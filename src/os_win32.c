@@ -4074,7 +4074,15 @@ mch_system_classic(char *cmd, int options)
      * Don't activate the window to keep focus on Vim.
      */
     if ((options & SHELL_DOOUT) && !mch_windows95() && !gui_is_win32s())
-	si.wShowWindow = SW_SHOWMINNOACTIVE;
+    {
+	char *vim_system_hideconsole;
+	vim_system_hideconsole = getenv("VIM_SYSTEM_HIDECONSOLE");
+	if (vim_system_hideconsole != NULL
+		&& strcmp(vim_system_hideconsole, "0") != 0)
+	    si.wShowWindow = SW_HIDE;
+	else
+	    si.wShowWindow = SW_SHOWMINNOACTIVE;
+    }
     else
 	si.wShowWindow = SW_SHOWNORMAL;
     si.cbReserved2 = 0;
