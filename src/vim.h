@@ -1457,6 +1457,10 @@ typedef UINT32_TYPEDEF UINT32_T;
 #define OP_FOLDDELREC	25	/* "zD" delete folds recursively */
 #define OP_FORMAT2	26	/* "gw" format operator, keeps cursor pos */
 #define OP_FUNCTION	27	/* "g@" call 'operatorfunc' */
+#define OP_NR_ADD	28	/* "<C-A>" Add to the number or alphabetic
+				   character (OP_ADD conflicts with Perl) */
+#define OP_NR_SUB	29	/* "<C-X>" Subtract from the number or
+				   alphabetic character */
 
 /*
  * Motion types, used for operators and for yank/delete registers.
@@ -1764,6 +1768,8 @@ typedef int proftime_T;	    /* dummy for function prototypes */
 /* Note that gui.h is included by structs.h */
 
 #include "structs.h"	    /* file that defines many structures */
+
+#include "alloc.h"
 
 /* Values for "do_profiling". */
 #define PROF_NONE	0	/* profiling not started */
