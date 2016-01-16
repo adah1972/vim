@@ -475,6 +475,8 @@ static void f_argidx __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_arglistid __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_argv __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_assert_equal __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_assert_exception __ARGS((typval_T *argvars, typval_T *rettv));
+static void f_assert_fails __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_assert_false __ARGS((typval_T *argvars, typval_T *rettv));
 static void f_assert_true __ARGS((typval_T *argvars, typval_T *rettv));
 #ifdef FEAT_FLOAT
@@ -971,8 +973,7 @@ eval_clear()
  * Return the name of the executed function.
  */
     char_u *
-func_name(cookie)
-    void *cookie;
+func_name(void *cookie)
 {
     return ((funccall_T *)cookie)->func->uf_name;
 }
@@ -991,8 +992,7 @@ func_breakpoint(cookie)
  * Return the address holding the debug tick for a funccall cookie.
  */
     int *
-func_dbg_tick(cookie)
-    void *cookie;
+func_dbg_tick(void *cookie)
 {
     return &((funccall_T *)cookie)->dbg_tick;
 }
@@ -1001,8 +1001,7 @@ func_dbg_tick(cookie)
  * Return the nesting level for a funccall cookie.
  */
     int
-func_level(cookie)
-    void *cookie;
+func_level(void *cookie)
 {
     return ((funccall_T *)cookie)->level;
 }
@@ -1029,9 +1028,7 @@ current_func_returned()
  * not already exist.
  */
     void
-set_internal_string_var(name, value)
-    char_u	*name;
-    char_u	*value;
+set_internal_string_var(char_u *name, char_u *value)
 {
     char_u	*val;
     typval_T	*tvp;
@@ -1055,12 +1052,11 @@ static char_u	*redir_varname = NULL;
 
 /*
  * Start recording command output to a variable
+ * When "append" is TRUE append to an existing variable.
  * Returns OK if successfully completed the setup.  FAIL otherwise.
  */
     int
-var_redir_start(name, append)
-    char_u	*name;
-    int		append;		/* append to an existing variable */
+var_redir_start(char_u *name, int append)
 {
     int		save_emsg;
     int		err;
@@ -1137,9 +1133,7 @@ var_redir_start(name, append)
  *   :redir END
  */
     void
-var_redir_str(value, value_len)
-    char_u	*value;
-    int		value_len;
+var_redir_str(char_u *value, int value_len)
 {
     int		len;
 
@@ -1199,11 +1193,11 @@ var_redir_stop()
 
 # if defined(FEAT_MBYTE) || defined(PROTO)
     int
-eval_charconvert(enc_from, enc_to, fname_from, fname_to)
-    char_u	*enc_from;
-    char_u	*enc_to;
-    char_u	*fname_from;
-    char_u	*fname_to;
+eval_charconvert(
+    char_u	*enc_from,
+    char_u	*enc_to,
+    char_u	*fname_from,
+    char_u	*fname_to)
 {
     int		err = FALSE;
 
@@ -8088,6 +8082,8 @@ static struct fst
     {"asin",		1, 1, f_asin},	/* WJMc */
 #endif
     {"assert_equal",	2, 3, f_assert_equal},
+    {"assert_exception", 1, 2, f_assert_exception},
+    {"assert_fails",	1, 2, f_assert_fails},
     {"assert_false",	1, 2, f_assert_false},
     {"assert_true",	1, 2, f_assert_true},
 #ifdef FEAT_FLOAT
@@ -9007,8 +9003,11 @@ f_alloc_fail(argvars, rettv)
     else
     {
 	alloc_fail_id = argvars[0].vval.v_number;
+	if (alloc_fail_id >= aid_last)
+	    EMSG(_(e_invarg));
 	alloc_fail_countdown = argvars[1].vval.v_number;
 	alloc_fail_repeat = argvars[2].vval.v_number;
+	did_outofmem_msg = FALSE;
     }
 }
 
@@ -9267,6 +9266,80 @@ f_assert_equal(argvars, rettv)
 	assert_error(&ga);
 	ga_clear(&ga);
     }
+}
+
+/*
+ * "assert_exception(string[, msg])" function
+ */
+    static void
+f_assert_exception(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv UNUSED;
+{
+    garray_T	ga;
+    char	*error;
+
+    error = (char *)get_tv_string_chk(&argvars[0]);
+    if (vimvars[VV_EXCEPTION].vv_str == NULL)
+    {
+	prepare_assert_error(&ga);
+	ga_concat(&ga, (char_u *)"v:exception is not set");
+	assert_error(&ga);
+	ga_clear(&ga);
+    }
+    else if (strstr((char *)vimvars[VV_EXCEPTION].vv_str, error) == NULL)
+    {
+	prepare_assert_error(&ga);
+	fill_assert_error(&ga, &argvars[1], NULL, &argvars[0],
+						&vimvars[VV_EXCEPTION].vv_tv);
+	assert_error(&ga);
+	ga_clear(&ga);
+    }
+}
+
+/*
+ * "assert_fails(cmd [, error])" function
+ */
+    static void
+f_assert_fails(argvars, rettv)
+    typval_T	*argvars;
+    typval_T	*rettv UNUSED;
+{
+    char_u	*cmd = get_tv_string_chk(&argvars[0]);
+    garray_T	ga;
+
+    called_emsg = FALSE;
+    suppress_errthrow = TRUE;
+    emsg_silent = TRUE;
+    do_cmdline_cmd(cmd);
+    if (!called_emsg)
+    {
+	prepare_assert_error(&ga);
+	ga_concat(&ga, (char_u *)"command did not fail: ");
+	ga_concat(&ga, cmd);
+	assert_error(&ga);
+	ga_clear(&ga);
+    }
+    else if (argvars[1].v_type != VAR_UNKNOWN)
+    {
+	char_u	buf[NUMBUFLEN];
+	char	*error = (char *)get_tv_string_buf_chk(&argvars[1], buf);
+
+	if (strstr((char *)vimvars[VV_ERRMSG].vv_str, error) == NULL)
+	{
+	    prepare_assert_error(&ga);
+	    fill_assert_error(&ga, &argvars[2], NULL, &argvars[1],
+						&vimvars[VV_ERRMSG].vv_tv);
+	    assert_error(&ga);
+	    ga_clear(&ga);
+	}
+    }
+
+    called_emsg = FALSE;
+    suppress_errthrow = FALSE;
+    emsg_silent = FALSE;
+    emsg_on_display = FALSE;
+    set_vim_var_string(VV_ERRMSG, NULL, 0);
 }
 
 /*
@@ -10212,7 +10285,8 @@ f_cscope_connection(argvars, rettv)
 }
 
 /*
- * "cursor(lnum, col)" function
+ * "cursor(lnum, col)" function, or
+ * "cursor(list)"
  *
  * Moves the cursor to the specified line and column.
  * Returns 0 when the position could be set, -1 otherwise.
@@ -10235,7 +10309,10 @@ f_cursor(argvars, rettv)
 	colnr_T	    curswant = -1;
 
 	if (list2fpos(argvars, &pos, NULL, &curswant) == FAIL)
+	{
+	    EMSG(_(e_invarg));
 	    return;
+	}
 	line = pos.lnum;
 	col = pos.col;
 #ifdef FEAT_VIRTUALEDIT
@@ -12917,6 +12994,8 @@ f_has(argvars, rettv)
 #endif
 #ifdef FEAT_CRYPT
 	"cryptv",
+	"crypt-blowfish",
+	"crypt-blowfish2",
 #endif
 #ifdef FEAT_CSCOPE
 	"cscope",
