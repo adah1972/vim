@@ -39,7 +39,7 @@ GUI=yes
 DIRECTX=no
 # FEATURES=[TINY | SMALL | NORMAL | BIG | HUGE]
 # Set to TINY to make minimal version (few features).
-FEATURES=BIG
+FEATURES=HUGE
 # Set to one of i386, i486, i586, i686 as the minimum target processor.
 # For amd64/x64 architecture set ARCH=x86-64 .
 ARCH=i386
@@ -171,26 +171,37 @@ ifndef MZSCHEME_VER
 MZSCHEME_VER=205_000
 endif
 
-ifndef MZSCHEME_PRECISE_GC
-MZSCHEME_PRECISE_GC=no
-endif
-
 # for version 4.x we need to generate byte-code for Scheme base
 ifndef MZSCHEME_GENERATE_BASE
 MZSCHEME_GENERATE_BASE=no
 endif
 
-ifndef MZSCHEME_USE_RACKET
+ifneq ($(wildcard $(MZSCHEME)/lib/msvc/libmzsch$(MZSCHEME_VER).lib),)
 MZSCHEME_MAIN_LIB=mzsch
 else
 MZSCHEME_MAIN_LIB=racket
+endif
+
+ifndef MZSCHEME_PRECISE_GC
+MZSCHEME_PRECISE_GC=no
+ifneq ($(wildcard $(MZSCHEME)\lib\lib$(MZSCHEME_MAIN_LIB)$(MZSCHEME_VER).dll),)
+ifeq ($(wildcard $(MZSCHEME)\lib\libmzgc$(MZSCHEME_VER).dll),)
+MZSCHEME_PRECISE_GC=yes
+endif
+else
+ifneq ($(wildcard $(MZSCHEME)\lib\msvc\lib$(MZSCHEME_MAIN_LIB)$(MZSCHEME_VER).lib),)
+ifeq ($(wildcard $(MZSCHEME)\lib\msvc\libmzgc$(MZSCHEME_VER).lib),)
+MZSCHEME_PRECISE_GC=yes
+endif
+endif
+endif
 endif
 
 ifeq (no,$(DYNAMIC_MZSCHEME))
 ifeq (yes,$(MZSCHEME_PRECISE_GC))
 MZSCHEME_LIB=-l$(MZSCHEME_MAIN_LIB)$(MZSCHEME_VER)
 else
-MZSCHEME_LIB = -l$(MZSCHEME_MAIN_LIB)$(MZSCHEME_VER) -lmzgc$(MZSCHEME_VER)
+MZSCHEME_LIB=-l$(MZSCHEME_MAIN_LIB)$(MZSCHEME_VER) -lmzgc$(MZSCHEME_VER)
 endif
 # the modern MinGW can dynamically link to dlls directly.
 # point MZSCHEME_DLLS to where you put libmzschXXXXXXX.dll and libgcXXXXXXX.dll
@@ -247,15 +258,23 @@ endif
 ifndef PYTHON3_VER
 PYTHON3_VER=31
 endif
-
-ifeq (no,$(DYNAMIC_PYTHON3))
-PYTHON3LIB=-L$(PYTHON3)/libs -lPYTHON$(PYTHON3_VER)
+ifndef DYNAMIC_PYTHON3_DLL
+DYNAMIC_PYTHON3_DLL=python$(PYTHON3_VER).dll
+endif
+ifdef PYTHON3_HOME
+PYTHON3_HOME_DEF=-DPYTHON3_HOME=\"$(PYTHON3_HOME)\"
 endif
 
+ifeq (no,$(DYNAMIC_PYTHON3))
+PYTHON3LIB=-L$(PYTHON3)/libs -lpython$(PYTHON3_VER)
+endif
+
+ifndef PYTHON3INC
 ifeq ($(CROSS),no)
 PYTHON3INC=-I $(PYTHON3)/include
 else
 PYTHON3INC=-I $(PYTHON3)/win32inc
+endif
 endif
 endif
 
@@ -429,9 +448,20 @@ endif
 endif
 
 ifdef MZSCHEME
-CFLAGS += -I$(MZSCHEME)/include -DFEAT_MZSCHEME -DMZSCHEME_COLLECTS=\"$(MZSCHEME)/collects\"
+ifndef MZSCHEME_COLLECTS
+MZSCHEME_COLLECTS=$(MZSCHEME)/collects
+ifeq (yes, $(UNDER_CYGWIN))
+MZSCHEME_COLLECTS:=$(shell cygpath -m $(MZSCHEME_COLLECTS) | sed -e 's/ /\\ /g')
+endif
+endif
+CFLAGS += -I$(MZSCHEME)/include -DFEAT_MZSCHEME -DMZSCHEME_COLLECTS=\"$(MZSCHEME_COLLECTS)\"
 ifeq (yes, $(DYNAMIC_MZSCHEME))
+ifeq (yes, $(MZSCHEME_PRECISE_GC))
+# Precise GC does not use separate dll
+CFLAGS += -DDYNAMIC_MZSCHEME -DDYNAMIC_MZSCH_DLL=\"lib$(MZSCHEME_MAIN_LIB)$(MZSCHEME_VER).dll\" -DDYNAMIC_MZGC_DLL=\"lib$(MZSCHEME_MAIN_LIB)$(MZSCHEME_VER).dll\"
+else
 CFLAGS += -DDYNAMIC_MZSCHEME -DDYNAMIC_MZSCH_DLL=\"lib$(MZSCHEME_MAIN_LIB)$(MZSCHEME_VER).dll\" -DDYNAMIC_MZGC_DLL=\"libmzgc$(MZSCHEME_VER).dll\"
+endif
 endif
 ifeq (yes, "$(MZSCHEME_DEBUG)")
 CFLAGS += -DMZSCHEME_FORCE_GC
@@ -460,7 +490,7 @@ endif
 ifdef PYTHON3 
 CFLAGS += -DFEAT_PYTHON3 
 ifeq (yes, $(DYNAMIC_PYTHON3))
-CFLAGS += -DDYNAMIC_PYTHON3 -DDYNAMIC_PYTHON3_DLL=\"PYTHON$(PYTHON3_VER).dll\"
+CFLAGS += -DDYNAMIC_PYTHON3 -DDYNAMIC_PYTHON3_DLL=\"$(DYNAMIC_PYTHON3_DLL)\"
 endif
 endif
 
@@ -792,7 +822,7 @@ $(OUTDIR)/if_python.o : if_python.c if_py_both.h $(INCL)
 	$(CC) -c $(CFLAGS) $(PYTHONINC) $(PYTHON_HOME_DEF) $< -o $@
 
 $(OUTDIR)/if_python3.o : if_python3.c if_py_both.h $(INCL)
-	$(CC) -c $(CFLAGS) $(PYTHON3INC) $< -o $@
+	$(CC) -c $(CFLAGS) $(PYTHON3INC) $(PYTHON3_HOME_DEF) $< -o $@
 
 $(OUTDIR)/%.o : %.c $(INCL)
 	$(CC) -c $(CFLAGS) $< -o $@

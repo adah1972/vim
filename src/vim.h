@@ -835,6 +835,8 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #define EW_ALLLINKS	0x1000	/* also links not pointing to existing file */
 #define EW_SHELLCMD	0x2000	/* called from expand_shellcmd(), don't check
 				 * if executable is in $PATH */
+#define EW_DODOT	0x4000	/* also files starting with a dot */
+#define EW_EMPTYOK	0x8000	/* no matches is not an error */
 
 /* Flags for find_file_*() functions. */
 #define FINDFILE_FILE	0	/* only files */
@@ -1107,14 +1109,6 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #define HIST_INPUT	3	/* input() lines */
 #define HIST_DEBUG	4	/* debug commands */
 #define HIST_COUNT	5	/* number of history tables */
-
-/*
- * Flags for chartab[].
- */
-#define CT_CELL_MASK	0x07	/* mask: nr of display cells (1, 2 or 4) */
-#define CT_PRINT_CHAR	0x10	/* flag: set for printable chars */
-#define CT_ID_CHAR	0x20	/* flag: set for ID chars */
-#define CT_FNAME_CHAR	0x40	/* flag: set for file name chars */
 
 /*
  * Values for do_tag().

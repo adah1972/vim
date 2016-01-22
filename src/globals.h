@@ -231,6 +231,7 @@ EXTERN int	ex_nesting_level INIT(= 0);	/* nesting level */
 EXTERN int	debug_break_level INIT(= -1);	/* break below this level */
 EXTERN int	debug_did_msg INIT(= FALSE);	/* did "debug mode" message */
 EXTERN int	debug_tick INIT(= 0);		/* breakpoint change count */
+EXTERN int	debug_backtrace_level INIT(= 0); /* breakpoint backtrace level */
 # ifdef FEAT_PROFILE
 EXTERN int	do_profiling INIT(= PROF_NONE);	/* PROF_ values */
 # endif
@@ -1010,9 +1011,6 @@ EXTERN int	vgetc_im_active;	/* Input Method was active for last
 					   character obtained from vgetc() */
 #endif
 EXTERN int	maptick INIT(= 0);	/* tick for each non-mapped char */
-
-EXTERN char_u	chartab[256];		/* table used in charset.c; See
-					   init_chartab() for explanation */
 
 EXTERN int	must_redraw INIT(= 0);	    /* type of redraw necessary */
 EXTERN int	skip_redraw INIT(= FALSE);  /* skip redraw once */

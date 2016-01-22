@@ -1361,10 +1361,10 @@ CPP_DEPEND = $(CC) -I$(srcdir) -M$(CPP_MM) \
 NO_ATTR=
 #
 # Use this for cproto 3 patchlevel 6 or below (use "cproto -V" to check):
-# PROTO_FLAGS = -f4 -m__ARGS -d -E"$(CPP)" $(NO_ATTR)
+# PROTO_FLAGS = -f4 -d -E"$(CPP)" $(NO_ATTR)
 #
 # Use this for cproto 3 patchlevel 7 or above (use "cproto -V" to check):
-PROTO_FLAGS = -m -M__ARGS -d -E"$(CPP)" $(NO_ATTR)
+PROTO_FLAGS = -d -E"$(CPP)" $(NO_ATTR)
 
 
 ################################################
@@ -1931,10 +1931,8 @@ unittest unittests: $(UNITTEST_TARGETS)
 		./$$t || exit 1; echo $$t passed; \
 	done
 
-# Run individual test, assuming that Vim was already compiled.
+# Run individual OLD style test, assuming that Vim was already compiled.
 test1 \
-	test_argument_0count \
-	test_argument_count \
 	test_autocmd_option \
 	test_autoformat_join \
 	test_breakindent \
@@ -1946,6 +1944,7 @@ test1 \
 	test_erasebackword \
 	test_eval \
 	test_fixeol \
+	test_getcwd \
 	test_insertcount \
 	test_listchars \
 	test_listlbr \
@@ -1955,7 +1954,6 @@ test1 \
 	test_match_conceal \
 	test_nested_function \
 	test_options \
-	test_perl \
 	test_qf_title \
 	test_ruby \
 	test_search_mbyte \
@@ -1975,22 +1973,29 @@ test1 \
 	test70 test71 test72 test73 test74 test75 test76 test77 test78 test79 \
 	test80 test81 test82 test83 test84 test85 test86 test87 test88 test89 \
 	test90 test91 test92 test93 test94 test95 test96 test97 test98 test99 \
-	test100 test101 test102 test103 test104 test105 test106 test107:
+	test100 test101 test102 test103 test104 test105 test106 test107 test108:
 	cd testdir; rm -f $@.out; $(MAKE) -f Makefile $@.out VIMPROG=../$(VIMTARGET) $(GUI_TESTARG) SCRIPTSOURCE=../$(SCRIPTSOURCE)
 
-test_assert \
+# Run individual NEW style test, assuming that Vim was already compiled.
+test_arglist \
+	test_assert \
 	test_backspace_opt \
 	test_cdo \
+	test_cursor_func \
+	test_delete \
+	test_expand \
 	test_hardcopy \
 	test_increment \
 	test_lispwords \
 	test_menu \
+	test_perl \
 	test_quickfix \
 	test_searchpos \
 	test_set \
 	test_sort \
 	test_undolevels \
 	test_unlet \
+	test_viminfo \
 	test_viml \
 	test_alot:
 	cd testdir; rm -f $@.res test.log messages; $(MAKE) -f Makefile $@.res VIMPROG=../$(VIMTARGET) $(GUI_TESTARG) SCRIPTSOURCE=../$(SCRIPTSOURCE)
