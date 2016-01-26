@@ -95,6 +95,7 @@ extern int _stricoll __ARGS((char *a, char *b));
 # endif
 # include "hardcopy.pro"
 # include "hashtab.pro"
+# include "json.pro"
 # include "main.pro"
 # include "mark.pro"
 # include "memfile.pro"
@@ -207,6 +208,9 @@ void qsort __ARGS((void *base, size_t elm_count, size_t elm_size, int (*cmp)(con
 
 # ifdef FEAT_NETBEANS_INTG
 #  include "netbeans.pro"
+# endif
+# ifdef FEAT_CHANNEL
+#  include "channel.pro"
 # endif
 
 # ifdef FEAT_GUI
