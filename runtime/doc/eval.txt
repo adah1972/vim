@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 7.4.  Last change: 2016 Jan 24
+*eval.txt*	For Vim version 7.4.  Last change: 2016 Jan 28
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1820,6 +1820,8 @@ complete_add( {expr})		Number	add completion match
 complete_check()		Number	check for key typed during completion
 confirm( {msg} [, {choices} [, {default} [, {type}]]])
 				Number	number of choice picked by user
+connect( {address}, {mode} [, {callback}])
+				Number	open a channel
 copy( {expr})			any	make a shallow copy of {expr}
 cos( {expr})			Float	cosine of {expr}
 cosh( {expr})			Float	hyperbolic cosine of {expr}
@@ -2027,6 +2029,10 @@ searchpairpos( {start}, {middle}, {end} [, {flags} [, {skip} [...]]])
 				List	search for other end of start/end pair
 searchpos( {pattern} [, {flags} [, {stopline} [, {timeout}]]])
 				List	search for {pattern}
+sendexpr( {handle}, {expr} [, {callback}])
+				any	send {expr} over JSON channel {handle}
+sendraw( {handle}, {string} [, {callback}])
+				any	send {string} over raw channel {handle}
 server2client( {clientid}, {string})
 				Number	send reply string
 serverlist()			String	get a list of available servers
@@ -2660,6 +2666,18 @@ confirm({msg} [, {choices} [, {default} [, {type}]]])
 		don't fit, a vertical layout is used anyway.  For some systems
 		the horizontal layout is always used.
 
+connect({address}, {mode} [, {callback}])		*connect()*
+		Open a channel to {address}.  See |channel|.
+
+		{address} has the form "hostname:port", e.g.,
+		"localhost:8765".
+
+		{mode} is either "json" or "raw".  See |channel-mode| for the
+		meaning.
+
+		{callback} is a function that handles received messages on the
+		channel.  See |channel-callback|.
+
 							*copy()*
 copy({expr})	Make a copy of {expr}.	For Numbers and Strings this isn't
 		different from using {expr} directly.
@@ -2842,6 +2860,7 @@ empty({expr})						*empty()*
 		Return the Number 1 if {expr} is empty, zero otherwise.
 		A |List| or |Dictionary| is empty when it does not have any
 		items.	A Number is empty when its value is zero.
+		|v:false|, |v:none| and |v:null| are empty, |v:true| is not.
 		For a long |List| this is much faster than comparing the
 		length with zero.
 
@@ -3860,7 +3879,9 @@ glob2regpat({expr})					 *glob2regpat()*
 			if filename =~ glob2regpat('Make*.mak')
 <		This is equivalent to: >
 			if filename =~ '^Make.*\.mak$'
-<
+<		When {expr} is an empty string the result is "^$", match an
+		empty string.
+
 								*globpath()*
 globpath({path}, {expr} [, {nosuf} [, {list} [, {allinks}]]])
 		Perform glob() on all directories in {path} and concatenate
@@ -4252,16 +4273,21 @@ jsondecode({string})					*jsondecode()*
 		JSON and Vim values.
 		The decoding is permissive:
 		- A trailing comma in an array and object is ignored.
-		- An empty item in an array results in v:none.
-		- When an object name is not a string it is converted to a
-		  string.  E.g. the number 123 is used as the string "123".
+		- An empty item in an array, two commas with nothing or white
+		  space in between, results in v:none.
+		- When an object member name is not a string it is converted
+		  to a string.  E.g. the number 123 is used as the string
+		  "123".
 		- More floating point numbers are recognized, e.g. "1." for
 		  "1.0".
+		The result must be a valid Vim type:
+		- An empty object member name is not allowed.
+		- Duplicate object member names are not allowed.
 
 jsonencode({expr})					*jsonencode()*
 		Encode {expr} as JSON and return this as a string.
 		The encoding is specified in:
-		http://www.ietf.org/rfc/rfc4627.txt
+		https://tools.ietf.org/html/rfc7159.html
 		Vim values are converted as follows:
 		   Number		decimal number
 		   Float		floating point number
@@ -5587,6 +5613,23 @@ searchpos({pattern} [, {flags} [, {stopline} [, {timeout}]]])	*searchpos()*
 <		In this example "submatch" is 2 when a lowercase letter is
 		found |/\l|, 3 when an uppercase letter is found |/\u|.
 
+sendexpr({handle}, {expr} [, {callback}])		*sendexpr()*
+		Send {expr} over JSON channel {handle}.  See |channel-use|.
+
+		When {callback} is given returns immediately.  Without
+		{callback} waits for a JSON response and returns the decoded
+		expression.  When there is an error or timeout returns an
+		empty string.
+
+		When {callback} is zero no response is expected.
+		Otherwise {callback} must be a Funcref or the name of a
+		function.  It is called when the response is received.  See
+		|channel-callback|.
+
+sendraw({handle}, {string} [, {callback}])		*sendraw()*
+		Send {string} over raw channel {handle}.  See |channel-raw|.
+		Works like |sendexpr()|, but does not decode the response.
+
 server2client( {clientid}, {string})			*server2client()*
 		Send a reply string to {clientid}.  The most recent {clientid}
 		that sent a string can be retrieved with expand("<client>").
@@ -5889,18 +5932,8 @@ shellescape({string} [, {special}])			*shellescape()*
 shiftwidth()						*shiftwidth()*
 		Returns the effective value of 'shiftwidth'. This is the
 		'shiftwidth' value unless it is zero, in which case it is the
-		'tabstop' value.  To be backwards compatible in indent
-		plugins, use this: >
-			if exists('*shiftwidth')
-			  func s:sw()
-			    return shiftwidth()
-			  endfunc
-			else
-			  func s:sw()
-			    return &sw
-			  endfunc
-			endif
-<		And then use s:sw() instead of &sw.
+		'tabstop' value.  This function was introduced with patch
+		7.3.694 in 2012, everybody should have it by now.
 
 
 simplify({filename})					*simplify()*

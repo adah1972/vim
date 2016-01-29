@@ -10,7 +10,7 @@
 /*
  * json.c: Encoding and decoding JSON.
  *
- * Follows this standard: http://www.ietf.org/rfc/rfc4627.txt
+ * Follows this standard: https://tools.ietf.org/html/rfc7159.html
  */
 
 #include "vim.h"
@@ -68,7 +68,12 @@ write_string(garray_T *gap, char_u *str)
 		default:
 		    if (c >= 0x20)
 		    {
+#ifdef FEAT_MBYTE
 			numbuf[mb_char2bytes(c, numbuf)] = NUL;
+#else
+			numbuf[0] = c;
+			numbuf[1] = NUL;
+#endif
 			ga_concat(gap, numbuf);
 		    }
 		    else
