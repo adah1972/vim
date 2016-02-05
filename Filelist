@@ -41,6 +41,7 @@ SRC_ALL =	\
 		src/hardcopy.c \
 		src/hashtab.c \
 		src/json.c \
+		src/json_test.c \
 		src/keymap.h \
 		src/macros.h \
 		src/main.c \
@@ -90,6 +91,7 @@ SRC_ALL =	\
 		src/testdir/README.txt \
 		src/testdir/Make_all.mak \
 		src/testdir/*.in \
+		src/testdir/*.py \
 		src/testdir/sautest/autoload/*.vim \
 		src/testdir/runtest.vim \
 		src/testdir/test[0-9]*.ok \

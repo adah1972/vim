@@ -1545,11 +1545,13 @@ EXTRA_SRC = hangulin.c if_lua.c if_mzsch.c auto/if_perl.c if_perlsfio.c \
 	    $(GRESOURCE_SRC)
 
 # Unittest files
+JSON_TEST_SRC = json_test.c
+JSON_TEST_TARGET = json_test$(EXEEXT)
 MEMFILE_TEST_SRC = memfile_test.c
 MEMFILE_TEST_TARGET = memfile_test$(EXEEXT)
 
-UNITTEST_SRC = $(MEMFILE_TEST_SRC)
-UNITTEST_TARGETS = $(MEMFILE_TEST_TARGET)
+UNITTEST_SRC = $(JSON_TEST_SRC) $(MEMFILE_TEST_SRC)
+UNITTEST_TARGETS = $(JSON_TEST_TARGET) $(MEMFILE_TEST_TARGET)
 
 # All sources, also the ones that are not configured
 ALL_SRC = $(BASIC_SRC) $(ALL_GUI_SRC) $(UNITTEST_SRC) $(EXTRA_SRC)
@@ -1588,9 +1590,8 @@ OBJ_COMMON = \
 	$(HANGULIN_OBJ) \
 	objects/if_cscope.o \
 	objects/if_xcmdsrv.o \
-	objects/json.o \
 	objects/mark.o \
-        objects/memline.o \
+	objects/memline.o \
 	objects/menu.o \
 	objects/message.o \
 	objects/misc1.o \
@@ -1632,11 +1633,17 @@ OBJ_COMMON = \
 	$(WSDEBUG_OBJ)
 
 OBJ = $(OBJ_COMMON) \
+	objects/json.o \
 	objects/main.o \
 	objects/memfile.o
 
+JSON_TEST_OBJ = $(OBJ_COMMON) \
+	objects/json_test.o \
+	objects/memfile.o
+
 MEMFILE_TEST_OBJ = $(OBJ_COMMON) \
-        objects/memfile_test.o
+	objects/json.o \
+	objects/memfile_test.o
 
 PRO_AUTO = \
 	blowfish.pro \
@@ -1914,6 +1921,7 @@ types.vim: $(TAGS_SRC) $(TAGS_INCL)
 	ctags --c-kinds=gstu -o- $(TAGS_SRC) $(TAGS_INCL) |\
 		awk 'BEGIN{printf("syntax keyword Type\t")}\
 			{printf("%s ", $$1)}END{print ""}' > $@
+	echo "syn keyword Constant OK FAIL TRUE FALSE MAYBE" >> $@
 
 # Execute the test scripts.  Run these after compiling Vim, before installing.
 # This doesn't depend on $(VIMTARGET), because that won't work when configure
@@ -1947,6 +1955,12 @@ unittest unittests: $(UNITTEST_TARGETS)
 	@for t in $(UNITTEST_TARGETS); do \
 		./$$t || exit 1; echo $$t passed; \
 	done
+
+run_json_test: $(JSON_TEST_TARGET)
+	./$(JSON_TEST_TARGET)
+
+run_memfile_test: $(MEMFILE_TEST_TARGET)
+	./$(MEMFILE_TEST_TARGET)
 
 # Run individual OLD style test, assuming that Vim was already compiled.
 test1 \
@@ -1998,6 +2012,7 @@ test_arglist \
 	test_assert \
 	test_backspace_opt \
 	test_cdo \
+	test_channel \
 	test_cursor_func \
 	test_delete \
 	test_expand \
@@ -2040,6 +2055,13 @@ testclean:
 
 # Unittests
 # It's build just like Vim to satisfy all dependencies.
+$(JSON_TEST_TARGET): auto/config.mk objects $(JSON_TEST_OBJ)
+	$(CCC) version.c -o objects/version.o
+	@LINK="$(PURIFY) $(SHRPENV) $(CClink) $(ALL_LIB_DIRS) $(LDFLAGS) \
+		-o $(JSON_TEST_TARGET) $(JSON_TEST_OBJ) $(ALL_LIBS)" \
+		MAKE="$(MAKE)" LINK_AS_NEEDED=$(LINK_AS_NEEDED) \
+		sh $(srcdir)/link.sh
+
 $(MEMFILE_TEST_TARGET): auto/config.mk objects $(MEMFILE_TEST_OBJ)
 	$(CCC) version.c -o objects/version.o
 	@LINK="$(PURIFY) $(SHRPENV) $(CClink) $(ALL_LIB_DIRS) $(LDFLAGS) \
@@ -2531,6 +2553,7 @@ shadow:	runtime pixmaps
 				 ../../testdir/Make_all.mak \
 				 ../../testdir/*.in \
 				 ../../testdir/*.vim \
+				 ../../testdir/*.py \
 				 ../../testdir/python* \
 				 ../../testdir/sautest \
 				 ../../testdir/test83-tags? \
@@ -2810,6 +2833,9 @@ objects/integration.o: integration.c
 
 objects/json.o: json.c
 	$(CCC) -o $@ json.c
+
+objects/json_test.o: json_test.c
+	$(CCC) -o $@ json_test.c
 
 objects/main.o: main.c
 	$(CCC) -o $@ main.c
@@ -3301,6 +3327,10 @@ objects/gui_at_fs.o: gui_at_fs.c vim.h auto/config.h feature.h os_unix.h \
 objects/pty.o: pty.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h ascii.h \
  keymap.h term.h macros.h option.h structs.h regexp.h gui.h gui_beval.h \
  proto/gui_beval.pro alloc.h ex_cmds.h proto.h globals.h farsi.h arabic.h
+objects/json_test.o: json_test.c main.c vim.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
+ regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h proto.h \
+ globals.h farsi.h arabic.h farsi.c arabic.c json.c
 objects/memfile_test.o: memfile_test.c main.c vim.h auto/config.h feature.h \
  os_unix.h auto/osdef.h ascii.h keymap.h term.h macros.h option.h \
  structs.h regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h \
