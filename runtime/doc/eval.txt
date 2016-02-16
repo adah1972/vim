@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 7.4.  Last change: 2016 Feb 04
+*eval.txt*	For Vim version 7.4.  Last change: 2016 Feb 13
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -37,7 +37,7 @@ done, the features in this document are not available.	See |+eval| and
 
 1.1 Variable types ~
 							*E712*
-There are six types of variables:
+There are nine types of variables:
 
 Number		A 32 or 64 bit signed number.  |expr-number| *Number*
 		Examples:  -123  0x10  0177
@@ -49,15 +49,21 @@ Float		A floating point number. |floating-point-format| *Float*
 String		A NUL terminated string of 8-bit unsigned characters (bytes).
 		|expr-string| Examples: "ab\txx\"--"  'x-z''a,c'
 
-Funcref		A reference to a function |Funcref|.
-		Example: function("strlen")
-
 List		An ordered sequence of items |List|.
 		Example: [1, 2, ['a', 'b']]
 
 Dictionary	An associative, unordered array: Each entry has a key and a
 		value. |Dictionary|
 		Example: {'blue': "#0000ff", 'red': "#ff0000"}
+
+Funcref		A reference to a function |Funcref|.
+		Example: function("strlen")
+
+Special		v:false, v:true, v:none and v:null
+
+Job		Used for a job, see |job_start()|.
+
+Channel		Used for a channel, see |ch_open()|.
 
 The Number and String types are converted automatically, depending on how they
 are used.
@@ -95,15 +101,16 @@ Note that in the command >
 "foo" is converted to 0, which means FALSE.  To test for a non-empty string,
 use empty(): >
 	:if !empty("foo")
-<				*E745* *E728* *E703* *E729* *E730* *E731*
-List, Dictionary and Funcref types are not automatically converted.
+<
+		*E745* *E728* *E703* *E729* *E730* *E731* *E908* *E910* *E913*
+List, Dictionary, Funcref and Job types are not automatically converted.
 
 							*E805* *E806* *E808*
 When mixing Number and Float the Number is converted to Float.	Otherwise
 there is no automatic conversion of Float.  You can use str2float() for String
 to Float, printf() for Float to String and float2nr() for Float to Number.
 
-						*E891* *E892* *E893* *E894*
+			*E891* *E892* *E893* *E894* *E907* *E911* *E914*
 When expecting a Float a Number can also be used, but nothing else.
 
 						*E706* *sticky-type-checking*
@@ -864,7 +871,7 @@ These three can be repeated and mixed.	Examples:
 expr8							*expr8*
 -----
 expr8[expr1]		item of String or |List|	*expr-[]* *E111*
-
+							*E909*
 If expr8 is a Number or String this results in a String that contains the
 expr1'th single byte from expr8.  expr8 is used as a String, expr1 as a
 Number.  This doesn't recognize multi-byte encodings, see |byteidx()| for
@@ -1411,7 +1418,7 @@ v:exception	The value of the exception most recently caught and not
 
 					*v:false* *false-variable*
 v:false		A Number with value zero. Used to put "false" in JSON.  See
-		|jsonencode()|.
+		|json_encode()|.
 		When used as a string this evaluates to "false". >
 			echo v:false
 <			false ~
@@ -1551,7 +1558,7 @@ v:mouse_col	Column number for a mouse click obtained with |getchar()|.
 
 					*v:none* *none-variable*
 v:none		An empty String. Used to put an empty item in JSON.  See
-		|jsonencode()|.
+		|json_encode()|.
 		When used as a number this evaluates to zero.
 		When used as a string this evaluates to "none". >
 			echo v:none
@@ -1559,7 +1566,7 @@ v:none		An empty String. Used to put an empty item in JSON.  See
 
 					*v:null* *null-variable*
 v:null		An empty String. Used to put "null" in JSON.  See
-		|jsonencode()|.
+		|json_encode()|.
 		When used as a number this evaluates to zero.
 		When used as a string this evaluates to "null". >
 			echo v:null
@@ -1732,7 +1739,7 @@ v:throwpoint	The point where the exception most recently caught and not
 
 						*v:true* *true-variable*
 v:true		A Number with value one. Used to put "true" in JSON.  See
-		|jsonencode()|.
+		|json_encode()|.
 		When used as a string this evaluates to "true". >
 			echo v:true
 <			true ~
@@ -1811,12 +1818,14 @@ call( {func}, {arglist} [, {dict}])
 				any	call {func} with arguments {arglist}
 ceil( {expr})			Float	round {expr} up
 ch_close( {handle})		none	close a channel
-ch_open( {address}, {mode} [, {callback}])
-				Number	open a channel
+ch_logfile( {fname} [, {mode}])	none	start logging channel activity
+ch_open( {address} [, {argdict})] Number open a channel to {address}
+ch_readraw( {handle})		String	read from channel {handle}
 ch_sendexpr( {handle}, {expr} [, {callback}])
 				any	send {expr} over JSON channel {handle}
 ch_sendraw( {handle}, {string} [, {callback}])
 				any	send {string} over raw channel {handle}
+ch_status( {handle})		String	status of channel {handle}
 changenr()			Number	current change number
 char2nr( {expr}[, {utf8}])	Number	ASCII/UTF8 value of first char in {expr}
 cindent( {lnum})		Number	C indent for line {lnum}
@@ -1842,6 +1851,7 @@ delete( {fname} [, {flags}])	Number	delete the file or directory {fname}
 did_filetype()			Number	TRUE if FileType autocommand event used
 diff_filler( {lnum})		Number	diff filler lines about {lnum}
 diff_hlID( {lnum}, {col})	Number	diff highlighting at {lnum}/{col}
+disable_char_avail_for_testing({expr})  none  test without typeahead
 empty( {expr})			Number	TRUE if {expr} is empty
 escape( {string}, {chars})	String	escape {chars} in {string} with '\'
 eval( {string})			any	evaluate {string} into its value
@@ -1948,9 +1958,15 @@ invert( {expr})			Number  bitwise invert
 isdirectory( {directory})	Number	TRUE if {directory} is a directory
 islocked( {expr})		Number	TRUE if {expr} is locked
 items( {dict})			List	key-value pairs in {dict}
+job_getchannel( {job})		Number	get the channel handle for {job}
+job_start( {command} [, {options}]) Job	start a job	
+job_status( {job})		String	get the status of a job
+job_stop( {job} [, {how}])	Number	stop a job
 join( {list} [, {sep}])		String	join {list} items into one String
-jsondecode( {string})		any	decode JSON
-jsonencode( {expr})		String	encode JSON
+js_decode( {string})		any	decode JS style JSON
+js_encode( {expr})		String	encode JS style JSON
+json_decode( {string})		any	decode JSON
+json_encode( {expr})		String	encode JSON
 keys( {dict})			List	keys in {dict}
 len( {expr})			Number	the length of {expr}
 libcall( {lib}, {func}, {arg})	String	call {func} in library {lib} with {arg}
@@ -1970,9 +1986,9 @@ mapcheck( {name}[, {mode} [, {abbr}]])
 				String	check for mappings matching {name}
 match( {expr}, {pat}[, {start}[, {count}]])
 				Number	position where {pat} matches in {expr}
-matchadd( {group}, {pattern}[, {priority}[, {id}]])
+matchadd( {group}, {pattern}[, {priority}[, {id} [, {dict}]]])
 				Number	highlight {pattern} with {group}
-matchaddpos( {group}, {list}[, {priority}[, {id}]])
+matchaddpos( {group}, {pos}[, {priority}[, {id}[, {dict}]]])
 				Number	highlight positions with {group}
 matcharg( {nr})			List	arguments of |:match|
 matchdelete( {id})		Number	delete match identified by {id}
@@ -2264,7 +2280,7 @@ assert_fails({cmd} [, {error}])					*assert_fails()*
 assert_false({actual} [, {msg}])				*assert_false()*
 		When {actual} is not false an error message is added to
 		|v:errors|, like with |assert_equal()|.
-		A value is false when it is zero. When "{actual}" is not a
+		A value is false when it is zero. When {actual} is not a
 		number the assert fails.
 		When {msg} is omitted an error in the form "Expected False but
 		got {actual}" is produced.
@@ -2431,7 +2447,6 @@ bufwinnr({expr})					*bufwinnr()*
 <		The number can be used with |CTRL-W_w| and ":wincmd w"
 		|:wincmd|.
 		Only deals with the current tab page.
-
 
 byte2line({byte})					*byte2line()*
 		Return the line number that contains the character at byte
@@ -2667,10 +2682,21 @@ confirm({msg} [, {choices} [, {default} [, {type}]]])
 		don't fit, a vertical layout is used anyway.  For some systems
 		the horizontal layout is always used.
 
-ch_close({handle})					*ch_close()*
+ch_close({handle})						*ch_close()*
 		Close channel {handle}.  See |channel|.
+		{only available when compiled with the |+channel| feature}
 
-ch_open({address}, {mode} [, {callback}])		*ch_open()*
+ch_logfile( {fname} [, {mode}])					*ch_logfile()*
+		Start logging channel activity to {fname}.
+		When {fname} is an empty string: stop logging.
+
+		When {mode} is omitted or "a" append to the file.
+		When {mode} is "w" start with an empty file.
+
+		The file is flushed after every message, on Unix you can use
+		"tail -f" to see what is going on in real time.
+
+ch_open({address} [, {argdict}])				*ch_open()*
 		Open a channel to {address}.  See |channel|.
 		Returns the channel handle on success.  Returns a negative
 		number for failure.
@@ -2678,17 +2704,34 @@ ch_open({address}, {mode} [, {callback}])		*ch_open()*
 		{address} has the form "hostname:port", e.g.,
 		"localhost:8765".
 
-		{mode} is either "json" or "raw".  See |channel-mode| for the
-		meaning.
+		If {argdict} is given it must be a |Dictionary|.  The optional
+		items are:
+			mode        "raw", "js" or "json".
+				    Default "json".
+			callback    function to call for requests with a zero
+				    sequence number.  See |channel-callback|.
+				    Default: none.
+			waittime    Specify connect timeout as milliseconds.
+				    Negative means forever.
+				    Default: 0 (don't wait)
+			timeout	    Specify response read timeout value as
+				    milliseconds. 
+				    Default: 2000.
+		{only available when compiled with the |+channel| feature}
 
-		{callback} is a function that handles received messages on the
-		channel.  See |channel-callback|.
+ch_readraw({handle})						*ch_readraw()*
+		Read from channel {handle} and return the received message.
+		This uses the channel timeout.  When there is nothing to read
+		within that time an empty string is returned.
+		TODO: depends on channel mode.
 
-ch_sendexpr({handle}, {expr} [, {callback}])		*ch_sendexpr()*
-		Send {expr} over JSON channel {handle}.  See |channel-use|.
+ch_sendexpr({handle}, {expr} [, {callback}])			*ch_sendexpr()*
+		Send {expr} over channel {handle}.  The {expr} is encoded
+		according to the type of channel.  The function cannot be used
+		with a raw channel.  See |channel-use|.  *E912*
 
 		When {callback} is given returns immediately.  Without
-		{callback} waits for a JSON response and returns the decoded
+		{callback} waits for a response and returns the decoded
 		expression.  When there is an error or timeout returns an
 		empty string.
 
@@ -2697,9 +2740,21 @@ ch_sendexpr({handle}, {expr} [, {callback}])		*ch_sendexpr()*
 		function.  It is called when the response is received.  See
 		|channel-callback|.
 
+		{only available when compiled with the |+channel| feature}
+
 ch_sendraw({handle}, {string} [, {callback}])		*ch_sendraw()*
-		Send {string} over raw channel {handle}.  See |channel-raw|.
-		Works like |ch_sendexpr()|, but does not decode the response.
+		Send {string} over channel {handle}.
+		Works like |ch_sendexpr()|, but does not encode the request or
+		decode the response.  The caller is responsible for the
+		correct contents.  See |channel-use|.
+
+		{only available when compiled with the |+channel| feature}
+
+ch_status({handle})						*ch_status()*
+		Return the status of channel {handle}:
+			"fail"		failed to open the channel
+			"open"		channel can be used
+			"closed"	channel can not be used
 
 							*copy()*
 copy({expr})	Make a copy of {expr}.	For Numbers and Strings this isn't
@@ -2707,8 +2762,9 @@ copy({expr})	Make a copy of {expr}.	For Numbers and Strings this isn't
 		When {expr} is a |List| a shallow copy is created.  This means
 		that the original |List| can be changed without changing the
 		copy, and vice versa.  But the items are identical, thus
-		changing an item changes the contents of both |Lists|.	Also
-		see |deepcopy()|.
+		changing an item changes the contents of both |Lists|.
+		A |Dictionary| is copied in a similar way as a |List|.
+		Also see |deepcopy()|.
 
 cos({expr})						*cos()*
 		Return the cosine of {expr}, measured in radians, as a |Float|.
@@ -2816,9 +2872,11 @@ deepcopy({expr}[, {noref}])				*deepcopy()* *E698*
 		different from using {expr} directly.
 		When {expr} is a |List| a full copy is created.  This means
 		that the original |List| can be changed without changing the
-		copy, and vice versa.  When an item is a |List|, a copy for it
-		is made, recursively.  Thus changing an item in the copy does
-		not change the contents of the original |List|.
+		copy, and vice versa.  When an item is a |List| or
+		|Dictionary|, a copy for it is made, recursively.  Thus
+		changing an item in the copy does not change the contents of
+		the original |List|.
+		A |Dictionary| is copied in a similar way as a |List|.
 		When {noref} is omitted or zero a contained |List| or
 		|Dictionary| is only copied once.  All references point to
 		this single copy.  With {noref} set to 1 every occurrence of a
@@ -2879,11 +2937,23 @@ diff_hlID({lnum}, {col})				*diff_hlID()*
 		The highlight ID can be used with |synIDattr()| to obtain
 		syntax information about the highlighting.
 
+					*disable_char_avail_for_testing()*
+disable_char_avail_for_testing({expr})
+		When {expr} is 1 the internal char_avail() function will
+		return FALSE.  When {expr} is 0 the char_avail() function will
+		function normally.
+		Only use this for a test where typeahead causes the test not
+		to work.  E.g., to trigger the CursorMovedI autocommand event.
+
 empty({expr})						*empty()*
 		Return the Number 1 if {expr} is empty, zero otherwise.
-		A |List| or |Dictionary| is empty when it does not have any
-		items.	A Number is empty when its value is zero.
-		|v:false|, |v:none| and |v:null| are empty, |v:true| is not.
+		- A |List| or |Dictionary| is empty when it does not have any
+		  items.
+		- A Number and Float is empty when its value is zero.
+		- |v:false|, |v:none| and |v:null| are empty, |v:true| is not.
+		- A Job is empty when it failed to start.
+		- A Channel is empty when it is closed.
+
 		For a long |List| this is much faster than comparing the
 		length with zero.
 
@@ -3906,7 +3976,7 @@ glob2regpat({expr})					 *glob2regpat()*
 		empty string.
 
 								*globpath()*
-globpath({path}, {expr} [, {nosuf} [, {list} [, {allinks}]]])
+globpath({path}, {expr} [, {nosuf} [, {list} [, {alllinks}]]])
 		Perform glob() on all directories in {path} and concatenate
 		the results.  Example: >
 			:echo globpath(&rtp, "syntax/c.vim")
@@ -3932,7 +4002,7 @@ globpath({path}, {expr} [, {nosuf} [, {list} [, {allinks}]]])
 		they are separated by <NL> characters.  Example: >
 			:echo globpath(&rtp, "syntax/c.vim", 0, 1)
 <
-		{allinks} is used as with |glob()|.
+		{alllinks} is used as with |glob()|.
 
 		The "**" item can be used to search in a directory tree.
 		For example, to find all "README.txt" files in the directories
@@ -4279,6 +4349,91 @@ items({dict})						*items()*
 		order.
 
 
+job_getchannel({job})					 *job_getchannel()*
+		Get the channel handle that {job} is using.
+		{only available when compiled with the |+job| feature}
+
+job_start({command} [, {options}])			*job_start()*
+		Start a job and return a Job object.  Unlike |system()| and
+		|:!cmd| this does not wait for the job to finish.
+
+		{command} can be a String.  This works best on MS-Windows.  On
+		Unix it is split up in white-separated parts to be passed to
+		execvp().  Arguments in double quotes can contain white space.
+
+		{command} can be a List, where the first item is the executable
+		and further items are the arguments.  All items are converted
+		to String.  This works best on Unix.
+
+		On MS-Windows, job_start() makes a GUI application hidden. If
+		want to show it, Use |:!start| instead.
+
+		The command is executed directly, not through a shell, the
+		'shell' option is not used.  To use the shell: >
+	let job = job_start(["/bin/sh", "-c", "echo hello"])
+<		Or: >
+	let job = job_start('/bin/sh -c "echo hello"')
+<		Note that this will start two processes, the shell and the
+		command it executes.  If you don't want this use the "exec"
+		shell command.
+
+		On Unix $PATH is used to search for the executable only when
+		the command does not contain a slash.
+
+		The job will use the same terminal as Vim.  If it reads from
+		stdin the job and Vim will be fighting over input, that
+		doesn't work.  Redirect stdin and stdout to avoid problems: >
+	let job = job_start(['sh', '-c', "myserver </dev/null >/dev/null"])
+<
+		The returned Job object can be used to get the status with
+		|job_status()| and stop the job with |job_stop()|.
+
+		{options} must be a Dictionary.  It can contain many optional
+		items, see |job-options|.
+
+		{only available when compiled with the |+job| feature}
+
+job_status({job})						*job_status()*
+		Returns a String with the status of {job}:
+			"run"	job is running
+			"fail"	job failed to start
+			"dead"	job died or was stopped after running
+
+		{only available when compiled with the |+job| feature}
+
+job_stop({job} [, {how}])					*job_stop()*
+		Stop the {job}.  This can also be used to signal the job.
+
+		When {how} is omitted or is "term" the job will be terminated
+		normally.  For Unix SIGTERM is sent.  For MS-Windows
+		CTRL_BREAK will be sent.  This goes to the process group, thus
+		children may also be affected.
+
+		Other values for Unix:
+			"hup"	Unix: SIGHUP
+			"quit"	Unix: SIGQUIT
+			"kill"	Unix: SIGKILL (strongest way to stop)
+			number	Unix: signal with that number
+
+		Other values for MS-Windows:
+			"int"	Windows: CTRL_C
+			"kill"	Windows: terminate process forcedly
+			Others	Windows: CTRL_BREAK
+
+		On Unix the signal is sent to the process group.  This means
+		that when the job is "sh -c command" it affects both the shell
+		and the command.
+
+		The result is a Number: 1 if the operation could be executed,
+		0 if "how" is not supported on the system.
+		Note that even when the operation was executed, whether the
+		job was actually stopped needs to be checked with
+		job_status().
+		The status of the job isn't checked, the operation will even
+		be done when Vim thinks the job isn't running.
+
+		{only available when compiled with the |+job| feature}
+
 join({list} [, {sep}])					*join()*
 		Join the items in {list} together into one String.
 		When {sep} is specified it is put in between the items.  If
@@ -4290,24 +4445,40 @@ join({list} [, {sep}])					*join()*
 		converted into a string like with |string()|.
 		The opposite function is |split()|.
 
-jsondecode({string})					*jsondecode()*
+js_decode({string})					*js_decode()*
+		This is similar to |json_decode()| with these differences:
+		- Object key names do not have to be in quotes.
+		- Empty items in an array (between two commas) are allowed and
+		  result in v:none items.
+
+js_encode({expr})					*js_encode()*
+		This is similar to |json_encode()| with these differences:
+		- Object key names are not in quotes.
+		- v:none items in an array result in an empty item between
+		  commas.
+		For example, the Vim object:
+			[1,v:none,{"one":1},v:none] ~
+		Will be encoded as:
+			[1,,{one:1},,] ~
+		While json_encode() would produce:
+			[1,null,{"one":1},null] ~
+		This encoding is valid for JavaScript. It is more efficient
+		than JSON, especially when using an array with optional items.
+
+
+json_decode({string})					*json_decode()*
 		This parses a JSON formatted string and returns the equivalent
-		in Vim values.  See |jsonencode()| for the relation between
+		in Vim values.  See |json_encode()| for the relation between
 		JSON and Vim values.
 		The decoding is permissive:
 		- A trailing comma in an array and object is ignored.
-		- An empty item in an array, two commas with nothing or white
-		  space in between, results in v:none.
-		- When an object member name is not a string it is converted
-		  to a string.  E.g. the number 123 is used as the string
-		  "123".
 		- More floating point numbers are recognized, e.g. "1." for
 		  "1.0".
 		The result must be a valid Vim type:
 		- An empty object member name is not allowed.
 		- Duplicate object member names are not allowed.
 
-jsonencode({expr})					*jsonencode()*
+json_encode({expr})					*json_encode()*
 		Encode {expr} as JSON and return this as a string.
 		The encoding is specified in:
 		https://tools.ietf.org/html/rfc7159.html
@@ -4322,7 +4493,7 @@ jsonencode({expr})					*jsonencode()*
 		   			used recursively: {}
 		   v:false		"false"
 		   v:true		"true"
-		   v:none		nothing
+		   v:none		"null"
 		   v:null		"null"
 		Note that using v:none is permitted, although the JSON
 		standard does not allow empty items.  This can be useful for
@@ -4659,7 +4830,7 @@ match({expr}, {pat}[, {start}[, {count}]])			*match()*
 		done like 'magic' is set and 'cpoptions' is empty.
 
 					*matchadd()* *E798* *E799* *E801*
-matchadd({group}, {pattern}[, {priority}[, {id} [, {dict}]]])
+matchadd({group}, {pattern}[, {priority}[, {id}[, {dict}]]])
 		Defines a pattern to be highlighted in the current window (a
 		"match").  It will be highlighted with {group}.  Returns an
 		identification number (ID), which can be used to delete the
@@ -4695,7 +4866,7 @@ matchadd({group}, {pattern}[, {priority}[, {id} [, {dict}]]])
 		highlighted matches. The dict can have the following members:
 
 			conceal	    Special character to show instead of the
-				    match (only for |hl-Conceal| highlighed
+				    match (only for |hl-Conceal| highlighted
 				    matches, see |:syn-cchar|)
 
 		The number of matches is not limited, as it is the case with
@@ -6685,6 +6856,8 @@ type({expr})	The result is a Number, depending on the type of {expr}:
 			Float:	    5
 			Boolean:    6 (v:false and v:true)
 			None	    7 (v:null and v:none)
+			Job	    8
+			Channel	    9
 		To avoid the magic numbers it should be used this way: >
 			:if type(myvar) == type(0)
 			:if type(myvar) == type("")
@@ -6693,7 +6866,7 @@ type({expr})	The result is a Number, depending on the type of {expr}:
 			:if type(myvar) == type({})
 			:if type(myvar) == type(0.0)
 			:if type(myvar) == type(v:false)
-			:if type(myvar) == type(v:none
+			:if type(myvar) == type(v:none)
 
 undofile({name})					*undofile()*
 		Return the name of the undo file that would be used for a file

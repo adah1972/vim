@@ -1780,10 +1780,17 @@ process_message(void)
 #ifdef FEAT_CHANNEL
     if (msg.message == WM_NETBEANS)
     {
-	int channel_idx = channel_socket2idx((sock_T)msg.wParam);
+	int	    what;
+	channel_T   *channel = channel_fd2channel((sock_T)msg.wParam, &what);
 
-	if (channel_idx >= 0)
-	    channel_read(channel_idx);
+	if (channel != NULL)
+	{
+	    /* Disable error messages, they can mess up the display and throw
+	     * an exception. */
+	    ++emsg_off;
+	    channel_read(channel, what, "process_message");
+	    --emsg_off;
+	}
 	return;
     }
 #endif

@@ -1123,6 +1123,29 @@ mch_setmouse(int on)
     SetConsoleMode(g_hConIn, cmodein);
 }
 
+#ifdef FEAT_CHANNEL
+    static int
+handle_channel_event(void)
+{
+    int		    ret;
+    fd_set	    rfds;
+    int		    maxfd;
+
+    FD_ZERO(&rfds);
+    maxfd = channel_select_setup(-1, &rfds);
+    if (maxfd >= 0)
+    {
+	struct timeval  tv;
+
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	ret = select(maxfd + 1, &rfds, NULL, NULL, &tv);
+	if (ret > 0 && channel_select_check(ret, &rfds) > 0)
+	    return TRUE;
+    }
+    return FALSE;
+}
+#endif
 
 /*
  * Decode a MOUSE_EVENT.  If it's a valid event, return MOUSE_LEFT,
@@ -1443,11 +1466,6 @@ WaitForChar(long msec)
     INPUT_RECORD    ir;
     DWORD	    cRecords;
     WCHAR	    ch, ch2;
-#ifdef FEAT_CHANNEL
-    int		    ret;
-    fd_set	    rfds;
-    int		    maxfd;
-#endif
 
     if (msec > 0)
 	/* Wait until the specified time has elapsed. */
@@ -1472,18 +1490,8 @@ WaitForChar(long msec)
 #endif
 
 #ifdef FEAT_CHANNEL
-	FD_ZERO(&rfds);
-	maxfd = channel_select_setup(-1, &rfds);
-	if (maxfd >= 0)
-	{
-	    struct timeval  tv;
-
-	    tv.tv_sec = 0;
-	    tv.tv_usec = 0;
-	    ret = select(maxfd + 1, &rfds, NULL, NULL, &tv);
-	    if (ret > 0 && channel_select_check(ret, &rfds) > 0)
-		return TRUE;
-	}
+	if (handle_channel_event())
+	    return TRUE;
 #endif
 
 	if (0
@@ -4155,7 +4163,7 @@ mch_system_classic(char *cmd, int options)
     si.cbReserved2 = 0;
     si.lpReserved2 = NULL;
 
-    /* There is a strange error on Windows 95 when using "c:\\command.com".
+    /* There is a strange error on Windows 95 when using "c:\command.com".
      * When the "c:\\" is left out it works OK...? */
     if (mch_windows95()
 	    && (STRNICMP(cmd, "c:/command.com", 14) == 0
@@ -5031,6 +5039,167 @@ mch_call_shell(
 
     return x;
 }
+
+#if defined(FEAT_JOB) || defined(PROTO)
+    void
+mch_start_job(char *cmd, job_T *job)
+{
+    STARTUPINFO		si;
+    PROCESS_INFORMATION	pi;
+    HANDLE		jo;
+# ifdef FEAT_CHANNEL
+    channel_T		*channel;
+    HANDLE		ifd[2];
+    HANDLE		ofd[2];
+    HANDLE		efd[2];
+    SECURITY_ATTRIBUTES saAttr;
+
+    ifd[0] = INVALID_HANDLE_VALUE;
+    ifd[1] = INVALID_HANDLE_VALUE;
+    ofd[0] = INVALID_HANDLE_VALUE;
+    ofd[1] = INVALID_HANDLE_VALUE;
+    efd[0] = INVALID_HANDLE_VALUE;
+    efd[1] = INVALID_HANDLE_VALUE;
+
+    channel = add_channel();
+    if (channel == NULL)
+	return;
+# endif
+
+    jo = CreateJobObject(NULL, NULL);
+    if (jo == NULL)
+    {
+	job->jv_status = JOB_FAILED;
+	goto failed;
+    }
+
+    ZeroMemory(&pi, sizeof(pi));
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags |= STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+
+    saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+    saAttr.bInheritHandle = TRUE;
+    saAttr.lpSecurityDescriptor = NULL;
+    if (!CreatePipe(&ifd[0], &ifd[1], &saAttr, 0)
+       || !pSetHandleInformation(ifd[1], HANDLE_FLAG_INHERIT, 0)
+       || !CreatePipe(&ofd[0], &ofd[1], &saAttr, 0)
+       || !pSetHandleInformation(ofd[0], HANDLE_FLAG_INHERIT, 0)
+       || !CreatePipe(&efd[0], &efd[1], &saAttr, 0)
+       || !pSetHandleInformation(efd[0], HANDLE_FLAG_INHERIT, 0))
+	goto failed;
+    si.dwFlags |= STARTF_USESTDHANDLES;
+    si.hStdInput = ifd[0];
+    si.hStdOutput = ofd[1];
+    si.hStdError = efd[1];
+
+    if (!vim_create_process(cmd, TRUE,
+	    CREATE_SUSPENDED |
+	    CREATE_DEFAULT_ERROR_MODE |
+	    CREATE_NEW_PROCESS_GROUP |
+	    CREATE_NEW_CONSOLE,
+	    &si, &pi))
+    {
+	CloseHandle(jo);
+	job->jv_status = JOB_FAILED;
+	goto failed;
+    }
+
+    if (!AssignProcessToJobObject(jo, pi.hProcess))
+    {
+	/* if failing, switch the way to terminate
+	 * process with TerminateProcess. */
+	CloseHandle(jo);
+	jo = NULL;
+    }
+    ResumeThread(pi.hThread);
+    CloseHandle(job->jv_proc_info.hThread);
+    job->jv_proc_info = pi;
+    job->jv_job_object = jo;
+    job->jv_status = JOB_STARTED;
+
+    CloseHandle(ifd[0]);
+    CloseHandle(ofd[1]);
+    CloseHandle(efd[1]);
+
+# ifdef FEAT_CHANNEL
+    job->jv_channel = channel;
+    channel_set_pipes(channel, (sock_T)ifd[1], (sock_T)ofd[0], (sock_T)efd[0]);
+    channel_set_job(channel, job);
+
+#   ifdef FEAT_GUI
+     channel_gui_register(channel);
+#   endif
+# endif
+    return;
+
+failed:
+# ifdef FEAT_CHANNEL
+    CloseHandle(ifd[0]);
+    CloseHandle(ofd[0]);
+    CloseHandle(efd[0]);
+    CloseHandle(ifd[1]);
+    CloseHandle(ofd[1]);
+    CloseHandle(efd[1]);
+    channel_free(channel);
+# else
+    ;  /* make compiler happy */
+# endif
+}
+
+    char *
+mch_job_status(job_T *job)
+{
+    DWORD dwExitCode = 0;
+
+    if (!GetExitCodeProcess(job->jv_proc_info.hProcess, &dwExitCode)
+	    || dwExitCode != STILL_ACTIVE)
+    {
+	job->jv_status = JOB_ENDED;
+	return "dead";
+    }
+    return "run";
+}
+
+    int
+mch_stop_job(job_T *job, char_u *how)
+{
+    int ret = 0;
+    int ctrl_c = STRCMP(how, "int") == 0;
+
+    if (STRCMP(how, "kill") == 0)
+    {
+	if (job->jv_job_object != NULL)
+	    return TerminateJobObject(job->jv_job_object, 0) ? OK : FAIL;
+	else
+	    return TerminateProcess(job->jv_proc_info.hProcess, 0) ? OK : FAIL;
+    }
+
+    if (!AttachConsole(job->jv_proc_info.dwProcessId))
+	return FAIL;
+    ret = GenerateConsoleCtrlEvent(
+	    ctrl_c ? CTRL_C_EVENT : CTRL_BREAK_EVENT,
+	    job->jv_proc_info.dwProcessId)
+	? OK : FAIL;
+    FreeConsole();
+    return ret;
+}
+
+/*
+ * Clear the data related to "job".
+ */
+    void
+mch_clear_job(job_T *job)
+{
+    if (job->jv_status != JOB_FAILED)
+    {
+	if (job->jv_job_object != NULL)
+	    CloseHandle(job->jv_job_object);
+	CloseHandle(job->jv_proc_info.hProcess);
+    }
+}
+#endif
 
 
 #ifndef FEAT_GUI_W32
