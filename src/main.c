@@ -637,6 +637,9 @@ vim_main2(int argc UNUSED, char **argv UNUSED)
 	source_runtime((char_u *)"plugin/**/*.vim", TRUE);
 # endif
 	TIME_MSG("loading plugins");
+
+	source_packages();
+	TIME_MSG("loading packages");
     }
 #endif
 
@@ -1486,6 +1489,9 @@ getout(int exitval)
 	windgoto((int)Rows - 1, 0);
 #endif
 
+#ifdef FEAT_JOB
+    job_stop_on_exit();
+#endif
 #ifdef FEAT_LUA
     lua_end();
 #endif

@@ -93,11 +93,7 @@ static struct cmdname
     ex_func_T   cmd_func;	/* function for this command */
     long_u	cmd_argt;	/* flags declared above */
     int		cmd_addr_type;	/* flag for address type */
-}
-# if defined(FEAT_GUI_W16)
-_far
-# endif
-cmdnames[] =
+} cmdnames[] =
 #else
 # define EX(a, b, c, d, e)  a
 enum CMD_index
@@ -813,6 +809,9 @@ EX(CMD_loadview,	"loadview",	ex_loadview,
 			ADDR_LINES),
 EX(CMD_loadkeymap,	"loadkeymap",	ex_loadkeymap,
 			CMDWIN,
+			ADDR_LINES),
+EX(CMD_loadplugin,	"loadplugin",	ex_loadplugin,
+			BANG|FILE1|TRLBAR|SBOXOK|CMDWIN,
 			ADDR_LINES),
 EX(CMD_lockmarks,	"lockmarks",	ex_wrongmodifier,
 			NEEDARG|EXTRA|NOTRLCOM,

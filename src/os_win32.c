@@ -1128,30 +1128,6 @@ mch_setmouse(int on)
     SetConsoleMode(g_hConIn, cmodein);
 }
 
-#ifdef FEAT_CHANNEL
-    static int
-handle_channel_event(void)
-{
-    int		    ret;
-    fd_set	    rfds;
-    int		    maxfd;
-
-    FD_ZERO(&rfds);
-    maxfd = channel_select_setup(-1, &rfds);
-    if (maxfd >= 0)
-    {
-	struct timeval  tv;
-
-	tv.tv_sec = 0;
-	tv.tv_usec = 0;
-	ret = select(maxfd + 1, &rfds, NULL, NULL, &tv);
-	if (ret > 0 && channel_select_check(ret, &rfds) > 0)
-	    return TRUE;
-    }
-    return FALSE;
-}
-#endif
-
 /*
  * Decode a MOUSE_EVENT.  If it's a valid event, return MOUSE_LEFT,
  * MOUSE_MIDDLE, or MOUSE_RIGHT for a click; MOUSE_DRAG for a mouse
@@ -1492,11 +1468,6 @@ WaitForChar(long msec)
 #endif
 #ifdef FEAT_CLIENTSERVER
 	serverProcessPendingMessages();
-#endif
-
-#ifdef FEAT_CHANNEL
-	if (handle_channel_event())
-	    return TRUE;
 #endif
 
 	if (0
@@ -5164,6 +5135,7 @@ mch_job_status(job_T *job)
 	    || dwExitCode != STILL_ACTIVE)
     {
 	job->jv_status = JOB_ENDED;
+	job->jv_exitval = (int)dwExitCode;
 	return "dead";
     }
     return "run";

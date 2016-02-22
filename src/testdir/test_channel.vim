@@ -44,7 +44,8 @@ func s:run_server(testfunc, ...)
 
   try
     if has('job')
-      let s:job = job_start(cmd)
+      let s:job = job_start(cmd, {"stoponexit": "hup"})
+      call job_setoptions(s:job, {"stoponexit": "kill"})
     elseif has('win32')
       exe 'silent !start cmd /c start "test_channel" ' . cmd
     else
@@ -144,6 +145,13 @@ func s:communicate(port)
   endif
   call assert_equal('got it', s:responseMsg)
 
+  " check setting options (without testing the effect)
+  call ch_setoptions(handle, {'callback': 's:NotUsed'})
+  call ch_setoptions(handle, {'timeout': 1111})
+  call ch_setoptions(handle, {'mode': 'json'})
+  call assert_fails("call ch_setoptions(handle, {'waittime': 111})", "E475")
+  call ch_setoptions(handle, {'callback': ''})
+
   " Send an eval request that works.
   call assert_equal('ok', ch_sendexpr(handle, 'eval-works'))
   sleep 10m
@@ -176,6 +184,24 @@ func s:communicate(port)
   call assert_equal('ok', ch_sendexpr(handle, 'redraw!'))
 
   call assert_equal('ok', ch_sendexpr(handle, 'empty-request'))
+
+  " Reading while there is nothing available.
+  " TODO: make this work for MS-Windows
+  if has('unix')
+    call assert_equal(v:none, ch_read(handle, {'timeout': 0}))
+    let start = reltime()
+    call assert_equal(v:none, ch_read(handle, {'timeout': 333}))
+    let elapsed = reltime(start)
+    call assert_true(reltimefloat(elapsed) > 0.3)
+    call assert_true(reltimefloat(elapsed) < 0.6)
+  endif
+
+  " Send without waiting for a response, then wait for a response.
+  call ch_sendexpr(handle, 'wait a bit',  {'callback': 0})
+  let resp = ch_read(handle)
+  call assert_equal(type([]), type(resp))
+  call assert_equal(type(11), type(resp[0]))
+  call assert_equal('waited', resp[1])
 
   " make the server quit, can't check if this works, should not hang.
   call ch_sendexpr(handle, '!quit!', {'callback': 0})
@@ -279,17 +305,26 @@ func Test_connect_waittime()
     call assert_true(reltimefloat(elapsed) < 1.0)
   endif
 
+  " We intend to use a socket that doesn't exist and wait for half a second
+  " before giving up.  If the socket does exist it can fail in various ways.
+  " Check for "Connection reset by peer" to avoid flakyness.
   let start = reltime()
-  let handle = ch_open('localhost:9867', {'waittime': 500})
-  if ch_status(handle) != "fail"
-    " Oops, port does exists.
-    call ch_close(handle)
-  else
-    " Failed connection doesn't wait the full time on Unix.
-    " TODO: why is MS-Windows different?
-    let elapsed = reltime(start)
-    call assert_true(reltimefloat(elapsed) < 1.0)
-  endif
+  try
+    let handle = ch_open('localhost:9867', {'waittime': 500})
+    if ch_status(handle) != "fail"
+      " Oops, port does exists.
+      call ch_close(handle)
+    else
+      " Failed connection should wait about 500 msec.
+      let elapsed = reltime(start)
+      call assert_true(reltimefloat(elapsed) > 0.3)
+      call assert_true(reltimefloat(elapsed) < 1.0)
+    endif
+  catch
+    if v:exception !~ 'Connection reset by peer'
+      call assert_false(1, "Caught exception: " . v:exception)
+    endif
+  endtry
 endfunc
 
 func Test_raw_pipe()
@@ -409,4 +444,52 @@ func Test_open_delay()
   call ch_log('Test_open_delay()')
   " The server will wait half a second before creating the port.
   call s:run_server('s:open_delay', 'delay')
+endfunc
+
+"""""""""
+
+function MyFunction(a,b,c)
+  let s:call_ret = [a:a, a:b, a:c]
+endfunc
+
+function s:test_call(port)
+  let handle = ch_open('localhost:' . a:port, s:chopt)
+  if ch_status(handle) == "fail"
+    call assert_false(1, "Can't open channel")
+    return
+  endif
+
+  call assert_equal('ok', ch_sendexpr(handle, 'call-func'))
+  sleep 20m
+  call assert_equal([1, 2, 3], s:call_ret)
+endfunc
+
+func Test_call()
+  call ch_log('Test_call()')
+  call s:run_server('s:test_call')
+endfunc
+
+"""""""""
+
+let s:job_ret = 'not yet'
+function MyExitCb(job, status)
+  let s:job_ret = 'done'
+endfunc
+
+function s:test_exit_callback(port)
+  call job_setoptions(s:job, {'exit-cb': 'MyExitCb'})
+  let s:exit_job = s:job
+endfunc
+
+func Test_exit_callback()
+  if has('job')
+    call s:run_server('s:test_exit_callback')
+
+    " the job may take a little while to exit
+    sleep 50m
+
+    " calling job_status() triggers the callback
+    call job_status(s:exit_job)
+    call assert_equal('done', s:job_ret)
+  endif
 endfunc
