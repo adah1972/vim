@@ -131,10 +131,10 @@ func s:communicate(port)
     call assert_false(1, 's:responseHandle was not set')
   else
     call assert_equal(handle, s:responseHandle)
+    unlet s:responseHandle
   endif
   call assert_equal('got it', s:responseMsg)
 
-  unlet s:responseHandle
   let s:responseMsg = ''
   call ch_sendexpr(handle, 'hello!', {'callback': function('s:RequestHandler')})
   sleep 10m
@@ -142,6 +142,7 @@ func s:communicate(port)
     call assert_false(1, 's:responseHandle was not set')
   else
     call assert_equal(handle, s:responseHandle)
+    unlet s:responseHandle
   endif
   call assert_equal('got it', s:responseMsg)
 
@@ -186,15 +187,12 @@ func s:communicate(port)
   call assert_equal('ok', ch_sendexpr(handle, 'empty-request'))
 
   " Reading while there is nothing available.
-  " TODO: make this work for MS-Windows
-  if has('unix')
-    call assert_equal(v:none, ch_read(handle, {'timeout': 0}))
-    let start = reltime()
-    call assert_equal(v:none, ch_read(handle, {'timeout': 333}))
-    let elapsed = reltime(start)
-    call assert_true(reltimefloat(elapsed) > 0.3)
-    call assert_true(reltimefloat(elapsed) < 0.6)
-  endif
+  call assert_equal(v:none, ch_read(handle, {'timeout': 0}))
+  let start = reltime()
+  call assert_equal(v:none, ch_read(handle, {'timeout': 333}))
+  let elapsed = reltime(start)
+  call assert_true(reltimefloat(elapsed) > 0.3)
+  call assert_true(reltimefloat(elapsed) < 0.6)
 
   " Send without waiting for a response, then wait for a response.
   call ch_sendexpr(handle, 'wait a bit',  {'callback': 0})
@@ -471,9 +469,9 @@ endfunc
 
 """""""""
 
-let s:job_ret = 'not yet'
+let s:job_exit_ret = 'not yet'
 function MyExitCb(job, status)
-  let s:job_ret = 'done'
+  let s:job_exit_ret = 'done'
 endfunc
 
 function s:test_exit_callback(port)
@@ -490,6 +488,32 @@ func Test_exit_callback()
 
     " calling job_status() triggers the callback
     call job_status(s:exit_job)
-    call assert_equal('done', s:job_ret)
+    call assert_equal('done', s:job_exit_ret)
   endif
 endfunc
+
+"""""""""
+
+let s:ch_close_ret = 'alive'
+function MyCloseCb(ch)
+  let s:ch_close_ret = 'closed'
+endfunc
+
+function s:test_close_callback(port)
+  let handle = ch_open('localhost:' . a:port, s:chopt)
+  if ch_status(handle) == "fail"
+    call assert_false(1, "Can't open channel")
+    return
+  endif
+  call ch_setoptions(handle, {'close-cb': 'MyCloseCb'})
+
+  call assert_equal('', ch_sendexpr(handle, 'close me'))
+  sleep 20m
+  call assert_equal('closed', s:ch_close_ret)
+endfunc
+
+func Test_close_callback()
+  call ch_log('Test_close_callback()')
+  call s:run_server('s:test_close_callback')
+endfunc
+

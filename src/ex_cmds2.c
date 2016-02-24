@@ -2442,7 +2442,7 @@ ex_next(exarg_T *eap)
     }
 }
 
-#ifdef FEAT_LISTCMDS
+#if defined(FEAT_LISTCMDS) || defined(PROTO)
 /*
  * ":argedit"
  */
@@ -2559,6 +2559,15 @@ ex_listdo(exarg_T *eap)
 
 #ifndef FEAT_WINDOWS
     if (eap->cmdidx == CMD_windo)
+    {
+	ex_ni(eap);
+	return;
+    }
+#endif
+
+#ifndef FEAT_QUICKFIX
+    if (eap->cmdidx == CMD_cdo || eap->cmdidx == CMD_ldo ||
+	    eap->cmdidx == CMD_cfdo || eap->cmdidx == CMD_lfdo)
     {
 	ex_ni(eap);
 	return;
@@ -3058,14 +3067,12 @@ source_pack_plugin(char_u *fname, void *cookie UNUSED)
     int oldlen;
     int addlen;
 
-    p4 = p3 = p2 = p1 = get_past_head(fname);
+    p6 = p5 = p4 = p3 = p2 = p1 = get_past_head(fname);
     for (p = p1; *p; mb_ptr_adv(p))
-    {
 	if (vim_ispathsep_nocolon(*p))
 	{
 	    p6 = p5; p5 = p4; p4 = p3; p3 = p2; p2 = p1; p1 = p;
 	}
-    }
 
     /* now we have:
      * rtp/pack/name/ever/name/plugin/name.vim
@@ -3089,8 +3096,8 @@ source_pack_plugin(char_u *fname, void *cookie UNUSED)
     if (strstr((char *)p_rtp, (char *)fname) == NULL)
     {
 	/* directory not in 'runtimepath', add it */
-	oldlen = STRLEN(p_rtp);
-	addlen = STRLEN(fname);
+	oldlen = (int)STRLEN(p_rtp);
+	addlen = (int)STRLEN(fname);
 	new_rtp = alloc(oldlen + addlen + 2);
 	if (new_rtp == NULL)
 	{
@@ -3132,7 +3139,7 @@ ex_loadplugin(exarg_T *eap)
     int		len;
     char	*pat;
 
-    len = STRLEN(pattern) + STRLEN(eap->arg);
+    len = (int)STRLEN(pattern) + (int)STRLEN(eap->arg);
     pat = (char *)alloc(len);
     if (pat == NULL)
 	return;
@@ -4258,8 +4265,7 @@ get_locale_val(int what)
 {
     char_u	*loc;
 
-    /* Obtain the locale value from the libraries.  For DJGPP this is
-     * redefined and it doesn't use the arguments. */
+    /* Obtain the locale value from the libraries. */
     loc = (char_u *)setlocale(what, NULL);
 
 # ifdef WIN32

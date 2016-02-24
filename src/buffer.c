@@ -541,9 +541,7 @@ buf_clear_file(buf_T *buf)
 {
     buf->b_ml.ml_line_count = 1;
     unchanged(buf, TRUE);
-#ifndef SHORT_FNAME
     buf->b_shortname = FALSE;
-#endif
     buf->b_p_eol = TRUE;
     buf->b_start_eol = TRUE;
 #ifdef FEAT_MBYTE
@@ -1617,11 +1615,14 @@ enter_buffer(buf_T *buf)
 #if defined(FEAT_AUTOCHDIR) || defined(PROTO)
 /*
  * Change to the directory of the current buffer.
+ * Don't do this while still starting up.
  */
     void
 do_autochdir(void)
 {
-    if (curbuf->b_ffname != NULL && vim_chdirfile(curbuf->b_ffname) == OK)
+    if (starting == 0
+	    && curbuf->b_ffname != NULL
+	    && vim_chdirfile(curbuf->b_ffname) == OK)
 	shorten_fnames(TRUE);
 }
 #endif
@@ -2911,9 +2912,7 @@ setfname(
     }
 #endif
 
-#ifndef SHORT_FNAME
     buf->b_shortname = FALSE;
-#endif
 
     buf_name_changed(buf);
     return OK;
@@ -4480,7 +4479,7 @@ fix_fname(char_u  *fname)
 # ifdef BACKSLASH_IN_FILENAME
 	    || strstr((char *)fname, "\\\\") != NULL
 # endif
-# if defined(MSWIN) || defined(DJGPP)
+# if defined(MSWIN)
 	    || vim_strchr(fname, '~') != NULL
 # endif
 	    )
