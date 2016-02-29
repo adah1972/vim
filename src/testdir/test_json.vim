@@ -1,4 +1,11 @@
 " Test for JSON functions.
+
+" JSON requires using utf-8.  Conversion breaks the asserts, therefore set
+" 'encoding' to utf-8.
+if !has('multi_byte')
+  finish
+endif
+set encoding=utf-8
 scriptencoding utf-8
 
 let s:json1 = '"str\"in\\g"'
@@ -12,6 +19,12 @@ let s:var4 = "\x10\x11\x12\x13\x14\x15\x16\x17"
 let s:json5 = '"\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f"'
 let s:var5 = "\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f"
 
+" surrogate pair
+let s:jsonsp1 = '"\ud83c\udf63"'
+let s:varsp1 = "\xf0\x9f\x8d\xa3"
+let s:jsonsp2 = '"\ud83c\u00a0"'
+let s:varsp2 = "\ud83c\u00a0"
+
 let s:jsonmb = '"s¢cĴgё"'
 let s:varmb = "s¢cĴgё"
 let s:jsonnr = '1234'
@@ -19,11 +32,9 @@ let s:varnr = 1234
 if has('float')
   let s:jsonfl = '12.34'
   let s:varfl = 12.34
-  let s:jsoninf = 'null'
-  let s:jsinf = 'Infinity'
+  let s:jsoninf = 'Infinity'
   let s:varinf = 1.0 / 0.0
-  let s:jsonnan = 'null'
-  let s:jsnan = 'NaN'
+  let s:jsonnan = 'NaN'
   let s:varnan = 0.0 / 0.0
 endif
 
@@ -71,6 +82,7 @@ func Test_json_encode()
 
   if has('multi_byte')
     call assert_equal(s:jsonmb, json_encode(s:varmb))
+    " no test for surrogate pair, json_encode() doesn't create them.
   endif
 
   call assert_equal(s:jsonnr, json_encode(s:varnr))
@@ -107,6 +119,8 @@ func Test_json_decode()
 
   if has('multi_byte')
     call assert_equal(s:varmb, json_decode(s:jsonmb))
+    call assert_equal(s:varsp1, json_decode(s:jsonsp1))
+    call assert_equal(s:varsp2, json_decode(s:jsonsp2))
   endif
 
   call assert_equal(s:varnr, json_decode(s:jsonnr))
@@ -170,13 +184,14 @@ func Test_js_encode()
 
   if has('multi_byte')
     call assert_equal(s:jsonmb, js_encode(s:varmb))
+    " no test for surrogate pair, js_encode() doesn't create them.
   endif
 
   call assert_equal(s:jsonnr, js_encode(s:varnr))
   if has('float')
     call assert_equal(s:jsonfl, js_encode(s:varfl))
-    call assert_equal(s:jsinf, js_encode(s:varinf))
-    call assert_equal(s:jsnan, js_encode(s:varnan))
+    call assert_equal(s:jsoninf, js_encode(s:varinf))
+    call assert_equal(s:jsonnan, js_encode(s:varnan))
   endif
 
   call assert_equal(s:jsonl1, js_encode(s:varl1))
@@ -208,13 +223,15 @@ func Test_js_decode()
 
   if has('multi_byte')
     call assert_equal(s:varmb, js_decode(s:jsonmb))
+    call assert_equal(s:varsp1, js_decode(s:jsonsp1))
+    call assert_equal(s:varsp2, js_decode(s:jsonsp2))
   endif
 
   call assert_equal(s:varnr, js_decode(s:jsonnr))
   if has('float')
     call assert_equal(s:varfl, js_decode(s:jsonfl))
-    call assert_equal(s:varinf, js_decode(s:jsinf))
-    call assert_true(isnan(js_decode(s:jsnan)))
+    call assert_equal(s:varinf, js_decode(s:jsoninf))
+    call assert_true(isnan(js_decode(s:jsonnan)))
   endif
 
   call assert_equal(s:varl1, js_decode(s:jsonl1))

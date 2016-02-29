@@ -1683,27 +1683,6 @@ mch_inchar(
     if (typeaheadlen > 0)
 	goto theend;
 
-#ifdef FEAT_SNIFF
-    if (want_sniff_request)
-    {
-	if (sniff_request_waiting)
-	{
-	    /* return K_SNIFF */
-	    typeahead[typeaheadlen++] = CSI;
-	    typeahead[typeaheadlen++] = (char_u)KS_EXTRA;
-	    typeahead[typeaheadlen++] = (char_u)KE_SNIFF;
-	    sniff_request_waiting = 0;
-	    want_sniff_request = 0;
-	    goto theend;
-	}
-	else if (time < 0 || time > 250)
-	{
-	    /* don't wait too long, a request might be pending */
-	    time = 250;
-	}
-    }
-#endif
-
     if (time >= 0)
     {
 	if (!WaitForChar(time))     /* no character available */
@@ -5149,10 +5128,9 @@ mch_job_status(job_T *job)
     int
 mch_stop_job(job_T *job, char_u *how)
 {
-    int ret = 0;
-    int ctrl_c = STRCMP(how, "int") == 0;
+    int ret;
 
-    if (STRCMP(how, "kill") == 0)
+    if (STRCMP(how, "term") == 0 || STRCMP(how, "kill") == 0 || *how == NUL)
     {
 	if (job->jv_job_object != NULL)
 	    return TerminateJobObject(job->jv_job_object, 0) ? OK : FAIL;
@@ -5163,9 +5141,9 @@ mch_stop_job(job_T *job, char_u *how)
     if (!AttachConsole(job->jv_proc_info.dwProcessId))
 	return FAIL;
     ret = GenerateConsoleCtrlEvent(
-	    ctrl_c ? CTRL_C_EVENT : CTRL_BREAK_EVENT,
-	    job->jv_proc_info.dwProcessId)
-	? OK : FAIL;
+		STRCMP(how, "int") == 0 ? CTRL_C_EVENT : CTRL_BREAK_EVENT,
+		job->jv_proc_info.dwProcessId)
+	    ? OK : FAIL;
     FreeConsole();
     return ret;
 }

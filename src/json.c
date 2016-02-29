@@ -12,26 +12,11 @@
  *
  * Follows this standard: https://tools.ietf.org/html/rfc7159.html
  */
+#define USING_FLOAT_STUFF
 
 #include "vim.h"
 
 #if defined(FEAT_EVAL) || defined(PROTO)
-
-#if defined(FEAT_FLOAT)
-# include <float.h>
-# if defined(HAVE_MATH_H)
-   /* for isnan() and isinf() */
-#  include <math.h>
-# endif
-# if defined(WIN32) && !defined(isnan)
-#  define isnan(x) _isnan(x)
-#  define isinf(x) (!_finite(x) && !_isnan(x))
-# endif
-# if defined(_MSC_VER) && !defined(INFINITY)
-#  define INFINITY (DBL_MAX+DBL_MAX)
-#  define NAN (INFINITY-INFINITY)
-# endif
-#endif
 
 static int json_encode_item(garray_T *gap, typval_T *val, int copyID, int options);
 static int json_decode_item(js_read_T *reader, typval_T *res, int options);
@@ -95,10 +80,31 @@ write_string(garray_T *gap, char_u *str)
 	ga_concat(gap, (char_u *)"null");
     else
     {
+#if defined(FEAT_MBYTE) && defined(USE_ICONV)
+	vimconv_T   conv;
+	char_u	    *converted = NULL;
+
+	if (!enc_utf8)
+	{
+	    /* Convert the text from 'encoding' to utf-8, the JSON string is
+	     * always utf-8. */
+	    conv.vc_type = CONV_NONE;
+	    convert_setup(&conv, p_enc, (char_u*)"utf-8");
+	    if (conv.vc_type != CONV_NONE)
+		converted = res = string_convert(&conv, res, NULL);
+	    convert_setup(&conv, NULL, NULL);
+	}
+#endif
 	ga_append(gap, '"');
 	while (*res != NUL)
 	{
-	    int c = PTR2CHAR(res);
+	    int c;
+#ifdef FEAT_MBYTE
+	    /* always use utf-8 encoding, ignore 'encoding' */
+	    c = utf_ptr2char(res);
+#else
+	    c = *res;
+#endif
 
 	    switch (c)
 	    {
@@ -121,7 +127,7 @@ write_string(garray_T *gap, char_u *str)
 		    if (c >= 0x20)
 		    {
 #ifdef FEAT_MBYTE
-			numbuf[mb_char2bytes(c, numbuf)] = NUL;
+			numbuf[utf_char2bytes(c, numbuf)] = NUL;
 #else
 			numbuf[0] = c;
 			numbuf[1] = NUL;
@@ -135,9 +141,16 @@ write_string(garray_T *gap, char_u *str)
 			ga_concat(gap, numbuf);
 		    }
 	    }
-	    mb_cptr_adv(res);
+#ifdef FEAT_MBYTE
+	    res += utf_ptr2len(res);
+#else
+	    ++res;
+#endif
 	}
 	ga_append(gap, '"');
+#if defined(FEAT_MBYTE) && defined(USE_ICONV)
+	vim_free(converted);
+#endif
     }
 }
 
@@ -285,12 +298,10 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
 	case VAR_FLOAT:
 #ifdef FEAT_FLOAT
 # if defined(HAVE_MATH_H)
-	    if ((options & JSON_JS) && isnan(val->vval.v_float))
+	    if (isnan(val->vval.v_float))
 		ga_concat(gap, (char_u *)"NaN");
-	    else if ((options & JSON_JS) && isinf(val->vval.v_float))
+	    else if (isinf(val->vval.v_float))
 		ga_concat(gap, (char_u *)"Infinity");
-	    else if (isnan(val->vval.v_float) || isinf(val->vval.v_float))
-		ga_concat(gap, (char_u *)"null");
 	    else
 # endif
 	    {
@@ -532,12 +543,16 @@ json_decode_string(js_read_T *reader, typval_T *res)
     p = reader->js_buf + reader->js_used + 1; /* skip over " */
     while (*p != '"')
     {
+	/* The JSON is always expected to be utf-8, thus use utf functions
+	 * here. The string is converted below if needed. */
 	if (*p == NUL || p[1] == NUL
 #ifdef FEAT_MBYTE
 		|| utf_ptr2len(p) < utf_byte2len(*p)
 #endif
 		)
 	{
+	    /* Not enough bytes to make a character or end of the string. Get
+	     * more if possible. */
 	    if (reader->js_fill == NULL)
 		break;
 	    len = (int)(reader->js_end - p);
@@ -573,13 +588,32 @@ json_decode_string(js_read_T *reader, typval_T *res)
 						     + STRLEN(reader->js_buf);
 			}
 		    }
+		    nr = 0;
+		    len = 0;
 		    vim_str2nr(p + 2, NULL, &len,
 				     STR2NR_HEX + STR2NR_FORCE, &nr, NULL, 4);
 		    p += len + 2;
+		    if (0xd800 <= nr && nr <= 0xdfff
+			    && (int)(reader->js_end - p) >= 6
+			    && *p == '\\' && *(p+1) == 'u')
+		    {
+			long	nr2 = 0;
+
+			/* decode surrogate pair: \ud812\u3456 */
+			len = 0;
+			vim_str2nr(p + 2, NULL, &len,
+				     STR2NR_HEX + STR2NR_FORCE, &nr2, NULL, 4);
+			if (0xdc00 <= nr2 && nr2 <= 0xdfff)
+			{
+			    p += len + 2;
+			    nr = (((nr - 0xd800) << 10) |
+				((nr2 - 0xdc00) & 0x3ff)) + 0x10000;
+			}
+		    }
 		    if (res != NULL)
 		    {
 #ifdef FEAT_MBYTE
-			buf[(*mb_char2bytes)((int)nr, buf)] = NUL;
+			buf[utf_char2bytes((int)nr, buf)] = NUL;
 			ga_concat(&ga, buf);
 #else
 			ga_append(&ga, nr);
@@ -600,7 +634,11 @@ json_decode_string(js_read_T *reader, typval_T *res)
 	}
 	else
 	{
-	    len = MB_PTR2LEN(p);
+#ifdef FEAT_MBYTE
+	    len = utf_ptr2len(p);
+#else
+	    len = 1;
+#endif
 	    if (res != NULL)
 	    {
 		if (ga_grow(&ga, len) == FAIL)
@@ -621,8 +659,27 @@ json_decode_string(js_read_T *reader, typval_T *res)
 	++reader->js_used;
 	if (res != NULL)
 	{
+	    ga_append(&ga, NUL);
 	    res->v_type = VAR_STRING;
-	    res->vval.v_string = ga.ga_data;
+#if defined(FEAT_MBYTE) && defined(USE_ICONV)
+	    if (!enc_utf8)
+	    {
+		vimconv_T   conv;
+
+		/* Convert the utf-8 string to 'encoding'. */
+		conv.vc_type = CONV_NONE;
+		convert_setup(&conv, (char_u*)"utf-8", p_enc);
+		if (conv.vc_type != CONV_NONE)
+		{
+		    res->vval.v_string =
+				      string_convert(&conv, ga.ga_data, NULL);
+		    vim_free(ga.ga_data);
+		}
+		convert_setup(&conv, NULL, NULL);
+	    }
+	    else
+#endif
+		res->vval.v_string = ga.ga_data;
 	}
 	return OK;
     }
