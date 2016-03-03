@@ -5235,9 +5235,9 @@ mch_clear_job(job_T *job)
 {
     /* call waitpid because child process may become zombie */
 # ifdef __NeXT__
-    wait4(job->jv_pid, NULL, WNOHANG, (struct rusage *)0);
+    (void)wait4(job->jv_pid, NULL, WNOHANG, (struct rusage *)0);
 # else
-    waitpid(job->jv_pid, NULL, WNOHANG);
+    (void)waitpid(job->jv_pid, NULL, WNOHANG);
 # endif
 }
 #endif
@@ -6454,14 +6454,14 @@ have_dollars(int num, char_u **file)
 }
 #endif	/* ifndef __EMX__ */
 
-#ifndef HAVE_RENAME
+#if !defined(HAVE_RENAME) || defined(PROTO)
 /*
  * Scaled-down version of rename(), which is missing in Xenix.
  * This version can only move regular files and will fail if the
  * destination exists.
  */
     int
-mch_rename(const char *src, *dest)
+mch_rename(const char *src, const char *dest)
 {
     struct stat	    st;
 

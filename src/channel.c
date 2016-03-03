@@ -720,10 +720,10 @@ channel_open(
 	     * After putting the socket in non-blocking mode, connect() will
 	     * return EINPROGRESS, select() will not wait (as if writing is
 	     * possible), need to use getsockopt() to check if the socket is
-	     * actually connect.
-	     * We detect an failure to connect when both read and write fds
+	     * actually able to connect.
+	     * We detect an failure to connect when either read and write fds
 	     * are set.  Use getsockopt() to find out what kind of failure. */
-	    if (FD_ISSET(sd, &rfds) && FD_ISSET(sd, &wfds))
+	    if (FD_ISSET(sd, &rfds) || FD_ISSET(sd, &wfds))
 	    {
 		ret = getsockopt(sd,
 			    SOL_SOCKET, SO_ERROR, &so_error, &so_error_len);
@@ -926,8 +926,9 @@ channel_set_options(channel_T *channel, jobopt_T *opt)
 
     if ((opt->jo_set & JO_OUT_IO) && opt->jo_io[PART_OUT] == JIO_BUFFER)
     {
-	/* writing output to a buffer. Force mode to NL. */
-	channel->ch_part[PART_OUT].ch_mode = MODE_NL;
+	/* writing output to a buffer. Default mode is NL. */
+	if (!(opt->jo_set & JO_OUT_MODE))
+	    channel->ch_part[PART_OUT].ch_mode = MODE_NL;
 	channel->ch_part[PART_OUT].ch_buffer =
 				       find_buffer(opt->jo_io_name[PART_OUT]);
 	ch_logs(channel, "writing to buffer '%s'",
@@ -1515,6 +1516,9 @@ may_invoke_callback(channel_T *channel, int part)
 	     * get everything we have. */
 	    msg = channel_get_all(channel, part);
 
+	if (msg == NULL)
+	    return FALSE; /* out of memory (and avoids Coverity warning) */
+
 	argv[1].v_type = VAR_STRING;
 	argv[1].vval.v_string = msg;
     }
@@ -1550,42 +1554,49 @@ may_invoke_callback(channel_T *channel, int part)
     {
 	if (buffer != NULL)
 	{
-	    buf_T	*save_curbuf = curbuf;
-	    linenr_T	lnum = buffer->b_ml.ml_line_count;
-
-	    /* Append to the buffer */
-	    ch_logn(channel, "appending line %d to buffer", (int)lnum + 1);
-
-	    curbuf = buffer;
-	    u_sync(TRUE);
-	    u_save(lnum, lnum + 1);
-
-	    ml_append(lnum, msg, 0, FALSE);
-	    appended_lines_mark(lnum, 1L);
-	    curbuf = save_curbuf;
-
-	    if (buffer->b_nwindows > 0)
+	    if (msg == NULL)
+		/* JSON or JS mode: re-encode the message. */
+		msg = json_encode(listtv, ch_mode);
+	    if (msg != NULL)
 	    {
-		win_T	*wp;
-		win_T	*save_curwin;
+		buf_T	    *save_curbuf = curbuf;
+		linenr_T    lnum = buffer->b_ml.ml_line_count;
 
-		FOR_ALL_WINDOWS(wp)
+		/* Append to the buffer */
+		ch_logn(channel, "appending line %d to buffer", (int)lnum + 1);
+
+		curbuf = buffer;
+		u_sync(TRUE);
+		/* ignore undo failure, undo is not very useful here */
+		ignored = u_save(lnum, lnum + 1);
+
+		ml_append(lnum, msg, 0, FALSE);
+		appended_lines_mark(lnum, 1L);
+		curbuf = save_curbuf;
+
+		if (buffer->b_nwindows > 0)
 		{
-		    if (wp->w_buffer == buffer
-			    && wp->w_cursor.lnum == lnum
-			    && wp->w_cursor.col == 0)
+		    win_T	*wp;
+		    win_T	*save_curwin;
+
+		    FOR_ALL_WINDOWS(wp)
 		    {
-			++wp->w_cursor.lnum;
-			save_curwin = curwin;
-			curwin = wp;
-			curbuf = curwin->w_buffer;
-			scroll_cursor_bot(0, FALSE);
-			curwin = save_curwin;
-			curbuf = curwin->w_buffer;
+			if (wp->w_buffer == buffer
+				&& wp->w_cursor.lnum == lnum
+				&& wp->w_cursor.col == 0)
+			{
+			    ++wp->w_cursor.lnum;
+			    save_curwin = curwin;
+			    curwin = wp;
+			    curbuf = curwin->w_buffer;
+			    scroll_cursor_bot(0, FALSE);
+			    curwin = save_curwin;
+			    curbuf = curwin->w_buffer;
+			}
 		    }
+		    redraw_buf_later(buffer, VALID);
+		    channel_need_redraw = TRUE;
 		}
-		redraw_buf_later(buffer, VALID);
-		channel_need_redraw = TRUE;
 	    }
 	}
 	if (callback != NULL)
@@ -1595,8 +1606,6 @@ may_invoke_callback(channel_T *channel, int part)
 	    invoke_callback(channel, callback, argv);
 	}
     }
-    else if (msg != NULL)
-	ch_logs(channel, "Dropping message '%s'", (char *)msg);
     else
 	ch_log(channel, "Dropping message");
 

@@ -3152,8 +3152,8 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 		}
 		return OK;
 
-#ifdef FEAT_FLOAT
 	    case VAR_FLOAT:
+#ifdef FEAT_FLOAT
 		{
 		    float_T f;
 
@@ -3170,8 +3170,8 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 		    else
 			tv1->vval.v_float -= f;
 		}
-		return OK;
 #endif
+		return OK;
 	}
     }
 
@@ -8011,8 +8011,8 @@ tv2string(
 	case VAR_STRING:
 	    *tofree = string_quote(tv->vval.v_string, FALSE);
 	    return *tofree;
-#ifdef FEAT_FLOAT
 	case VAR_FLOAT:
+#ifdef FEAT_FLOAT
 	    *tofree = NULL;
 	    vim_snprintf((char *)numbuf, NUMBUFLEN - 1, "%g", tv->vval.v_float);
 	    return numbuf;
@@ -8415,7 +8415,9 @@ static struct fst
     {"range",		1, 3, f_range},
     {"readfile",	1, 3, f_readfile},
     {"reltime",		0, 2, f_reltime},
+#ifdef FEAT_FLOAT
     {"reltimefloat",	1, 1, f_reltimefloat},
+#endif
     {"reltimestr",	1, 1, f_reltimestr},
     {"remote_expr",	2, 3, f_remote_expr},
     {"remote_foreground", 1, 1, f_remote_foreground},
@@ -15137,7 +15139,8 @@ f_job_start(typval_T *argvars UNUSED, typval_T *rettv)
 #ifdef USE_ARGV
 	    argv[argc++] = (char *)s;
 #else
-	    if (li != l->lv_first)
+	    /* Only escape when needed, double quotes are not always allowed. */
+	    if (li != l->lv_first && vim_strpbrk(s, (char_u *)" \t\"") != NULL)
 	    {
 		s = vim_strsave_shellescape(s, FALSE, TRUE);
 		if (s == NULL)
@@ -19194,11 +19197,21 @@ do_sort_uniq(typval_T *argvars, typval_T *rettv, int sort)
 		    goto theend;	/* type error; errmsg already given */
 		if (i == 1)
 		    info.item_compare_ic = TRUE;
-		else
+		else if (argvars[1].v_type != VAR_NUMBER)
 		    info.item_compare_func = get_tv_string(&argvars[1]);
+		else if (i != 0)
+		{
+		    EMSG(_(e_invarg));
+		    goto theend;
+		}
 		if (info.item_compare_func != NULL)
 		{
-		    if (STRCMP(info.item_compare_func, "n") == 0)
+		    if (*info.item_compare_func == NUL)
+		    {
+			/* empty string means default sort */
+			info.item_compare_func = NULL;
+		    }
+		    else if (STRCMP(info.item_compare_func, "n") == 0)
 		    {
 			info.item_compare_func = NULL;
 			info.item_compare_numeric = TRUE;
