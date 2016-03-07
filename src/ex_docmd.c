@@ -4198,6 +4198,11 @@ set_one_cmd_context(
 	    xp->xp_pattern = arg;
 	    break;
 
+	case CMD_packadd:
+	    xp->xp_context = EXPAND_PACKADD;
+	    xp->xp_pattern = arg;
+	    break;
+
 #if (defined(HAVE_LOCALE_H) || defined(X_LOCALE)) \
 	&& (defined(FEAT_GETTEXT) || defined(FEAT_MBYTE))
 	case CMD_language:
@@ -5846,6 +5851,7 @@ static struct
     {EXPAND_SYNTIME, "syntime"},
 #endif
     {EXPAND_SETTINGS, "option"},
+    {EXPAND_PACKADD, "packadd"},
     {EXPAND_SHELLCMD, "shellcmd"},
 #if defined(FEAT_SIGNS)
     {EXPAND_SIGN, "sign"},
@@ -9262,7 +9268,7 @@ ex_bang(exarg_T *eap)
  * ":undo".
  */
     static void
-ex_undo(exarg_T *eap UNUSED)
+ex_undo(exarg_T *eap)
 {
     if (eap->addr_count == 1)	    /* :undo 123 */
 	undo_time(eap->line2, FALSE, FALSE, TRUE);
@@ -9759,7 +9765,7 @@ theend:
 #if ((defined(FEAT_SESSION) || defined(FEAT_EVAL)) && defined(vim_mkdir)) \
 	|| defined(PROTO)
     int
-vim_mkdir_emsg(char_u *name, int prot UNUSED)
+vim_mkdir_emsg(char_u *name, int prot)
 {
     if (vim_mkdir(name, prot) != 0)
     {

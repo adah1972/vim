@@ -5008,6 +5008,8 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
     HANDLE		jo;
 # ifdef FEAT_CHANNEL
     channel_T		*channel;
+    int			use_file_for_in = options->jo_io[PART_IN] == JIO_FILE;
+    int			use_out_for_err = options->jo_io[PART_ERR] == JIO_OUT;
     HANDLE		ifd[2];
     HANDLE		ofd[2];
     HANDLE		efd[2];
@@ -5042,17 +5044,30 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
     saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
     saAttr.bInheritHandle = TRUE;
     saAttr.lpSecurityDescriptor = NULL;
-    if (!CreatePipe(&ifd[0], &ifd[1], &saAttr, 0)
-       || !pSetHandleInformation(ifd[1], HANDLE_FLAG_INHERIT, 0)
-       || !CreatePipe(&ofd[0], &ofd[1], &saAttr, 0)
-       || !pSetHandleInformation(ofd[0], HANDLE_FLAG_INHERIT, 0)
-       || !CreatePipe(&efd[0], &efd[1], &saAttr, 0)
-       || !pSetHandleInformation(efd[0], HANDLE_FLAG_INHERIT, 0))
+    if (use_file_for_in)
+    {
+	char_u *fname = options->jo_io_name[PART_IN];
+
+	// TODO
+	EMSG2(_(e_notopen), fname);
+	goto failed;
+    }
+    else if (!CreatePipe(&ifd[0], &ifd[1], &saAttr, 0)
+	    || !pSetHandleInformation(ifd[1], HANDLE_FLAG_INHERIT, 0))
+	goto failed;
+
+    if (!CreatePipe(&ofd[0], &ofd[1], &saAttr, 0)
+	    || !pSetHandleInformation(ofd[0], HANDLE_FLAG_INHERIT, 0))
+	goto failed;
+
+    if (!use_out_for_err
+	   && (!CreatePipe(&efd[0], &efd[1], &saAttr, 0)
+	    || !pSetHandleInformation(efd[0], HANDLE_FLAG_INHERIT, 0)))
 	goto failed;
     si.dwFlags |= STARTF_USESTDHANDLES;
     si.hStdInput = ifd[0];
     si.hStdOutput = ofd[1];
-    si.hStdError = efd[1];
+    si.hStdError = use_out_for_err ? ofd[1] : efd[1];
 # endif
 
     if (!vim_create_process(cmd, TRUE,
@@ -5083,13 +5098,13 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
 # ifdef FEAT_CHANNEL
     CloseHandle(ifd[0]);
     CloseHandle(ofd[1]);
-    CloseHandle(efd[1]);
+    if (!use_out_for_err)
+	CloseHandle(efd[1]);
 
     job->jv_channel = channel;
-    channel_set_pipes(channel, (sock_T)ifd[1], (sock_T)ofd[0], (sock_T)efd[0]);
-    channel_set_job(channel, job);
-    channel_set_options(channel, options);
-
+    channel_set_pipes(channel, (sock_T)ifd[1], (sock_T)ofd[0],
+			       use_out_for_err ? INVALID_FD : (sock_T)efd[0]);
+    channel_set_job(channel, job, options);
 #   ifdef FEAT_GUI
      channel_gui_register(channel);
 #   endif

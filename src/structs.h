@@ -1267,6 +1267,8 @@ struct jobvar_S
     int		jv_exitval;
     char_u	*jv_exit_cb;	/* allocated */
 
+    buf_T	*jv_in_buf;	/* buffer from "in-name" */
+
     int		jv_refcount;	/* reference count */
     channel_T	*jv_channel;	/* channel for I/O, reference counted */
 };
@@ -1347,7 +1349,10 @@ typedef struct {
 
     cbq_T	ch_cb_head;	/* dummy node for per-request callbacks */
     char_u	*ch_callback;	/* call when a msg is not handled */
+
     buf_T	*ch_buffer;	/* buffer to read from or write to */
+    linenr_T	ch_buf_top;	/* next line to send */
+    linenr_T	ch_buf_bot;	/* last line to send */
 } chanpart_T;
 
 struct channel_S {
@@ -1402,6 +1407,8 @@ struct channel_S {
 #define JO_OUT_NAME	    0x80000	/* "out-name" */
 #define JO_ERR_NAME	    0x100000	/* "err-name" (JO_OUT_NAME << 1) */
 #define JO_IN_NAME	    0x200000	/* "in-name" (JO_OUT_NAME << 2) */
+#define JO_IN_TOP	    0x400000	/* "in-top" */
+#define JO_IN_BOT	    0x800000	/* "in-bot" */
 #define JO_ALL		    0xffffff
 
 #define JO_MODE_ALL	(JO_MODE + JO_IN_MODE + JO_OUT_MODE + JO_ERR_MODE)
@@ -1432,6 +1439,9 @@ typedef struct
     job_io_T	jo_io[4];	/* PART_OUT, PART_ERR, PART_IN */
     char_u	jo_io_name_buf[4][NUMBUFLEN];
     char_u	*jo_io_name[4];	/* not allocated! */
+
+    linenr_T	jo_in_top;
+    linenr_T	jo_in_bot;
 
     char_u	*jo_callback;	/* not allocated! */
     char_u	*jo_out_cb;	/* not allocated! */
@@ -2040,6 +2050,10 @@ struct file_buffer
 #ifdef FEAT_NETBEANS_INTG
     int		b_netbeans_file;    /* TRUE when buffer is owned by NetBeans */
     int		b_was_netbeans_file;/* TRUE if b_netbeans_file was once set */
+#endif
+#ifdef FEAT_CHANNEL
+    int		b_write_to_channel; /* TRUE when appended lines are written to
+				     * a channel. */
 #endif
 
 #ifdef FEAT_CRYPT

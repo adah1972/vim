@@ -62,6 +62,9 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
                     if decoded[1] == 'hello!':
                         # simply send back a string
                         response = "got it"
+                    elif decoded[1].startswith("echo "):
+                        # send back the argument
+                        response = decoded[1][5:]
                     elif decoded[1] == 'make change':
                         # Send two ex commands at the same time, before
                         # replying to the request.
@@ -140,6 +143,11 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
                         print("sending: {}".format(cmd))
                         self.request.sendall(cmd.encode('utf-8'))
                         response = ""
+                    elif decoded[1] == 'send zero':
+                        cmd = '[0,"zero index"]'
+                        print("sending: {}".format(cmd))
+                        self.request.sendall(cmd.encode('utf-8'))
+                        response = "sent zero"
                     elif decoded[1] == 'close me':
                         print("closing")
                         self.request.close()

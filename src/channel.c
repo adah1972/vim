@@ -136,6 +136,8 @@ ch_log_lead(char *what, channel_T *ch)
     }
 }
 
+static int did_log_msg = TRUE;
+
     void
 ch_log(channel_T *ch, char *msg)
 {
@@ -145,6 +147,7 @@ ch_log(channel_T *ch, char *msg)
 	fputs(msg, log_fd);
 	fputc('\n', log_fd);
 	fflush(log_fd);
+	did_log_msg = TRUE;
     }
 }
 
@@ -157,6 +160,7 @@ ch_logn(channel_T *ch, char *msg, int nr)
 	fprintf(log_fd, msg, nr);
 	fputc('\n', log_fd);
 	fflush(log_fd);
+	did_log_msg = TRUE;
     }
 }
 
@@ -169,6 +173,7 @@ ch_logs(channel_T *ch, char *msg, char *name)
 	fprintf(log_fd, msg, name);
 	fputc('\n', log_fd);
 	fflush(log_fd);
+	did_log_msg = TRUE;
     }
 }
 
@@ -181,6 +186,7 @@ ch_logsn(channel_T *ch, char *msg, char *name, int nr)
 	fprintf(log_fd, msg, name, nr);
 	fputc('\n', log_fd);
 	fflush(log_fd);
+	did_log_msg = TRUE;
     }
 }
 
@@ -193,6 +199,7 @@ ch_error(channel_T *ch, char *msg)
 	fputs(msg, log_fd);
 	fputc('\n', log_fd);
 	fflush(log_fd);
+	did_log_msg = TRUE;
     }
 }
 
@@ -205,6 +212,7 @@ ch_errorn(channel_T *ch, char *msg, int nr)
 	fprintf(log_fd, msg, nr);
 	fputc('\n', log_fd);
 	fflush(log_fd);
+	did_log_msg = TRUE;
     }
 }
 
@@ -217,6 +225,7 @@ ch_errors(channel_T *ch, char *msg, char *arg)
 	fprintf(log_fd, msg, arg);
 	fputc('\n', log_fd);
 	fflush(log_fd);
+	did_log_msg = TRUE;
     }
 }
 
@@ -819,13 +828,43 @@ channel_set_pipes(channel_T *channel, sock_T in, sock_T out, sock_T err)
 #endif
 
 /*
- * Sets the job the channel is associated with.
+ * Sets the job the channel is associated with and associated options.
  * This does not keep a refcount, when the job is freed ch_job is cleared.
  */
     void
-channel_set_job(channel_T *channel, job_T *job)
+channel_set_job(channel_T *channel, job_T *job, jobopt_T *options)
 {
     channel->ch_job = job;
+
+    channel_set_options(channel, options);
+
+    if (job->jv_in_buf != NULL)
+    {
+	chanpart_T *in_part = &channel->ch_part[PART_IN];
+
+	in_part->ch_buffer = job->jv_in_buf;
+	ch_logs(channel, "reading from buffer '%s'",
+					(char *)in_part->ch_buffer->b_ffname);
+	if (options->jo_set & JO_IN_TOP)
+	{
+	    if (options->jo_in_top == 0 && !(options->jo_set & JO_IN_BOT))
+	    {
+		/* Special mode: send last-but-one line when appending a line
+		 * to the buffer. */
+		in_part->ch_buffer->b_write_to_channel = TRUE;
+		in_part->ch_buf_top =
+				   in_part->ch_buffer->b_ml.ml_line_count + 1;
+	    }
+	    else
+		in_part->ch_buf_top = options->jo_in_top;
+	}
+	else
+	    in_part->ch_buf_top = 1;
+	if (options->jo_set & JO_IN_BOT)
+	    in_part->ch_buf_bot = options->jo_in_bot;
+	else
+	    in_part->ch_buf_bot = in_part->ch_buffer->b_ml.ml_line_count;
+    }
 }
 
 /*
@@ -845,13 +884,12 @@ find_buffer(char_u *name)
 					       NULL, (linenr_T)0, BLN_LISTED);
 	buf_copy_options(buf, BCO_ENTER);
 #ifdef FEAT_QUICKFIX
-	clear_string_option(&buf->b_p_bt);
-	buf->b_p_bt = vim_strsave((char_u *)"nofile");
-	clear_string_option(&buf->b_p_bh);
-	buf->b_p_bh = vim_strsave((char_u *)"hide");
+	set_option_value((char_u *)"bt", 0L, (char_u *)"nofile", OPT_LOCAL);
+	set_option_value((char_u *)"bh", 0L, (char_u *)"hide", OPT_LOCAL);
 #endif
 	curbuf = buf;
-	ml_open(curbuf);
+	if (curbuf->b_ml.ml_mfp == NULL)
+	    ml_open(curbuf);
 	ml_replace(1, (char_u *)"Reading from channel output...", TRUE);
 	changed_bytes(1, 0);
 	curbuf = save_curbuf;
@@ -963,6 +1001,103 @@ channel_set_req_callback(
     }
 }
 
+    static void
+write_buf_line(buf_T *buf, linenr_T lnum, channel_T *channel)
+{
+    char_u  *line = ml_get_buf(buf, lnum, FALSE);
+    int	    len = STRLEN(line);
+    char_u  *p;
+
+    /* TODO: check if channel can be written to, do not block on write */
+    if ((p = alloc(len + 2)) == NULL)
+	return;
+    STRCPY(p, line);
+    p[len] = NL;
+    p[len + 1] = NUL;
+    channel_send(channel, PART_IN, p, "write_buf_line()");
+    vim_free(p);
+}
+
+/*
+ * Write any lines to the input channel.
+ */
+    void
+channel_write_in(channel_T *channel)
+{
+    chanpart_T *in_part = &channel->ch_part[PART_IN];
+    linenr_T    lnum;
+    buf_T	*buf = in_part->ch_buffer;
+    int		written = 0;
+
+    if (buf == NULL)
+	return;
+    if (!buf_valid(buf) || buf->b_ml.ml_mfp == NULL)
+    {
+	/* buffer was wiped out or unloaded */
+	in_part->ch_buffer = NULL;
+	return;
+    }
+    if (in_part->ch_fd == INVALID_FD)
+	/* pipe was closed */
+	return;
+
+    for (lnum = in_part->ch_buf_top; lnum <= in_part->ch_buf_bot
+				   && lnum <= buf->b_ml.ml_line_count; ++lnum)
+    {
+	write_buf_line(buf, lnum, channel);
+	++written;
+    }
+
+    if (written == 1)
+	ch_logn(channel, "written line %d to channel", (int)lnum - 1);
+    else if (written > 1)
+	ch_logn(channel, "written %d lines to channel", written);
+
+    in_part->ch_buf_top = lnum;
+}
+
+/*
+ * Write appended lines above the last one in "buf" to the channel.
+ */
+    void
+channel_write_new_lines(buf_T *buf)
+{
+    channel_T	*channel;
+    int		found_one = FALSE;
+
+    /* There could be more than one channel for the buffer, loop over all of
+     * them. */
+    for (channel = first_channel; channel != NULL; channel = channel->ch_next)
+    {
+	chanpart_T  *in_part = &channel->ch_part[PART_IN];
+	linenr_T    lnum;
+	int	    written = 0;
+
+	if (in_part->ch_buffer == buf)
+	{
+	    if (in_part->ch_fd == INVALID_FD)
+		/* pipe was closed */
+		continue;
+	    found_one = TRUE;
+	    for (lnum = in_part->ch_buf_bot; lnum < buf->b_ml.ml_line_count;
+								       ++lnum)
+	    {
+		write_buf_line(buf, lnum, channel);
+		++written;
+	    }
+
+	    if (written == 1)
+		ch_logn(channel, "written line %d to channel", (int)lnum - 1);
+	    else if (written > 1)
+		ch_logn(channel, "written %d lines to channel", written);
+
+	    in_part->ch_buf_bot = lnum;
+	}
+    }
+    if (!found_one)
+	buf->b_write_to_channel = FALSE;
+}
+
 /*
  * Invoke the "callback" on channel "channel".
  */
@@ -986,8 +1121,11 @@ invoke_callback(channel_T *channel, char_u *callback, typval_T *argv)
     cursor_on();
     out_flush();
 #ifdef FEAT_GUI
-    gui_update_cursor(TRUE, FALSE);
-    gui_mch_flush();
+    if (gui.in_use)
+    {
+	gui_update_cursor(TRUE, FALSE);
+	gui_mch_flush();
+    }
 #endif
 }
 
@@ -1390,6 +1528,93 @@ channel_exe_cmd(channel_T *channel, int part, typval_T *argv)
     }
 }
 
+    static void
+invoke_one_time_callback(
+	channel_T   *channel,
+	cbq_T	    *cbhead,
+	cbq_T	    *item,
+	typval_T    *argv)
+{
+    ch_logs(channel, "Invoking one-time callback %s",
+						   (char *)item->cq_callback);
+    /* Remove the item from the list first, if the callback
+     * invokes ch_close() the list will be cleared. */
+    remove_cb_node(cbhead, item);
+    invoke_callback(channel, item->cq_callback, argv);
+    vim_free(item->cq_callback);
+    vim_free(item);
+}
+
+    static void
+append_to_buffer(buf_T *buffer, char_u *msg, channel_T *channel)
+{
+    buf_T	*save_curbuf = curbuf;
+    linenr_T    lnum = buffer->b_ml.ml_line_count;
+    int		save_write_to = buffer->b_write_to_channel;
+
+    /* If the buffer is also used as input insert above the last
+     * line. Don't write these lines. */
+    if (save_write_to)
+    {
+	--lnum;
+	buffer->b_write_to_channel = FALSE;
+    }
+
+    /* Append to the buffer */
+    ch_logn(channel, "appending line %d to buffer", (int)lnum + 1);
+
+    curbuf = buffer;
+    u_sync(TRUE);
+    /* ignore undo failure, undo is not very useful here */
+    ignored = u_save(lnum, lnum + 1);
+
+    ml_append(lnum, msg, 0, FALSE);
+    appended_lines_mark(lnum, 1L);
+    curbuf = save_curbuf;
+
+    if (buffer->b_nwindows > 0)
+    {
+	win_T	*wp;
+	win_T	*save_curwin;
+
+	FOR_ALL_WINDOWS(wp)
+	{
+	    if (wp->w_buffer == buffer
+		    && (save_write_to
+			? wp->w_cursor.lnum == lnum + 1
+			: (wp->w_cursor.lnum == lnum
+			    && wp->w_cursor.col == 0)))
+	    {
+		++wp->w_cursor.lnum;
+		save_curwin = curwin;
+		curwin = wp;
+		curbuf = curwin->w_buffer;
+		scroll_cursor_bot(0, FALSE);
+		curwin = save_curwin;
+		curbuf = curwin->w_buffer;
+	    }
+	}
+	redraw_buf_later(buffer, VALID);
+	channel_need_redraw = TRUE;
+    }
+
+    if (save_write_to)
+    {
+	channel_T *ch;
+
+	/* Find channels reading from this buffer and adjust their
+	 * next-to-read line number. */
+	buffer->b_write_to_channel = TRUE;
+	for (ch = first_channel; ch != NULL; ch = ch->ch_next)
+	{
+	    chanpart_T  *in_part = &ch->ch_part[PART_IN];
+
+	    if (in_part->ch_buffer == buffer)
+		in_part->ch_buf_bot = buffer->b_ml.ml_line_count;
+	}
+    }
+}
+
 /*
  * Invoke a callback for "channel"/"part" if needed.
  * Return TRUE when a message was handled, there might be another one.
@@ -1402,6 +1627,8 @@ may_invoke_callback(channel_T *channel, int part)
     typval_T	argv[CH_JSON_MAX_ARGS];
     int		seq_nr = -1;
     ch_mode_T	ch_mode = channel->ch_part[part].ch_mode;
+    cbq_T	*cbhead = &channel->ch_part[part].ch_cb_head;
+    cbq_T	*cbitem;
     char_u	*callback = NULL;
     buf_T	*buffer = NULL;
 
@@ -1409,7 +1636,13 @@ may_invoke_callback(channel_T *channel, int part)
 	/* this channel is handled elsewhere (netbeans) */
 	return FALSE;
 
-    if (channel->ch_part[part].ch_callback != NULL)
+    /* Use a message-specific callback, part callback or channel callback */
+    for (cbitem = cbhead->cq_next; cbitem != NULL; cbitem = cbitem->cq_next)
+	if (cbitem->cq_seq_nr == 0)
+	    break;
+    if (cbitem != NULL)
+	callback = cbitem->cq_callback;
+    else if (channel->ch_part[part].ch_callback != NULL)
 	callback = channel->ch_part[part].ch_callback;
     else
 	callback = channel->ch_callback;
@@ -1525,28 +1758,16 @@ may_invoke_callback(channel_T *channel, int part)
 
     if (seq_nr > 0)
     {
-	cbq_T	*head = &channel->ch_part[part].ch_cb_head;
-	cbq_T	*item = head->cq_next;
 	int	done = FALSE;
 
 	/* invoke the one-time callback with the matching nr */
-	while (item != NULL)
-	{
-	    if (item->cq_seq_nr == seq_nr)
+	for (cbitem = cbhead->cq_next; cbitem != NULL; cbitem = cbitem->cq_next)
+	    if (cbitem->cq_seq_nr == seq_nr)
 	    {
-		ch_logs(channel, "Invoking one-time callback %s",
-						   (char *)item->cq_callback);
-		/* Remove the item from the list first, if the callback
-		 * invokes ch_close() the list will be cleared. */
-		remove_cb_node(head, item);
-		invoke_callback(channel, item->cq_callback, argv);
-		vim_free(item->cq_callback);
-		vim_free(item);
+		invoke_one_time_callback(channel, cbhead, cbitem, argv);
 		done = TRUE;
 		break;
 	    }
-	    item = item->cq_next;
-	}
 	if (!done)
 	    ch_logn(channel, "Dropping message %d without callback", seq_nr);
     }
@@ -1558,52 +1779,20 @@ may_invoke_callback(channel_T *channel, int part)
 		/* JSON or JS mode: re-encode the message. */
 		msg = json_encode(listtv, ch_mode);
 	    if (msg != NULL)
-	    {
-		buf_T	    *save_curbuf = curbuf;
-		linenr_T    lnum = buffer->b_ml.ml_line_count;
-
-		/* Append to the buffer */
-		ch_logn(channel, "appending line %d to buffer", (int)lnum + 1);
-
-		curbuf = buffer;
-		u_sync(TRUE);
-		/* ignore undo failure, undo is not very useful here */
-		ignored = u_save(lnum, lnum + 1);
-
-		ml_append(lnum, msg, 0, FALSE);
-		appended_lines_mark(lnum, 1L);
-		curbuf = save_curbuf;
-
-		if (buffer->b_nwindows > 0)
-		{
-		    win_T	*wp;
-		    win_T	*save_curwin;
-
-		    FOR_ALL_WINDOWS(wp)
-		    {
-			if (wp->w_buffer == buffer
-				&& wp->w_cursor.lnum == lnum
-				&& wp->w_cursor.col == 0)
-			{
-			    ++wp->w_cursor.lnum;
-			    save_curwin = curwin;
-			    curwin = wp;
-			    curbuf = curwin->w_buffer;
-			    scroll_cursor_bot(0, FALSE);
-			    curwin = save_curwin;
-			    curbuf = curwin->w_buffer;
-			}
-		    }
-		    redraw_buf_later(buffer, VALID);
-		    channel_need_redraw = TRUE;
-		}
-	    }
+		append_to_buffer(buffer, msg, channel);
 	}
+
 	if (callback != NULL)
 	{
-	    /* invoke the channel callback */
-	    ch_logs(channel, "Invoking channel callback %s", (char *)callback);
-	    invoke_callback(channel, callback, argv);
+	    if (cbitem != NULL)
+		invoke_one_time_callback(channel, cbhead, cbitem, argv);
+	    else
+	    {
+		/* invoke the channel callback */
+		ch_logs(channel, "Invoking channel callback %s",
+							    (char *)callback);
+		invoke_callback(channel, callback, argv);
+	    }
 	}
     }
     else
@@ -2172,6 +2361,7 @@ channel_send(channel_T *channel, int part, char_u *buf, char *fun)
 	ignored = (int)fwrite(buf, len, 1, log_fd);
 	fprintf(log_fd, "'\n");
 	fflush(log_fd);
+	did_log_msg = TRUE;
     }
 
     if (part == PART_SOCK)
@@ -2361,7 +2551,13 @@ channel_parse_messages(void)
     int		r;
     int		part = PART_SOCK;
 
-    ch_log(NULL, "looking for messages on channels");
+    /* Only do this message when another message was given, otherwise we get
+     * lots of them. */
+    if (did_log_msg)
+    {
+	ch_log(NULL, "looking for messages on channels");
+	did_log_msg = FALSE;
+    }
     while (channel != NULL)
     {
 	if (channel->ch_refcount == 0 && !channel_still_useful(channel))
