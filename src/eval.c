@@ -735,6 +735,7 @@ static void f_serverlist(typval_T *argvars, typval_T *rettv);
 static void f_setbufvar(typval_T *argvars, typval_T *rettv);
 static void f_setcharsearch(typval_T *argvars, typval_T *rettv);
 static void f_setcmdpos(typval_T *argvars, typval_T *rettv);
+static void f_setfperm(typval_T *argvars, typval_T *rettv);
 static void f_setline(typval_T *argvars, typval_T *rettv);
 static void f_setloclist(typval_T *argvars, typval_T *rettv);
 static void f_setmatches(typval_T *argvars, typval_T *rettv);
@@ -8446,6 +8447,7 @@ static struct fst
     {"setbufvar",	3, 3, f_setbufvar},
     {"setcharsearch",	1, 1, f_setcharsearch},
     {"setcmdpos",	1, 1, f_setcmdpos},
+    {"setfperm",	2, 2, f_setfperm},
     {"setline",		2, 2, f_setline},
     {"setloclist",	2, 3, f_setloclist},
     {"setmatches",	1, 1, f_setmatches},
@@ -10117,6 +10119,27 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported)
 		opt->jo_io_name[part] =
 		       get_tv_string_buf_chk(item, opt->jo_io_name_buf[part]);
 	    }
+	    else if (STRCMP(hi->hi_key, "in-buf") == 0
+		    || STRCMP(hi->hi_key, "out-buf") == 0
+		    || STRCMP(hi->hi_key, "err-buf") == 0)
+	    {
+		part = part_from_char(*hi->hi_key);
+
+		if (!(supported & JO_OUT_IO))
+		    break;
+		opt->jo_set |= JO_OUT_BUF << (part - PART_OUT);
+		opt->jo_io_buf[part] = get_tv_number(item);
+		if (opt->jo_io_buf[part] <= 0)
+		{
+		    EMSG2(_(e_invarg2), get_tv_string(item));
+		    return FAIL;
+		}
+		if (buflist_findnr(opt->jo_io_buf[part]) == NULL)
+		{
+		    EMSGN(_(e_nobufnr), (long)opt->jo_io_buf[part]);
+		    return FAIL;
+		}
+	    }
 	    else if (STRCMP(hi->hi_key, "in-top") == 0
 		    || STRCMP(hi->hi_key, "in-bot") == 0)
 	    {
@@ -10283,18 +10306,26 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported)
  * Returns NULL if the handle is invalid.
  */
     static channel_T *
-get_channel_arg(typval_T *tv)
+get_channel_arg(typval_T *tv, int check_open)
 {
-    channel_T *channel;
+    channel_T *channel = NULL;
 
-    if (tv->v_type != VAR_CHANNEL)
+    if (tv->v_type == VAR_JOB)
+    {
+	if (tv->vval.v_job != NULL)
+	    channel = tv->vval.v_job->jv_channel;
+    }
+    else if (tv->v_type == VAR_CHANNEL)
+    {
+	channel = tv->vval.v_channel;
+    }
+    else
     {
 	EMSG2(_(e_invarg2), get_tv_string(tv));
 	return NULL;
     }
-    channel = tv->vval.v_channel;
 
-    if (channel == NULL || !channel_is_open(channel))
+    if (check_open && (channel == NULL || !channel_is_open(channel)))
     {
 	EMSG(_("E906: not an open channel"));
 	return NULL;
@@ -10308,7 +10339,7 @@ get_channel_arg(typval_T *tv)
     static void
 f_ch_close(typval_T *argvars, typval_T *rettv UNUSED)
 {
-    channel_T *channel = get_channel_arg(&argvars[0]);
+    channel_T *channel = get_channel_arg(&argvars[0], TRUE);
 
     if (channel != NULL)
     {
@@ -10323,7 +10354,7 @@ f_ch_close(typval_T *argvars, typval_T *rettv UNUSED)
     static void
 f_ch_getbufnr(typval_T *argvars, typval_T *rettv)
 {
-    channel_T *channel = get_channel_arg(&argvars[0]);
+    channel_T *channel = get_channel_arg(&argvars[0], TRUE);
 
     rettv->vval.v_number = -1;
     if (channel != NULL)
@@ -10351,7 +10382,7 @@ f_ch_getbufnr(typval_T *argvars, typval_T *rettv)
     static void
 f_ch_getjob(typval_T *argvars, typval_T *rettv)
 {
-    channel_T *channel = get_channel_arg(&argvars[0]);
+    channel_T *channel = get_channel_arg(&argvars[0], TRUE);
 
     if (channel != NULL)
     {
@@ -10373,7 +10404,7 @@ f_ch_log(typval_T *argvars, typval_T *rettv UNUSED)
     channel_T	*channel = NULL;
 
     if (argvars[1].v_type != VAR_UNKNOWN)
-	channel = get_channel_arg(&argvars[1]);
+	channel = get_channel_arg(&argvars[1], TRUE);
 
     ch_log(channel, (char *)msg);
 }
@@ -10490,7 +10521,7 @@ common_channel_read(typval_T *argvars, typval_T *rettv, int raw)
 								      == FAIL)
 	return;
 
-    channel = get_channel_arg(&argvars[0]);
+    channel = get_channel_arg(&argvars[0], TRUE);
     if (channel != NULL)
     {
 	if (opt.jo_set & JO_PART)
@@ -10560,7 +10591,7 @@ send_common(
     channel_T	*channel;
     int		part_send;
 
-    channel = get_channel_arg(&argvars[0]);
+    channel = get_channel_arg(&argvars[0], TRUE);
     if (channel == NULL)
 	return NULL;
     part_send = channel_part_send(channel);
@@ -10609,7 +10640,7 @@ ch_expr_common(typval_T *argvars, typval_T *rettv, int eval)
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 
-    channel = get_channel_arg(&argvars[0]);
+    channel = get_channel_arg(&argvars[0], TRUE);
     if (channel == NULL)
 	return;
     part_send = channel_part_send(channel);
@@ -10726,7 +10757,7 @@ f_ch_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
     channel_T	*channel;
     jobopt_T	opt;
 
-    channel = get_channel_arg(&argvars[0]);
+    channel = get_channel_arg(&argvars[0], TRUE);
     if (channel == NULL)
 	return;
     clear_job_options(&opt);
@@ -10742,17 +10773,14 @@ f_ch_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
     static void
 f_ch_status(typval_T *argvars, typval_T *rettv)
 {
+    channel_T	*channel;
+
     /* return an empty string by default */
     rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
 
-    if (argvars[0].v_type != VAR_CHANNEL)
-    {
-	EMSG2(_(e_invarg2), get_tv_string(&argvars[0]));
-	rettv->vval.v_string = NULL;
-    }
-    else
-	rettv->vval.v_string = vim_strsave(
-			 (char_u *)channel_status(argvars[0].vval.v_channel));
+    channel = get_channel_arg(&argvars[0], FALSE);
+    rettv->vval.v_string = vim_strsave((char_u *)channel_status(channel));
 }
 #endif
 
@@ -11811,24 +11839,25 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 	return;
 
     keys = get_tv_string(&argvars[0]);
-    if (*keys != NUL)
+
+    if (argvars[1].v_type != VAR_UNKNOWN)
     {
-	if (argvars[1].v_type != VAR_UNKNOWN)
+	flags = get_tv_string_buf(&argvars[1], nbuf);
+	for ( ; *flags != NUL; ++flags)
 	{
-	    flags = get_tv_string_buf(&argvars[1], nbuf);
-	    for ( ; *flags != NUL; ++flags)
+	    switch (*flags)
 	    {
-		switch (*flags)
-		{
-		    case 'n': remap = FALSE; break;
-		    case 'm': remap = TRUE; break;
-		    case 't': typed = TRUE; break;
-		    case 'i': insert = TRUE; break;
-		    case 'x': execute = TRUE; break;
-		}
+		case 'n': remap = FALSE; break;
+		case 'm': remap = TRUE; break;
+		case 't': typed = TRUE; break;
+		case 'i': insert = TRUE; break;
+		case 'x': execute = TRUE; break;
 	    }
 	}
+    }
 
+    if (*keys != NUL || execute)
+    {
 	/* Need to escape K_SPECIAL and CSI before putting the string in the
 	 * typeahead buffer. */
 	keys_esc = vim_strsave_escape_csi(keys);
@@ -15106,7 +15135,7 @@ f_job_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
  * "job_start()" function
  */
     static void
-f_job_start(typval_T *argvars UNUSED, typval_T *rettv)
+f_job_start(typval_T *argvars, typval_T *rettv)
 {
     job_T	*job;
     char_u	*cmd = NULL;
@@ -15149,21 +15178,36 @@ f_job_start(typval_T *argvars UNUSED, typval_T *rettv)
 
     if ((opt.jo_set & JO_IN_IO) && opt.jo_io[PART_IN] == JIO_BUFFER)
     {
-	buf_T *buf;
+	buf_T *buf = NULL;
 
 	/* check that we can find the buffer before starting the job */
-	if (!(opt.jo_set & JO_IN_NAME))
+	if (opt.jo_set & JO_IN_BUF)
 	{
-	    EMSG(_("E915: in-io buffer requires in-name to be set"));
-	    return;
+	    buf = buflist_findnr(opt.jo_io_buf[PART_IN]);
+	    if (buf == NULL)
+		EMSGN(_(e_nobufnr), (long)opt.jo_io_buf[PART_IN]);
 	}
-	buf = buflist_find_by_name(opt.jo_io_name[PART_IN], FALSE);
+	else if (!(opt.jo_set & JO_IN_NAME))
+	{
+	    EMSG(_("E915: in-io buffer requires in-buf or in-name to be set"));
+	}
+	else
+	    buf = buflist_find_by_name(opt.jo_io_name[PART_IN], FALSE);
 	if (buf == NULL)
 	    return;
 	if (buf->b_ml.ml_mfp == NULL)
 	{
-	    EMSG2(_("E918: buffer must be loaded: %s"),
-						     opt.jo_io_name[PART_IN]);
+	    char_u	buf[NUMBUFLEN];
+	    char_u	*s;
+
+	    if (opt.jo_set & JO_IN_BUF)
+	    {
+		sprintf((char *)buf, "%d", opt.jo_io_buf[PART_IN]);
+		s = buf;
+	    }
+	    else
+		s = opt.jo_io_name[PART_IN];
+	    EMSG2(_("E918: buffer must be loaded: %s"), s);
 	    return;
 	}
 	job->jv_in_buf = buf;
@@ -15262,7 +15306,8 @@ f_job_start(typval_T *argvars UNUSED, typval_T *rettv)
 
 #ifdef FEAT_CHANNEL
     /* If the channel is reading from a buffer, write lines now. */
-    channel_write_in(job->jv_channel);
+    if (job->jv_channel != NULL)
+	channel_write_in(job->jv_channel);
 #endif
 
 theend:
@@ -18410,6 +18455,42 @@ f_setcmdpos(typval_T *argvars, typval_T *rettv)
 
     if (pos >= 0)
 	rettv->vval.v_number = set_cmdline_pos(pos);
+}
+
+/*
+ * "setfperm({fname}, {mode})" function
+ */
+    static void
+f_setfperm(typval_T *argvars, typval_T *rettv)
+{
+    char_u	*fname;
+    char_u	modebuf[NUMBUFLEN];
+    char_u	*mode_str;
+    int		i;
+    int		mask;
+    int		mode = 0;
+
+    rettv->vval.v_number = 0;
+    fname = get_tv_string_chk(&argvars[0]);
+    if (fname == NULL)
+	return;
+    mode_str = get_tv_string_buf_chk(&argvars[1], modebuf);
+    if (mode_str == NULL)
+	return;
+    if (STRLEN(mode_str) != 9)
+    {
+	EMSG2(_(e_invarg2), mode_str);
+	return;
+    }
+
+    mask = 1;
+    for (i = 8; i >= 0; --i)
+    {
+	if (mode_str[i] != '-')
+	    mode |= mask;
+	mask = mask << 1;
+    }
+    rettv->vval.v_number = mch_setperm(fname, mode) == OK;
 }
 
 /*
