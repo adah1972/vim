@@ -1492,7 +1492,7 @@ WaitForChar(long msec)
 	{
 	    DWORD dwWaitTime = dwEndTime - dwNow;
 
-#ifdef FEAT_CHANNEL
+#ifdef FEAT_JOB_CHANNEL
 	    /* Check channel while waiting input. */
 	    if (dwWaitTime > 100)
 		dwWaitTime = 100;
@@ -4999,7 +4999,7 @@ mch_call_shell(
     return x;
 }
 
-#if defined(FEAT_JOB) || defined(PROTO)
+#if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
     static HANDLE
 job_io_file_open(
         char_u *fname,
@@ -5041,7 +5041,6 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
     STARTUPINFO		si;
     PROCESS_INFORMATION	pi;
     HANDLE		jo;
-# ifdef FEAT_CHANNEL
     SECURITY_ATTRIBUTES saAttr;
     channel_T		*channel = NULL;
     HANDLE		ifd[2];
@@ -5065,7 +5064,6 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
     ofd[1] = INVALID_HANDLE_VALUE;
     efd[0] = INVALID_HANDLE_VALUE;
     efd[1] = INVALID_HANDLE_VALUE;
-# endif
 
     jo = CreateJobObject(NULL, NULL);
     if (jo == NULL)
@@ -5080,7 +5078,6 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
     si.dwFlags |= STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
 
-# ifdef FEAT_CHANNEL
     saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
     saAttr.bInheritHandle = TRUE;
     saAttr.lpSecurityDescriptor = NULL;
@@ -5146,11 +5143,17 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
 
     if (!use_null_for_in || !use_null_for_out || !use_null_for_err)
     {
-	channel = add_channel();
+	if (options->jo_set & JO_CHANNEL)
+	{
+	    channel = options->jo_channel;
+	    if (channel != NULL)
+		++channel->ch_refcount;
+	}
+	else
+	    channel = add_channel();
 	if (channel == NULL)
 	    goto failed;
     }
-# endif
 
     if (!vim_create_process(cmd, TRUE,
 	    CREATE_SUSPENDED |
@@ -5177,7 +5180,6 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
     job->jv_job_object = jo;
     job->jv_status = JOB_STARTED;
 
-# ifdef FEAT_CHANNEL
     if (!use_file_for_in)
 	CloseHandle(ifd[0]);
     if (!use_file_for_out)
@@ -5196,25 +5198,17 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
 		      use_out_for_err || use_file_for_err || use_null_for_err
 					    ? INVALID_FD : (sock_T)efd[0]);
 	channel_set_job(channel, job, options);
-#  ifdef FEAT_GUI
-	channel_gui_register(channel);
-#  endif
     }
-# endif
     return;
 
 failed:
-# ifdef FEAT_CHANNEL
     CloseHandle(ifd[0]);
     CloseHandle(ofd[0]);
     CloseHandle(efd[0]);
     CloseHandle(ifd[1]);
     CloseHandle(ofd[1]);
     CloseHandle(efd[1]);
-    channel_free(channel);
-# else
-    ;  /* make compiler happy */
-# endif
+    channel_unref(channel);
 }
 
     char *

@@ -4949,7 +4949,7 @@ ex_gui(exarg_T *eap)
 	 * of the argument ending up after the shell prompt. */
 	msg_clr_eos_force();
 	gui_start();
-#ifdef FEAT_CHANNEL
+#ifdef FEAT_JOB_CHANNEL
 	channel_gui_register_all();
 #endif
     }
@@ -4988,7 +4988,7 @@ gui_find_bitmap(char_u *name, char_u *buffer, char *ext)
     if (STRLEN(name) > MAXPATHL - 14)
 	return FAIL;
     vim_snprintf((char *)buffer, MAXPATHL, "bitmaps/%s.%s", name, ext);
-    if (do_in_runtimepath(buffer, FALSE, gfp_setname, buffer) == FAIL
+    if (do_in_runtimepath(buffer, 0, gfp_setname, buffer) == FAIL
 							    || *buffer == NUL)
 	return FAIL;
     return OK;
