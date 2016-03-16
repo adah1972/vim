@@ -626,6 +626,11 @@ static char *(features[]) =
 #else
 	"-textobjects",
 #endif
+#ifdef FEAT_TIMERS
+	"+timers",
+#else
+	"-timers",
+#endif
 #ifdef FEAT_TITLE
 	"+title",
 #else
@@ -743,6 +748,48 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    1579,
+/**/
+    1578,
+/**/
+    1577,
+/**/
+    1576,
+/**/
+    1575,
+/**/
+    1574,
+/**/
+    1573,
+/**/
+    1572,
+/**/
+    1571,
+/**/
+    1570,
+/**/
+    1569,
+/**/
+    1568,
+/**/
+    1567,
+/**/
+    1566,
+/**/
+    1565,
+/**/
+    1564,
+/**/
+    1563,
+/**/
+    1562,
+/**/
+    1561,
+/**/
+    1560,
+/**/
+    1559,
 /**/
     1558,
 /**/
