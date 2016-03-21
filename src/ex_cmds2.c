@@ -1179,7 +1179,7 @@ check_due_timer()
 {
     timer_T	*timer;
     long	this_due;
-    long	next_due;
+    long	next_due = -1;
     proftime_T	now;
     int		did_one = FALSE;
 # ifdef WIN3264
@@ -3272,7 +3272,7 @@ do_in_runtimepath(
 
     if ((done == FAIL || (flags & DIP_ALL)) && (flags & DIP_START))
     {
-	len = STRLEN(start_dir) + STRLEN(name);
+	len = (int)(STRLEN(start_dir) + STRLEN(name));
 	s = alloc(len);
 	if (s == NULL)
 	    return FAIL;
@@ -3283,7 +3283,7 @@ do_in_runtimepath(
 
     if ((done == FAIL || (flags & DIP_ALL)) && (flags & DIP_OPT))
     {
-	len = STRLEN(opt_dir) + STRLEN(name);
+	len = (int)(STRLEN(opt_dir) + STRLEN(name));
 	s = alloc(len);
 	if (s == NULL)
 	    return FAIL;
@@ -3404,6 +3404,7 @@ add_pack_plugin(char_u *fname, void *cookie)
 	    vim_free(cmd);
 	}
 #endif
+	vim_free(pat);
     }
 
 theend:

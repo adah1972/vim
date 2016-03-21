@@ -1355,7 +1355,7 @@ main_loop(
 }
 
 
-#if defined(USE_XSMP) || defined(FEAT_GUI_MSWIN) || defined(PROTO)
+#if defined(USE_XSMP) || defined(FEAT_GUI) || defined(PROTO)
 /*
  * Exit, but leave behind swap files for modified buffers.
  */
@@ -1377,7 +1377,9 @@ getout_preserve_modified(int exitval)
 #endif
 
 
-/* Exit properly */
+/*
+ * Exit properly.
+ */
     void
 getout(int exitval)
 {
@@ -2086,7 +2088,7 @@ command_line_scan(mparm_T *parmp)
 		break;
 
 		case 'O':	/* "-O[N]" open N vertical split windows */
-#if defined(FEAT_VERTSPLIT) && defined(FEAT_WINDOWS)
+#ifdef FEAT_WINDOWS
 		/* default is 0: open window for each file */
 		parmp->window_count = get_number_arg((char_u *)argv[0],
 								&argv_idx, 0);

@@ -1319,6 +1319,14 @@ typedef enum
     MODE_JS
 } ch_mode_T;
 
+typedef enum {
+    JIO_PIPE,	    /* default */
+    JIO_NULL,
+    JIO_FILE,
+    JIO_BUFFER,
+    JIO_OUT
+} job_io_T;
+
 /* Ordering matters, it is used in for loops: IN is last, only SOCK/OUT/ERR
  * are polled. */
 #define PART_SOCK   0
@@ -1351,12 +1359,21 @@ typedef struct {
 #endif
 
     ch_mode_T	ch_mode;
+    job_io_T	ch_io;
     int		ch_timeout;	/* request timeout in msec */
 
     readq_T	ch_head;	/* header for circular raw read queue */
     jsonq_T	ch_json_head;	/* header for circular json read queue */
     int		ch_block_id;	/* ID that channel_read_json_block() is
 				   waiting for */
+    /* When ch_waiting is TRUE use ch_deadline to wait for incomplete message
+     * to be complete. */
+    int		ch_waiting;
+#ifdef WIN32
+    DWORD	ch_deadline;
+#else
+    struct timeval ch_deadline;
+#endif
 
     cbq_T	ch_cb_head;	/* dummy node for per-request callbacks */
     char_u	*ch_callback;	/* call when a msg is not handled */
@@ -1372,8 +1389,12 @@ struct channel_S {
     channel_T	*ch_prev;
 
     int		ch_id;		/* ID of the channel */
+    int		ch_last_msg_id;	/* ID of the last message */
 
     chanpart_T	ch_part[4];	/* info for socket, out, err and in */
+
+    char	*ch_hostname;	/* only for socket, allocated */
+    int		ch_port;	/* only for socket */
 
     int		ch_error;	/* When TRUE an error was reported.  Avoids
 				 * giving pages full of error messages when
@@ -1433,14 +1454,6 @@ struct channel_S {
 #define JO_CB_ALL \
     (JO_CALLBACK + JO_OUT_CALLBACK + JO_ERR_CALLBACK + JO_CLOSE_CALLBACK)
 #define JO_TIMEOUT_ALL	(JO_TIMEOUT + JO_OUT_TIMEOUT + JO_ERR_TIMEOUT)
-
-typedef enum {
-    JIO_PIPE,	    /* default */
-    JIO_NULL,
-    JIO_FILE,
-    JIO_BUFFER,
-    JIO_OUT
-} job_io_T;
 
 /*
  * Options for job and channel commands.
@@ -2200,7 +2213,7 @@ typedef struct w_line
 struct frame_S
 {
     char	fr_layout;	/* FR_LEAF, FR_COL or FR_ROW */
-#ifdef FEAT_VERTSPLIT
+#ifdef FEAT_WINDOWS
     int		fr_width;
     int		fr_newwidth;	/* new width used in win_equal_rec() */
 #endif
@@ -2370,8 +2383,6 @@ struct window_S
 				       status/command line(s) */
 #ifdef FEAT_WINDOWS
     int		w_status_height;    /* number of status lines (0 or 1) */
-#endif
-#ifdef FEAT_VERTSPLIT
     int		w_wincol;	    /* Leftmost column of window in screen.
 				       use W_WINCOL() */
     int		w_width;	    /* Width of window, excluding separation.

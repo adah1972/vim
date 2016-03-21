@@ -79,7 +79,6 @@ SCRIPTS_ALL = \
 	test93.out \
 	test94.out \
 	test95.out \
-	test96.out \
 	test98.out \
 	test99.out \
 	test101.out \
@@ -131,7 +130,6 @@ SCRIPTS_MORE1 = \
 # Tests that run on most systems, but not on Amiga and DOS/Windows.
 SCRIPTS_MORE2 = \
 	test2.out \
-	test10.out \
 	test12.out \
 	test13.out \
 	test25.out \

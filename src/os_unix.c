@@ -176,6 +176,7 @@ typedef int waitstatus;
 static pid_t wait4pid(pid_t, waitstatus *);
 
 static int  WaitForChar(long);
+static int  WaitForCharOrMouse(long);
 #if defined(__BEOS__) || defined(VMS)
 int  RealWaitForChar(int, long, int *);
 #else
@@ -5149,7 +5150,7 @@ mch_start_job(char **argv, job_T *job, jobopt_T *options UNUSED)
 	    null_fd = open("/dev/null", O_RDWR | O_EXTRA, 0);
 
 	/* set up stdin for the child */
-	if (use_null_for_in)
+	if (use_null_for_in && null_fd >= 0)
 	{
 	    close(0);
 	    ignored = dup(null_fd);
@@ -5164,7 +5165,7 @@ mch_start_job(char **argv, job_T *job, jobopt_T *options UNUSED)
 	}
 
 	/* set up stderr for the child */
-	if (use_null_for_err)
+	if (use_null_for_err && null_fd >= 0)
 	{
 	    close(2);
 	    ignored = dup(null_fd);
@@ -5184,7 +5185,7 @@ mch_start_job(char **argv, job_T *job, jobopt_T *options UNUSED)
 	}
 
 	/* set up stdout for the child */
-	if (use_null_for_out)
+	if (use_null_for_out && null_fd >= 0)
 	{
 	    close(0);
 	    ignored = dup(null_fd);
@@ -5213,11 +5214,11 @@ mch_start_job(char **argv, job_T *job, jobopt_T *options UNUSED)
     job->jv_channel = channel;  /* ch_refcount was set above */
 
     /* child stdin, stdout and stderr */
-    if (!use_file_for_in)
+    if (!use_file_for_in && fd_in[0] >= 0)
 	close(fd_in[0]);
-    if (!use_file_for_out)
+    if (!use_file_for_out && fd_out[1] >= 0)
 	close(fd_out[1]);
-    if (!use_out_for_err && !use_file_for_err)
+    if (!use_out_for_err && !use_file_for_err && fd_err[1] >= 0)
 	close(fd_err[1]);
     if (channel != NULL)
     {
@@ -5347,12 +5348,49 @@ mch_breakcheck(void)
 }
 
 /*
- * Wait "msec" msec until a character is available from the keyboard or from
- * inbuf[]. msec == -1 will block forever.
+ * Wait "msec" msec until a character is available from the mouse, keyboard,
+ * from inbuf[].
+ * "msec" == -1 will block forever.
+ * Invokes timer callbacks when needed.
  * When a GUI is being used, this will never get called -- webb
  */
     static int
 WaitForChar(long msec)
+{
+#ifdef FEAT_TIMERS
+    long    due_time;
+    long    remaining = msec;
+
+    /* When waiting very briefly don't trigger timers. */
+    if (msec >= 0 && msec < 10L)
+	return WaitForCharOrMouse(msec);
+
+    while (msec < 0 || remaining > 0)
+    {
+	/* Trigger timers and then get the time in msec until the next one is
+	 * due.  Wait up to that time. */
+	due_time = check_due_timer();
+	if (due_time <= 0 || (msec > 0 && due_time > remaining))
+	    due_time = remaining;
+	if (WaitForCharOrMouse(due_time))
+	    return TRUE;
+	if (msec > 0)
+	    remaining -= due_time;
+    }
+    return FALSE;
+#else
+    return WaitForCharOrMouse(msec);
+#endif
+}
+
+/*
+ * Wait "msec" msec until a character is available from the mouse or keyboard
+ * or from inbuf[].
+ * "msec" == -1 will block forever.
+ * When a GUI is being used, this will never get called -- webb
+ */
+    static int
+WaitForCharOrMouse(long msec)
 {
 #ifdef FEAT_MOUSE_GPM
     int		gpm_process_wanted;
