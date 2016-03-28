@@ -2,12 +2,14 @@
 " This makes testing go faster, since Vim doesn't need to restart.
 
 source test_assign.vim
+source test_autocmd.vim
 source test_cursor_func.vim
 source test_delete.vim
 source test_ex_undo.vim
 source test_expr.vim
 source test_expand.vim
 source test_feedkeys.vim
+source test_fnamemodify.vim
 source test_file_perm.vim
 source test_glob2regpat.vim
 source test_help_tagjump.vim

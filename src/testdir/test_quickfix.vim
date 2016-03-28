@@ -679,3 +679,21 @@ function Test_quickfix_was_changed_by_autocmd()
   call XquickfixChangedByAutocmd('c')
   call XquickfixChangedByAutocmd('l')
 endfunction
+
+func Test_caddbuffer_to_empty()
+  helpgr quickfix
+  call setqflist([], 'r')
+  cad
+  try
+    cn
+  catch
+    " number of matches is unknown
+    call assert_true(v:exception =~ 'E553:')
+  endtry
+  quit!
+endfunc
+
+func Test_cgetexpr_works()
+  " this must not crash Vim
+  cgetexpr [$x]
+endfunc

@@ -1661,8 +1661,17 @@ channel_exe_cmd(channel_T *channel, int part, typval_T *argv)
 
     if (STRCMP(cmd, "ex") == 0)
     {
+	int save_called_emsg = called_emsg;
+
+	called_emsg = FALSE;
 	ch_logs(channel, "Executing ex command '%s'", (char *)arg);
+	++emsg_silent;
 	do_cmdline_cmd(arg);
+	--emsg_silent;
+	if (called_emsg)
+	    ch_logs(channel, "Ex command error: '%s'",
+					  (char *)get_vim_var_str(VV_ERRMSG));
+	called_emsg = save_called_emsg;
     }
     else if (STRCMP(cmd, "normal") == 0)
     {
@@ -3803,6 +3812,11 @@ job_start(typval_T *argvars)
     {
 	/* Command is a string. */
 	cmd = argvars[0].vval.v_string;
+	if (cmd == NULL || *cmd == NUL)
+	{
+	    EMSG(_(e_invarg));
+	    return job;
+	}
 #ifdef USE_ARGV
 	if (mch_parse_cmd(cmd, FALSE, &argv, &argc) == FAIL)
 	    return job;

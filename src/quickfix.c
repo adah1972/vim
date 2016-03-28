@@ -532,7 +532,8 @@ qf_init_ext(
 		else if (tv->v_type == VAR_LIST)
 		{
 		    /* Get the next line from the supplied list */
-		    while (p_li && p_li->li_tv.v_type != VAR_STRING)
+		    while (p_li && (p_li->li_tv.v_type != VAR_STRING
+				|| p_li->li_tv.vval.v_string == NULL))
 			p_li = p_li->li_next;	/* Skip non-string items */
 
 		    if (!p_li)			/* End of the list */
@@ -1027,6 +1028,8 @@ qf_add_entry(
 				/* first element in the list */
     {
 	qi->qf_lists[qi->qf_curlist].qf_start = qfp;
+	qi->qf_lists[qi->qf_curlist].qf_ptr = qfp;
+	qi->qf_lists[qi->qf_curlist].qf_index = 0;
 	qfp->qf_prev = qfp;	/* first element points to itself */
     }
     else
@@ -4113,7 +4116,8 @@ set_errorlist(
     else
 	qi->qf_lists[qi->qf_curlist].qf_nonevalid = FALSE;
     qi->qf_lists[qi->qf_curlist].qf_ptr = qi->qf_lists[qi->qf_curlist].qf_start;
-    qi->qf_lists[qi->qf_curlist].qf_index = 1;
+    if (qi->qf_lists[qi->qf_curlist].qf_count > 0)
+	qi->qf_lists[qi->qf_curlist].qf_index = 1;
 
 #ifdef FEAT_WINDOWS
     qf_update_buffer(qi);
