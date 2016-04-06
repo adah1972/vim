@@ -340,7 +340,7 @@ newwindow:
 /* cursor to last accessed (previous) window */
     case 'p':
     case Ctrl_P:
-		if (prevwin == NULL)
+		if (!win_valid(prevwin))
 		    beep_flush();
 		else
 		    win_goto(prevwin);
@@ -4577,8 +4577,15 @@ win_free(
     unref_var_dict(wp->w_vars);
 #endif
 
-    if (prevwin == wp)
-	prevwin = NULL;
+    {
+	tabpage_T	*ttp;
+
+	if (prevwin == wp)
+	    prevwin = NULL;
+	for (ttp = first_tabpage; ttp != NULL; ttp = ttp->tp_next)
+	    if (ttp->tp_prevwin == wp)
+		ttp->tp_prevwin = NULL;
+    }
     win_free_lsize(wp);
 
     for (i = 0; i < wp->w_tagstacklen; ++i)
@@ -6746,11 +6753,11 @@ match_add(
     m->match.regprog = regprog;
     m->match.rmm_ic = FALSE;
     m->match.rmm_maxcol = 0;
-#ifdef FEAT_CONCEAL
+# if defined(FEAT_CONCEAL) && defined(FEAT_MBYTE)
     m->conceal_char = 0;
     if (conceal_char != NULL)
 	m->conceal_char = (*mb_ptr2char)(conceal_char);
-#endif
+# endif
 
     /* Set up position matches */
     if (pos_list != NULL)
