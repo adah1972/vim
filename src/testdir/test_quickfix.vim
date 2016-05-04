@@ -501,7 +501,7 @@ endfunction
 function Test_locationlist_curwin_was_closed()
     augroup testgroup
       au!
-      autocmd BufReadCmd t call R(expand("<amatch>"))
+      autocmd BufReadCmd test_curwin.txt call R(expand("<amatch>"))
     augroup END
 
     function! R(n)
@@ -510,7 +510,7 @@ function Test_locationlist_curwin_was_closed()
 
     new
     let q = []
-    call add(q, {'filename': 't' })
+    call add(q, {'filename': 'test_curwin.txt' })
     call setloclist(0, q)
     call assert_fails('lrewind', 'E924:')
 
@@ -643,14 +643,14 @@ function XquickfixChangedByAutocmd(cchar)
   let Xgetexpr = a:cchar . 'getexpr'
   let Xrewind = a:cchar . 'rewind'
   if a:cchar == 'c'
-    let Xsetlist = 'setqflist('
+    let Xsetlist = function('setqflist')
     let ErrorNr = 'E925'
     function! ReadFunc()
       colder
       cgetexpr []
     endfunc
   else
-    let Xsetlist = 'setloclist(0,'
+    let Xsetlist = function('setloclist', [0])
     let ErrorNr = 'E926'
     function! ReadFunc()
       lolder
@@ -660,15 +660,15 @@ function XquickfixChangedByAutocmd(cchar)
 
   augroup testgroup
     au!
-    autocmd BufReadCmd t call ReadFunc()
+    autocmd BufReadCmd test_changed.txt call ReadFunc()
   augroup END
 
-  bwipe!
+  new | only
   let words = [ "a", "b" ]
   let qflist = []
   for word in words
-    call add(qflist, {'filename': 't'})
-    exec "call " . Xsetlist . "qflist, '')"
+    call add(qflist, {'filename': 'test_changed.txt'})
+    call Xsetlist(qflist, ' ')
   endfor
   exec "call assert_fails('" . Xrewind . "', '" . ErrorNr . ":')"
 
@@ -696,4 +696,175 @@ endfunc
 func Test_cgetexpr_works()
   " this must not crash Vim
   cgetexpr [$x]
+endfunc
+
+" Tests for the setqflist() and setloclist() functions
+function SetXlistTests(cchar, bnum)
+  if a:cchar == 'c'
+    let Xsetlist = function('setqflist')
+    let Xgetlist = function('getqflist')
+    let Xnext = 'cnext'
+  else
+    let Xsetlist = function('setloclist', [0])
+    let Xgetlist = function('getloclist', [0])
+    let Xnext = 'lnext'
+  endif
+
+  call Xsetlist([{'bufnr': a:bnum, 'lnum': 1},
+	      \  {'bufnr': a:bnum, 'lnum': 2}])
+  let l = Xgetlist()
+  call assert_equal(2, len(l))
+  call assert_equal(2, l[1].lnum)
+
+  exe Xnext
+  call Xsetlist([{'bufnr': a:bnum, 'lnum': 3}], 'a')
+  let l = Xgetlist()
+  call assert_equal(3, len(l))
+  exe Xnext
+  call assert_equal(3, line('.'))
+
+  call Xsetlist([{'bufnr': a:bnum, 'lnum': 3},
+	      \  {'bufnr': a:bnum, 'lnum': 4},
+	      \  {'bufnr': a:bnum, 'lnum': 5}], 'r')
+  let l = Xgetlist()
+  call assert_equal(3, len(l))
+  call assert_equal(5, l[2].lnum)
+
+  call Xsetlist([])
+  let l = Xgetlist()
+  call assert_equal(0, len(l))
+endfunction
+
+function Test_setqflist()
+  new Xtestfile | only
+  let bnum = bufnr('%')
+  call setline(1, range(1,5))
+
+  call SetXlistTests('c', bnum)
+  call SetXlistTests('l', bnum)
+
+  call delete('Xtestfile')
+endfunction
+
+function! XquickfixSetListWithAct(cchar)
+  let Xolder = a:cchar . 'older'
+  let Xnewer = a:cchar . 'newer'
+  if a:cchar == 'c'
+    let Xsetlist = function('setqflist')
+    let Xgetlist = function('getqflist')
+  else
+    let Xsetlist = function('setloclist', [0])
+    let Xgetlist = function('getloclist', [0])
+  endif
+  let list1 = [{'filename': 'fnameA', 'text': 'A'},
+          \    {'filename': 'fnameB', 'text': 'B'}]
+  let list2 = [{'filename': 'fnameC', 'text': 'C'},
+          \    {'filename': 'fnameD', 'text': 'D'},
+          \    {'filename': 'fnameE', 'text': 'E'}]
+
+  " {action} is unspecified.  Same as specifing ' '.
+  new | only
+  exec "silent! " . Xnewer . "99"
+  call Xsetlist(list1)
+  call Xsetlist(list2)
+  let li = Xgetlist()
+  call assert_equal(3, len(li))
+  call assert_equal('C', li[0]['text'])
+  call assert_equal('D', li[1]['text'])
+  call assert_equal('E', li[2]['text'])
+  exec "silent! " . Xolder
+  let li = Xgetlist()
+  call assert_equal(2, len(li))
+  call assert_equal('A', li[0]['text'])
+  call assert_equal('B', li[1]['text'])
+
+  " {action} is specified ' '.
+  new | only
+  exec "silent! " . Xnewer . "99"
+  call Xsetlist(list1)
+  call Xsetlist(list2, ' ')
+  let li = Xgetlist()
+  call assert_equal(3, len(li))
+  call assert_equal('C', li[0]['text'])
+  call assert_equal('D', li[1]['text'])
+  call assert_equal('E', li[2]['text'])
+  exec "silent! " . Xolder
+  let li = Xgetlist()
+  call assert_equal(2, len(li))
+  call assert_equal('A', li[0]['text'])
+  call assert_equal('B', li[1]['text'])
+
+  " {action} is specified 'a'.
+  new | only
+  exec "silent! " . Xnewer . "99"
+  call Xsetlist(list1)
+  call Xsetlist(list2, 'a')
+  let li = Xgetlist()
+  call assert_equal(5, len(li))
+  call assert_equal('A', li[0]['text'])
+  call assert_equal('B', li[1]['text'])
+  call assert_equal('C', li[2]['text'])
+  call assert_equal('D', li[3]['text'])
+  call assert_equal('E', li[4]['text'])
+
+  " {action} is specified 'r'.
+  new | only
+  exec "silent! " . Xnewer . "99"
+  call Xsetlist(list1)
+  call Xsetlist(list2, 'r')
+  let li = Xgetlist()
+  call assert_equal(3, len(li))
+  call assert_equal('C', li[0]['text'])
+  call assert_equal('D', li[1]['text'])
+  call assert_equal('E', li[2]['text'])
+
+  " Test for wrong value.
+  new | only
+  call assert_fails("call Xsetlist(0)", 'E714:')
+  call assert_fails("call Xsetlist(list1, '')", 'E927:')
+  call assert_fails("call Xsetlist(list1, 'aa')", 'E927:')
+  call assert_fails("call Xsetlist(list1, ' a')", 'E927:')
+  call assert_fails("call Xsetlist(list1, 0)", 'E928:')
+endfunc
+
+function Test_quickfix_set_list_with_act()
+  call XquickfixSetListWithAct('c')
+  call XquickfixSetListWithAct('l')
+endfunction
+
+func XLongLinesTests()
+  let l = getqflist()
+
+  call assert_equal(3, len(l))
+  call assert_equal(1, l[0].lnum)
+  call assert_equal(1, l[0].col)
+  call assert_equal(4070, len(l[0].text))
+  call assert_equal(2, l[1].lnum)
+  call assert_equal(1, l[1].col)
+  call assert_equal(4070, len(l[1].text))
+  call assert_equal(3, l[2].lnum)
+  call assert_equal(1, l[2].col)
+  call assert_equal(10, len(l[2].text))
+
+  call setqflist([], 'r')
+endfunc
+
+func Test_long_lines()
+  let testfile = 'samples/quickfix.txt'
+
+  " file
+  exe 'cgetfile' testfile
+  call XLongLinesTests()
+
+  " list
+  cexpr readfile(testfile)
+  call XLongLinesTests()
+
+  " string
+  cexpr join(readfile(testfile), "\n")
+  call XLongLinesTests()
+
+  " buffer
+  e testfile
+  exe 'cbuffer' bufnr('%')
 endfunc

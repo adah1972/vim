@@ -8,10 +8,12 @@ source test_delete.vim
 source test_ex_undo.vim
 source test_expr.vim
 source test_expand.vim
+source test_expand_dllpath.vim
 source test_feedkeys.vim
 source test_fnamemodify.vim
 source test_file_perm.vim
 source test_glob2regpat.vim
+source test_goto.vim
 source test_help_tagjump.vim
 source test_join.vim
 source test_lispwords.vim
@@ -26,6 +28,7 @@ source test_sort.vim
 source test_statusline.vim
 source test_syn_attr.vim
 source test_tabline.vim
+source test_tagjump.vim
 source test_timers.vim
 source test_undolevels.vim
 source test_unlet.vim

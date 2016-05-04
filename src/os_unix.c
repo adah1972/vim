@@ -397,7 +397,7 @@ mch_inchar(
 
     if (wtime >= 0)
     {
-	while (WaitForChar(wtime) == 0)		/* no character available */
+	while (!WaitForChar(wtime))		/* no character available */
 	{
 	    if (do_resize)
 		handle_resize();
@@ -420,7 +420,7 @@ mch_inchar(
 	 * flush all the swap files to disk.
 	 * Also done when interrupted by SIGWINCH.
 	 */
-	if (WaitForChar(p_ut) == 0)
+	if (!WaitForChar(p_ut))
 	{
 #ifdef FEAT_AUTOCMD
 	    if (trigger_cursorhold() && maxlen >= 3
@@ -448,7 +448,7 @@ mch_inchar(
 	 * We want to be interrupted by the winch signal
 	 * or by an event on the monitored file descriptors.
 	 */
-	if (WaitForChar(-1L) == 0)
+	if (!WaitForChar(-1L))
 	{
 	    if (do_resize)	    /* interrupted by SIGWINCH signal */
 		handle_resize();
@@ -482,7 +482,7 @@ handle_resize(void)
 }
 
 /*
- * return non-zero if a character is available
+ * Return non-zero if a character is available.
  */
     int
 mch_char_avail(void)
@@ -3940,7 +3940,7 @@ mch_parse_cmd(char_u *cmd, int use_shcf, char ***argv, int *argc)
      */
     for (i = 0; i < 2; ++i)
     {
-	p = cmd;
+	p = skipwhite(cmd);
 	inquote = FALSE;
 	*argc = 0;
 	for (;;)
@@ -5138,7 +5138,8 @@ mch_start_job(char **argv, job_T *job, jobopt_T *options UNUSED)
 
     if (pid == 0)
     {
-	int		null_fd = -1;
+	int	null_fd = -1;
+	int	stderr_works = TRUE;
 
 	/* child */
 	reset_signals();		/* handle signals normally */
@@ -5175,6 +5176,7 @@ mch_start_job(char **argv, job_T *job, jobopt_T *options UNUSED)
 	{
 	    close(2);
 	    ignored = dup(null_fd);
+	    stderr_works = FALSE;
 	}
 	else if (use_out_for_err)
 	{
@@ -5210,7 +5212,8 @@ mch_start_job(char **argv, job_T *job, jobopt_T *options UNUSED)
 	/* See above for type of argv. */
 	execvp(argv[0], argv);
 
-	perror("executing job failed");
+	if (stderr_works)
+	    perror("executing job failed");
 	_exit(EXEC_FAILED);	    /* exec failed, return failure code */
     }
 
@@ -5359,6 +5362,7 @@ mch_breakcheck(void)
  * "msec" == -1 will block forever.
  * Invokes timer callbacks when needed.
  * When a GUI is being used, this will never get called -- webb
+ * Returns TRUE when a character is available.
  */
     static int
 WaitForChar(long msec)
@@ -5367,6 +5371,7 @@ WaitForChar(long msec)
     long    due_time;
     long    remaining = msec;
     int	    break_loop = FALSE;
+    int	    tb_change_cnt = typebuf.tb_change_cnt;
 
     /* When waiting very briefly don't trigger timers. */
     if (msec >= 0 && msec < 10L)
@@ -5377,6 +5382,11 @@ WaitForChar(long msec)
 	/* Trigger timers and then get the time in msec until the next one is
 	 * due.  Wait up to that time. */
 	due_time = check_due_timer();
+	if (typebuf.tb_change_cnt != tb_change_cnt)
+	{
+	    /* timer may have used feedkeys() */
+	    return FALSE;
+	}
 	if (due_time <= 0 || (msec > 0 && due_time > remaining))
 	    due_time = remaining;
 	if (WaitForCharOrMouse(due_time, &break_loop))

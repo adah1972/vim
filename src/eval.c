@@ -98,6 +98,9 @@ static char *e_listarg = N_("E686: Argument of %s must be a List");
 static char *e_listdictarg = N_("E712: Argument of %s must be a List or Dictionary");
 static char *e_listreq = N_("E714: List required");
 static char *e_dictreq = N_("E715: Dictionary required");
+#ifdef FEAT_QUICKFIX
+static char *e_stringreq = N_("E928: String required");
+#endif
 static char *e_toomanyarg = N_("E118: Too many arguments for function: %s");
 static char *e_dictkey = N_("E716: Key not present in Dictionary: %s");
 static char *e_funcexts = N_("E122: Function %s already exists, add ! to replace it");
@@ -3289,9 +3292,14 @@ eval_for_line(
 	if (!skip)
 	{
 	    l = tv.vval.v_list;
-	    if (tv.v_type != VAR_LIST || l == NULL)
+	    if (tv.v_type != VAR_LIST)
 	    {
 		EMSG(_(e_listreq));
+		clear_tv(&tv);
+	    }
+	    else if (l == NULL)
+	    {
+		/* a null list is like an empty list: do nothing */
 		clear_tv(&tv);
 	    }
 	    else
@@ -6051,7 +6059,7 @@ list_alloc(void)
 }
 
 /*
- * Allocate an empty list for a return value.
+ * Allocate an empty list for a return value, with reference count set.
  * Returns OK or FAIL.
  */
     int
@@ -7021,6 +7029,10 @@ garbage_collect(int testing)
 
 #ifdef FEAT_JOB_CHANNEL
     abort = abort || set_ref_in_channel(copyID);
+    abort = abort || set_ref_in_job(copyID);
+#endif
+#ifdef FEAT_NETBEANS_INTG
+    abort = abort || set_ref_in_nb_channel(copyID);
 #endif
 
     if (!abort)
@@ -10302,7 +10314,7 @@ f_ceil(typval_T *argvars, typval_T *rettv)
     static void
 f_ch_close(typval_T *argvars, typval_T *rettv UNUSED)
 {
-    channel_T *channel = get_channel_arg(&argvars[0], TRUE);
+    channel_T *channel = get_channel_arg(&argvars[0], TRUE, FALSE, 0);
 
     if (channel != NULL)
     {
@@ -10317,7 +10329,7 @@ f_ch_close(typval_T *argvars, typval_T *rettv UNUSED)
     static void
 f_ch_getbufnr(typval_T *argvars, typval_T *rettv)
 {
-    channel_T *channel = get_channel_arg(&argvars[0], TRUE);
+    channel_T *channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
 
     rettv->vval.v_number = -1;
     if (channel != NULL)
@@ -10344,7 +10356,7 @@ f_ch_getbufnr(typval_T *argvars, typval_T *rettv)
     static void
 f_ch_getjob(typval_T *argvars, typval_T *rettv)
 {
-    channel_T *channel = get_channel_arg(&argvars[0], TRUE);
+    channel_T *channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
 
     if (channel != NULL)
     {
@@ -10361,7 +10373,7 @@ f_ch_getjob(typval_T *argvars, typval_T *rettv)
     static void
 f_ch_info(typval_T *argvars, typval_T *rettv UNUSED)
 {
-    channel_T *channel = get_channel_arg(&argvars[0], TRUE);
+    channel_T *channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
 
     if (channel != NULL && rettv_dict_alloc(rettv) != FAIL)
 	channel_info(channel, rettv->vval.v_dict);
@@ -10377,7 +10389,7 @@ f_ch_log(typval_T *argvars, typval_T *rettv UNUSED)
     channel_T	*channel = NULL;
 
     if (argvars[1].v_type != VAR_UNKNOWN)
-	channel = get_channel_arg(&argvars[1], TRUE);
+	channel = get_channel_arg(&argvars[1], FALSE, FALSE, 0);
 
     ch_log(channel, (char *)msg);
 }
@@ -10405,6 +10417,8 @@ f_ch_logfile(typval_T *argvars, typval_T *rettv UNUSED)
 f_ch_open(typval_T *argvars, typval_T *rettv)
 {
     rettv->v_type = VAR_CHANNEL;
+    if (check_restricted() || check_secure())
+	return;
     rettv->vval.v_channel = channel_open_func(argvars);
 }
 
@@ -10471,7 +10485,7 @@ f_ch_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
     channel_T	*channel;
     jobopt_T	opt;
 
-    channel = get_channel_arg(&argvars[0], TRUE);
+    channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
     if (channel == NULL)
 	return;
     clear_job_options(&opt);
@@ -10493,7 +10507,7 @@ f_ch_status(typval_T *argvars, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 
-    channel = get_channel_arg(&argvars[0], FALSE);
+    channel = get_channel_arg(&argvars[0], FALSE, FALSE, 0);
     rettv->vval.v_string = vim_strsave((char_u *)channel_status(channel));
 }
 #endif
@@ -11547,6 +11561,7 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
     char_u	nbuf[NUMBUFLEN];
     int		typed = FALSE;
     int		execute = FALSE;
+    int		dangerous = FALSE;
     char_u	*keys_esc;
 
     /* This is not allowed in the sandbox.  If the commands would still be
@@ -11569,6 +11584,7 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 		case 't': typed = TRUE; break;
 		case 'i': insert = TRUE; break;
 		case 'x': execute = TRUE; break;
+		case '!': dangerous = TRUE; break;
 	    }
 	}
     }
@@ -11592,9 +11608,11 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 		/* Avoid a 1 second delay when the keys start Insert mode. */
 		msg_scroll = FALSE;
 
-		++ex_normal_busy;
+		if (!dangerous)
+		    ++ex_normal_busy;
 		exec_normal(TRUE);
-		--ex_normal_busy;
+		if (!dangerous)
+		    --ex_normal_busy;
 		msg_scroll |= save_msg_scroll;
 	    }
 	}
@@ -13173,7 +13191,9 @@ f_getreg(typval_T *argvars, typval_T *rettv)
 	rettv->v_type = VAR_LIST;
 	rettv->vval.v_list = (list_T *)get_reg_contents(regname,
 				      (arg2 ? GREG_EXPR_SRC : 0) | GREG_LIST);
-	if (rettv->vval.v_list != NULL)
+	if (rettv->vval.v_list == NULL)
+	    (void)rettv_list_alloc(rettv);
+	else
 	    ++rettv->vval.v_list->lv_refcount;
     }
     else
@@ -14030,6 +14050,9 @@ f_has(typval_T *argvars, typval_T *rettv)
 # ifndef DYNAMIC_TCL
 	"tcl",
 # endif
+#endif
+#ifdef FEAT_TERMGUICOLORS
+	"termguicolors",
 #endif
 #ifdef TERMINFO
 	"terminfo",
@@ -15066,6 +15089,8 @@ f_job_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
 f_job_start(typval_T *argvars, typval_T *rettv)
 {
     rettv->v_type = VAR_JOB;
+    if (check_restricted() || check_secure())
+	return;
     rettv->vval.v_job = job_start(argvars);
 }
 
@@ -16809,8 +16834,6 @@ check_connection(void)
 #endif
 
 #ifdef FEAT_CLIENTSERVER
-static void remote_common(typval_T *argvars, typval_T *rettv, int expr);
-
     static void
 remote_common(typval_T *argvars, typval_T *rettv, int expr)
 {
@@ -18274,8 +18297,9 @@ set_qf_ll_list(
     typval_T	*rettv)
 {
 #ifdef FEAT_QUICKFIX
+    static char *e_invact = N_("E927: Invalid action: '%s'");
     char_u	*act;
-    int		action = ' ';
+    int		action = 0;
 #endif
 
     rettv->vval.v_number = -1;
@@ -18292,11 +18316,17 @@ set_qf_ll_list(
 	    act = get_tv_string_chk(action_arg);
 	    if (act == NULL)
 		return;		/* type error; errmsg already given */
-	    if (*act == 'a' || *act == 'r')
+	    if ((*act == 'a' || *act == 'r' || *act == ' ') && act[1] == NUL)
 		action = *act;
+	    else
+		EMSG2(_(e_invact), act);
 	}
+	else if (action_arg->v_type == VAR_UNKNOWN)
+	    action = ' ';
+	else
+	    EMSG(_(e_stringreq));
 
-	if (l != NULL && set_errorlist(wp, l, action,
+	if (l != NULL && action && set_errorlist(wp, l, action,
 	       (char_u *)(wp == NULL ? "setqflist()" : "setloclist()")) == OK)
 	    rettv->vval.v_number = 0;
     }
@@ -19743,7 +19773,7 @@ f_strcharpart(typval_T *argvars, typval_T *rettv)
 	if (nchar > 0)
 	    while (nchar > 0 && nbyte < slen)
 	    {
-		nbyte += mb_char2len(p[nbyte]);
+		nbyte += mb_cptr2len(p + nbyte);
 		--nchar;
 	    }
 	else
@@ -19753,7 +19783,12 @@ f_strcharpart(typval_T *argvars, typval_T *rettv)
 	    charlen = get_tv_number(&argvars[2]);
 	    while (charlen > 0 && nbyte + len < slen)
 	    {
-		len += mb_char2len(p[nbyte + len]);
+		int off = nbyte + len;
+
+		if (off < 0)
+		    len += 1;
+		else
+		    len += mb_cptr2len(p + off);
 		--charlen;
 	    }
 	}
@@ -19993,8 +20028,8 @@ f_synIDattr(typval_T *argvars UNUSED, typval_T *rettv)
     }
     else
     {
-#ifdef FEAT_GUI
-	if (gui.in_use)
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+	if (USE_24BIT)
 	    modec = 'g';
 	else
 #endif
@@ -20664,6 +20699,8 @@ f_timer_start(typval_T *argvars, typval_T *rettv)
     char_u  *callback;
     dict_T  *dict;
 
+    if (check_secure())
+	return;
     if (argvars[2].v_type != VAR_UNKNOWN)
     {
 	if (argvars[2].v_type != VAR_DICT

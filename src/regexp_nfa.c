@@ -4837,11 +4837,11 @@ check_char_class(int class, int c)
     switch (class)
     {
 	case NFA_CLASS_ALNUM:
-	    if (c >= 1 && c <= 255 && isalnum(c))
+	    if (c >= 1 && c < 128 && isalnum(c))
 		return OK;
 	    break;
 	case NFA_CLASS_ALPHA:
-	    if (c >= 1 && c <= 255 && isalpha(c))
+	    if (c >= 1 && c < 128 && isalpha(c))
 		return OK;
 	    break;
 	case NFA_CLASS_BLANK:
@@ -4861,7 +4861,7 @@ check_char_class(int class, int c)
 		return OK;
 	    break;
 	case NFA_CLASS_LOWER:
-	    if (MB_ISLOWER(c))
+	    if (MB_ISLOWER(c) && c != 170 && c != 186)
 		return OK;
 	    break;
 	case NFA_CLASS_PRINT:
@@ -4869,7 +4869,7 @@ check_char_class(int class, int c)
 		return OK;
 	    break;
 	case NFA_CLASS_PUNCT:
-	    if (c >= 1 && c <= 255 && ispunct(c))
+	    if (c >= 1 && c < 128 && ispunct(c))
 		return OK;
 	    break;
 	case NFA_CLASS_SPACE:
@@ -5515,14 +5515,9 @@ nfa_regmatch(
     int		add_off = 0;
     int		toplevel = start->c == NFA_MOPEN;
 #ifdef NFA_REGEXP_DEBUG_LOG
-    FILE	*debug = fopen(NFA_REGEXP_DEBUG_LOG, "a");
-
-    if (debug == NULL)
-    {
-	EMSG2(_("(NFA) COULD NOT OPEN %s !"), NFA_REGEXP_DEBUG_LOG);
-	return FALSE;
-    }
+    FILE	*debug;
 #endif
+
     /* Some patterns may take a long time to match, especially when using
      * recursive_regmatch(). Allow interrupting them with CTRL-C. */
     fast_breakcheck();
@@ -5533,6 +5528,14 @@ nfa_regmatch(
 	return FALSE;
 #endif
 
+#ifdef NFA_REGEXP_DEBUG_LOG
+    debug = fopen(NFA_REGEXP_DEBUG_LOG, "a");
+    if (debug == NULL)
+    {
+	EMSG2(_("(NFA) COULD NOT OPEN %s !"), NFA_REGEXP_DEBUG_LOG);
+	return FALSE;
+    }
+#endif
     nfa_match = FALSE;
 
     /* Allocate memory for the lists of nodes. */
