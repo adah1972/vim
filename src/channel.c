@@ -59,6 +59,11 @@ static void channel_read(channel_T *channel, int part, char *func);
 /* Whether a redraw is needed for appending a line to a buffer. */
 static int channel_need_redraw = FALSE;
 
+/* Whether we are inside channel_parse_messages() or another situation where it
+ * is safe to invoke callbacks. */
+static int safe_to_invoke_callback = 0;
+
+static char *part_names[] = {"sock", "out", "err", "in"};
 
 #ifdef WIN32
     static int
@@ -352,6 +357,10 @@ channel_still_useful(channel_T *channel)
     if (channel->ch_close_cb != NULL)
 	return TRUE;
 
+    /* If reading from or a buffer it's still useful. */
+    if (channel->ch_part[PART_IN].ch_buffer != NULL)
+	return TRUE;
+
     /* If there is no callback then nobody can get readahead.  If the fd is
      * closed and there is no readahead then the callback won't be called. */
     has_sock_msg = channel->ch_part[PART_SOCK].ch_fd != INVALID_FD
@@ -365,8 +374,10 @@ channel_still_useful(channel_T *channel)
 		  || channel->ch_part[PART_ERR].ch_json_head.jq_next != NULL;
     return (channel->ch_callback != NULL && (has_sock_msg
 		|| has_out_msg || has_err_msg))
-	    || (channel->ch_part[PART_OUT].ch_callback != NULL && has_out_msg)
-	    || (channel->ch_part[PART_ERR].ch_callback != NULL && has_err_msg);
+	    || ((channel->ch_part[PART_OUT].ch_callback != NULL
+		      || channel->ch_part[PART_OUT].ch_buffer) && has_out_msg)
+	    || ((channel->ch_part[PART_ERR].ch_callback != NULL
+		     || channel->ch_part[PART_ERR].ch_buffer) && has_err_msg);
 }
 
 /*
@@ -397,8 +408,15 @@ channel_free(channel_T *channel)
 {
     if (!in_free_unref_items)
     {
-	channel_free_contents(channel);
-	channel_free_channel(channel);
+	if (safe_to_invoke_callback == 0)
+	{
+	    channel->ch_to_be_freed = TRUE;
+	}
+	else
+	{
+	    channel_free_contents(channel);
+	    channel_free_channel(channel);
+	}
     }
 }
 
@@ -438,6 +456,10 @@ free_unused_channels_contents(int copyID, int mask)
     int		did_free = FALSE;
     channel_T	*ch;
 
+    /* This is invoked from the garbage collector, which only runs at a safe
+     * point. */
+    ++safe_to_invoke_callback;
+
     for (ch = first_channel; ch != NULL; ch = ch->ch_next)
 	if (!channel_still_useful(ch)
 				 && (ch->ch_copyID & mask) != (copyID & mask))
@@ -447,6 +469,8 @@ free_unused_channels_contents(int copyID, int mask)
 	    channel_free_contents(ch);
 	    did_free = TRUE;
 	}
+
+    --safe_to_invoke_callback;
     return did_free;
 }
 
@@ -1046,6 +1070,7 @@ channel_set_job(channel_T *channel, job_T *job, jobopt_T *options)
 
 /*
  * Find a buffer matching "name" or create a new one.
+ * Returns NULL if there is something very wrong (error already reported).
  */
     static buf_T *
 find_buffer(char_u *name, int err)
@@ -1059,6 +1084,8 @@ find_buffer(char_u *name, int err)
     {
 	buf = buflist_new(name == NULL || *name == NUL ? NULL : name,
 					       NULL, (linenr_T)0, BLN_LISTED);
+	if (buf == NULL)
+	    return NULL;
 	buf_copy_options(buf, BCO_ENTER);
 	curbuf = buf;
 #ifdef FEAT_QUICKFIX
@@ -1165,37 +1192,54 @@ channel_set_options(channel_T *channel, jobopt_T *opt)
 
     if ((opt->jo_set & JO_OUT_IO) && opt->jo_io[PART_OUT] == JIO_BUFFER)
     {
+	buf_T *buf;
+
 	/* writing output to a buffer. Default mode is NL. */
 	if (!(opt->jo_set & JO_OUT_MODE))
 	    channel->ch_part[PART_OUT].ch_mode = MODE_NL;
 	if (opt->jo_set & JO_OUT_BUF)
-	    channel->ch_part[PART_OUT].ch_buffer =
-				     buflist_findnr(opt->jo_io_buf[PART_OUT]);
+	{
+	    buf = buflist_findnr(opt->jo_io_buf[PART_OUT]);
+	    if (buf == NULL)
+		EMSGN(_(e_nobufnr), (long)opt->jo_io_buf[PART_OUT]);
+	}
 	else
-	    channel->ch_part[PART_OUT].ch_buffer =
-				find_buffer(opt->jo_io_name[PART_OUT], FALSE);
-	ch_logs(channel, "writing out to buffer '%s'",
-		      (char *)channel->ch_part[PART_OUT].ch_buffer->b_ffname);
+	{
+	    buf = find_buffer(opt->jo_io_name[PART_OUT], FALSE);
+	}
+	if (buf != NULL)
+	{
+	    ch_logs(channel, "writing out to buffer '%s'",
+						       (char *)buf->b_ffname);
+	    channel->ch_part[PART_OUT].ch_buffer = buf;
+	}
     }
 
     if ((opt->jo_set & JO_ERR_IO) && (opt->jo_io[PART_ERR] == JIO_BUFFER
 	 || (opt->jo_io[PART_ERR] == JIO_OUT && (opt->jo_set & JO_OUT_IO)
 				       && opt->jo_io[PART_OUT] == JIO_BUFFER)))
     {
+	buf_T *buf;
+
 	/* writing err to a buffer. Default mode is NL. */
 	if (!(opt->jo_set & JO_ERR_MODE))
 	    channel->ch_part[PART_ERR].ch_mode = MODE_NL;
 	if (opt->jo_io[PART_ERR] == JIO_OUT)
-	    channel->ch_part[PART_ERR].ch_buffer =
-					 channel->ch_part[PART_OUT].ch_buffer;
+	    buf = channel->ch_part[PART_OUT].ch_buffer;
 	else if (opt->jo_set & JO_ERR_BUF)
-	    channel->ch_part[PART_ERR].ch_buffer =
-				     buflist_findnr(opt->jo_io_buf[PART_ERR]);
+	{
+	    buf = buflist_findnr(opt->jo_io_buf[PART_ERR]);
+	    if (buf == NULL)
+		EMSGN(_(e_nobufnr), (long)opt->jo_io_buf[PART_ERR]);
+	}
 	else
-	    channel->ch_part[PART_ERR].ch_buffer =
-				 find_buffer(opt->jo_io_name[PART_ERR], TRUE);
-	ch_logs(channel, "writing err to buffer '%s'",
-		      (char *)channel->ch_part[PART_ERR].ch_buffer->b_ffname);
+	    buf = find_buffer(opt->jo_io_name[PART_ERR], TRUE);
+	if (buf != NULL)
+	{
+	    ch_logs(channel, "writing err to buffer '%s'",
+						       (char *)buf->b_ffname);
+	    channel->ch_part[PART_ERR].ch_buffer = buf;
+	}
     }
 
     channel->ch_part[PART_OUT].ch_io = opt->jo_io[PART_OUT];
@@ -1366,6 +1410,29 @@ channel_write_in(channel_T *channel)
 }
 
 /*
+ * Handle buffer "buf" beeing freed, remove it from any channels.
+ */
+    void
+channel_buffer_free(buf_T *buf)
+{
+    channel_T	*channel;
+    int		part;
+
+    for (channel = first_channel; channel != NULL; channel = channel->ch_next)
+	for (part = PART_SOCK; part <= PART_IN; ++part)
+	{
+	    chanpart_T  *ch_part = &channel->ch_part[part];
+
+	    if (ch_part->ch_buffer == buf)
+	    {
+		ch_logs(channel, "%s buffer has been wiped out",
+							    part_names[part]);
+		ch_part->ch_buffer = NULL;
+	    }
+	}
+}
+
+/*
  * Write any lines waiting to be written to a channel.
  */
     void
@@ -1443,6 +1510,9 @@ invoke_callback(channel_T *channel, char_u *callback, partial_T *partial,
 {
     typval_T	rettv;
     int		dummy;
+
+    if (safe_to_invoke_callback == 0)
+	EMSG("INTERNAL: Invoking callback when it is not safe");
 
     argv[0].v_type = VAR_CHANNEL;
     argv[0].vval.v_channel = channel;
@@ -2494,6 +2564,7 @@ channel_close(channel_T *channel, int invoke_close_cb)
 			   &rettv, 1, argv, 0L, 0L, &dummy, TRUE,
 			   channel->ch_close_partial, NULL);
 	      clear_tv(&rettv);
+	      channel_need_redraw = TRUE;
 	  }
 	  --channel->ch_refcount;
 
@@ -2502,6 +2573,12 @@ channel_close(channel_T *channel, int invoke_close_cb)
 	  channel->ch_close_cb = NULL;
 	  partial_unref(channel->ch_close_partial);
 	  channel->ch_close_partial = NULL;
+
+	  if (channel_need_redraw)
+	  {
+	      channel_need_redraw = FALSE;
+	      redraw_after_callback();
+	  }
 
 	  /* any remaining messages are useless now */
 	  for (part = PART_SOCK; part <= PART_ERR; ++part)
@@ -2769,7 +2846,8 @@ channel_wait(channel_T *channel, sock_T fd, int timeout)
 channel_close_on_error(channel_T *channel, char *func)
 {
     /* Do not call emsg(), most likely the other end just exited. */
-    ch_errors(channel, "%s(): Cannot read from channel", func);
+    ch_errors(channel, "%s(): Cannot read from channel, will close it soon",
+									func);
 
     /* Queue a "DETACH" netbeans message in the command queue in order to
      * terminate the netbeans session later. Do not end the session here
@@ -2787,7 +2865,15 @@ channel_close_on_error(channel_T *channel, char *func)
 			      (int)STRLEN(DETACH_MSG_RAW), FALSE, "PUT ");
 
     /* When reading from stdout is not possible, assume the other side has
-     * died. */
+     * died.  Don't close the channel right away, it may be the wrong moment
+     * to invoke callbacks. */
+    channel->ch_to_be_closed = TRUE;
+}
+
+    static void
+channel_close_now(channel_T *channel)
+{
+    ch_log(channel, "Closing channel because of previous read error");
     channel_close(channel, TRUE);
     if (channel->ch_nb_close_cb != NULL)
 	(*channel->ch_nb_close_cb)();
@@ -3493,6 +3579,8 @@ channel_parse_messages(void)
     int		r;
     int		part = PART_SOCK;
 
+    ++safe_to_invoke_callback;
+
     /* Only do this message when another message was given, otherwise we get
      * lots of them. */
     if (did_log_msg)
@@ -3502,6 +3590,21 @@ channel_parse_messages(void)
     }
     while (channel != NULL)
     {
+	if (channel->ch_to_be_closed)
+	{
+	    channel->ch_to_be_closed = FALSE;
+	    channel_close_now(channel);
+	    /* channel may have been freed, start over */
+	    channel = first_channel;
+	    continue;
+	}
+	if (channel->ch_to_be_freed)
+	{
+	    channel_free(channel);
+	    /* channel has been freed, start over */
+	    channel = first_channel;
+	    continue;
+	}
 	if (channel->ch_refcount == 0 && !channel_still_useful(channel))
 	{
 	    /* channel is no longer useful, free it */
@@ -3541,6 +3644,8 @@ channel_parse_messages(void)
 	channel_need_redraw = FALSE;
 	redraw_after_callback();
     }
+
+    --safe_to_invoke_callback;
 
     return ret;
 }
@@ -4137,7 +4242,7 @@ free_unused_jobs_contents(int copyID, int mask)
 	     * recurse into Lists, Dictionaries etc. */
 	    job_free_contents(job);
 	    did_free = TRUE;
-    }
+	}
     return did_free;
 }
 
@@ -4227,7 +4332,7 @@ job_stop_on_exit()
 }
 
 /*
- * Called once in a while: check if any jobs with an "exit_cb" have ended.
+ * Called once in a while: check if any jobs that seem useful have ended.
  */
     void
 job_check_ended(void)
@@ -4245,7 +4350,7 @@ job_check_ended(void)
 	for (job = first_job; job != NULL; job = next)
 	{
 	    next = job->jv_next;
-	    if (job->jv_status == JOB_STARTED && job->jv_exit_cb != NULL)
+	    if (job->jv_status == JOB_STARTED && job_still_useful(job))
 		job_status(job); /* may free "job" */
 	}
     }
