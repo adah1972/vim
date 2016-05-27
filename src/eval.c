@@ -472,7 +472,6 @@ static void f_abs(typval_T *argvars, typval_T *rettv);
 static void f_acos(typval_T *argvars, typval_T *rettv);
 #endif
 static void f_add(typval_T *argvars, typval_T *rettv);
-static void f_alloc_fail(typval_T *argvars, typval_T *rettv);
 static void f_and(typval_T *argvars, typval_T *rettv);
 static void f_append(typval_T *argvars, typval_T *rettv);
 static void f_argc(typval_T *argvars, typval_T *rettv);
@@ -549,7 +548,6 @@ static void f_delete(typval_T *argvars, typval_T *rettv);
 static void f_did_filetype(typval_T *argvars, typval_T *rettv);
 static void f_diff_filler(typval_T *argvars, typval_T *rettv);
 static void f_diff_hlID(typval_T *argvars, typval_T *rettv);
-static void f_disable_char_avail_for_testing(typval_T *argvars, typval_T *rettv);
 static void f_empty(typval_T *argvars, typval_T *rettv);
 static void f_escape(typval_T *argvars, typval_T *rettv);
 static void f_eval(typval_T *argvars, typval_T *rettv);
@@ -583,7 +581,6 @@ static void f_foldtextresult(typval_T *argvars, typval_T *rettv);
 static void f_foreground(typval_T *argvars, typval_T *rettv);
 static void f_function(typval_T *argvars, typval_T *rettv);
 static void f_garbagecollect(typval_T *argvars, typval_T *rettv);
-static void f_garbagecollect_for_testing(typval_T *argvars, typval_T *rettv);
 static void f_get(typval_T *argvars, typval_T *rettv);
 static void f_getbufline(typval_T *argvars, typval_T *rettv);
 static void f_getbufvar(typval_T *argvars, typval_T *rettv);
@@ -806,7 +803,19 @@ static void f_tabpagewinnr(typval_T *argvars, typval_T *rettv);
 static void f_taglist(typval_T *argvars, typval_T *rettv);
 static void f_tagfiles(typval_T *argvars, typval_T *rettv);
 static void f_tempname(typval_T *argvars, typval_T *rettv);
-static void f_test(typval_T *argvars, typval_T *rettv);
+static void f_test_alloc_fail(typval_T *argvars, typval_T *rettv);
+static void f_test_disable_char_avail(typval_T *argvars, typval_T *rettv);
+static void f_test_garbagecollect_now(typval_T *argvars, typval_T *rettv);
+#ifdef FEAT_JOB_CHANNEL
+static void f_test_null_channel(typval_T *argvars, typval_T *rettv);
+#endif
+static void f_test_null_dict(typval_T *argvars, typval_T *rettv);
+#ifdef FEAT_JOB_CHANNEL
+static void f_test_null_job(typval_T *argvars, typval_T *rettv);
+#endif
+static void f_test_null_list(typval_T *argvars, typval_T *rettv);
+static void f_test_null_partial(typval_T *argvars, typval_T *rettv);
+static void f_test_null_string(typval_T *argvars, typval_T *rettv);
 #ifdef FEAT_FLOAT
 static void f_tan(typval_T *argvars, typval_T *rettv);
 static void f_tanh(typval_T *argvars, typval_T *rettv);
@@ -6221,6 +6230,8 @@ dict_equal(
     dictitem_T	*item2;
     int		todo;
 
+    if (d1 == NULL && d2 == NULL)
+	return TRUE;
     if (d1 == NULL || d2 == NULL)
 	return FALSE;
     if (d1 == d2)
@@ -6925,7 +6936,7 @@ static garray_T funcargs = GA_EMPTY;
 
 /*
  * Do garbage collection for lists and dicts.
- * When "testing" is TRUE this is called from garbagecollect_for_testing().
+ * When "testing" is TRUE this is called from test_garbagecollect_now().
  * Return TRUE if some memory was freed.
  */
     int
@@ -7754,6 +7765,8 @@ dict_find(dict_T *d, char_u *key, int len)
     char_u	*tofree = NULL;
     hashitem_T	*hi;
 
+    if (d == NULL)
+	return NULL;
     if (len < 0)
 	akey = key;
     else if (len >= AKEYLEN)
@@ -8335,7 +8348,6 @@ static struct fst
     {"acos",		1, 1, f_acos},	/* WJMc */
 #endif
     {"add",		2, 2, f_add},
-    {"alloc_fail",	3, 3, f_alloc_fail},
     {"and",		2, 2, f_and},
     {"append",		2, 2, f_append},
     {"argc",		0, 0, f_argc},
@@ -8416,7 +8428,6 @@ static struct fst
     {"did_filetype",	0, 0, f_did_filetype},
     {"diff_filler",	1, 1, f_diff_filler},
     {"diff_hlID",	2, 2, f_diff_hlID},
-    {"disable_char_avail_for_testing", 1, 1, f_disable_char_avail_for_testing},
     {"empty",		1, 1, f_empty},
     {"escape",		2, 2, f_escape},
     {"eval",		1, 1, f_eval},
@@ -8451,7 +8462,6 @@ static struct fst
     {"foreground",	0, 0, f_foreground},
     {"function",	1, 3, f_function},
     {"garbagecollect",	0, 1, f_garbagecollect},
-    {"garbagecollect_for_testing",	0, 0, f_garbagecollect_for_testing},
     {"get",		2, 3, f_get},
     {"getbufline",	2, 3, f_getbufline},
     {"getbufvar",	2, 3, f_getbufvar},
@@ -8681,7 +8691,19 @@ static struct fst
     {"tanh",		1, 1, f_tanh},
 #endif
     {"tempname",	0, 0, f_tempname},
-    {"test",		1, 1, f_test},
+    {"test_alloc_fail",	3, 3, f_test_alloc_fail},
+    {"test_disable_char_avail", 1, 1, f_test_disable_char_avail},
+    {"test_garbagecollect_now",	0, 0, f_test_garbagecollect_now},
+#ifdef FEAT_JOB_CHANNEL
+    {"test_null_channel", 0, 0, f_test_null_channel},
+#endif
+    {"test_null_dict", 0, 0, f_test_null_dict},
+#ifdef FEAT_JOB_CHANNEL
+    {"test_null_job", 0, 0, f_test_null_job},
+#endif
+    {"test_null_list", 0, 0, f_test_null_list},
+    {"test_null_partial", 0, 0, f_test_null_partial},
+    {"test_null_string", 0, 0, f_test_null_string},
 #ifdef FEAT_TIMERS
     {"timer_start",	2, 3, f_timer_start},
     {"timer_stop",	1, 1, f_timer_stop},
@@ -8931,7 +8953,7 @@ get_func_tv(
 
 	if (get_vim_var_nr(VV_TESTING))
 	{
-	    /* Prepare for calling garbagecollect_for_testing(), need to know
+	    /* Prepare for calling test_garbagecollect_now(), need to know
 	     * what variables are used on the call stack. */
 	    if (funcargs.ga_itemsize == 0)
 		ga_init2(&funcargs, (int)sizeof(typval_T *), 50);
@@ -9069,14 +9091,12 @@ call_func(
 
     if (partial != NULL)
     {
-	if (partial->pt_dict != NULL)
-	{
-	    /* When the function has a partial with a dict and there is a dict
-	     * argument, use the dict argument.  That is backwards compatible.
-	     */
-	    if (selfdict_in == NULL)
-		selfdict = partial->pt_dict;
-	}
+	/* When the function has a partial with a dict and there is a dict
+	 * argument, use the dict argument.  That is backwards compatible.
+	 * When the dict was bound explicitly use the one from the partial. */
+	if (partial->pt_dict != NULL
+		&& (selfdict_in == NULL || !partial->pt_auto))
+	    selfdict = partial->pt_dict;
 	if (error == ERROR_NONE && partial->pt_argc > 0)
 	{
 	    for (argv_clear = 0; argv_clear < partial->pt_argc; ++argv_clear)
@@ -9362,29 +9382,6 @@ f_add(typval_T *argvars, typval_T *rettv)
     }
     else
 	EMSG(_(e_listreq));
-}
-
-/*
- * "alloc_fail(id, countdown, repeat)" function
- */
-    static void
-f_alloc_fail(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    if (argvars[0].v_type != VAR_NUMBER
-	    || argvars[0].vval.v_number <= 0
-	    || argvars[1].v_type != VAR_NUMBER
-	    || argvars[1].vval.v_number < 0
-	    || argvars[2].v_type != VAR_NUMBER)
-	EMSG(_(e_invarg));
-    else
-    {
-	alloc_fail_id = argvars[0].vval.v_number;
-	if (alloc_fail_id >= aid_last)
-	    EMSG(_(e_invarg));
-	alloc_fail_countdown = argvars[1].vval.v_number;
-	alloc_fail_repeat = argvars[2].vval.v_number;
-	did_outofmem_msg = FALSE;
-    }
 }
 
 /*
@@ -11099,15 +11096,6 @@ f_diff_hlID(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 }
 
 /*
- * "disable_char_avail_for_testing({expr})" function
- */
-    static void
-f_disable_char_avail_for_testing(typval_T *argvars, typval_T *rettv UNUSED)
-{
-    disable_char_avail_for_testing = get_tv_number(&argvars[0]);
-}
-
-/*
  * "empty({expr})" function
  */
     static void
@@ -12330,12 +12318,16 @@ f_function(typval_T *argvars, typval_T *rettv)
 		 * use "dict".  That is backwards compatible. */
 		if (dict_idx > 0)
 		{
+		    /* The dict is bound explicitly, pt_auto is FALSE. */
 		    pt->pt_dict = argvars[dict_idx].vval.v_dict;
 		    ++pt->pt_dict->dv_refcount;
 		}
 		else if (arg_pt != NULL)
 		{
+		    /* If the dict was bound automatically the result is also
+		     * bound automatically. */
 		    pt->pt_dict = arg_pt->pt_dict;
+		    pt->pt_auto = arg_pt->pt_auto;
 		    if (pt->pt_dict != NULL)
 			++pt->pt_dict->dv_refcount;
 		}
@@ -12372,17 +12364,6 @@ f_garbagecollect(typval_T *argvars, typval_T *rettv UNUSED)
 }
 
 /*
- * "garbagecollect_for_testing()" function
- */
-    static void
-f_garbagecollect_for_testing(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
-{
-    /* This is dangerous, any Lists and Dicts used internally may be freed
-     * while still in use. */
-    garbage_collect(TRUE);
-}
-
-/*
  * "get()" function
  */
     static void
@@ -12412,6 +12393,55 @@ f_get(typval_T *argvars, typval_T *rettv)
 	    di = dict_find(d, get_tv_string(&argvars[1]), -1);
 	    if (di != NULL)
 		tv = &di->di_tv;
+	}
+    }
+    else if (argvars[0].v_type == VAR_PARTIAL || argvars[0].v_type == VAR_FUNC)
+    {
+	partial_T	*pt;
+	partial_T	fref_pt;
+
+	if (argvars[0].v_type == VAR_PARTIAL)
+	    pt = argvars[0].vval.v_partial;
+	else
+	{
+	    vim_memset(&fref_pt, 0, sizeof(fref_pt));
+	    fref_pt.pt_name = argvars[0].vval.v_string;
+	    pt = &fref_pt;
+	}
+
+	if (pt != NULL)
+	{
+	    char_u *what = get_tv_string(&argvars[1]);
+
+	    if (STRCMP(what, "func") == 0 || STRCMP(what, "name") == 0)
+	    {
+		rettv->v_type = (*what == 'f' ? VAR_FUNC : VAR_STRING);
+		if (pt->pt_name == NULL)
+		    rettv->vval.v_string = NULL;
+		else
+		    rettv->vval.v_string = vim_strsave(pt->pt_name);
+	    }
+	    else if (STRCMP(what, "dict") == 0)
+	    {
+		rettv->v_type = VAR_DICT;
+		rettv->vval.v_dict = pt->pt_dict;
+		if (pt->pt_dict != NULL)
+		    ++pt->pt_dict->dv_refcount;
+	    }
+	    else if (STRCMP(what, "args") == 0)
+	    {
+		rettv->v_type = VAR_LIST;
+		if (rettv_list_alloc(rettv) == OK)
+		{
+		    int i;
+
+		    for (i = 0; i < pt->pt_argc; ++i)
+			list_append_tv(rettv->vval.v_list, &pt->pt_argv[i]);
+		}
+	    }
+	    else
+		EMSG2(_(e_invarg2), what);
+	    return;
 	}
     }
     else
@@ -18577,8 +18607,12 @@ f_setreg(typval_T *argvars, typval_T *rettv)
 	char_u		buf[NUMBUFLEN];
 	char_u		**curval;
 	char_u		**curallocval;
-	int		len = argvars[1].vval.v_list->lv_len;
+	list_T		*ll = argvars[1].vval.v_list;
 	listitem_T	*li;
+	int		len;
+
+	/* If the list is NULL handle like an empty list. */
+	len = ll == NULL ? 0 : ll->lv_len;
 
 	/* First half: use for pointers to result lines; second half: use for
 	 * pointers to allocated copies. */
@@ -18589,7 +18623,7 @@ f_setreg(typval_T *argvars, typval_T *rettv)
 	allocval = lstval + len + 2;
 	curallocval = allocval;
 
-	for (li = argvars[1].vval.v_list->lv_first; li != NULL;
+	for (li = ll == NULL ? NULL : ll->lv_first; li != NULL;
 							     li = li->li_next)
 	{
 	    strval = get_tv_string_buf_chk(&li->li_tv, buf);
@@ -20600,35 +20634,6 @@ f_tempname(typval_T *argvars UNUSED, typval_T *rettv)
     } while (x == 'I' || x == 'O');
 }
 
-/*
- * "test(list)" function: Just checking the walls...
- */
-    static void
-f_test(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
-{
-    /* Used for unit testing.  Change the code below to your liking. */
-#if 0
-    listitem_T	*li;
-    list_T	*l;
-    char_u	*bad, *good;
-
-    if (argvars[0].v_type != VAR_LIST)
-	return;
-    l = argvars[0].vval.v_list;
-    if (l == NULL)
-	return;
-    li = l->lv_first;
-    if (li == NULL)
-	return;
-    bad = get_tv_string(&li->li_tv);
-    li = li->li_next;
-    if (li == NULL)
-	return;
-    good = get_tv_string(&li->li_tv);
-    rettv->vval.v_number = test_edit_score(bad, good);
-#endif
-}
-
 #ifdef FEAT_FLOAT
 /*
  * "tan()" function
@@ -20660,6 +20665,95 @@ f_tanh(typval_T *argvars, typval_T *rettv)
 	rettv->vval.v_float = 0.0;
 }
 #endif
+
+/*
+ * "test_alloc_fail(id, countdown, repeat)" function
+ */
+    static void
+f_test_alloc_fail(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    if (argvars[0].v_type != VAR_NUMBER
+	    || argvars[0].vval.v_number <= 0
+	    || argvars[1].v_type != VAR_NUMBER
+	    || argvars[1].vval.v_number < 0
+	    || argvars[2].v_type != VAR_NUMBER)
+	EMSG(_(e_invarg));
+    else
+    {
+	alloc_fail_id = argvars[0].vval.v_number;
+	if (alloc_fail_id >= aid_last)
+	    EMSG(_(e_invarg));
+	alloc_fail_countdown = argvars[1].vval.v_number;
+	alloc_fail_repeat = argvars[2].vval.v_number;
+	did_outofmem_msg = FALSE;
+    }
+}
+
+/*
+ * "test_disable_char_avail({expr})" function
+ */
+    static void
+f_test_disable_char_avail(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    disable_char_avail_for_testing = get_tv_number(&argvars[0]);
+}
+
+/*
+ * "test_garbagecollect_now()" function
+ */
+    static void
+f_test_garbagecollect_now(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    /* This is dangerous, any Lists and Dicts used internally may be freed
+     * while still in use. */
+    garbage_collect(TRUE);
+}
+
+#ifdef FEAT_JOB_CHANNEL
+    static void
+f_test_null_channel(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    rettv->v_type = VAR_CHANNEL;
+    rettv->vval.v_channel = NULL;
+}
+#endif
+
+    static void
+f_test_null_dict(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    rettv->v_type = VAR_DICT;
+    rettv->vval.v_dict = NULL;
+}
+
+#ifdef FEAT_JOB_CHANNEL
+    static void
+f_test_null_job(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    rettv->v_type = VAR_JOB;
+    rettv->vval.v_job = NULL;
+}
+#endif
+
+    static void
+f_test_null_list(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    rettv->v_type = VAR_LIST;
+    rettv->vval.v_list = NULL;
+}
+
+    static void
+f_test_null_partial(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    rettv->v_type = VAR_PARTIAL;
+    rettv->vval.v_partial = NULL;
+}
+
+    static void
+f_test_null_string(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
+}
 
 #if defined(FEAT_JOB_CHANNEL) || defined(FEAT_TIMERS) || defined(PROTO)
 /*
@@ -20733,8 +20827,14 @@ f_timer_start(typval_T *argvars, typval_T *rettv)
     static void
 f_timer_stop(typval_T *argvars, typval_T *rettv UNUSED)
 {
-    timer_T *timer = find_timer(get_tv_number(&argvars[0]));
+    timer_T *timer;
 
+    if (argvars[0].v_type != VAR_NUMBER)
+    {
+         EMSG(_(e_number_exp));
+         return;
+    }
+    timer = find_timer(get_tv_number(&argvars[0]));
     if (timer != NULL)
 	stop_timer(timer);
 }
@@ -22273,8 +22373,14 @@ handle_subscript(
 	}
     }
 
-    if ((rettv->v_type == VAR_FUNC || rettv->v_type == VAR_PARTIAL)
-							  && selfdict != NULL)
+    /* Turn "dict.Func" into a partial for "Func" bound to "dict".
+     * Don't do this when "Func" is already a partial that was bound
+     * explicitly (pt_auto is FALSE). */
+    if (selfdict != NULL
+	    && (rettv->v_type == VAR_FUNC
+		|| (rettv->v_type == VAR_PARTIAL
+		    && (rettv->vval.v_partial->pt_auto
+			|| rettv->vval.v_partial->pt_dict == NULL))))
     {
 	char_u	    *fname = rettv->v_type == VAR_FUNC ? rettv->vval.v_string
 					     : rettv->vval.v_partial->pt_name;
@@ -22288,7 +22394,6 @@ handle_subscript(
 	fp = find_func(fname);
 	vim_free(tofree);
 
-	/* Turn "dict.Func" into a partial for "Func" with "dict". */
 	if (fp != NULL && (fp->uf_flags & FC_DICT))
 	{
 	    partial_T	*pt = (partial_T *)alloc_clear(sizeof(partial_T));
@@ -22297,6 +22402,7 @@ handle_subscript(
 	    {
 		pt->pt_refcount = 1;
 		pt->pt_dict = selfdict;
+		pt->pt_auto = TRUE;
 		selfdict = NULL;
 		if (rettv->v_type == VAR_FUNC)
 		{

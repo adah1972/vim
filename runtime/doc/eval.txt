@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 7.4.  Last change: 2016 May 05
+*eval.txt*	For Vim version 7.4.  Last change: 2016 May 25
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -59,6 +59,9 @@ Dictionary	An associative, unordered array: Each entry has a key and a
 
 Funcref		A reference to a function |Funcref|.
 		Example: function("strlen")
+		It can be bound to a dictionary and arguments, it then works
+		like a Partial.
+		Example: function("Callback", [arg], myDict)
 
 Special		|v:false|, |v:true|, |v:none| and |v:null|.  *Special*
 
@@ -150,6 +153,43 @@ The name of the referenced function can be obtained with |string()|. >
 You can use |call()| to invoke a Funcref and use a list variable for the
 arguments: >
 	:let r = call(Fn, mylist)
+<
+								*Partial*
+A Funcref optionally binds a Dictionary and/or arguments.  This is also called
+a Partial.  This is created by passing the Dictionary and/or arguments to
+function().  When calling the function the Dictionary and/or arguments will be
+passed to the function.  Example: >
+
+	let Cb = function('Callback', ['foo'], myDict)
+	call Cb()
+
+This will invoke the function as if using: >
+	call myDict.Callback('foo')
+
+This is very useful when passing a function around, e.g. in the arguments of
+|ch_open()|.
+
+Note that binding a function to a Dictionary also happens when the function is
+a member of the Dictionary: >
+
+	let myDict.myFunction = MyFunction
+	call myDict.myFunction()
+
+Here MyFunction() will get myDict passed as "self".  This happens when the
+"myFunction" member is accessed.  When making assigning "myFunction" to
+otherDict and calling it, it will be bound to otherDict: >
+
+	let otherDict.myFunction = myDict.myFunction
+	call otherDict.myFunction()
+
+Now "self" will be "otherDict".  But when the dictionary was bound explicitly
+this won't happen: >
+
+	let myDict.myFunction = function(MyFunction, myDict)
+	let otherDict.myFunction = myDict.myFunction
+	call otherDict.myFunction()
+
+Here "self" will be "myDict", because it was bound explitly.
 
 
 1.3 Lists ~
@@ -1725,7 +1765,7 @@ v:termresponse	The escape sequence returned by the terminal for the |t_RV|
 		{only when compiled with |+termresponse| feature}
 
 					*v:testing* *testing-variable*
-v:testing	Must be set before using `garbagecollect_for_testing()`.
+v:testing	Must be set before using `test_garbagecollect_now()`.
 
 				*v:this_session* *this_session-variable*
 v:this_session	Full filename of the last loaded or saved session file.  See
@@ -1795,8 +1835,6 @@ USAGE				RESULT	DESCRIPTION	~
 abs({expr})			Float or Number  absolute value of {expr}
 acos({expr})			Float	arc cosine of {expr}
 add({list}, {item})		List	append {item} to |List| {list}
-alloc_fail({id}, {countdown}, {repeat})
-				none	make memory allocation fail
 and({expr}, {expr})		Number  bitwise AND
 append({lnum}, {string})	Number	append {string} below line {lnum}
 append({lnum}, {list})		Number	append lines {list} below line {lnum}
@@ -1878,8 +1916,6 @@ delete({fname} [, {flags}])	Number	delete the file or directory {fname}
 did_filetype()			Number	TRUE if FileType autocommand event used
 diff_filler({lnum})		Number	diff filler lines about {lnum}
 diff_hlID({lnum}, {col})	Number	diff highlighting at {lnum}/{col}
-disable_char_avail_for_testing({expr})
-				none	test without typeahead
 empty({expr})			Number	TRUE if {expr} is empty
 escape({string}, {chars})	String	escape {chars} in {string} with '\'
 eval({string})			any	evaluate {string} into its value
@@ -1915,9 +1951,9 @@ foreground()			Number	bring the Vim window to the foreground
 function({name} [, {arglist}] [, {dict}])
 				Funcref reference to function {name}
 garbagecollect([{atexit}])	none	free memory, breaking cyclic references
-garbagecollect_for_testing()	none	free memory right now
 get({list}, {idx} [, {def}])	any	get item {idx} from {list} or {def}
 get({dict}, {key} [, {def}])	any	get item {key} from {dict} or {def}
+get({func}, {what})		any	get property of funcref/partial {func}
 getbufline({expr}, {lnum} [, {end}])
 				List	lines {lnum} to {end} of buffer {expr}
 getbufvar({expr}, {varname} [, {def}])
@@ -2163,6 +2199,16 @@ tagfiles()			List	tags files used
 tan({expr})			Float	tangent of {expr}
 tanh({expr})			Float	hyperbolic tangent of {expr}
 tempname()			String	name for a temporary file
+test_alloc_fail({id}, {countdown}, {repeat})
+				none	make memory allocation fail
+test_disable_char_avail({expr}) none	test without typeahead
+test_garbagecollect_now()	none	free memory right now for testing
+test_null_channel()		Channel	null value for testing
+test_null_dict()		Dict	null value for testing
+test_null_job()			Job	null value for testing
+test_null_list()		List	null value for testing
+test_null_partial()		Funcref	null value for testing
+test_null_string()		String	null value for testing
 timer_start({time}, {callback} [, {options}])
 				Number	create a timer
 timer_stop({timer})		none	stop a timer
@@ -2236,13 +2282,6 @@ add({list}, {expr})					*add()*
 <		Note that when {expr} is a |List| it is appended as a single
 		item.  Use |extend()| to concatenate |Lists|.
 		Use |insert()| to add an item at another position.
-
-
-alloc_fail({id}, {countdown}, {repeat})			*alloc_fail()*
-		This is for testing: If the memory allocation with {id} is
-		called, then decrement {countdown}, and when it reaches zero
-		let memory allocation fail {repeat} times.  When {repeat} is
-		smaller than one it fails one time.
 
 
 and({expr}, {expr})					*and()*
@@ -3111,14 +3150,6 @@ diff_hlID({lnum}, {col})				*diff_hlID()*
 		The highlight ID can be used with |synIDattr()| to obtain
 		syntax information about the highlighting.
 
-					*disable_char_avail_for_testing()*
-disable_char_avail_for_testing({expr})
-		When {expr} is 1 the internal char_avail() function will
-		return FALSE.  When {expr} is 0 the char_avail() function will
-		function normally.
-		Only use this for a test where typeahead causes the test not
-		to work.  E.g., to trigger the CursorMovedI autocommand event.
-
 empty({expr})						*empty()*
 		Return the Number 1 if {expr} is empty, zero otherwise.
 		- A |List| or |Dictionary| is empty when it does not have any
@@ -3645,7 +3676,7 @@ function({name} [, {arglist}] [, {dict}])
 			let Broken = function(dict.Func, [arg], dict)
 <
 		When {arglist} or {dict} is present this creates a partial.
-		That mans the argument list and/or the dictionary is stored in
+		That means the argument list and/or the dictionary is stored in
 		the Funcref and will be used when the Funcref is called.
 		
 		The arguments are passed to the function in front of other
@@ -3712,11 +3743,10 @@ garbagecollect([{atexit}])				*garbagecollect()*
 		collection will also be done when exiting Vim, if it wasn't
 		done before.  This is useful when checking for memory leaks.
 
-garbagecollect_for_testing()			 *garbagecollect_for_testing()*
-		Like garbagecollect(), but executed right away.  This must
-		only be called directly to avoid any structure to exist
-		internally, and |v:testing| must have been set before calling
-		any function.
+		The garbage collection is not done immediately but only when
+		it's safe to perform.  This is when waiting for the user to
+		type a character.  To force garbage collection immediately use
+		|test_garbagecollect_now()|.
 
 get({list}, {idx} [, {default}])			*get()*
 		Get item {idx} from |List| {list}.  When this item is not
@@ -3726,6 +3756,13 @@ get({dict}, {key} [, {default}])
 		Get item with key {key} from |Dictionary| {dict}.  When this
 		item is not available return {default}.  Return zero when
 		{default} is omitted.
+get({func}, {what})
+		Get an item with from Funcref {func}.  Possible values for
+		{what} are:
+			'name'	The function name
+			'func'	The function
+			'dict'	The dictionary
+			'args'	The list with arguments
 
 							*getbufline()*
 getbufline({expr}, {lnum} [, {end}])
@@ -7125,17 +7162,6 @@ taglist({expr})							*taglist()*
 		located by Vim. Refer to |tags-file-format| for the format of
 		the tags file generated by the different ctags tools.
 
-tempname()					*tempname()* *temp-file-name*
-		The result is a String, which is the name of a file that
-		doesn't exist.	It can be used for a temporary file.  The name
-		is different for at least 26 consecutive calls.  Example: >
-			:let tmpfile = tempname()
-			:exe "redir > " . tmpfile
-<		For Unix, the file will be in a private directory |tempfile|.
-		For MS-Windows forward slashes are used when the 'shellslash'
-		option is set or when 'shellcmdflag' starts with '-'.
-
-
 tan({expr})						*tan()*
 		Return the tangent of {expr}, measured in radians, as a |Float|
 		in the range [-inf, inf].
@@ -7158,6 +7184,59 @@ tanh({expr})						*tanh()*
 			:echo tanh(-1)
 <			-0.761594
 		{only available when compiled with the |+float| feature}
+
+
+tempname()					*tempname()* *temp-file-name*
+		The result is a String, which is the name of a file that
+		doesn't exist.	It can be used for a temporary file.  The name
+		is different for at least 26 consecutive calls.  Example: >
+			:let tmpfile = tempname()
+			:exe "redir > " . tmpfile
+<		For Unix, the file will be in a private directory |tempfile|.
+		For MS-Windows forward slashes are used when the 'shellslash'
+		option is set or when 'shellcmdflag' starts with '-'.
+
+
+test_alloc_fail({id}, {countdown}, {repeat})		*test_alloc_fail()*
+		This is for testing: If the memory allocation with {id} is
+		called, then decrement {countdown}, and when it reaches zero
+		let memory allocation fail {repeat} times.  When {repeat} is
+		smaller than one it fails one time.
+
+
+					*test_disable_char_avail()*
+test_disable_char_avail({expr})
+		When {expr} is 1 the internal char_avail() function will
+		return FALSE.  When {expr} is 0 the char_avail() function will
+		function normally.
+		Only use this for a test where typeahead causes the test not
+		to work.  E.g., to trigger the CursorMovedI autocommand event.
+
+test_garbagecollect_now()			 *test_garbagecollect_now()*
+		Like garbagecollect(), but executed right away.  This must
+		only be called directly to avoid any structure to exist
+		internally, and |v:testing| must have been set before calling
+		any function.
+
+test_null_channel()					*test_null_channel()*
+		Return a Channel that is null. Only useful for testing.
+		{only available when compiled with the +channel feature}
+
+test_null_dict()					*test_null_dict()*
+		Return a Dict that is null. Only useful for testing.
+
+test_null_job()						*test_null_job()*
+		Return a Job that is null. Only useful for testing.
+		{only available when compiled with the +job feature}
+
+test_null_list()					*test_null_list()*
+		Return a List that is null. Only useful for testing.
+
+test_null_partial()					*test_null_partial()*
+		Return a Partial that is null. Only useful for testing.
+
+test_null_string()					*test_null_string()*
+		Return a String that is null. Only useful for testing.
 
 
 							*timer_start()*
@@ -7188,8 +7267,9 @@ timer_start({time}, {callback} [, {options}])
 		{only available when compiled with the |+timers| feature}
 
 timer_stop({timer})					*timer_stop()*
-		Stop a timer.  {timer} is an ID returned by timer_start().
-		The timer callback will no longer be invoked.
+		Stop a timer.  The timer callback will no longer be invoked.
+		{timer} is an ID returned by timer_start(), thus it must be a
+		Number.
 
 tolower({expr})						*tolower()*
 		The result is a copy of the String given, with all uppercase

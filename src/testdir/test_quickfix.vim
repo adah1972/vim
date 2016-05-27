@@ -280,19 +280,19 @@ function Test_cbuffer()
 endfunction
 
 function Test_nomem()
-  call alloc_fail(GetAllocId('qf_dirname_start'), 0, 0)
+  call test_alloc_fail(GetAllocId('qf_dirname_start'), 0, 0)
   call assert_fails('vimgrep vim runtest.vim', 'E342:')
 
-  call alloc_fail(GetAllocId('qf_dirname_now'), 0, 0)
+  call test_alloc_fail(GetAllocId('qf_dirname_now'), 0, 0)
   call assert_fails('vimgrep vim runtest.vim', 'E342:')
 
-  call alloc_fail(GetAllocId('qf_namebuf'), 0, 0)
+  call test_alloc_fail(GetAllocId('qf_namebuf'), 0, 0)
   call assert_fails('cfile runtest.vim', 'E342:')
 
-  call alloc_fail(GetAllocId('qf_errmsg'), 0, 0)
+  call test_alloc_fail(GetAllocId('qf_errmsg'), 0, 0)
   call assert_fails('cfile runtest.vim', 'E342:')
 
-  call alloc_fail(GetAllocId('qf_pattern'), 0, 0)
+  call test_alloc_fail(GetAllocId('qf_pattern'), 0, 0)
   call assert_fails('cfile runtest.vim', 'E342:')
 
 endfunc
@@ -700,14 +700,14 @@ endfunc
 
 " Tests for the setqflist() and setloclist() functions
 function SetXlistTests(cchar, bnum)
+  let Xwindow = a:cchar . 'window'
+  let Xnext = a:cchar . 'next'
   if a:cchar == 'c'
     let Xsetlist = function('setqflist')
     let Xgetlist = function('getqflist')
-    let Xnext = 'cnext'
   else
     let Xsetlist = function('setloclist', [0])
     let Xgetlist = function('getloclist', [0])
-    let Xnext = 'lnext'
   endif
 
   call Xsetlist([{'bufnr': a:bnum, 'lnum': 1},
@@ -722,6 +722,15 @@ function SetXlistTests(cchar, bnum)
   call assert_equal(3, len(l))
   exe Xnext
   call assert_equal(3, line('.'))
+
+  " Appending entries to the list should not change the cursor position
+  " in the quickfix window
+  exe Xwindow
+  1
+  call Xsetlist([{'bufnr': a:bnum, 'lnum': 4},
+	      \  {'bufnr': a:bnum, 'lnum': 5}], 'a')
+  call assert_equal(1, line('.'))
+  close
 
   call Xsetlist([{'bufnr': a:bnum, 'lnum': 3},
 	      \  {'bufnr': a:bnum, 'lnum': 4},
