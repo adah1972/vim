@@ -754,6 +754,46 @@ static char *(features[]) =
 static int included_patches[] =
 {   /* Add new patch number below this line */
 /**/
+    1868,
+/**/
+    1867,
+/**/
+    1866,
+/**/
+    1865,
+/**/
+    1864,
+/**/
+    1863,
+/**/
+    1862,
+/**/
+    1861,
+/**/
+    1860,
+/**/
+    1859,
+/**/
+    1858,
+/**/
+    1857,
+/**/
+    1856,
+/**/
+    1855,
+/**/
+    1854,
+/**/
+    1853,
+/**/
+    1852,
+/**/
+    1851,
+/**/
+    1850,
+/**/
+    1849,
+/**/
     1848,
 /**/
     1847,
@@ -5049,7 +5089,7 @@ do_intro_line(
     if (*mesg == ' ')
     {
 	vim_strncpy(modby, (char_u *)_("Modified by "), MODBY_LEN - 1);
-	l = STRLEN(modby);
+	l = (int)STRLEN(modby);
 	vim_strncpy(modby + l, (char_u *)MODIFIED_BY, MODBY_LEN - l - 1);
 	mesg = modby;
     }

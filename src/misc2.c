@@ -1036,13 +1036,12 @@ static void free_findfile(void);
 free_all_mem(void)
 {
     buf_T	*buf, *nextbuf;
-    static int	entered = FALSE;
 
     /* When we cause a crash here it is caught and Vim tries to exit cleanly.
      * Don't try freeing everything again. */
-    if (entered)
+    if (entered_free_all_mem)
 	return;
-    entered = TRUE;
+    entered_free_all_mem = TRUE;
 
 # ifdef FEAT_AUTOCMD
     /* Don't want to trigger autocommands from here on. */
@@ -1126,9 +1125,6 @@ free_all_mem(void)
 # endif
 # ifdef FEAT_DIFF
     diff_clear(curtab);
-# endif
-# ifdef FEAT_JOB_CHANNEL
-    channel_free_all();
 # endif
     clear_sb_text();	      /* free any scrollback text */
 
@@ -1220,6 +1216,10 @@ free_all_mem(void)
 
 # ifdef FEAT_EVAL
     eval_clear();
+# endif
+# ifdef FEAT_JOB_CHANNEL
+    channel_free_all();
+    job_free_all();
 # endif
 
     free_termoptions();
