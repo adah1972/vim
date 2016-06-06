@@ -540,6 +540,12 @@ static long_u		blink_ontime = 400;
 static long_u		blink_offtime = 250;
 static UINT		blink_timer = 0;
 
+    int
+gui_mch_is_blinking(void)
+{
+    return blink_state != BLINK_NONE;
+}
+
     void
 gui_mch_set_blinking(long wait, long on, long off)
 {
@@ -2022,6 +2028,22 @@ gui_mch_update(void)
 	    process_message();
 }
 
+    static void
+remove_any_timer(void)
+{
+    MSG		msg;
+
+    if (s_wait_timer != 0 && !s_timed_out)
+    {
+	KillTimer(NULL, s_wait_timer);
+
+	/* Eat spurious WM_TIMER messages */
+	while (pPeekMessage(&msg, s_hwnd, WM_TIMER, WM_TIMER, PM_REMOVE))
+	    ;
+	s_wait_timer = 0;
+    }
+}
+
 /*
  * GUI input routine called by gui_wait_for_chars().  Waits for a character
  * from the keyboard.
@@ -2034,7 +2056,6 @@ gui_mch_update(void)
     int
 gui_mch_wait_for_chars(int wtime)
 {
-    MSG		msg;
     int		focus;
 
     s_timed_out = FALSE;
@@ -2073,6 +2094,9 @@ gui_mch_wait_for_chars(int wtime)
 	    s_need_activate = FALSE;
 	}
 
+#ifdef FEAT_TIMERS
+	did_add_timer = FALSE;
+#endif
 #ifdef MESSAGE_QUEUE
 	/* Check channel while waiting message. */
 	for (;;)
@@ -2098,15 +2122,7 @@ gui_mch_wait_for_chars(int wtime)
 
 	if (input_available())
 	{
-	    if (s_wait_timer != 0 && !s_timed_out)
-	    {
-		KillTimer(NULL, s_wait_timer);
-
-		/* Eat spurious WM_TIMER messages */
-		while (pPeekMessage(&msg, s_hwnd, WM_TIMER, WM_TIMER, PM_REMOVE))
-		    ;
-		s_wait_timer = 0;
-	    }
+	    remove_any_timer();
 	    allow_scrollbar = FALSE;
 
 	    /* Clear pending mouse button, the release event may have been
@@ -2117,6 +2133,15 @@ gui_mch_wait_for_chars(int wtime)
 
 	    return OK;
 	}
+
+#ifdef FEAT_TIMERS
+	if (did_add_timer)
+	{
+	    /* Need to recompute the waiting time. */
+	    remove_any_timer();
+	    break;
+	}
+#endif
     }
     allow_scrollbar = FALSE;
     return FAIL;
@@ -7001,10 +7026,8 @@ gui_mch_menu_grey(
     }
     else
 #endif
-    if (grey)
-	EnableMenuItem(s_menuBar, menu->id, MF_BYCOMMAND | MF_GRAYED);
-    else
-	EnableMenuItem(s_menuBar, menu->id, MF_BYCOMMAND | MF_ENABLED);
+    (void)EnableMenuItem(menu->parent ? menu->parent->submenu_id : s_menuBar,
+		    menu->id, MF_BYCOMMAND | (grey ? MF_GRAYED : MF_ENABLED));
 
 #ifdef FEAT_TEAROFF
     if ((menu->parent != NULL) && (IsWindow(menu->parent->tearoff_handle)))

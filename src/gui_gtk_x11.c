@@ -657,7 +657,7 @@ gui_gtk3_should_draw_cursor(void)
 }
 
     static gboolean
-draw_event(GtkWidget *widget,
+draw_event(GtkWidget *widget UNUSED,
 	   cairo_t   *cr,
 	   gpointer   user_data UNUSED)
 {
@@ -675,8 +675,6 @@ draw_event(GtkWidget *widget,
     {
 	cairo_rectangle_list_t *list = NULL;
 
-	gui_gtk_window_clear(gtk_widget_get_window(widget));
-
 	list = cairo_copy_clip_rectangle_list(cr);
 	if (list->status != CAIRO_STATUS_CLIP_NOT_REPRESENTABLE)
 	{
@@ -684,6 +682,10 @@ draw_event(GtkWidget *widget,
 	    for (i = 0; i < list->num_rectangles; i++)
 	    {
 		const cairo_rectangle_t rect = list->rectangles[i];
+
+		gui_mch_clear_block(Y_2_ROW(rect.y), 1,
+			Y_2_ROW(rect.y + rect.height - 1), Columns);
+
 		if (blink_mode)
 		    gui_gtk3_redraw(rect.x, rect.y, rect.width, rect.height);
 		else
@@ -809,6 +811,12 @@ gui_gtk_is_blink_on(void)
     return blink_state == BLINK_ON;
 }
 #endif
+
+    int
+gui_mch_is_blinking(void)
+{
+    return blink_state != BLINK_NONE;
+}
 
     void
 gui_mch_set_blinking(long waittime, long on, long off)
@@ -6535,15 +6543,15 @@ input_timer_cb(gpointer data)
     int
 gui_mch_wait_for_chars(long wtime)
 {
-    int focus;
-    guint timer;
-    static int timed_out;
+    int		focus;
+    guint	timer;
+    static int	timed_out;
+    int		retval = FAIL;
 
     timed_out = FALSE;
 
     /* this timeout makes sure that we will return if no characters arrived in
      * time */
-
     if (wtime > 0)
 #if GTK_CHECK_VERSION(3,0,0)
 	timer = g_timeout_add((guint)wtime, input_timer_cb, &timed_out);
@@ -6568,7 +6576,15 @@ gui_mch_wait_for_chars(long wtime)
 	}
 
 #ifdef MESSAGE_QUEUE
+# ifdef FEAT_TIMERS
+	did_add_timer = FALSE;
+# endif
 	parse_queued_messages();
+# ifdef FEAT_TIMERS
+	if (did_add_timer)
+	    /* Need to recompute the waiting time. */
+	    goto theend;
+# endif
 #endif
 
 	/*
@@ -6582,13 +6598,8 @@ gui_mch_wait_for_chars(long wtime)
 	/* Got char, return immediately */
 	if (input_available())
 	{
-	    if (timer != 0 && !timed_out)
-#if GTK_CHECK_VERSION(3,0,0)
-		g_source_remove(timer);
-#else
-		gtk_timeout_remove(timer);
-#endif
-	    return OK;
+	    retval = OK;
+	    goto theend;
 	}
     } while (wtime < 0 || !timed_out);
 
@@ -6597,7 +6608,15 @@ gui_mch_wait_for_chars(long wtime)
      */
     gui_mch_update();
 
-    return FAIL;
+theend:
+    if (timer != 0 && !timed_out)
+#if GTK_CHECK_VERSION(3,0,0)
+	g_source_remove(timer);
+#else
+	gtk_timeout_remove(timer);
+#endif
+
+    return retval;
 }
 
 

@@ -849,7 +849,7 @@ static long range_end;
 static int mz_threads_allow = 0;
 
 #if defined(FEAT_GUI_W32)
-static void CALLBACK timer_proc(HWND, UINT, UINT, DWORD);
+static void CALLBACK timer_proc(HWND, UINT, UINT_PTR, DWORD);
 static UINT timer_id = 0;
 #elif defined(FEAT_GUI_GTK)
 # if GTK_CHECK_VERSION(3,0,0)
@@ -2725,7 +2725,8 @@ set_buffer_line_list(void *data, int argc, Scheme_Object **argv)
 	 * Adjust marks. Invalidate any which lie in the
 	 * changed range, and move any in the remainder of the buffer.
 	 */
-	mark_adjust((linenr_T)lo, (linenr_T)(hi - 1), (long)MAXLNUM, (long)extra);
+	mark_adjust((linenr_T)lo, (linenr_T)(hi - 1),
+						  (long)MAXLNUM, (long)extra);
 	changed_lines((linenr_T)lo, 0, (linenr_T)hi, (long)extra);
 
 	if (buf->buf == curwin->w_buffer)
