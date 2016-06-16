@@ -309,6 +309,48 @@ func Test_viminfo_jumplist()
   exe "normal \<C-O>"
   call assert_equal('time 05', getline('.'))
 
+  clearjumps
+  call cursor(1, 1)
+  call test_settime(5)
+  exe "normal /15\r"
+  call test_settime(15)
+  exe "normal /last pos\r"
+  call test_settime(40)
+  exe "normal ?30\r"
+  " Test merge when writing
+  wviminfo Xviminfo
+  clearjumps
+  rviminfo Xviminfo
+
+  let last_line = line('.')
+  exe "normal \<C-O>"
+  call assert_equal('time 30', getline('.'))
+  exe "normal \<C-O>"
+  call assert_equal('last pos', getline('.'))
+  exe "normal \<C-O>"
+  " duplicate for 'time 30' was removed
+  call assert_equal('time 20', getline('.'))
+  exe "normal \<C-O>"
+  call assert_equal('time 15', getline('.'))
+  exe "normal \<C-O>"
+  call assert_equal('time 10', getline('.'))
+  exe "normal \<C-O>"
+  call assert_equal('time 05', getline('.'))
+
+  " Test with jumplist full.
+  clearjumps
+  call setline(1, repeat(['match here'], 101))
+  call cursor(1, 1)
+  call test_settime(10)
+  for i in range(100)
+    exe "normal /here\r"
+  endfor
+  rviminfo Xviminfo
+
+  " must be newest mark that comes from viminfo.
+  exe "normal \<C-O>"
+  call assert_equal(last_line, line('.'))
+
   bwipe!
   call delete('Xviminfo')
 endfunc

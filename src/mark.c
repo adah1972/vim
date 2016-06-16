@@ -1518,7 +1518,16 @@ handle_viminfo_mark(garray_T *values, int force)
 	    {
 		for (idx = curwin->w_jumplistlen - 1; idx >= 0; --idx)
 		    if (curwin->w_jumplist[idx].time_set < timestamp)
+		    {
+			++idx;
 			break;
+		    }
+		if (idx < 0 && curwin->w_jumplistlen < JUMPLISTSIZE)
+		    /* insert as the oldest entry */
+		    idx = 0;
+		else if (idx == 0 && curwin->w_jumplistlen == JUMPLISTSIZE)
+		    /* no space to insert as the oldest entry */
+		    idx = -1;
 	    }
 	    else if (curwin->w_jumplistlen < JUMPLISTSIZE)
 		/* insert as oldest entry */
@@ -1531,6 +1540,7 @@ handle_viminfo_mark(garray_T *values, int force)
 		if (curwin->w_jumplistlen == JUMPLISTSIZE)
 		{
 		    /* Drop the oldest entry. */
+		    --idx;
 		    vim_free(curwin->w_jumplist[0].fname);
 		    for (i = 0; i < idx; ++i)
 			curwin->w_jumplist[i] = curwin->w_jumplist[i + 1];
@@ -1538,7 +1548,6 @@ handle_viminfo_mark(garray_T *values, int force)
 		else
 		{
 		    /* Move newer entries forward. */
-		    ++idx;
 		    for (i = curwin->w_jumplistlen; i > idx; --i)
 			curwin->w_jumplist[i] = curwin->w_jumplist[i - 1];
 		    ++curwin->w_jumplistidx;
@@ -1669,13 +1678,29 @@ write_viminfo_filemarks(FILE *fp)
     idx = NMARKS;
     for (i = NMARKS; i < NMARKS + EXTRA_MARKS; i++)
     {
-	if (vi_namedfm != NULL
-		&& vi_namedfm[vi_idx].fmark.mark.lnum != 0
-		&& (vi_namedfm[vi_idx].time_set > namedfm[idx].time_set
+	xfmark_T *vi_fm = vi_namedfm != NULL ? &vi_namedfm[vi_idx] : NULL;
+
+	if (vi_fm != NULL
+		&& vi_fm->fmark.mark.lnum != 0
+		&& (vi_fm->time_set > namedfm[idx].time_set
 		    || namedfm[idx].fmark.mark.lnum == 0))
-	    fm = &vi_namedfm[vi_idx++];
+	{
+	    fm = vi_fm;
+	    ++vi_idx;
+	}
 	else
+	{
 	    fm = &namedfm[idx++];
+	    if (vi_fm != NULL
+		  && vi_fm->fmark.mark.lnum == fm->fmark.mark.lnum
+		  && vi_fm->time_set == fm->time_set
+		  && ((vi_fm->fmark.fnum != 0
+			  && vi_fm->fmark.fnum == fm->fmark.fnum)
+		      || (vi_fm->fname != NULL
+			  && fm->fname != NULL
+			  && STRCMP(vi_fm->fname, fm->fname) == 0)))
+		++vi_idx;  /* skip duplicate */
+	}
 	write_one_filemark(fp, fm, '\'', i - NMARKS + '0');
     }
 
@@ -1684,10 +1709,23 @@ write_viminfo_filemarks(FILE *fp)
     fputs(_("\n# Jumplist (newest first):\n"), fp);
     setpcmark();	/* add current cursor position */
     cleanup_jumplist();
-    /* TODO: when vi_jumplist != NULL merge the two lists. */
-    for (fm = &curwin->w_jumplist[curwin->w_jumplistlen - 1];
-					   fm >= &curwin->w_jumplist[0]; --fm)
+    vi_idx = 0;
+    idx = curwin->w_jumplistlen - 1;
+    for (i = 0; i < JUMPLISTSIZE; ++i)
     {
+	xfmark_T	*vi_fm;
+
+	fm = idx >= 0 ? &curwin->w_jumplist[idx] : NULL;
+	vi_fm = vi_idx < vi_jumplist_len ? &vi_jumplist[vi_idx] : NULL;
+	if (fm == NULL && vi_fm == NULL)
+	    break;
+	if (fm == NULL || (vi_fm != NULL && fm->time_set < vi_fm->time_set))
+	{
+	    fm = vi_fm;
+	    ++vi_idx;
+	}
+	else
+	    --idx;
 	if (fm->fmark.fnum == 0
 		|| ((buf = buflist_findnr(fm->fmark.fnum)) != NULL
 		    && !removable(buf->b_ffname)))
