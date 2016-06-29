@@ -1986,7 +1986,6 @@ test1 \
 	test_marks \
 	test_nested_function \
 	test_options \
-	test_ruby \
 	test_search_mbyte \
 	test_signs \
 	test_tagcase \
@@ -1997,7 +1996,7 @@ test1 \
 	test2 test3 test4 test5 test6 test7 test8 test9 \
 	test11 test12 test13 test14 test15 test16 test17 test18 test19 \
 	test20 test21 test22 test23 test24 test25 test26 test27 test28 test29 \
-	test30 test31 test32 test33 test34 test35 test36 test37 test38 test39 \
+	test30 test31 test32 test33 test34 test36 test37 test38 test39 \
 	test40 test41 test42 test43 test44 test45 test46 test47 test48 test49 \
 	test50 test51 test52 test53 test54 test55 test56 test57 test58 test59 \
 	test60 test61 test62 test63 test64 test65 test66 test67 test68 test69 \
@@ -2015,6 +2014,7 @@ test_arglist \
 	test_backspace_opt \
 	test_cdo \
 	test_channel \
+	test_cmdline \
 	test_cursor_func \
 	test_delete \
 	test_ex_undo \
@@ -2031,10 +2031,12 @@ test_arglist \
 	test_help_tagjump \
 	test_history \
 	test_increment \
+	test_increment_dbcs \
 	test_join \
 	test_json \
 	test_langmap \
 	test_lispwords \
+	test_man \
 	test_matchadd_conceal \
 	test_matchadd_conceal_utf8 \
 	test_matchstrpos \
@@ -2043,16 +2045,19 @@ test_arglist \
 	test_packadd \
 	test_partial \
 	test_perl \
+	test_popup \
 	test_quickfix \
 	test_regexp_latin \
 	test_regexp_utf8 \
 	test_reltime \
+	test_ruby \
 	test_searchpos \
 	test_set \
 	test_sort \
 	test_statusline \
 	test_syn_attr \
 	test_syntax \
+	test_usercommands \
 	test_tabline \
 	test_tagjump \
 	test_timers \
