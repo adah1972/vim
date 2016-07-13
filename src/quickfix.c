@@ -1483,14 +1483,22 @@ copy_loclist(win_T *from, win_T *to)
 }
 
 /*
+ * Looking up a buffer can be slow if there are many.  Remember the last one
+ * to make this a lot faster if there are multiple matches in the same file.
+ */
+static char_u *qf_last_bufname = NULL;
+static bufref_T  qf_last_bufref = {NULL, 0};
+
+/*
  * Get buffer number for file "dir.name".
  * Also sets the b_has_qf_entry flag.
  */
     static int
 qf_get_fnum(qf_info_T *qi, char_u *directory, char_u *fname)
 {
-    char_u	*ptr;
+    char_u	*ptr = NULL;
     buf_T	*buf;
+    char_u	*bufname;
 
     if (fname == NULL || *fname == NUL)		/* no file name */
 	return 0;
@@ -1522,13 +1530,30 @@ qf_get_fnum(qf_info_T *qi, char_u *directory, char_u *fname)
 		ptr = vim_strsave(fname);
 	}
 	/* Use concatenated directory name and file name */
-	buf = buflist_new(ptr, NULL, (linenr_T)0, 0);
+	bufname = ptr;
+    }
+    else
+	bufname = fname;
+
+    if (qf_last_bufname != NULL && STRCMP(bufname, qf_last_bufname) == 0
+	    && bufref_valid(&qf_last_bufref))
+    {
+	buf = qf_last_bufref.br_buf;
 	vim_free(ptr);
     }
     else
-	buf = buflist_new(fname, NULL, (linenr_T)0, 0);
+    {
+	vim_free(qf_last_bufname);
+	buf = buflist_new(bufname, NULL, (linenr_T)0, BLN_NOOPT);
+	if (bufname == ptr)
+	    qf_last_bufname = bufname;
+	else
+	    qf_last_bufname = vim_strsave(bufname);
+	set_bufref(&qf_last_bufref, buf);
+    }
     if (buf == NULL)
 	return 0;
+
     buf->b_has_qf_entry = TRUE;
     return buf->b_fnum;
 }
@@ -2808,6 +2833,53 @@ ex_copen(exarg_T *eap)
 }
 
 /*
+ * Move the cursor in the quickfix window to "lnum".
+ */
+    static void
+qf_win_goto(win_T *win, linenr_T lnum)
+{
+    win_T	*old_curwin = curwin;
+
+    curwin = win;
+    curbuf = win->w_buffer;
+    curwin->w_cursor.lnum = lnum;
+    curwin->w_cursor.col = 0;
+#ifdef FEAT_VIRTUALEDIT
+    curwin->w_cursor.coladd = 0;
+#endif
+    curwin->w_curswant = 0;
+    update_topline();		/* scroll to show the line */
+    redraw_later(VALID);
+    curwin->w_redr_status = TRUE;	/* update ruler */
+    curwin = old_curwin;
+    curbuf = curwin->w_buffer;
+}
+
+/*
+ * :cbottom/:lbottom commands.
+ */
+    void
+ex_cbottom(exarg_T *eap UNUSED)
+{
+    qf_info_T	*qi = &ql_info;
+    win_T	*win;
+
+    if (eap->cmdidx == CMD_lbottom)
+    {
+	qi = GET_LOC_LIST(curwin);
+	if (qi == NULL)
+	{
+	    EMSG(_(e_loclist));
+	    return;
+	}
+    }
+
+    win = qf_find_win(qi);
+    if (win != NULL && win->w_cursor.lnum != win->w_buffer->b_ml.ml_line_count)
+	qf_win_goto(win, win->w_buffer->b_ml.ml_line_count);
+}
+
+/*
  * Return the number of the current entry (line number in the quickfix
  * window).
  */
@@ -2844,27 +2916,17 @@ qf_win_pos_update(
 	    && qf_index <= win->w_buffer->b_ml.ml_line_count
 	    && old_qf_index != qf_index)
     {
-	win_T	*old_curwin = curwin;
-
-	curwin = win;
-	curbuf = win->w_buffer;
 	if (qf_index > old_qf_index)
 	{
-	    curwin->w_redraw_top = old_qf_index;
-	    curwin->w_redraw_bot = qf_index;
+	    win->w_redraw_top = old_qf_index;
+	    win->w_redraw_bot = qf_index;
 	}
 	else
 	{
-	    curwin->w_redraw_top = qf_index;
-	    curwin->w_redraw_bot = old_qf_index;
+	    win->w_redraw_top = qf_index;
+	    win->w_redraw_bot = old_qf_index;
 	}
-	curwin->w_cursor.lnum = qf_index;
-	curwin->w_cursor.col = 0;
-	update_topline();		/* scroll to show the line */
-	redraw_later(VALID);
-	curwin->w_redr_status = TRUE;	/* update ruler */
-	curwin = old_curwin;
-	curbuf = curwin->w_buffer;
+	qf_win_goto(win, qf_index);
     }
     return win != NULL;
 }
@@ -4180,7 +4242,8 @@ load_dummy_buffer(
     char_u	*resulting_dir)  /* out: new directory */
 {
     buf_T	*newbuf;
-    buf_T	*newbuf_to_wipe = NULL;
+    bufref_T	newbufref;
+    bufref_T	newbuf_to_wipe;
     int		failed = TRUE;
     aco_save_T	aco;
 
@@ -4188,6 +4251,7 @@ load_dummy_buffer(
     newbuf = buflist_new(NULL, NULL, (linenr_T)1, BLN_DUMMY);
     if (newbuf == NULL)
 	return NULL;
+    set_bufref(&newbufref, newbuf);
 
     /* Init the options. */
     buf_copy_options(newbuf, BCO_ENTER | BCO_NOHELP);
@@ -4208,6 +4272,7 @@ load_dummy_buffer(
 	 * work. */
 	curbuf->b_flags &= ~BF_DUMMY;
 
+	newbuf_to_wipe.br_buf = NULL;
 	if (readfile(fname, NULL,
 		    (linenr_T)0, (linenr_T)0, (linenr_T)MAXLNUM,
 		    NULL, READ_NEW | READ_DUMMY) == OK
@@ -4221,15 +4286,19 @@ load_dummy_buffer(
 		 * using netrw and editing a remote file.  Use the current
 		 * buffer instead, delete the dummy one after restoring the
 		 * window stuff. */
-		newbuf_to_wipe = newbuf;
+		set_bufref(&newbuf_to_wipe, newbuf);
 		newbuf = curbuf;
 	    }
 	}
 
 	/* restore curwin/curbuf and a few other things */
 	aucmd_restbuf(&aco);
-	if (newbuf_to_wipe != NULL && buf_valid(newbuf_to_wipe))
-	    wipe_buffer(newbuf_to_wipe, FALSE);
+	if (newbuf_to_wipe.br_buf != NULL && bufref_valid(&newbuf_to_wipe))
+	    wipe_buffer(newbuf_to_wipe.br_buf, FALSE);
+
+	/* Add back the "dummy" flag, otherwise buflist_findname_stat() won't
+	 * skip it. */
+	newbuf->b_flags |= BF_DUMMY;
     }
 
     /*
@@ -4240,7 +4309,7 @@ load_dummy_buffer(
     mch_dirname(resulting_dir, MAXPATHL);
     restore_start_dir(dirname_start);
 
-    if (!buf_valid(newbuf))
+    if (!bufref_valid(&newbufref))
 	return NULL;
     if (failed)
     {

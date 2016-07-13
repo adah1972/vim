@@ -1273,6 +1273,9 @@ main_loop(
 	    if (need_maketitle)
 		maketitle();
 #endif
+#ifdef FEAT_VIMINFO
+	    curbuf->b_last_used = vim_time();
+#endif
 	    /* display message after redraw */
 	    if (keep_msg != NULL)
 	    {
@@ -1457,9 +1460,13 @@ getout(int exitval)
 	for (buf = firstbuf; buf != NULL; buf = buf->b_next)
 	    if (buf->b_ml.ml_mfp != NULL)
 	    {
+		bufref_T bufref;
+
+		set_bufref(&bufref, buf);
 		apply_autocmds(EVENT_BUFUNLOAD, buf->b_fname, buf->b_fname,
 								  FALSE, buf);
-		if (!buf_valid(buf))	/* autocmd may delete the buffer */
+		if (!bufref_valid(&bufref))
+		    /* autocmd deleted the buffer */
 		    break;
 	    }
 	apply_autocmds(EVENT_VIMLEAVEPRE, NULL, NULL, FALSE, curbuf);

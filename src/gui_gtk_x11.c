@@ -818,6 +818,12 @@ gui_mch_is_blinking(void)
     return blink_state != BLINK_NONE;
 }
 
+    int
+gui_mch_is_blink_off(void)
+{
+    return blink_state == BLINK_OFF;
+}
+
     void
 gui_mch_set_blinking(long waittime, long on, long off)
 {
@@ -861,7 +867,10 @@ gui_mch_stop_blink(void)
 	blink_timer = 0;
     }
     if (blink_state == BLINK_OFF)
+    {
 	gui_update_cursor(TRUE, FALSE);
+	gui_mch_flush();
+    }
     blink_state = BLINK_NONE;
 }
 
@@ -896,6 +905,7 @@ blink_cb(gpointer data UNUSED)
 				   (GtkFunction) blink_cb, NULL);
 #endif
     }
+    gui_mch_flush();
 
     return FALSE;		/* don't happen again */
 }
@@ -928,6 +938,7 @@ gui_mch_start_blink(void)
 #endif
 	blink_state = BLINK_ON;
 	gui_update_cursor(TRUE, FALSE);
+	gui_mch_flush();
     }
 }
 

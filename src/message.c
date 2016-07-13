@@ -566,22 +566,25 @@ emsg(char_u *s)
 	 */
 	if (emsg_silent != 0)
 	{
-	    msg_start();
-	    p = get_emsg_source();
-	    if (p != NULL)
+	    if (emsg_noredir == 0)
 	    {
-		STRCAT(p, "\n");
-		redir_write(p, -1);
-		vim_free(p);
+		msg_start();
+		p = get_emsg_source();
+		if (p != NULL)
+		{
+		    STRCAT(p, "\n");
+		    redir_write(p, -1);
+		    vim_free(p);
+		}
+		p = get_emsg_lnum();
+		if (p != NULL)
+		{
+		    STRCAT(p, "\n");
+		    redir_write(p, -1);
+		    vim_free(p);
+		}
+		redir_write(s, -1);
 	    }
-	    p = get_emsg_lnum();
-	    if (p != NULL)
-	    {
-		STRCAT(p, "\n");
-		redir_write(p, -1);
-		vim_free(p);
-	    }
-	    redir_write(s, -1);
 	    return TRUE;
 	}
 
@@ -3063,7 +3066,9 @@ redir_write(char_u *str, int maxlen)
 	    while (cur_col < msg_col)
 	    {
 #ifdef FEAT_EVAL
-		if (redir_reg)
+		if (redir_execute)
+		    execute_redir_str((char_u *)" ", -1);
+		else if (redir_reg)
 		    write_reg_contents(redir_reg, (char_u *)" ", -1, TRUE);
 		else if (redir_vname)
 		    var_redir_str((char_u *)" ", -1);
@@ -3078,9 +3083,11 @@ redir_write(char_u *str, int maxlen)
 	}
 
 #ifdef FEAT_EVAL
-	if (redir_reg)
+	if (redir_execute)
+	    execute_redir_str(s, maxlen);
+	else if (redir_reg)
 	    write_reg_contents(redir_reg, s, maxlen, TRUE);
-	if (redir_vname)
+	else if (redir_vname)
 	    var_redir_str(s, maxlen);
 #endif
 
@@ -3088,7 +3095,7 @@ redir_write(char_u *str, int maxlen)
 	while (*s != NUL && (maxlen < 0 || (int)(s - str) < maxlen))
 	{
 #ifdef FEAT_EVAL
-	    if (!redir_reg && !redir_vname)
+	    if (!redir_reg && !redir_vname && !redir_execute)
 #endif
 		if (redir_fd != NULL)
 		    putc(*s, redir_fd);
@@ -3113,7 +3120,7 @@ redirecting(void)
 {
     return redir_fd != NULL || *p_vfile != NUL
 #ifdef FEAT_EVAL
-			  || redir_reg || redir_vname
+			  || redir_reg || redir_vname || redir_execute
 #endif
 				       ;
 }
@@ -4190,6 +4197,15 @@ vim_vsnprintf(
 		case 'F': fmt_spec = 'f'; break;
 		default: break;
 	    }
+
+# if defined(FEAT_EVAL) && defined(FEAT_NUM64)
+	    switch (fmt_spec)
+	    {
+		case 'd': case 'u': case 'o': case 'x': case 'X':
+		    if (tvs != NULL && length_modifier == '\0')
+			length_modifier = 'L';
+	    }
+# endif
 
 	    /* get parameter value, do initial processing */
 	    switch (fmt_spec)

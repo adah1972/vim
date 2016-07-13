@@ -386,7 +386,7 @@ EXTERN int	keep_filetype INIT(= FALSE);	/* value for did_filetype when
 
 /* When deleting the current buffer, another one must be loaded.  If we know
  * which one is preferred, au_new_curbuf is set to it */
-EXTERN buf_T	*au_new_curbuf INIT(= NULL);
+EXTERN bufref_T	au_new_curbuf INIT(= {NULL});
 
 /* When deleting a buffer/window and autocmd_busy is TRUE, do not free the
  * buffer/window. but link it in the list starting with
@@ -635,6 +635,9 @@ EXTERN int	exiting INIT(= FALSE);
 EXTERN int	really_exiting INIT(= FALSE);
 				/* TRUE when we are sure to exit, e.g., after
 				 * a deadly signal */
+#if defined(FEAT_AUTOCHDIR)
+EXTERN int	test_autochdir INIT(= FALSE);
+#endif
 #if defined(EXITFREE)
 EXTERN int	entered_free_all_mem INIT(= FALSE);
 				/* TRUE when in or after free_all_mem() */
@@ -971,6 +974,7 @@ EXTERN cmdmod_T	cmdmod;			/* Ex command modifiers */
 
 EXTERN int	msg_silent INIT(= 0);	/* don't print messages */
 EXTERN int	emsg_silent INIT(= 0);	/* don't print error messages */
+EXTERN int	emsg_noredir INIT(= 0);	/* don't redirect error messages */
 EXTERN int	cmd_silent INIT(= FALSE); /* don't echo the command line */
 
 #if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG) \
@@ -1106,6 +1110,7 @@ EXTERN FILE *redir_fd INIT(= NULL);	/* message redirection file */
 #ifdef FEAT_EVAL
 EXTERN int  redir_reg INIT(= 0);	/* message redirection register */
 EXTERN int  redir_vname INIT(= 0);	/* message redirection variable */
+EXTERN int  redir_execute INIT(= 0);	/* execute() redirection */
 #endif
 
 #ifdef FEAT_LANGMAP

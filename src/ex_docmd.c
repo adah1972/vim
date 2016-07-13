@@ -129,6 +129,7 @@ static int	getargopt(exarg_T *eap);
 # define ex_cclose		ex_ni
 # define ex_copen		ex_ni
 # define ex_cwindow		ex_ni
+# define ex_cbottom		ex_ni
 #endif
 #if !defined(FEAT_QUICKFIX) || !defined(FEAT_EVAL)
 # define ex_cexpr		ex_ni
@@ -7048,6 +7049,18 @@ parse_compl_arg(
 # endif
     return OK;
 }
+
+    int
+cmdcomplete_str_to_type(char_u *complete_str)
+{
+    int i;
+
+    for (i = 0; command_complete[i].expand != 0; ++i)
+	if (STRCMP(complete_str, command_complete[i].name) == 0)
+	    return command_complete[i].expand;
+
+    return EXPAND_NOTHING;
+}
 #endif
 
     static void
@@ -7309,8 +7322,11 @@ ex_win_close(
 # if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
 	if ((p_confirm || cmdmod.confirm) && p_write)
 	{
+	    bufref_T bufref;
+
+	    set_bufref(&bufref, buf);
 	    dialog_changed(buf, FALSE);
-	    if (buf_valid(buf) && bufIsChanged(buf))
+	    if (bufref_valid(&bufref) && bufIsChanged(buf))
 		return;
 	    need_hide = FALSE;
 	}
@@ -9453,6 +9469,14 @@ ex_redir(exarg_T *eap)
     char	*mode;
     char_u	*fname;
     char_u	*arg = eap->arg;
+
+#ifdef FEAT_EVAL
+    if (redir_execute)
+    {
+	EMSG(_("E930: Cannot use :redir inside execute()"));
+	return;
+    }
+#endif
 
     if (STRICMP(eap->arg, "END") == 0)
 	close_redir();

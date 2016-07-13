@@ -2016,6 +2016,7 @@ test1 \
 test_arglist \
 	test_assert \
 	test_assign \
+	test_autochdir \
 	test_autocmd \
 	test_backspace_opt \
 	test_cdo \
@@ -2024,6 +2025,7 @@ test_arglist \
 	test_cursor_func \
 	test_delete \
 	test_ex_undo \
+	test_execute_func \
 	test_expand \
 	test_expand_dllpath \
 	test_expr \
@@ -2031,6 +2033,7 @@ test_arglist \
 	test_farsi \
 	test_feedkeys \
 	test_file_perm \
+	test_filter_map \
 	test_fnamemodify \
 	test_glob2regpat \
 	test_goto \
@@ -2067,11 +2070,12 @@ test_arglist \
 	test_statusline \
 	test_syn_attr \
 	test_syntax \
-	test_usercommands \
 	test_tabline \
 	test_tagjump \
 	test_timers \
+	test_true_false \
 	test_undolevels \
+	test_usercommands \
 	test_unlet \
 	test_viminfo \
 	test_viml \
