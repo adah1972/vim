@@ -395,7 +395,7 @@ static struct builtin_term builtin_termcaps[] =
     {K_RIGHT,		"\033[C"},
 # endif
 
-# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS)
 /*
  * standard ANSI terminal, default for unix
  */
@@ -431,20 +431,16 @@ static struct builtin_term builtin_termcaps[] =
 #  endif
 # endif
 
-# if defined(ALL_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(ALL_BUILTIN_TCAPS)
 /*
  * These codes are valid when nansi.sys or equivalent has been installed.
  * Function keys on a PC are preceded with a NUL. These are converted into
  * K_NUL '\316' in mch_inchar(), because we cannot handle NULs in key codes.
  * CTRL-arrow is used instead of SHIFT-arrow.
  */
-#ifdef __EMX__
-    {(int)KS_NAME,	"os2ansi"},
-#else
     {(int)KS_NAME,	"pcansi"},
     {(int)KS_DL,	"\033[M"},
     {(int)KS_AL,	"\033[L"},
-#endif
     {(int)KS_CE,	"\033[K"},
     {(int)KS_CL,	"\033[2J"},
     {(int)KS_ME,	"\033[0m"},
@@ -516,7 +512,7 @@ static struct builtin_term builtin_termcaps[] =
     {K_PAGEUP,		"\316I"},
 # endif
 
-# if defined(WIN3264) || defined(ALL_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(WIN3264) || defined(ALL_BUILTIN_TCAPS)
 /*
  * These codes are valid for the Win32 Console .  The entries that start with
  * ESC | are translated into console calls in os_win32.c.  The function keys
@@ -793,7 +789,7 @@ static struct builtin_term builtin_termcaps[] =
 #  endif
 # endif
 
-# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS) || defined(__EMX__)
+# if defined(UNIX) || defined(ALL_BUILTIN_TCAPS) || defined(SOME_BUILTIN_TCAPS)
     {(int)KS_NAME,	"xterm"},
     {(int)KS_CE,	IF_EB("\033[K", ESC_STR "[K")},
     {(int)KS_AL,	IF_EB("\033[L", ESC_STR "[L")},
@@ -1310,10 +1306,6 @@ termgui_mch_get_rgb(guicolor_T color)
 
 #ifdef __MINT__
 # define DEFAULT_TERM	(char_u *)"vt52"
-#endif
-
-#ifdef __EMX__
-# define DEFAULT_TERM	(char_u *)"os2ansi"
 #endif
 
 #ifdef VMS
@@ -2094,7 +2086,7 @@ vim_tgetstr(char *s, char_u **pp)
 }
 #endif /* HAVE_TGETENT */
 
-#if defined(HAVE_TGETENT) && (defined(UNIX) || defined(__EMX__) || defined(VMS) || defined(MACOS_X))
+#if defined(HAVE_TGETENT) && (defined(UNIX) || defined(VMS) || defined(MACOS_X))
 /*
  * Get Columns and Rows from the termcap. Used after a window signal if the
  * ioctl() fails. It doesn't make sense to call tgetent each time if the "co"
@@ -2398,11 +2390,7 @@ termcapinit(char_u *name)
 /*
  * the number of calls to ui_write is reduced by using the buffer "out_buf"
  */
-#ifdef DOS16
-# define OUT_SIZE	255		/* only have 640K total... */
-#else
-# define OUT_SIZE	2047
-#endif
+#define OUT_SIZE	2047
 	    /* Add one to allow mch_write() in os_win32.c to append a NUL */
 static char_u		out_buf[OUT_SIZE + 1];
 static int		out_pos = 0;	/* number of chars in out_buf */
@@ -6098,6 +6086,8 @@ gui_get_color_cmn(char_u *name)
 	guicolor_T  color;
     };
 
+    /* Only non X11 colors (not present in rgb.txt) and colors in
+     * color_names[], useful when $VIMRUNTIME is not found,. */
     static struct rgbcolor_table_S rgb_table[] = {
 	    {(char_u *)"black",		RGB(0x00, 0x00, 0x00)},
 	    {(char_u *)"blue",		RGB(0x00, 0x00, 0xFF)},
@@ -6112,25 +6102,8 @@ gui_get_color_cmn(char_u *name)
 	    {(char_u *)"darkred",	RGB(0x8B, 0x00, 0x00)},
 	    {(char_u *)"darkyellow",	RGB(0x8B, 0x8B, 0x00)}, /* No X11 */
 	    {(char_u *)"gray",		RGB(0xBE, 0xBE, 0xBE)},
-	    {(char_u *)"gray10",	RGB(0x1A, 0x1A, 0x1A)},
-	    {(char_u *)"gray20",	RGB(0x33, 0x33, 0x33)},
-	    {(char_u *)"gray30",	RGB(0x4D, 0x4D, 0x4D)},
-	    {(char_u *)"gray40",	RGB(0x66, 0x66, 0x66)},
-	    {(char_u *)"gray50",	RGB(0x7F, 0x7F, 0x7F)},
-	    {(char_u *)"gray60",	RGB(0x99, 0x99, 0x99)},
-	    {(char_u *)"gray70",	RGB(0xB3, 0xB3, 0xB3)},
-	    {(char_u *)"gray80",	RGB(0xCC, 0xCC, 0xCC)},
-	    {(char_u *)"gray90",	RGB(0xE5, 0xE5, 0xE5)},
 	    {(char_u *)"green",		RGB(0x00, 0xFF, 0x00)},
 	    {(char_u *)"grey",		RGB(0xBE, 0xBE, 0xBE)},
-	    {(char_u *)"grey10",	RGB(0x1A, 0x1A, 0x1A)},
-	    {(char_u *)"grey20",	RGB(0x33, 0x33, 0x33)},
-	    {(char_u *)"grey30",	RGB(0x4D, 0x4D, 0x4D)},
-	    {(char_u *)"grey40",	RGB(0x66, 0x66, 0x66)},
-	    {(char_u *)"grey50",	RGB(0x7F, 0x7F, 0x7F)},
-	    {(char_u *)"grey60",	RGB(0x99, 0x99, 0x99)},
-	    {(char_u *)"grey70",	RGB(0xB3, 0xB3, 0xB3)},
-	    {(char_u *)"grey80",	RGB(0xCC, 0xCC, 0xCC)},
 	    {(char_u *)"grey90",	RGB(0xE5, 0xE5, 0xE5)},
 	    {(char_u *)"lightblue",	RGB(0xAD, 0xD8, 0xE6)},
 	    {(char_u *)"lightcyan",	RGB(0xE0, 0xFF, 0xFF)},
@@ -6141,16 +6114,14 @@ gui_get_color_cmn(char_u *name)
 	    {(char_u *)"lightred",	RGB(0xFF, 0x8B, 0x8B)}, /* No X11 */
 	    {(char_u *)"lightyellow",	RGB(0xFF, 0xFF, 0xE0)},
 	    {(char_u *)"magenta",	RGB(0xFF, 0x00, 0xFF)},
-	    {(char_u *)"orange",	RGB(0xFF, 0xA5, 0x00)},
-	    {(char_u *)"purple",	RGB(0xA0, 0x20, 0xF0)},
 	    {(char_u *)"red",		RGB(0xFF, 0x00, 0x00)},
 	    {(char_u *)"seagreen",	RGB(0x2E, 0x8B, 0x57)},
-	    {(char_u *)"slateblue",	RGB(0x6A, 0x5A, 0xCD)},
-	    {(char_u *)"violet",	RGB(0xEE, 0x82, 0xEE)},
 	    {(char_u *)"white",		RGB(0xFF, 0xFF, 0xFF)},
 	    {(char_u *)"yellow",	RGB(0xFF, 0xFF, 0x00)},
     };
 
+    static struct rgbcolor_table_S *colornames_table;
+    static int size = 0;
 
     if (name[0] == '#' && STRLEN(name) == 7)
     {
@@ -6171,44 +6142,78 @@ gui_get_color_cmn(char_u *name)
     /*
      * Last attempt. Look in the file "$VIM/rgb.txt".
      */
-
-    fname = expand_env_save((char_u *)"$VIMRUNTIME/rgb.txt");
-    if (fname == NULL)
-	return INVALCOLOR;
-
-    fd = fopen((char *)fname, "rt");
-    vim_free(fname);
-    if (fd == NULL)
+    if (size == 0)
     {
-	if (p_verbose > 1)
-	    verb_msg((char_u *)_("Cannot open $VIMRUNTIME/rgb.txt"));
-	return INVALCOLOR;
-    }
+	int counting;
 
-    while (!feof(fd))
-    {
-	size_t		len;
-	int		pos;
+	/* colornames_table not yet initialized */
+	fname = expand_env_save((char_u *)"$VIMRUNTIME/rgb.txt");
+	if (fname == NULL)
+	    return INVALCOLOR;
 
-	ignoredp = fgets(line, LINE_LEN, fd);
-	len = strlen(line);
-
-	if (len <= 1 || line[len - 1] != '\n')
-	    continue;
-
-	line[len - 1] = '\0';
-
-	i = sscanf(line, "%d %d %d %n", &r, &g, &b, &pos);
-	if (i != 3)
-	    continue;
-
-	if (STRICMP(line + pos, name) == 0)
+	fd = fopen((char *)fname, "rt");
+	vim_free(fname);
+	if (fd == NULL)
 	{
-	    fclose(fd);
-	    return (guicolor_T)RGB(r, g, b);
+	    if (p_verbose > 1)
+		verb_msg((char_u *)_("Cannot open $VIMRUNTIME/rgb.txt"));
+	    return INVALCOLOR;
 	}
+
+	for (counting = 1; counting >= 0; --counting)
+	{
+	    if (!counting)
+	    {
+		colornames_table = (struct rgbcolor_table_S *)alloc(
+			   (unsigned)(sizeof(struct rgbcolor_table_S) * size));
+		if (colornames_table == NULL)
+		{
+		    fclose(fd);
+		    return INVALCOLOR;
+		}
+		rewind(fd);
+	    }
+	    size = 0;
+
+	    while (!feof(fd))
+	    {
+		size_t	len;
+		int	pos;
+
+		ignoredp = fgets(line, LINE_LEN, fd);
+		len = strlen(line);
+
+		if (len <= 1 || line[len - 1] != '\n')
+		    continue;
+
+		line[len - 1] = '\0';
+
+		i = sscanf(line, "%d %d %d %n", &r, &g, &b, &pos);
+		if (i != 3)
+		    continue;
+
+		if (!counting)
+		{
+		    char_u *s = vim_strsave((char_u *)line + pos);
+
+		    if (s == NULL)
+		    {
+			fclose(fd);
+			return INVALCOLOR;
+		    }
+		    colornames_table[size].color_name = s;
+		    colornames_table[size].color = (guicolor_T)RGB(r, g, b);
+		}
+		size++;
+	    }
+	}
+	fclose(fd);
     }
-    fclose(fd);
+
+    for (i = 0; i < size; i++)
+	if (STRICMP(name, colornames_table[i].color_name) == 0)
+	    return colornames_table[i].color;
+
     return INVALCOLOR;
 }
 #endif

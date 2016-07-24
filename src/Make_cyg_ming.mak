@@ -149,7 +149,7 @@ WINDRES_CC = $(CC)
 
 # Get the default ARCH.
 ifndef ARCH
-ARCH := $(shell $(CC) -dumpmachine | sed -e 's/-.*//')
+ARCH := $(shell $(CC) -dumpmachine | sed -e 's/-.*//' -e 's/_/-/' -e 's/^mingw32$$/i686/')
 endif
 
 
@@ -610,10 +610,12 @@ OBJ = \
 	$(OUTDIR)/charset.o \
 	$(OUTDIR)/crypt.o \
 	$(OUTDIR)/crypt_zip.o \
+	$(OUTDIR)/dict.o \
 	$(OUTDIR)/diff.o \
 	$(OUTDIR)/digraph.o \
 	$(OUTDIR)/edit.o \
 	$(OUTDIR)/eval.o \
+	$(OUTDIR)/evalfunc.o \
 	$(OUTDIR)/ex_cmds.o \
 	$(OUTDIR)/ex_cmds2.o \
 	$(OUTDIR)/ex_docmd.o \
@@ -626,6 +628,7 @@ OBJ = \
 	$(OUTDIR)/hardcopy.o \
 	$(OUTDIR)/hashtab.o \
 	$(OUTDIR)/json.o \
+	$(OUTDIR)/list.o \
 	$(OUTDIR)/main.o \
 	$(OUTDIR)/mark.o \
 	$(OUTDIR)/memfile.o \
@@ -650,11 +653,13 @@ OBJ = \
 	$(OUTDIR)/search.o \
 	$(OUTDIR)/sha256.o \
 	$(OUTDIR)/spell.o \
+	$(OUTDIR)/spellfile.o \
 	$(OUTDIR)/syntax.o \
 	$(OUTDIR)/tag.o \
 	$(OUTDIR)/term.o \
 	$(OUTDIR)/ui.o \
 	$(OUTDIR)/undo.o \
+	$(OUTDIR)/userfunc.o \
 	$(OUTDIR)/version.o \
 	$(OUTDIR)/vimrc.o \
 	$(OUTDIR)/window.o

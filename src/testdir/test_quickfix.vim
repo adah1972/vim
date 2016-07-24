@@ -922,6 +922,30 @@ function! Test_efm2()
   call assert_equal('E', l[0].type)
   call assert_equal("\nunknown variable 'i'", l[0].text)
 
+  " Test for %A, %C and other formats
+  let lines = [
+	  \"==============================================================",
+	  \"FAIL: testGetTypeIdCachesResult (dbfacadeTest.DjsDBFacadeTest)",
+	  \"--------------------------------------------------------------",
+	  \"Traceback (most recent call last):",
+	  \'  File "unittests/dbfacadeTest.py", line 89, in testFoo',
+	  \"    self.assertEquals(34, dtid)",
+	  \'  File "/usr/lib/python2.2/unittest.py", line 286, in',
+	  \" failUnlessEqual",
+	  \"    raise self.failureException, \\",
+	  \"AssertionError: 34 != 33",
+	  \"",
+	  \"--------------------------------------------------------------",
+	  \"Ran 27 tests in 0.063s"
+	  \]
+  set efm=%C\ %.%#,%A\ \ File\ \"%f\"\\,\ line\ %l%.%#,%Z%[%^\ ]%\\@=%m
+  cgetexpr lines
+  let l = getqflist()
+  call assert_equal(8, len(l))
+  call assert_equal(89, l[4].lnum)
+  call assert_equal(1, l[4].valid)
+  call assert_equal('unittests/dbfacadeTest.py', bufname(l[4].bufnr))
+
   let &efm = save_efm
 endfunction
 
@@ -1317,13 +1341,14 @@ function! Xadjust_qflnum(cchar)
 
   enew | only
 
-  call s:create_test_file('Xqftestfile')
-  edit Xqftestfile
+  let fname = 'Xqftestfile' . a:cchar
+  call s:create_test_file(fname)
+  exe 'edit ' . fname
 
-  Xgetexpr ['Xqftestfile:5:Line5',
-		\ 'Xqftestfile:10:Line10',
-		\ 'Xqftestfile:15:Line15',
-		\ 'Xqftestfile:20:Line20']
+  Xgetexpr [fname . ':5:Line5',
+	      \ fname . ':10:Line10',
+	      \ fname . ':15:Line15',
+	      \ fname . ':20:Line20']
 
   6,14delete
   call append(6, ['Buffer', 'Window'])
@@ -1335,11 +1360,13 @@ function! Xadjust_qflnum(cchar)
   call assert_equal(13, l[3].lnum)
 
   enew!
-  call delete('Xqftestfile')
+  call delete(fname)
 endfunction
 
 function! Test_adjust_lnum()
+  call setloclist(0, [])
   call Xadjust_qflnum('c')
+  call setqflist([])
   call Xadjust_qflnum('l')
 endfunction
 
@@ -1438,3 +1465,42 @@ function Test_cbottom()
   call XbottomTests('c')
   call XbottomTests('l')
 endfunction
+
+function HistoryTest(cchar)
+  call s:setup_commands(a:cchar)
+
+  call assert_fails(a:cchar . 'older 99', 'E380:')
+  " clear all lists after the first one, then replace the first one.
+  call g:Xsetlist([])
+  Xolder
+  let entry = {'filename': 'foo', 'lnum': 42}
+  call g:Xsetlist([entry], 'r')
+  call g:Xsetlist([entry, entry])
+  call g:Xsetlist([entry, entry, entry])
+  let res = split(execute(a:cchar . 'hist'), "\n")
+  call assert_equal(3, len(res))
+  let common = 'errors     :set' . (a:cchar == 'c' ? 'qf' : 'loc') . 'list()'
+  call assert_equal('  error list 1 of 3; 1 ' . common, res[0])
+  call assert_equal('  error list 2 of 3; 2 ' . common, res[1])
+  call assert_equal('> error list 3 of 3; 3 ' . common, res[2])
+endfunc
+
+func Test_history()
+  call HistoryTest('c')
+  call HistoryTest('l')
+endfunc
+
+func Test_duplicate_buf()
+  " make sure we can get the highest buffer number
+  edit DoesNotExist
+  edit DoesNotExist2
+  let last_buffer = bufnr("$")
+
+  " make sure only one buffer is created
+  call writefile(['this one', 'that one'], 'Xgrepthis')
+  vimgrep one Xgrepthis
+  vimgrep one Xgrepthis
+  call assert_equal(last_buffer + 1, bufnr("$"))
+
+  call delete('Xgrepthis')
+endfunc

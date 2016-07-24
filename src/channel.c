@@ -1122,7 +1122,12 @@ set_callback(
 {
     free_callback(*cbp, *pp);
     if (callback != NULL && *callback != NUL)
-	*cbp = vim_strsave(callback);
+    {
+	if (partial != NULL)
+	    *cbp = partial->pt_name;
+	else
+	    *cbp = vim_strsave(callback);
+    }
     else
 	*cbp = NULL;
     *pp = partial;
@@ -1528,8 +1533,8 @@ invoke_callback(channel_T *channel, char_u *callback, partial_T *partial,
     argv[0].v_type = VAR_CHANNEL;
     argv[0].vval.v_channel = channel;
 
-    call_func(callback, (int)STRLEN(callback),
-			&rettv, 2, argv, 0L, 0L, &dummy, TRUE, partial, NULL);
+    call_func(callback, (int)STRLEN(callback), &rettv, 2, argv, NULL,
+					  0L, 0L, &dummy, TRUE, partial, NULL);
     clear_tv(&rettv);
     channel_need_redraw = TRUE;
 }
@@ -2690,7 +2695,7 @@ channel_close(channel_T *channel, int invoke_close_cb)
 	      argv[0].v_type = VAR_CHANNEL;
 	      argv[0].vval.v_channel = channel;
 	      call_func(channel->ch_close_cb, (int)STRLEN(channel->ch_close_cb),
-			   &rettv, 1, argv, 0L, 0L, &dummy, TRUE,
+			   &rettv, 1, argv, NULL, 0L, 0L, &dummy, TRUE,
 			   channel->ch_close_partial, NULL);
 	      clear_tv(&rettv);
 	      channel_need_redraw = TRUE;
@@ -4753,7 +4758,7 @@ job_status(job_T *job)
 	    argv[1].v_type = VAR_NUMBER;
 	    argv[1].vval.v_number = job->jv_exitval;
 	    call_func(job->jv_exit_cb, (int)STRLEN(job->jv_exit_cb),
-			   &rettv, 2, argv, 0L, 0L, &dummy, TRUE,
+			   &rettv, 2, argv, NULL, 0L, 0L, &dummy, TRUE,
 			   job->jv_exit_partial, NULL);
 	    clear_tv(&rettv);
 	    --job->jv_refcount;
