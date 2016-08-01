@@ -304,6 +304,11 @@ static char *(features[]) =
 #else
 	"-keymap",
 #endif
+#ifdef FEAT_EVAL
+	"+lambda",
+#else
+	"-lambda",
+#endif
 #ifdef FEAT_LANGMAP
 	"+langmap",
 #else
@@ -758,6 +763,82 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    2136,
+/**/
+    2135,
+/**/
+    2134,
+/**/
+    2133,
+/**/
+    2132,
+/**/
+    2131,
+/**/
+    2130,
+/**/
+    2129,
+/**/
+    2128,
+/**/
+    2127,
+/**/
+    2126,
+/**/
+    2125,
+/**/
+    2124,
+/**/
+    2123,
+/**/
+    2122,
+/**/
+    2121,
+/**/
+    2120,
+/**/
+    2119,
+/**/
+    2118,
+/**/
+    2117,
+/**/
+    2116,
+/**/
+    2115,
+/**/
+    2114,
+/**/
+    2113,
+/**/
+    2112,
+/**/
+    2111,
+/**/
+    2110,
+/**/
+    2109,
+/**/
+    2108,
+/**/
+    2107,
+/**/
+    2106,
+/**/
+    2105,
+/**/
+    2104,
+/**/
+    2103,
+/**/
+    2102,
+/**/
+    2101,
+/**/
+    2100,
+/**/
+    2099,
 /**/
     2098,
 /**/
@@ -5325,6 +5406,9 @@ list_version(void)
     version_msg("\"\n");
 # endif
 #endif
+    version_msg(_("       defaults file: \""));
+    version_msg(VIM_DEFAULTS_FILE);
+    version_msg("\"\n");
 #ifdef FEAT_GUI
 # ifdef SYS_MENU_FILE
     version_msg(_("    system menu file: \""));

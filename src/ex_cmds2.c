@@ -1265,12 +1265,35 @@ set_ref_in_timer(int copyID)
 
     for (timer = first_timer; timer != NULL; timer = timer->tr_next)
     {
-	tv.v_type = VAR_PARTIAL;
-	tv.vval.v_partial = timer->tr_partial;
+	if (timer->tr_partial != NULL)
+	{
+	    tv.v_type = VAR_PARTIAL;
+	    tv.vval.v_partial = timer->tr_partial;
+	}
+	else
+	{
+	    tv.v_type = VAR_FUNC;
+	    tv.vval.v_string = timer->tr_callback;
+	}
 	abort = abort || set_ref_in_item(&tv, copyID, NULL, NULL);
     }
     return abort;
 }
+
+#  if defined(EXITFREE) || defined(PROTO)
+    void
+timer_free_all()
+{
+    timer_T *timer;
+
+    while (first_timer != NULL)
+    {
+	timer = first_timer;
+	remove_timer(timer);
+	free_timer(timer);
+    }
+}
+#  endif
 # endif
 
 #if defined(FEAT_SYN_HL) && defined(FEAT_RELTIME) && defined(FEAT_FLOAT)
@@ -1721,7 +1744,7 @@ autowrite_all(void)
 
     if (!(p_aw || p_awa) || !p_write)
 	return;
-    for (buf = firstbuf; buf; buf = buf->b_next)
+    FOR_ALL_BUFFERS(buf)
 	if (bufIsChanged(buf) && !buf->b_p_ro)
 	{
 #ifdef FEAT_AUTOCMD
@@ -1764,7 +1787,7 @@ check_changed(buf_T *buf, int flags)
 	    int		count = 0;
 
 	    if (flags & CCGD_ALLBUF)
-		for (buf2 = firstbuf; buf2 != NULL; buf2 = buf2->b_next)
+		FOR_ALL_BUFFERS(buf2)
 		    if (bufIsChanged(buf2)
 				     && (buf2->b_ffname != NULL
 # ifdef FEAT_BROWSE
@@ -1868,7 +1891,7 @@ dialog_changed(
 	 * Skip readonly buffers, these need to be confirmed
 	 * individually.
 	 */
-	for (buf2 = firstbuf; buf2 != NULL; buf2 = buf2->b_next)
+	FOR_ALL_BUFFERS(buf2)
 	{
 	    if (bufIsChanged(buf2)
 		    && (buf2->b_ffname != NULL
@@ -1904,7 +1927,7 @@ dialog_changed(
 	/*
 	 * mark all buffers as unchanged
 	 */
-	for (buf2 = firstbuf; buf2 != NULL; buf2 = buf2->b_next)
+	FOR_ALL_BUFFERS(buf2)
 	    unchanged(buf2, TRUE);
     }
 }
@@ -1964,7 +1987,7 @@ check_changed_any(
     win_T	*wp;
 #endif
 
-    for (buf = firstbuf; buf != NULL; buf = buf->b_next)
+    FOR_ALL_BUFFERS(buf)
 	++bufcount;
 
     if (bufcount == 0)
@@ -1983,13 +2006,13 @@ check_changed_any(
 	    add_bufnum(bufnrs, &bufnum, wp->w_buffer->b_fnum);
 
     /* buf in other tab */
-    for (tp = first_tabpage; tp != NULL; tp = tp->tp_next)
+    FOR_ALL_TABPAGES(tp)
 	if (tp != curtab)
 	    for (wp = tp->tp_firstwin; wp != NULL; wp = wp->w_next)
 		add_bufnum(bufnrs, &bufnum, wp->w_buffer->b_fnum);
 #endif
     /* any other buf */
-    for (buf = firstbuf; buf != NULL; buf = buf->b_next)
+    FOR_ALL_BUFFERS(buf)
 	add_bufnum(bufnrs, &bufnum, buf->b_fnum);
 
     for (i = 0; i < bufnum; ++i)
@@ -2924,7 +2947,7 @@ ex_listdo(exarg_T *eap)
 		if (next_fnum < 0 || next_fnum > eap->line2)
 		    break;
 		/* Check if the buffer still exists. */
-		for (buf = firstbuf; buf != NULL; buf = buf->b_next)
+		FOR_ALL_BUFFERS(buf)
 		    if (buf->b_fnum == next_fnum)
 			break;
 		if (buf == NULL)

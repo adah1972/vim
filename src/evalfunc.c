@@ -1439,7 +1439,7 @@ find_buffer(typval_T *avar)
 	{
 	    /* No full path name match, try a match with a URL or a "nofile"
 	     * buffer, these don't use the full path. */
-	    for (buf = firstbuf; buf != NULL; buf = buf->b_next)
+	    FOR_ALL_BUFFERS(buf)
 		if (buf->b_fname != NULL
 			&& (path_with_url(buf->b_fname)
 #ifdef FEAT_QUICKFIX
@@ -1597,7 +1597,7 @@ buf_win_common(typval_T *argvars, typval_T *rettv, int get_nr)
     ++emsg_off;
     buf = get_buf_tv(&argvars[0], TRUE);
 #ifdef FEAT_WINDOWS
-    for (wp = firstwin; wp; wp = wp->w_next)
+    FOR_ALL_WINDOWS(wp)
     {
 	++winnr;
 	if (wp->w_buffer == buf)
@@ -2845,7 +2845,7 @@ f_exists(typval_T *argvars, typval_T *rettv)
     }
     else if (*p == '*')			/* internal or user defined function */
     {
-	n = function_exists(p + 1);
+	n = function_exists(p + 1, FALSE);
     }
     else if (*p == ':')
     {
@@ -3577,7 +3577,7 @@ f_function(typval_T *argvars, typval_T *rettv)
 	EMSG2(_(e_invarg2), s);
     /* Don't check an autoload name for existence here. */
     else if (use_string && vim_strchr(s, AUTOLOAD_CHAR) == NULL
-						       && !function_exists(s))
+						&& !function_exists(s, TRUE))
 	EMSG2(_("E700: Unknown function: %s"), s);
     else
     {
@@ -4164,8 +4164,8 @@ f_getcompletion(typval_T *argvars, typval_T *rettv)
 {
     char_u	*pat;
     expand_T	xpc;
-    int		options = WILD_KEEP_ALL | WILD_SILENT | WILD_USE_NL
-					  | WILD_LIST_NOTFOUND | WILD_NO_BEEP;
+    int		options = WILD_SILENT | WILD_USE_NL | WILD_ADD_SLASH
+					| WILD_NO_BEEP;
 
     if (p_wic)
 	options |= WILD_ICASE;
@@ -4194,7 +4194,7 @@ f_getcompletion(typval_T *argvars, typval_T *rettv)
     pat = addstar(xpc.xp_pattern, xpc.xp_pattern_len, xpc.xp_context);
     if ((rettv_list_alloc(rettv) != FAIL) && (pat != NULL))
     {
-	int i;
+	int	i;
 
 	ExpandOne(&xpc, pat, NULL, options, WILD_ALL_KEEP);
 
@@ -5205,6 +5205,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_KEYMAP
 	"keymap",
 #endif
+	"lambda", /* always with FEAT_EVAL, since 7.4.2120 with closure */
 #ifdef FEAT_LANGMAP
 	"langmap",
 #endif
@@ -6383,7 +6384,7 @@ f_last_buffer_nr(typval_T *argvars UNUSED, typval_T *rettv)
     int		n = 0;
     buf_T	*buf;
 
-    for (buf = firstbuf; buf != NULL; buf = buf->b_next)
+    FOR_ALL_BUFFERS(buf)
 	if (n < buf->b_fnum)
 	    n = buf->b_fnum;
 
@@ -11930,7 +11931,11 @@ f_timer_start(typval_T *argvars, typval_T *rettv)
     }
     else
     {
-	timer->tr_callback = vim_strsave(callback);
+	if (timer->tr_partial == NULL)
+	    timer->tr_callback = vim_strsave(callback);
+	else
+	    /* pointer into the partial */
+	    timer->tr_callback = callback;
 	rettv->vval.v_number = timer->tr_id;
     }
 }
@@ -12373,7 +12378,7 @@ f_winrestcmd(typval_T *argvars UNUSED, typval_T *rettv)
     char_u	buf[50];
 
     ga_init2(&ga, (int)sizeof(char), 70);
-    for (wp = firstwin; wp != NULL; wp = wp->w_next)
+    FOR_ALL_WINDOWS(wp)
     {
 	sprintf((char *)buf, "%dresize %d|", winnr, wp->w_height);
 	ga_concat(&ga, buf);

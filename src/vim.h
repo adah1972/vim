@@ -98,12 +98,6 @@
 # ifndef HAVE_CONFIG_H
 #  define UNIX
 # endif
-# ifndef FEAT_CLIPBOARD
-#  define FEAT_CLIPBOARD
-#  if defined(FEAT_SMALL) && !defined(FEAT_MOUSE)
-#   define FEAT_MOUSE
-#  endif
-# endif
 #endif
 #if defined(MACOS_X) || defined(MACOS_CLASSIC)
 # define MACOS
@@ -180,7 +174,20 @@
 #endif
 
 
-#include "feature.h"	/* #defines for optionals and features */
+/*
+ * #defines for optionals and features
+ * Also defines FEAT_TINY, FEAT_SMALL, etc. when FEAT_HUGE is defined.
+ */
+#include "feature.h"
+
+#if defined(MACOS_X_UNIX)
+# if defined(FEAT_SMALL) && !defined(FEAT_CLIPBOARD)
+#  define FEAT_CLIPBOARD
+# endif
+# if defined(FEAT_SMALL) && !defined(FEAT_MOUSE)
+#  define FEAT_MOUSE
+# endif
+#endif
 
 /* +x11 is only enabled when it's both available and wanted. */
 #if defined(HAVE_X11) && defined(WANT_X11)
@@ -1765,6 +1772,7 @@ int vim_memcmp(void *, void *, size_t);
 # ifndef INIT
 #  define INIT(x) x
 #  define DO_INIT
+#  define COMMA ,
 # endif
 #endif
 
@@ -2450,6 +2458,7 @@ int vim_main2(int argc, char **argv);
 #define TFN_INT		1	/* internal function name OK */
 #define TFN_QUIET	2	/* no error messages */
 #define TFN_NO_AUTOLOAD	4	/* do not use script autoloading */
+#define TFN_NO_DEREF	8	/* do not dereference a Funcref */
 
 /* Values for get_lval() flags argument: */
 #define GLV_QUIET	TFN_QUIET	/* no error messages */

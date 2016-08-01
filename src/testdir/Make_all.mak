@@ -43,7 +43,6 @@ SCRIPTS_ALL = \
 	test44.out \
 	test45.out \
 	test46.out \
-	test47.out \
 	test48.out \
 	test51.out \
 	test53.out \
@@ -51,7 +50,6 @@ SCRIPTS_ALL = \
 	test56.out \
 	test57.out \
 	test60.out \
-	test61.out \
 	test62.out \
 	test63.out \
 	test64.out \
@@ -169,8 +167,10 @@ NEW_TESTS = test_arglist.res \
 	    test_channel.res \
 	    test_cmdline.res \
 	    test_cscope.res \
+	    test_diffmode.res \
 	    test_digraph.res \
 	    test_farsi.res \
+	    test_gn.res \
 	    test_hardcopy.res \
 	    test_history.res \
 	    test_increment.res \
@@ -184,9 +184,11 @@ NEW_TESTS = test_arglist.res \
 	    test_perl.res \
 	    test_quickfix.res \
 	    test_ruby.res \
+	    test_startup.res \
 	    test_stat.res \
 	    test_syntax.res \
 	    test_textobjects.res \
+	    test_undo.res \
 	    test_usercommands.res \
 	    test_viminfo.res \
 	    test_viml.res \
