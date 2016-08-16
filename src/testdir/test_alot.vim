@@ -21,8 +21,9 @@ source test_join.vim
 source test_jumps.vim
 source test_lambda.vim
 source test_lispwords.vim
-source test_matchstrpos.vim
+source test_match.vim
 source test_menu.vim
+source test_mapping.vim
 source test_messages.vim
 source test_partial.vim
 source test_popup.vim
@@ -38,3 +39,4 @@ source test_timers.vim
 source test_true_false.vim
 source test_unlet.vim
 source test_window_cmd.vim
+source test_options.vim

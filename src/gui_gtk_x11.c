@@ -542,8 +542,10 @@ gui_mch_prepare(int *argc, char **argv)
 	}
 
 	/* These arguments make gnome_program_init() print a message and exit.
-	 * Must start the GUI for this, otherwise ":gui" will exit later! */
-	if (option->flags & ARG_NEEDS_GUI)
+	 * Must start the GUI for this, otherwise ":gui" will exit later!
+	 * Only when the GUI can start. */
+	if ((option->flags & ARG_NEEDS_GUI)
+				      && gui_mch_early_init_check(FALSE) == OK)
 	    gui.starting = TRUE;
 
 	if (option->flags & ARG_KEEP)
@@ -1663,7 +1665,7 @@ selection_get_cb(GtkWidget	    *widget UNUSED,
  * Return OK or FAIL.
  */
     int
-gui_mch_early_init_check(void)
+gui_mch_early_init_check(int give_message)
 {
     char_u *p;
 
@@ -1672,7 +1674,8 @@ gui_mch_early_init_check(void)
     if (p == NULL || *p == NUL)
     {
 	gui.dying = TRUE;
-	EMSG(_((char *)e_opendisp));
+	if (give_message)
+	    EMSG(_((char *)e_opendisp));
 	return FAIL;
     }
     return OK;
@@ -5236,7 +5239,7 @@ static PangoEngineShape *default_shape_engine = NULL;
     static void
 ascii_glyph_table_init(void)
 {
-    char_u	    ascii_chars[128];
+    char_u	    ascii_chars[2 * 128];
     PangoAttrList   *attr_list;
     GList	    *item_list;
     int		    i;
@@ -5249,12 +5252,16 @@ ascii_glyph_table_init(void)
     gui.ascii_glyphs = NULL;
     gui.ascii_font   = NULL;
 
-    /* For safety, fill in question marks for the control characters. */
-    for (i = 0; i < 32; ++i)
-	ascii_chars[i] = '?';
-    for (; i < 127; ++i)
-	ascii_chars[i] = i;
-    ascii_chars[i] = '?';
+    /* For safety, fill in question marks for the control characters.
+     * Put a space between characters to avoid shaping. */
+    for (i = 0; i < 128; ++i)
+    {
+	if (i >= 32 && i < 127)
+	    ascii_chars[2 * i] = i;
+	else
+	    ascii_chars[2 * i] = '?';
+	ascii_chars[2 * i + 1] = ' ';
+    }
 
     attr_list = pango_attr_list_new();
     item_list = pango_itemize(gui.text_context, (const char *)ascii_chars,
@@ -5943,7 +5950,7 @@ gui_gtk2_draw_string(int row, int col, char_u *s, int len, int flags)
 
 	for (i = 0; i < len; ++i)
 	{
-	    glyphs->glyphs[i] = gui.ascii_glyphs->glyphs[s[i]];
+	    glyphs->glyphs[i] = gui.ascii_glyphs->glyphs[2 * s[i]];
 	    glyphs->log_clusters[i] = i;
 	}
 
@@ -6695,7 +6702,7 @@ check_copy_area(void)
      * we don't want it to be.	I'm not sure if it's correct to call
      * gui_dont_update_cursor() at this point but it works as a quick
      * fix for now. */
-    gui_dont_update_cursor();
+    gui_dont_update_cursor(TRUE);
 
     do
     {

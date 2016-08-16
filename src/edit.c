@@ -3891,7 +3891,8 @@ ins_compl_prep(int c)
 		    && pum_visible())
 		retval = TRUE;
 
-	    /* CTRL-E means completion is Ended, go back to the typed text. */
+	    /* CTRL-E means completion is Ended, go back to the typed text.
+	     * but only do this, if the Popup is still visible */
 	    if (c == Ctrl_E)
 	    {
 		ins_compl_delete();
@@ -6760,11 +6761,7 @@ comp_textwidth(
 	textwidth -= curwin->w_p_fdc;
 #endif
 #ifdef FEAT_SIGNS
-	if (curwin->w_buffer->b_signlist != NULL
-# ifdef FEAT_NETBEANS_INTG
-			  || curwin->w_buffer->b_has_sign_column
-# endif
-		    )
+	if (signcolumn_on(curwin))
 	    textwidth -= 1;
 #endif
 	if (curwin->w_p_nu || curwin->w_p_rnu)

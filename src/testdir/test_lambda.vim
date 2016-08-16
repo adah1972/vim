@@ -152,7 +152,7 @@ function! Test_lambda_delfunc()
   endfunction
 
   let l:F = s:gen()
-  call assert_fails(':call l:F()', 'E117:')
+  call assert_fails(':call l:F()', 'E933:')
 endfunction
 
 function! Test_lambda_scope()
@@ -267,7 +267,20 @@ func Test_closure_refcount()
   call assert_equal(2, g:Count())
   call assert_equal(3, g:Count2())
 
-  " This causes memory access errors.
-  " delfunc LambdaFoo
-  " delfunc LambdaBar
+  delfunc LambdaFoo
+  delfunc LambdaBar
+endfunc
+
+func Test_named_function_closure()
+  func! Afoo()
+    let x = 14
+    func! s:Abar() closure
+      return x
+    endfunc
+    call assert_equal(14, s:Abar())
+  endfunc
+  call Afoo()
+  call assert_equal(14, s:Abar())
+  call test_garbagecollect_now()
+  call assert_equal(14, s:Abar())
 endfunc

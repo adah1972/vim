@@ -561,6 +561,7 @@ typedef unsigned long u8char_T;	    /* long should be 32 bits or more */
 # endif
 /* These are in os_win32.c */
 extern char *(*dyn_libintl_gettext)(const char *msgid);
+extern char *(*dyn_libintl_ngettext)(const char *msgid, const char *msgid_plural, unsigned long n);
 extern char *(*dyn_libintl_bindtextdomain)(const char *domainname, const char *dirname);
 extern char *(*dyn_libintl_bind_textdomain_codeset)(const char *domainname, const char *codeset);
 extern char *(*dyn_libintl_textdomain)(const char *domainname);
@@ -574,6 +575,7 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #ifdef FEAT_GETTEXT
 # ifdef DYNAMIC_GETTEXT
 #  define _(x) (*dyn_libintl_gettext)((char *)(x))
+#  define ngettext(x, xs, n) (*dyn_libintl_ngettext)((char *)(x), (char *)(xs), (n))
 #  define N_(x) x
 #  define bindtextdomain(domain, dir) (*dyn_libintl_bindtextdomain)((domain), (dir))
 #  define bind_textdomain_codeset(domain, codeset) (*dyn_libintl_bind_textdomain_codeset)((domain), (codeset))
@@ -592,6 +594,7 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 # endif
 #else
 # define _(x) ((char *)(x))
+# define ngettext(x, xs, n) (((n) == 1) ? (char *)(x) : (char *)(xs))
 # define N_(x) x
 # ifdef bindtextdomain
 #  undef bindtextdomain
@@ -977,7 +980,8 @@ extern char *(*dyn_libintl_textdomain)(const char *domainname);
 #define READ_STDIN	0x04	/* read from stdin */
 #define READ_BUFFER	0x08	/* read from curbuf (converting stdin) */
 #define READ_DUMMY	0x10	/* reading into a dummy buffer */
-#define READ_KEEP_UNDO	0x20	/* keep undo info*/
+#define READ_KEEP_UNDO	0x20	/* keep undo info */
+#define READ_FIFO	0x40	/* read from fifo or socket */
 
 /* Values for change_indent() */
 #define INDENT_SET	1	/* set indent */
@@ -1359,7 +1363,8 @@ typedef enum
 {
     HLF_8 = 0	    /* Meta & special keys listed with ":map", text that is
 		       displayed different from what it is */
-    , HLF_AT	    /* @ and ~ characters at end of screen, characters that
+    , HLF_EOB	    /* after the last line in the buffer */
+    , HLF_AT	    /* @ characters at end of screen, characters that
 		       don't really exist in the text */
     , HLF_D	    /* directories in CTRL-D listing */
     , HLF_E	    /* error messages */
@@ -1406,7 +1411,7 @@ typedef enum
 
 /* The HL_FLAGS must be in the same order as the HLF_ enums!
  * When changing this also adjust the default for 'highlight'. */
-#define HL_FLAGS {'8', '@', 'd', 'e', 'h', 'i', 'l', 'm', 'M', \
+#define HL_FLAGS {'8', '~', '@', 'd', 'e', 'h', 'i', 'l', 'm', 'M', \
 		  'n', 'N', 'r', 's', 'S', 'c', 't', 'v', 'V', 'w', 'W', \
 		  'f', 'F', 'A', 'C', 'D', 'T', '-', '>', \
 		  'B', 'P', 'R', 'L', \
@@ -1500,6 +1505,8 @@ typedef UINT32_TYPEDEF UINT32_T;
 # define MSG_BUF_LEN 80		/* length of buffer for small messages */
 # define MSG_BUF_CLEN  MSG_BUF_LEN	    /* cell length */
 #endif
+
+#define FOLD_TEXT_LEN  51	/* buffer size for get_foldtext() */
 
 /* Size of the buffer used for tgetent().  Unfortunately this is largely
  * undocumented, some systems use 1024.  Using a buffer that is too small
@@ -2103,7 +2110,7 @@ typedef enum
  * been seen at that stage.  But it must be before globals.h, where error_ga
  * is declared. */
 #if !defined(FEAT_GUI_W32) && !defined(FEAT_GUI_X11) \
-	&& !defined(FEAT_GUI_GTK) && !defined(FEAT_GUI_MAC)
+	&& !defined(FEAT_GUI_GTK) && !defined(FEAT_GUI_MAC) && !defined(PROTO)
 # define mch_errmsg(str)	fprintf(stderr, "%s", (str))
 # define display_errors()	fflush(stderr)
 # define mch_msg(str)		printf("%s", (str))
@@ -2434,11 +2441,6 @@ typedef enum
 #define JSON_JS		1   /* use JS instead of JSON */
 #define JSON_NO_NONE	2   /* v:none item not allowed */
 
-#ifdef FEAT_MZSCHEME
-/* this is in main.c, cproto can't handle it. */
-int vim_main2(int argc, char **argv);
-#endif
-
 /* Used for flags of do_in_path() */
 #define DIP_ALL	    0x01	/* all matches, not just the first one */
 #define DIP_DIR	    0x02	/* find directories instead of files. */
@@ -2446,6 +2448,8 @@ int vim_main2(int argc, char **argv);
 #define DIP_START   0x08	/* also use "start" directory in 'packpath' */
 #define DIP_OPT	    0x10	/* also use "opt" directory in 'packpath' */
 #define DIP_NORTP   0x20	/* do not use 'runtimepath' */
+#define DIP_NOAFTER 0x40	/* skip "after" directories */
+#define DIP_AFTER   0x80	/* only use "after" directories */
 
 /* Lowest number used for window ID. Cannot have this many windows. */
 #define LOWEST_WIN_ID 1000
@@ -2475,6 +2479,7 @@ int vim_main2(int argc, char **argv);
 #define ERROR_DICT	4
 #define ERROR_NONE	5
 #define ERROR_OTHER	6
+#define ERROR_DELETED	7
 
 /* flags for find_name_end() */
 #define FNE_INCL_BR	1	/* include [] in name */

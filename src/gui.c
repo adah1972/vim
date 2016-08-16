@@ -447,7 +447,7 @@ gui_init_check(void)
      * See gui_do_fork().
      * Use a simpler check if the GUI window can probably be opened.
      */
-    result = gui.dofork ? gui_mch_early_init_check() : gui_mch_init_check();
+    result = gui.dofork ? gui_mch_early_init_check(TRUE) : gui_mch_init_check();
 # else
     result = gui_mch_init_check();
 # endif
@@ -1964,12 +1964,13 @@ gui_write(
  * gui_can_update_cursor() afterwards.
  */
     void
-gui_dont_update_cursor(void)
+gui_dont_update_cursor(int undraw)
 {
     if (gui.in_use)
     {
 	/* Undraw the cursor now, we probably can't do it after the change. */
-	gui_undraw_cursor();
+	if (undraw)
+	    gui_undraw_cursor();
 	can_update_cursor = FALSE;
     }
 }

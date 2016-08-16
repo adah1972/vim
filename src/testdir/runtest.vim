@@ -103,6 +103,12 @@ function RunTheTest(test)
   if exists("*TearDown")
     call TearDown()
   endif
+
+  " Close any extra windows and make the current one not modified.
+  while winnr('$') > 1
+    bwipe!
+  endwhile
+  set nomodified
 endfunc
 
 " Source the test script.  First grab the file name, in case the script
@@ -125,7 +131,7 @@ else
 endif
 
 " Names of flaky tests.
-let s:flaky = ['Test_reltime()', 'Test_nb_basic()']
+let s:flaky = ['Test_reltime()', 'Test_nb_basic()', 'Test_communicate()']
 
 " Locate Test_ functions and execute them.
 set nomore

@@ -179,3 +179,31 @@ func Test_function_with_funcref()
   call assert_equal(v:t_string, s:fref('x'))
   call assert_fails("call function('s:f')", 'E700:')
 endfunc
+
+func Test_funcref()
+  func! One()
+    return 1
+  endfunc
+  let OneByName = function('One')
+  let OneByRef = funcref('One')
+  func! One()
+    return 2
+  endfunc
+  call assert_equal(2, OneByName())
+  call assert_equal(1, OneByRef())
+  let OneByRef = funcref('One')
+  call assert_equal(2, OneByRef())
+endfunc
+
+func Test_setmatches()
+  hi def link 1 Comment
+  hi def link 2 PreProc
+  let set = [{"group": 1, "pattern": 2, "id": 3, "priority": 4}]
+  let exp = [{"group": '1', "pattern": '2', "id": 3, "priority": 4}]
+  if has('conceal')
+    let set[0]['conceal'] = 5
+    let exp[0]['conceal'] = '5'
+  endif
+  call setmatches(set)
+  call assert_equal(exp, getmatches())
+endfunc
