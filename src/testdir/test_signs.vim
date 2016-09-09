@@ -145,8 +145,12 @@ func Test_sign_completion()
   call feedkeys(":sign define Sign linehl=Spell\<C-A>\<C-B>\"\<CR>", 'tx')
   call assert_equal('"sign define Sign linehl=SpellBad SpellCap SpellLocal SpellRare', @:)
 
-  call feedkeys(":sign define Sign icon=../../pixmaps/tb_p\<C-A>\<C-B>\"\<CR>", 'tx')
-  call assert_equal('"sign define Sign icon=../../pixmaps/tb_paste.xpm ../../pixmaps/tb_print.xpm', @:)
+  call writefile(['foo'], 'XsignOne')
+  call writefile(['bar'], 'XsignTwo')
+  call feedkeys(":sign define Sign icon=Xsig\<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal('"sign define Sign icon=XsignOne XsignTwo', @:)
+  call delete('XsignOne')
+  call delete('XsignTwo')
 
   call feedkeys(":sign undefine \<C-A>\<C-B>\"\<CR>", 'tx')
   call assert_equal('"sign undefine Sign1 Sign2', @:)
@@ -180,4 +184,16 @@ func Test_sign_invalid_commands()
   call assert_fails('sign list xxx', 'E155:')
   call assert_fails('sign place 1 buffer=', 'E158:')
   call assert_fails('sign define Sign2 text=', 'E239:')
+endfunc
+
+func Test_sign_delete_buffer()
+  new
+  sign define Sign text=x
+  let bufnr = bufnr('%')
+  new
+  exe 'bd ' . bufnr
+  exe 'sign place 61 line=3 name=Sign buffer=' . bufnr
+  call assert_fails('sign jump 61 buffer=' . bufnr, 'E934:')
+  sign unplace 61
+  sign undefine Sign
 endfunc

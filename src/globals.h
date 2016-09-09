@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -368,8 +368,8 @@ EXTERN int	cterm_normal_fg_color INIT(= 0);
 EXTERN int	cterm_normal_fg_bold INIT(= 0);
 EXTERN int	cterm_normal_bg_color INIT(= 0);
 #ifdef FEAT_TERMGUICOLORS
-EXTERN long_u	cterm_normal_fg_gui_color INIT(= INVALCOLOR);
-EXTERN long_u	cterm_normal_bg_gui_color INIT(= INVALCOLOR);
+EXTERN guicolor_T cterm_normal_fg_gui_color INIT(= INVALCOLOR);
+EXTERN guicolor_T cterm_normal_bg_gui_color INIT(= INVALCOLOR);
 #endif
 
 #ifdef FEAT_AUTOCMD
@@ -1509,7 +1509,7 @@ EXTERN char_u e_notread[]	INIT(= N_("E485: Can't read file %s"));
 EXTERN char_u e_nowrtmsg[]	INIT(= N_("E37: No write since last change (add ! to override)"));
 EXTERN char_u e_nowrtmsg_nobang[]   INIT(= N_("E37: No write since last change"));
 EXTERN char_u e_null[]		INIT(= N_("E38: Null argument"));
-#ifdef FEAT_DIGRAPHS
+#if defined(FEAT_DIGRAPHS) || defined(FEAT_TIMERS)
 EXTERN char_u e_number_exp[]	INIT(= N_("E39: Number expected"));
 #endif
 #ifdef FEAT_QUICKFIX

@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -77,6 +77,7 @@ static void f_ceil(typval_T *argvars, typval_T *rettv);
 #endif
 #ifdef FEAT_JOB_CHANNEL
 static void f_ch_close(typval_T *argvars, typval_T *rettv);
+static void f_ch_close_in(typval_T *argvars, typval_T *rettv);
 static void f_ch_evalexpr(typval_T *argvars, typval_T *rettv);
 static void f_ch_evalraw(typval_T *argvars, typval_T *rettv);
 static void f_ch_getbufnr(typval_T *argvars, typval_T *rettv);
@@ -499,6 +500,7 @@ static struct fst
 #endif
 #ifdef FEAT_JOB_CHANNEL
     {"ch_close",	1, 1, f_ch_close},
+    {"ch_close_in",	1, 1, f_ch_close_in},
     {"ch_evalexpr",	2, 3, f_ch_evalexpr},
     {"ch_evalraw",	2, 3, f_ch_evalraw},
     {"ch_getbufnr",	2, 2, f_ch_getbufnr},
@@ -1789,6 +1791,18 @@ f_ch_close(typval_T *argvars, typval_T *rettv UNUSED)
 	channel_close(channel, FALSE);
 	channel_clear(channel);
     }
+}
+
+/*
+ * "ch_close()" function
+ */
+    static void
+f_ch_close_in(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    channel_T *channel = get_channel_arg(&argvars[0], TRUE, FALSE, 0);
+
+    if (channel != NULL)
+	channel_close_in(channel);
 }
 
 /*
@@ -3291,10 +3305,10 @@ f_float2nr(typval_T *argvars, typval_T *rettv)
     if (get_float_arg(argvars, &f) == OK)
     {
 # ifdef FEAT_NUM64
-	if (f < -0x7fffffffffffffff)
-	    rettv->vval.v_number = -0x7fffffffffffffff;
-	else if (f > 0x7fffffffffffffff)
-	    rettv->vval.v_number = 0x7fffffffffffffff;
+	if (f < -0x7fffffffffffffffLL)
+	    rettv->vval.v_number = -0x7fffffffffffffffLL;
+	else if (f > 0x7fffffffffffffffLL)
+	    rettv->vval.v_number = 0x7fffffffffffffffLL;
 	else
 	    rettv->vval.v_number = (varnumber_T)f;
 # else
@@ -3587,8 +3601,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 	use_string = TRUE;
     }
 
-    if (((use_string && vim_strchr(s, AUTOLOAD_CHAR) == NULL)
-				   || is_funcref))
+    if ((use_string && vim_strchr(s, AUTOLOAD_CHAR) == NULL) || is_funcref)
     {
 	name = s;
 	trans_name = trans_function_name(&name, FALSE,
@@ -3597,7 +3610,8 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 	    s = NULL;
     }
 
-    if (s == NULL || *s == NUL || (use_string && VIM_ISDIGIT(*s)))
+    if (s == NULL || *s == NUL || (use_string && VIM_ISDIGIT(*s))
+					 || (is_funcref && trans_name == NULL))
 	EMSG2(_(e_invarg2), s);
     /* Don't check an autoload name for existence here. */
     else if (trans_name != NULL && (is_funcref
@@ -3905,8 +3919,7 @@ get_buffer_signs(buf_T *buf, list_T *l)
 	{
 	    dict_add_nr_str(d, "id", sign->id, NULL);
 	    dict_add_nr_str(d, "lnum", sign->lnum, NULL);
-	    dict_add_nr_str(d, "name", 0L,
-		    vim_strsave(sign_typenr2name(sign->typenr)));
+	    dict_add_nr_str(d, "name", 0L, sign_typenr2name(sign->typenr));
 
 	    list_append_dict(l, d);
 	}
@@ -3921,8 +3934,6 @@ get_buffer_signs(buf_T *buf, list_T *l)
 get_buffer_info(buf_T *buf)
 {
     dict_T	*dict;
-    dict_T	*opts;
-    dict_T	*vars;
     tabpage_T	*tp;
     win_T	*wp;
     list_T	*windows;
@@ -3931,7 +3942,7 @@ get_buffer_info(buf_T *buf)
     if (dict == NULL)
 	return NULL;
 
-    dict_add_nr_str(dict, "nr", buf->b_fnum, NULL);
+    dict_add_nr_str(dict, "bufnr", buf->b_fnum, NULL);
     dict_add_nr_str(dict, "name", 0L,
 	    buf->b_ffname != NULL ? buf->b_ffname : (char_u *)"");
     dict_add_nr_str(dict, "lnum", buflist_findlnum(buf), NULL);
@@ -3943,15 +3954,8 @@ get_buffer_info(buf_T *buf)
 		    buf->b_ml.ml_mfp != NULL && buf->b_nwindows == 0,
 		    NULL);
 
-    /* Copy buffer variables */
-    vars = dict_copy(buf->b_vars, TRUE, 0);
-    if (vars != NULL)
-	dict_add_dict(dict, "variables", vars);
-
-    /* Copy buffer options */
-    opts = get_winbuf_options(TRUE);
-    if (opts != NULL)
-	dict_add_dict(dict, "options", opts);
+    /* Get a reference to buffer variables */
+    dict_add_dict(dict, "variables", buf->b_vars);
 
     /* List of windows displaying this buffer */
     windows = list_alloc();
@@ -4159,9 +4163,23 @@ f_getbufvar(typval_T *argvars, typval_T *rettv)
 	save_curbuf = curbuf;
 	curbuf = buf;
 
-	if (*varname == '&')	/* buffer-local-option */
+	if (*varname == '&')
 	{
-	    if (get_option_tv(&varname, rettv, TRUE) == OK)
+	    if (varname[1] == NUL)
+	    {
+		/* get all buffer-local options in a dict */
+		dict_T	*opts = get_winbuf_options(TRUE);
+
+		if (opts != NULL)
+		{
+		    rettv->v_type = VAR_DICT;
+		    rettv->vval.v_dict = opts;
+		    ++opts->dv_refcount;
+		    done = TRUE;
+		}
+	    }
+	    else if (get_option_tv(&varname, rettv, TRUE) == OK)
+		/* buffer-local-option */
 		done = TRUE;
 	}
 	else if (STRCMP(varname, "changedtick") == 0)
@@ -4994,14 +5012,13 @@ get_tabpage_info(tabpage_T *tp, int tp_idx)
 {
     win_T	*wp;
     dict_T	*dict;
-    dict_T	*vars;
     list_T	*l;
 
     dict = dict_alloc();
     if (dict == NULL)
 	return NULL;
 
-    dict_add_nr_str(dict, "nr", tp_idx, NULL);
+    dict_add_nr_str(dict, "tabnr", tp_idx, NULL);
 
     l = list_alloc();
     if (l != NULL)
@@ -5012,10 +5029,8 @@ get_tabpage_info(tabpage_T *tp, int tp_idx)
 	dict_add_list(dict, "windows", l);
     }
 
-    /* Copy tabpage variables */
-    vars = dict_copy(tp->tp_vars, TRUE, 0);
-    if (vars != NULL)
-	dict_add_dict(dict, "variables", vars);
+    /* Make a reference to tabpage variables */
+    dict_add_dict(dict, "variables", tp->tp_vars);
 
     return dict;
 }
@@ -5118,19 +5133,17 @@ f_gettabwinvar(typval_T *argvars, typval_T *rettv)
 get_win_info(win_T *wp, short tpnr, short winnr)
 {
     dict_T	*dict;
-    dict_T	*vars;
-    dict_T	*opts;
 
     dict = dict_alloc();
     if (dict == NULL)
 	return NULL;
 
-    dict_add_nr_str(dict, "tpnr", tpnr, NULL);
-    dict_add_nr_str(dict, "nr", winnr, NULL);
+    dict_add_nr_str(dict, "tabnr", tpnr, NULL);
+    dict_add_nr_str(dict, "winnr", winnr, NULL);
     dict_add_nr_str(dict, "winid", wp->w_id, NULL);
     dict_add_nr_str(dict, "height", wp->w_height, NULL);
     dict_add_nr_str(dict, "width", wp->w_width, NULL);
-    dict_add_nr_str(dict, "bufnum", wp->w_buffer->b_fnum, NULL);
+    dict_add_nr_str(dict, "bufnr", wp->w_buffer->b_fnum, NULL);
 
 #ifdef FEAT_QUICKFIX
     dict_add_nr_str(dict, "quickfix", bt_quickfix(wp->w_buffer), NULL);
@@ -5138,15 +5151,8 @@ get_win_info(win_T *wp, short tpnr, short winnr)
 	    (bt_quickfix(wp->w_buffer) && wp->w_llist_ref != NULL), NULL);
 #endif
 
-    /* Copy window variables */
-    vars = dict_copy(wp->w_vars, TRUE, 0);
-    if (vars != NULL)
-	dict_add_dict(dict, "variables", vars);
-
-    /* Copy window options */
-    opts = get_winbuf_options(FALSE);
-    if (opts != NULL)
-	dict_add_dict(dict, "options", opts);
+    /* Add a reference to window variables */
+    dict_add_dict(dict, "variables", wp->w_vars);
 
     return dict;
 }
@@ -5989,10 +5995,6 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_GUI
 	else if (STRICMP(name, "gui_running") == 0)
 	    n = (gui.in_use || gui.starting);
-# ifdef FEAT_GUI_W32
-	else if (STRICMP(name, "gui_win32s") == 0)
-	    n = gui_is_win32s();
-# endif
 # ifdef FEAT_BROWSE
 	else if (STRICMP(name, "browse") == 0)
 	    n = gui.in_use;	/* gui_mch_browse() works when GUI is running */
@@ -7413,7 +7415,7 @@ f_matchadd(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	return;
     if (id >= 1 && id <= 3)
     {
-	EMSGN("E798: ID is reserved for \":match\": %ld", id);
+	EMSGN(_("E798: ID is reserved for \":match\": %ld"), id);
 	return;
     }
 
@@ -7478,7 +7480,7 @@ f_matchaddpos(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     /* id == 3 is ok because matchaddpos() is supposed to substitute :3match */
     if (id == 1 || id == 2)
     {
-	EMSGN("E798: ID is reserved for \":match\": %ld", id);
+	EMSGN(_("E798: ID is reserved for \":match\": %ld"), id);
 	return;
     }
 
@@ -7627,7 +7629,7 @@ max_min(typval_T *argvars, typval_T *rettv, int domax)
 	}
     }
     else
-	EMSG(_(e_listdictarg));
+	EMSG2(_(e_listdictarg), domax ? "max()" : "min()");
     rettv->vval.v_number = error ? 0 : n;
 }
 
@@ -11166,7 +11168,7 @@ f_strgetchar(typval_T *argvars, typval_T *rettv)
 		break;
 	    }
 	    --charidx;
-	    byteidx += mb_cptr2len(str + byteidx);
+	    byteidx += MB_CPTR2LEN(str + byteidx);
 	}
     }
 #else
@@ -11326,7 +11328,7 @@ f_strcharpart(typval_T *argvars, typval_T *rettv)
 	if (nchar > 0)
 	    while (nchar > 0 && nbyte < slen)
 	    {
-		nbyte += mb_cptr2len(p + nbyte);
+		nbyte += MB_CPTR2LEN(p + nbyte);
 		--nchar;
 	    }
 	else
@@ -11341,7 +11343,7 @@ f_strcharpart(typval_T *argvars, typval_T *rettv)
 		if (off < 0)
 		    len += 1;
 		else
-		    len += mb_cptr2len(p + off);
+		    len += MB_CPTR2LEN(p + off);
 		--charlen;
 	    }
 	}
@@ -11491,7 +11493,11 @@ f_submatch(typval_T *argvars, typval_T *rettv)
     no = (int)get_tv_number_chk(&argvars[0], &error);
     if (error)
 	return;
-    error = FALSE;
+    if (no < 0 || no >= NSUBEXP)
+    {
+        EMSGN(_("E935: invalid submatch number: %d"), no);
+        return;
+    }
     if (argvars[1].v_type != VAR_UNKNOWN)
 	retList = (int)get_tv_number_chk(&argvars[1], &error);
     if (error)
@@ -12392,12 +12398,14 @@ f_timer_pause(typval_T *argvars, typval_T *rettv UNUSED)
     static void
 f_timer_start(typval_T *argvars, typval_T *rettv)
 {
-    long    msec = (long)get_tv_number(&argvars[0]);
-    timer_T *timer;
-    int	    repeat = 0;
-    char_u  *callback;
-    dict_T  *dict;
+    long	msec = (long)get_tv_number(&argvars[0]);
+    timer_T	*timer;
+    int		repeat = 0;
+    char_u	*callback;
+    dict_T	*dict;
+    partial_T	*partial;
 
+    rettv->vval.v_number = -1;
     if (check_secure())
 	return;
     if (argvars[2].v_type != VAR_UNKNOWN)
@@ -12412,13 +12420,13 @@ f_timer_start(typval_T *argvars, typval_T *rettv)
 	    repeat = get_dict_number(dict, (char_u *)"repeat");
     }
 
-    timer = create_timer(msec, repeat);
-    callback = get_callback(&argvars[1], &timer->tr_partial);
+    callback = get_callback(&argvars[1], &partial);
     if (callback == NULL)
-    {
-	stop_timer(timer);
-	rettv->vval.v_number = -1;
-    }
+	return;
+
+    timer = create_timer(msec, repeat);
+    if (timer == NULL)
+	free_callback(callback, partial);
     else
     {
 	if (timer->tr_partial == NULL)
@@ -12426,7 +12434,8 @@ f_timer_start(typval_T *argvars, typval_T *rettv)
 	else
 	    /* pointer into the partial */
 	    timer->tr_callback = callback;
-	rettv->vval.v_number = timer->tr_id;
+	timer->tr_partial = partial;
+	rettv->vval.v_number = (varnumber_T)timer->tr_id;
     }
 }
 

@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -77,9 +77,6 @@ struct builtin_term
 static struct builtin_term *find_builtin_term(char_u *name);
 static void parse_builtin_tcap(char_u *s);
 static void term_color(char_u *s, int n);
-#ifdef FEAT_TERMGUICOLORS
-static void term_rgb_color(char_u *s, long_u rgb);
-#endif
 static void gather_termleader(void);
 #ifdef FEAT_TERMRESPONSE
 static void req_codes_from_term(void);
@@ -1282,10 +1279,10 @@ termgui_get_color(char_u *name)
     return t;
 }
 
-    long_u
+    guicolor_T
 termgui_mch_get_rgb(guicolor_T color)
 {
-    return (long_u)color;
+    return color;
 }
 #endif
 
@@ -2634,24 +2631,13 @@ term_color(char_u *s, int n)
 }
 
 #if defined(FEAT_TERMGUICOLORS) || defined(PROTO)
-    void
-term_fg_rgb_color(long_u rgb)
-{
-    term_rgb_color(T_8F, rgb);
-}
 
-    void
-term_bg_rgb_color(long_u rgb)
-{
-    term_rgb_color(T_8B, rgb);
-}
-
-#define RED(rgb)   ((rgb>>16)&0xFF)
-#define GREEN(rgb) ((rgb>> 8)&0xFF)
-#define BLUE(rgb)  ((rgb    )&0xFF)
+#define RED(rgb)   (((long_u)(rgb) >> 16) & 0xFF)
+#define GREEN(rgb) (((long_u)(rgb) >>  8) & 0xFF)
+#define BLUE(rgb)  (((long_u)(rgb)      ) & 0xFF)
 
     static void
-term_rgb_color(char_u *s, long_u rgb)
+term_rgb_color(char_u *s, guicolor_T rgb)
 {
 #define MAX_COLOR_STR_LEN 100
     char	buf[MAX_COLOR_STR_LEN];
@@ -2659,6 +2645,18 @@ term_rgb_color(char_u *s, long_u rgb)
     vim_snprintf(buf, MAX_COLOR_STR_LEN,
 				  (char *)s, RED(rgb), GREEN(rgb), BLUE(rgb));
     OUT_STR(buf);
+}
+
+    void
+term_fg_rgb_color(guicolor_T rgb)
+{
+    term_rgb_color(T_8F, rgb);
+}
+
+    void
+term_bg_rgb_color(guicolor_T rgb)
+{
+    term_rgb_color(T_8B, rgb);
 }
 #endif
 
@@ -4939,7 +4937,7 @@ check_termcode(
 		button = getdigits(&p);
 		mouse_code = 0;
 
-		switch( button )
+		switch (button)
 		{
 		    case 4: mouse_code = MOUSE_LEFT; break;
 		    case 1: mouse_code = MOUSE_RIGHT; break;
@@ -4947,7 +4945,7 @@ check_termcode(
 		    default: return -1;
 		}
 
-		switch( action )
+		switch (action)
 		{
 		    case 31: /* Initial press */
 			if (*p++ != ';')
@@ -5096,9 +5094,11 @@ check_termcode(
 	    else if (orig_num_clicks == 4)
 		modifiers |= MOD_MASK_4CLICK;
 
-	    /* Work out our pseudo mouse event */
+	    /* Work out our pseudo mouse event. Note that MOUSE_RELEASE gets
+	     * added, then it's not mouse up/down. */
 	    key_name[0] = (int)KS_EXTRA;
-	    if (wheel_code != 0)
+            if (wheel_code != 0
+			      && (wheel_code & MOUSE_RELEASE) != MOUSE_RELEASE)
 	    {
 		if (wheel_code & MOUSE_CTRL)
 		    modifiers |= MOD_MASK_CTRL;

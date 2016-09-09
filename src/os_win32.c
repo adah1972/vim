@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -137,6 +137,8 @@ typedef int PSNSECINFO;
 typedef int PSNSECINFOW;
 typedef int STARTUPINFO;
 typedef int PROCESS_INFORMATION;
+typedef int LPSECURITY_ATTRIBUTES;
+# define __stdcall /* empty */
 #endif
 
 #ifndef FEAT_GUI_W32
@@ -2062,7 +2064,6 @@ mch_init(void)
     Columns = 80;
 
     /* Look for 'vimrun' */
-    if (!gui_is_win32s())
     {
 	char_u vimrun_location[_MAX_PATH + 4];
 
@@ -4142,7 +4143,7 @@ mch_system_classic(char *cmd, int options)
      * Win32s either as it stops the synchronous spawn workaround working.
      * Don't activate the window to keep focus on Vim.
      */
-    if ((options & SHELL_DOOUT) && !mch_windows95() && !gui_is_win32s())
+    if ((options & SHELL_DOOUT) && !mch_windows95())
     {
 	char *vim_system_hideconsole;
 	vim_system_hideconsole = getenv("VIM_SYSTEM_HIDECONSOLE");
@@ -4378,7 +4379,7 @@ dump_pipe(int	    options,
 	     * round. */
 	    for (p = buffer; p < buffer + len; p += l)
 	    {
-		l = mb_cptr2len(p);
+		l = MB_CPTR2LEN(p);
 		if (l == 0)
 		    l = 1;  /* NUL byte? */
 		else if (MB_BYTE2LEN(*p) != l)
@@ -5217,11 +5218,9 @@ mch_start_job(char *cmd, job_T *job, jobopt_T *options)
     job->jv_job_object = jo;
     job->jv_status = JOB_STARTED;
 
-    if (!use_file_for_in)
-	CloseHandle(ifd[0]);
-    if (!use_file_for_out)
-	CloseHandle(ofd[1]);
-    if (!use_out_for_err && !use_file_for_err)
+    CloseHandle(ifd[0]);
+    CloseHandle(ofd[1]);
+    if (!use_out_for_err && !use_null_for_err)
 	CloseHandle(efd[1]);
 
     job->jv_channel = channel;

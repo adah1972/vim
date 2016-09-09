@@ -130,9 +130,265 @@ func Test_option_value()
   set cpo&vim
 endfunc
 
+function Test_printf_misc()
+  call assert_equal('123', printf('%d', 123))
+  call assert_equal('123', printf('%i', 123))
+  call assert_equal('123', printf('%D', 123))
+  call assert_equal('123', printf('%U', 123))
+  call assert_equal('173', printf('%o', 123))
+  call assert_equal('173', printf('%O', 123))
+  call assert_equal('7b', printf('%x', 123))
+  call assert_equal('7B', printf('%X', 123))
+  if has('ebcdic')
+    call assert_equal('#', printf('%c', 123))
+  else
+    call assert_equal('{', printf('%c', 123))
+  endif
+  call assert_equal('abc', printf('%s', 'abc'))
+  call assert_equal('abc', printf('%S', 'abc'))
+
+  call assert_equal('+123', printf('%+d', 123))
+  call assert_equal('-123', printf('%+d', -123))
+  call assert_equal('+123', printf('%+ d', 123))
+  call assert_equal(' 123', printf('% d', 123))
+  call assert_equal(' 123', printf('%  d', 123))
+  call assert_equal('-123', printf('% d', -123))
+
+  call assert_equal('123', printf('%2d', 123))
+  call assert_equal('   123', printf('%6d', 123))
+  call assert_equal('000123', printf('%06d', 123))
+  call assert_equal('+00123', printf('%+06d', 123))
+  call assert_equal(' 00123', printf('% 06d', 123))
+  call assert_equal('  +123', printf('%+6d', 123))
+  call assert_equal('   123', printf('% 6d', 123))
+  call assert_equal('  -123', printf('% 6d', -123))
+
+  " Test left adjusted.
+  call assert_equal('123   ', printf('%-6d', 123))
+  call assert_equal('+123  ', printf('%-+6d', 123))
+  call assert_equal(' 123  ', printf('%- 6d', 123))
+  call assert_equal('-123  ', printf('%- 6d', -123))
+
+  call assert_equal('  00123', printf('%7.5d', 123))
+  call assert_equal(' -00123', printf('%7.5d', -123))
+  call assert_equal(' +00123', printf('%+7.5d', 123))
+  " Precision field should not be used when combined with %0
+  call assert_equal('  00123', printf('%07.5d', 123))
+  call assert_equal(' -00123', printf('%07.5d', -123))
+
+  call assert_equal('  123', printf('%*d', 5, 123))
+  call assert_equal('123  ', printf('%*d', -5, 123))
+  call assert_equal('00123', printf('%.*d', 5, 123))
+  call assert_equal('  123', printf('% *d', 5, 123))
+  call assert_equal(' +123', printf('%+ *d', 5, 123))
+
+  " Simple quote (thousand grouping char) is ignored.
+  call assert_equal('+00123456', printf("%+'09d", 123456))
+
+  " Unrecognized format specifier kept as-is.
+  call assert_equal('_123', printf("%_%d", 123))
+
+  " Test alternate forms.
+  call assert_equal('0x7b', printf('%#x', 123))
+  call assert_equal('0X7B', printf('%#X', 123))
+  call assert_equal('0173', printf('%#o', 123))
+  call assert_equal('0173', printf('%#O', 123))
+  call assert_equal('abc', printf('%#s', 'abc'))
+  call assert_equal('abc', printf('%#S', 'abc'))
+  call assert_equal('  0173', printf('%#6o', 123))
+  call assert_equal(' 00173', printf('%#6.5o', 123))
+  call assert_equal('  0173', printf('%#6.2o', 123))
+  call assert_equal('  0173', printf('%#6.2o', 123))
+  call assert_equal('0173', printf('%#2.2o', 123))
+
+  call assert_equal(' 00123', printf('%6.5d', 123))
+  call assert_equal(' 0007b', printf('%6.5x', 123))
+
+  call assert_equal('abc', printf('%2s', 'abc'))
+  call assert_equal('abc', printf('%2S', 'abc'))
+  call assert_equal('abc', printf('%.4s', 'abc'))
+  call assert_equal('abc', printf('%.4S', 'abc'))
+  call assert_equal('ab', printf('%.2s', 'abc'))
+  call assert_equal('ab', printf('%.2S', 'abc'))
+  call assert_equal('', printf('%.0s', 'abc'))
+  call assert_equal('', printf('%.s', 'abc'))
+  call assert_equal(' abc', printf('%4s', 'abc'))
+  call assert_equal(' abc', printf('%4S', 'abc'))
+  call assert_equal('0abc', printf('%04s', 'abc'))
+  call assert_equal('0abc', printf('%04S', 'abc'))
+  call assert_equal('abc ', printf('%-4s', 'abc'))
+  call assert_equal('abc ', printf('%-4S', 'abc'))
+
+  call assert_equal('1%', printf('%d%%', 1))
+endfunc
+
+function Test_printf_float()
+  if has('float')
+    call assert_equal('1.000000', printf('%f', 1))
+    call assert_equal('1.230000', printf('%f', 1.23))
+    call assert_equal('1.230000', printf('%F', 1.23))
+    call assert_equal('9999999.9', printf('%g', 9999999.9))
+    call assert_equal('9999999.9', printf('%G', 9999999.9))
+    call assert_equal('1.00000001e7', printf('%.8g', 10000000.1))
+    call assert_equal('1.00000001E7', printf('%.8G', 10000000.1))
+    call assert_equal('1.230000e+00', printf('%e', 1.23))
+    call assert_equal('1.230000E+00', printf('%E', 1.23))
+    call assert_equal('1.200000e-02', printf('%e', 0.012))
+    call assert_equal('-1.200000e-02', printf('%e', -0.012))
+    call assert_equal('0.33', printf('%.2f', 1.0/3.0))
+    call assert_equal('  0.33', printf('%6.2f', 1.0/3.0))
+    call assert_equal(' -0.33', printf('%6.2f', -1.0/3.0))
+    call assert_equal('000.33', printf('%06.2f', 1.0/3.0))
+    call assert_equal('-00.33', printf('%06.2f', -1.0/3.0))
+    call assert_equal('-00.33', printf('%+06.2f', -1.0/3.0))
+    call assert_equal('+00.33', printf('%+06.2f', 1.0/3.0))
+    call assert_equal(' 00.33', printf('% 06.2f', 1.0/3.0))
+    call assert_equal('000.33', printf('%06.2g', 1.0/3.0))
+    call assert_equal('-00.33', printf('%06.2g', -1.0/3.0))
+    call assert_equal('0.33', printf('%3.2f', 1.0/3.0))
+    call assert_equal('003.33e-01', printf('%010.2e', 1.0/3.0))
+    call assert_equal(' 03.33e-01', printf('% 010.2e', 1.0/3.0))
+    call assert_equal('+03.33e-01', printf('%+010.2e', 1.0/3.0))
+    call assert_equal('-03.33e-01', printf('%010.2e', -1.0/3.0))
+
+    " When precision is 0, the dot should be omitted.
+    call assert_equal('  2', printf('%3.f', 7.0/3.0))
+    call assert_equal('  2', printf('%3.g', 7.0/3.0))
+    call assert_equal('  2e+00', printf('%7.e', 7.0/3.0))
+
+    " Float zero can be signed.
+    call assert_equal('+0.000000', printf('%+f', 0.0))
+    call assert_equal('0.000000', printf('%f', 1.0/(1.0/0.0)))
+    call assert_equal('-0.000000', printf('%f', 1.0/(-1.0/0.0)))
+    call assert_equal('0.0', printf('%s', 1.0/(1.0/0.0)))
+    call assert_equal('-0.0', printf('%s', 1.0/(-1.0/0.0)))
+    call assert_equal('0.0', printf('%S', 1.0/(1.0/0.0)))
+    call assert_equal('-0.0', printf('%S', 1.0/(-1.0/0.0)))
+
+    " Float infinity can be signed.
+    call assert_equal('inf', printf('%f', 1.0/0.0))
+    call assert_equal('-inf', printf('%f', -1.0/0.0))
+    call assert_equal('inf', printf('%g', 1.0/0.0))
+    call assert_equal('-inf', printf('%g', -1.0/0.0))
+    call assert_equal('inf', printf('%e', 1.0/0.0))
+    call assert_equal('-inf', printf('%e', -1.0/0.0))
+    call assert_equal('INF', printf('%F', 1.0/0.0))
+    call assert_equal('-INF', printf('%F', -1.0/0.0))
+    call assert_equal('INF', printf('%E', 1.0/0.0))
+    call assert_equal('-INF', printf('%E', -1.0/0.0))
+    call assert_equal('INF', printf('%E', 1.0/0.0))
+    call assert_equal('-INF', printf('%G', -1.0/0.0))
+    call assert_equal('+inf', printf('%+f', 1.0/0.0))
+    call assert_equal('-inf', printf('%+f', -1.0/0.0))
+    call assert_equal(' inf', printf('% f',  1.0/0.0))
+    call assert_equal('   inf', printf('%6f', 1.0/0.0))
+    call assert_equal('  -inf', printf('%6f', -1.0/0.0))
+    call assert_equal('   inf', printf('%6g', 1.0/0.0))
+    call assert_equal('  -inf', printf('%6g', -1.0/0.0))
+    call assert_equal('  +inf', printf('%+6f', 1.0/0.0))
+    call assert_equal('   inf', printf('% 6f', 1.0/0.0))
+    call assert_equal('  +inf', printf('%+06f', 1.0/0.0))
+    call assert_equal('inf   ', printf('%-6f', 1.0/0.0))
+    call assert_equal('-inf  ', printf('%-6f', -1.0/0.0))
+    call assert_equal('+inf  ', printf('%-+6f', 1.0/0.0))
+    call assert_equal(' inf  ', printf('%- 6f', 1.0/0.0))
+    call assert_equal('-INF  ', printf('%-6F', -1.0/0.0))
+    call assert_equal('+INF  ', printf('%-+6F', 1.0/0.0))
+    call assert_equal(' INF  ', printf('%- 6F', 1.0/0.0))
+    call assert_equal('INF   ', printf('%-6G', 1.0/0.0))
+    call assert_equal('-INF  ', printf('%-6G', -1.0/0.0))
+    call assert_equal('INF   ', printf('%-6E', 1.0/0.0))
+    call assert_equal('-INF  ', printf('%-6E', -1.0/0.0))
+    call assert_equal('inf', printf('%s', 1.0/0.0))
+    call assert_equal('-inf', printf('%s', -1.0/0.0))
+
+    " Float nan (not a number) has no sign.
+    call assert_equal('nan', printf('%f', sqrt(-1.0)))
+    call assert_equal('nan', printf('%f', 0.0/0.0))
+    call assert_equal('nan', printf('%f', -0.0/0.0))
+    call assert_equal('nan', printf('%g', 0.0/0.0))
+    call assert_equal('nan', printf('%e', 0.0/0.0))
+    call assert_equal('NAN', printf('%F', 0.0/0.0))
+    call assert_equal('NAN', printf('%G', 0.0/0.0))
+    call assert_equal('NAN', printf('%E', 0.0/0.0))
+    call assert_equal('NAN', printf('%F', -0.0/0.0))
+    call assert_equal('NAN', printf('%G', -0.0/0.0))
+    call assert_equal('NAN', printf('%E', -0.0/0.0))
+    call assert_equal('   nan', printf('%6f', 0.0/0.0))
+    call assert_equal('   nan', printf('%06f', 0.0/0.0))
+    call assert_equal('nan   ', printf('%-6f', 0.0/0.0))
+    call assert_equal('nan   ', printf('%- 6f', 0.0/0.0))
+    call assert_equal('nan', printf('%s', 0.0/0.0))
+    call assert_equal('nan', printf('%s', -0.0/0.0))
+    call assert_equal('nan', printf('%S', 0.0/0.0))
+    call assert_equal('nan', printf('%S', -0.0/0.0))
+
+    call assert_fails('echo printf("%f", "a")', 'E807:')
+  endif
+endfunc
+
+function Test_printf_errors()
+  call assert_fails('echo printf("%d", {})', 'E728:')
+  call assert_fails('echo printf("%d", [])', 'E745:')
+  call assert_fails('echo printf("%d", 1, 2)', 'E767:')
+  call assert_fails('echo printf("%*d", 1)', 'E766:')
+  call assert_fails('echo printf("%d", 1.2)', 'E805:')
+endfunc
+
+function Test_max_min_errors()
+  call assert_fails('call max(v:true)', 'E712:')
+  call assert_fails('call max(v:true)', 'max()')
+  call assert_fails('call min(v:true)', 'E712:')
+  call assert_fails('call min(v:true)', 'min()')
+endfunc
+
 function Test_printf_64bit()
   if has('num64')
     call assert_equal("123456789012345", printf('%d', 123456789012345))
+  endif
+endfunc
+
+function Test_printf_spec_s()
+  " number
+  call assert_equal("1234567890", printf('%s', 1234567890))
+
+  " string
+  call assert_equal("abcdefgi", printf('%s', "abcdefgi"))
+
+  " float
+  if has('float')
+    call assert_equal("1.23", printf('%s', 1.23))
+  endif
+
+  " list
+  let value = [1, 'two', ['three', 4]]
+  call assert_equal(string(value), printf('%s', value))
+
+  " dict
+  let value = {'key1' : 'value1', 'key2' : ['list', 'value'], 'key3' : {'dict' : 'value'}}
+  call assert_equal(string(value), printf('%s', value))
+
+  " funcref
+  call assert_equal('printf', printf('%s', function('printf')))
+
+  " partial
+  call assert_equal(string(function('printf', ['%s'])), printf('%s', function('printf', ['%s'])))
+endfunc
+
+function Test_printf_spec_b()
+  call assert_equal("0", printf('%b', 0))
+  call assert_equal("00001100", printf('%08b', 12))
+  call assert_equal("11111111", printf('%08b', 0xff))
+  call assert_equal("   1111011", printf('%10b', 123))
+  call assert_equal("0001111011", printf('%010b', 123))
+  call assert_equal(" 0b1111011", printf('%#10b', 123))
+  call assert_equal("0B01111011", printf('%#010B', 123))
+  call assert_equal("1001001100101100000001011010010", printf('%b', 1234567890))
+  if has('num64')
+    call assert_equal("11100000100100010000110000011011101111101111001", printf('%b', 123456789012345))
+    call assert_equal("1111111111111111111111111111111111111111111111111111111111111111", printf('%b', -1))
+  else
+    call assert_equal("11111111111111111111111111111111", printf('%b', -1))
   endif
 endfunc
 
@@ -152,6 +408,11 @@ func Test_substitute_expr()
     return substitute('yyy', 'y*', {-> g:val}, '')
   endfunc
   call assert_equal('--', substitute('xxx', 'x*', {-> '-' . Recurse() . '-'}, ''))
+endfunc
+
+func Test_invalid_submatch()
+  " This was causing invalid memory access in Vim-7.4.2232 and older
+  call assert_fails("call substitute('x', '.', {-> submatch(10)}, '')", 'E935:')
 endfunc
 
 func Test_substitute_expr_arg()
@@ -193,6 +454,7 @@ func Test_funcref()
   call assert_equal(1, OneByRef())
   let OneByRef = funcref('One')
   call assert_equal(2, OneByRef())
+  call assert_fails('echo funcref("{")', 'E475:')
 endfunc
 
 func Test_setmatches()

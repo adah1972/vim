@@ -13,6 +13,7 @@ source test_expand_dllpath.vim
 source test_feedkeys.vim
 source test_fnamemodify.vim
 source test_file_perm.vim
+source test_filter_cmd.vim
 source test_filter_map.vim
 source test_glob2regpat.vim
 source test_goto.vim
@@ -34,6 +35,8 @@ source test_sort.vim
 source test_statusline.vim
 source test_syn_attr.vim
 source test_tabline.vim
+source test_tabpage.vim
+source test_tagcase.vim
 source test_tagjump.vim
 source test_timers.vim
 source test_true_false.vim

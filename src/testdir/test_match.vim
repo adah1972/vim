@@ -1,7 +1,7 @@
 " Test for :match, :2match, :3match, clearmatches(), getmatches(), matchadd(),
 " matchaddpos(), matcharg(), matchdelete(), matchstrpos() and setmatches().
 
-function Test_matcharg()
+function Test_match()
   highlight MyGroup1 term=bold ctermbg=red guibg=red
   highlight MyGroup2 term=italic ctermbg=green guibg=green
   highlight MyGroup3 term=underline ctermbg=blue guibg=blue
@@ -162,4 +162,55 @@ func Test_matchstrpos()
   call assert_equal(['', -1, -1, -1], matchstrpos(['vim', 'testing', 'execute'], 'img'))
 endfunc
 
-" vim: et ts=2 sw=2
+func Test_matchaddpos()
+  syntax on
+  set hlsearch
+
+  call setline(1, ['12345', 'NP'])
+  call matchaddpos('Error', [[1,2], [1,6], [2,2]])
+  redraw!
+  call assert_notequal(screenattr(2,2), 0)
+  call assert_equal(screenattr(2,2), screenattr(1,2))
+  call assert_notequal(screenattr(2,2), screenattr(1,6))
+  1
+  call matchadd('Search', 'N\|\n')
+  redraw!
+  call assert_notequal(screenattr(2,1), 0)
+  call assert_equal(screenattr(2,1), screenattr(1,6))
+  exec "norm! i0\<Esc>"
+  redraw!
+  call assert_equal(screenattr(2,2), screenattr(1,6))
+
+  nohl
+  syntax off
+  set hlsearch&
+endfunc
+
+func Test_matchaddpos_using_negative_priority()
+  set hlsearch
+
+  call clearmatches()
+
+  call setline(1, 'x')
+  let @/='x'
+  redraw!
+  let search_attr = screenattr(1,1)
+
+  let @/=''
+  call matchaddpos('Error', [1], 10)
+  redraw!
+  let error_attr = screenattr(1,1)
+
+  call setline(2, '-1 match priority')
+  call matchaddpos('Error', [2], -1)
+  redraw!
+  let negative_match_priority_attr = screenattr(2,1)
+
+  call assert_notequal(negative_match_priority_attr, search_attr, "Match with negative priority is incorrectly highlighted with Search highlight.")
+  call assert_equal(negative_match_priority_attr, error_attr)
+
+  nohl
+  set hlsearch&
+endfunc
+
+" vim: shiftwidth=2 sts=2 expandtab

@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved		by Bram Moolenaar
  *				GUI/Motif support by Robert Webb
@@ -4741,7 +4741,7 @@ gui_get_color(char_u *name)
     int
 gui_get_lightness(guicolor_T pixel)
 {
-    long_u	rgb = gui_mch_get_rgb(pixel);
+    long_u	rgb = (long_u)gui_mch_get_rgb(pixel);
 
     return  (int)(  (((rgb >> 16) & 0xff) * 299)
 		   + (((rgb >> 8) & 0xff) * 587)

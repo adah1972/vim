@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -4087,11 +4087,11 @@ eval6(
 		    {
 #ifdef FEAT_NUM64
 			if (n1 == 0)
-			    n1 = -0x7fffffffffffffff - 1; /* similar to NaN */
+			    n1 = -0x7fffffffffffffffLL - 1; /* similar to NaN */
 			else if (n1 < 0)
-			    n1 = -0x7fffffffffffffff;
+			    n1 = -0x7fffffffffffffffLL;
 			else
-			    n1 = 0x7fffffffffffffff;
+			    n1 = 0x7fffffffffffffffLL;
 #else
 			if (n1 == 0)
 			    n1 = -0x7fffffffL - 1L;	/* similar to NaN */
@@ -4167,7 +4167,7 @@ eval7(
     rettv->v_type = VAR_UNKNOWN;
 
     /*
-     * Skip '!' and '-' characters.  They are handled later.
+     * Skip '!', '-' and '+' characters.  They are handled later.
      */
     start_leader = *arg;
     while (**arg == '!' || **arg == '-' || **arg == '+')
@@ -4941,12 +4941,9 @@ get_string_tv(char_u **arg, typval_T *rettv, int evaluate)
 
     }
     *name = NUL;
-    if (p == NUL)
-    {
-	EMSG2(_("E114: Missing quote: %s"), *arg);
-	return FAIL;
-    }
-    *arg = p + 1;
+    if (*p != NUL) /* just in case */
+	++p;
+    *arg = p;
 
     return OK;
 }
@@ -8473,9 +8470,23 @@ getwinvar(
 		  || switch_win(&oldcurwin, &oldtabpage, win, tp, TRUE) == OK)
 #endif
 	{
-	    if (*varname == '&')	/* window-local-option */
+	    if (*varname == '&')
 	    {
-		if (get_option_tv(&varname, rettv, 1) == OK)
+		if (varname[1] == NUL)
+		{
+		    /* get all window-local options in a dict */
+		    dict_T	*opts = get_winbuf_options(FALSE);
+
+		    if (opts != NULL)
+		    {
+			rettv->v_type = VAR_DICT;
+			rettv->vval.v_dict = opts;
+			++opts->dv_refcount;
+			done = TRUE;
+		    }
+		}
+		else if (get_option_tv(&varname, rettv, 1) == OK)
+		    /* window-local-option */
 		    done = TRUE;
 	    }
 	    else
@@ -8926,60 +8937,6 @@ last_set_msg(scid_T scriptID)
 	    vim_free(p);
 	    verbose_leave();
 	}
-    }
-}
-
-/*
- * List v:oldfiles in a nice way.
- */
-    void
-ex_oldfiles(exarg_T *eap UNUSED)
-{
-    list_T	*l = vimvars[VV_OLDFILES].vv_list;
-    listitem_T	*li;
-    int		nr = 0;
-
-    if (l == NULL)
-	msg((char_u *)_("No old files"));
-    else
-    {
-	msg_start();
-	msg_scroll = TRUE;
-	for (li = l->lv_first; li != NULL && !got_int; li = li->li_next)
-	{
-	    msg_outnum((long)++nr);
-	    MSG_PUTS(": ");
-	    msg_outtrans(get_tv_string(&li->li_tv));
-	    msg_putchar('\n');
-	    out_flush();	    /* output one line at a time */
-	    ui_breakcheck();
-	}
-	/* Assume "got_int" was set to truncate the listing. */
-	got_int = FALSE;
-
-#ifdef FEAT_BROWSE_CMD
-	if (cmdmod.browse)
-	{
-	    quit_more = FALSE;
-	    nr = prompt_for_number(FALSE);
-	    msg_starthere();
-	    if (nr > 0)
-	    {
-		char_u *p = list_find_str(get_vim_var_list(VV_OLDFILES),
-								    (long)nr);
-
-		if (p != NULL)
-		{
-		    p = expand_env_save(p);
-		    eap->arg = p;
-		    eap->cmdidx = CMD_edit;
-		    cmdmod.browse = FALSE;
-		    do_exedit(eap, NULL);
-		    vim_free(p);
-		}
-	    }
-	}
-#endif
     }
 }
 

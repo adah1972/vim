@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *	      OS/2 port by Paul Slootman
@@ -3934,6 +3934,7 @@ mch_new_shellsize(void)
 wait4pid(pid_t child, waitstatus *status)
 {
     pid_t wait_pid = 0;
+    long delay_msec = 1;
 
     while (wait_pid != child)
     {
@@ -3948,8 +3949,10 @@ wait4pid(pid_t child, waitstatus *status)
 # endif
 	if (wait_pid == 0)
 	{
-	    /* Wait for 10 msec before trying again. */
-	    mch_delay(10L, TRUE);
+	    /* Wait for 1 to 10 msec before trying again. */
+	    mch_delay(delay_msec, TRUE);
+	    if (++delay_msec > 10)
+		delay_msec = 10;
 	    continue;
 	}
 	if (wait_pid <= 0
@@ -4806,7 +4809,7 @@ mch_call_shell(
 			     * round. */
 			    for (p = buffer; p < buffer + len; p += l)
 			    {
-				l = mb_cptr2len(p);
+				l = MB_CPTR2LEN(p);
 				if (l == 0)
 				    l = 1;  /* NUL byte? */
 				else if (MB_BYTE2LEN(*p) != l)
@@ -4929,6 +4932,8 @@ finished:
 # if defined(FEAT_XCLIPBOARD) && defined(FEAT_X11)
 	    else
 	    {
+		long delay_msec = 1;
+
 		/*
 		 * Similar to the loop above, but only handle X events, no
 		 * I/O.
@@ -4961,7 +4966,11 @@ finished:
 		    /* Handle any X events, e.g. serving the clipboard. */
 		    clip_update();
 
-		    mch_delay(10L, TRUE);
+		    /* Wait for 1 to 10 msec. 1 is faster but gives the child
+		     * less time. */
+		    mch_delay(delay_msec, TRUE);
+		    if (++delay_msec > 10)
+			delay_msec = 10;
 		}
 	    }
 # endif

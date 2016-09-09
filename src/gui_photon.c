@@ -1,4 +1,4 @@
-/* vi:set ts=8 sw=4 sts=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *			Photon GUI support by Julian Kinraid
@@ -1933,10 +1933,11 @@ gui_mch_setmouse(int x, int y)
 /*
  * Return the RGB value of a pixel as a long.
  */
-    long_u
+    guicolor_T
 gui_mch_get_rgb(guicolor_T pixel)
 {
-    return PgRGB(PgRedValue(pixel), PgGreenValue(pixel), PgBlueValue(pixel));
+    return (guicolor_T)(PgRGB(PgRedValue(pixel),
+				     PgGreenValue(pixel), PgBlueValue(pixel)));
 }
 
     void

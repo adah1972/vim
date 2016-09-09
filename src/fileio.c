@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -27,10 +27,6 @@
 /* Is there any system that doesn't have access()? */
 #define USE_MCH_ACCESS
 
-#if (defined(sun) || defined(__FreeBSD__)) && defined(S_ISCHR)
-# define OPEN_CHR_FILES
-static int is_dev_fd_file(char_u *fname);
-#endif
 #ifdef FEAT_MBYTE
 static char_u *next_fenc(char_u **pp);
 # ifdef FEAT_EVAL
@@ -2718,14 +2714,14 @@ failed:
     return OK;
 }
 
-#ifdef OPEN_CHR_FILES
+#if defined(OPEN_CHR_FILES) || defined(PROTO)
 /*
  * Returns TRUE if the file name argument is of the form "/dev/fd/\d\+",
  * which is the name of files used for process substitution output by
  * some shells on some operating systems, e.g., bash on SunOS.
  * Do not accept "/dev/fd/[012]", opening these may hang Vim.
  */
-    static int
+    int
 is_dev_fd_file(char_u *fname)
 {
     return (STRNCMP(fname, "/dev/fd/", 8) == 0
@@ -7762,6 +7758,7 @@ static AutoPatCmd *active_apc_list = NULL; /* stack of active autocommands */
  */
 static garray_T augroups = {0, 0, sizeof(char_u *), 10, NULL};
 #define AUGROUP_NAME(i) (((char_u **)augroups.ga_data)[i])
+/* use get_deleted_augroup() to get this */
 static char_u *deleted_augroup = NULL;
 
 /*
@@ -7794,6 +7791,14 @@ static event_T	last_event;
 static int	last_group;
 static int	autocmd_blocked = 0;	/* block all autocmds */
 
+    static char_u *
+get_deleted_augroup(void)
+{
+    if (deleted_augroup == NULL)
+	deleted_augroup = (char_u *)_("--Deleted--");
+    return deleted_augroup;
+}
+
 /*
  * Show the autocommands for one AutoPat.
  */
@@ -7817,7 +7822,7 @@ show_autocmd(AutoPat *ap, event_T event)
 	if (ap->group != AUGROUP_DEFAULT)
 	{
 	    if (AUGROUP_NAME(ap->group) == NULL)
-		msg_puts_attr(deleted_augroup, hl_attr(HLF_E));
+		msg_puts_attr(get_deleted_augroup(), hl_attr(HLF_E));
 	    else
 		msg_puts_attr(AUGROUP_NAME(ap->group), hl_attr(HLF_T));
 	    msg_puts((char_u *)"  ");
@@ -8012,6 +8017,8 @@ au_del_group(char_u *name)
     i = au_find_group(name);
     if (i == AUGROUP_ERROR)	/* the group doesn't exist */
 	EMSG2(_("E367: No such group: \"%s\""), name);
+    else if (i == current_augroup)
+	EMSG(_("E936: Cannot delete the current group"));
     else
     {
 	event_T	event;
@@ -8022,7 +8029,7 @@ au_del_group(char_u *name)
 					    event = (event_T)((int)event + 1))
 	{
 	    for (ap = first_autopat[(int)event]; ap != NULL; ap = ap->next)
-		if (ap->group == i)
+		if (ap->group == i && ap->pat != NULL)
 		{
 		    give_warning((char_u *)_("W19: Deleting augroup that is still in use"), TRUE);
 		    in_use = TRUE;
@@ -8033,9 +8040,7 @@ au_del_group(char_u *name)
 	vim_free(AUGROUP_NAME(i));
 	if (in_use)
 	{
-	    if (deleted_augroup == NULL)
-		deleted_augroup = (char_u *)_("--Deleted--");
-	    AUGROUP_NAME(i) = deleted_augroup;
+	    AUGROUP_NAME(i) = get_deleted_augroup();
 	}
 	else
 	    AUGROUP_NAME(i) = NULL;
@@ -8052,7 +8057,7 @@ au_find_group(char_u *name)
     int	    i;
 
     for (i = 0; i < augroups.ga_len; ++i)
-	if (AUGROUP_NAME(i) != NULL && AUGROUP_NAME(i) != deleted_augroup
+	if (AUGROUP_NAME(i) != NULL && AUGROUP_NAME(i) != get_deleted_augroup()
 		&& STRCMP(AUGROUP_NAME(i), name) == 0)
 	    return i;
     return AUGROUP_ERROR;
@@ -8120,7 +8125,7 @@ free_all_autocmds(void)
     for (i = 0; i < augroups.ga_len; ++i)
     {
 	s = ((char_u **)(augroups.ga_data))[i];
-	if (s != deleted_augroup)
+	if (s != get_deleted_augroup())
 	    vim_free(s);
     }
     ga_clear(&augroups);
@@ -9869,7 +9874,7 @@ get_augroup_name(expand_T *xp UNUSED, int idx)
 	return (char_u *)"END";
     if (idx >= augroups.ga_len)		/* end of list */
 	return NULL;
-    if (AUGROUP_NAME(idx) == NULL || AUGROUP_NAME(idx) == deleted_augroup)
+    if (AUGROUP_NAME(idx) == NULL || AUGROUP_NAME(idx) == get_deleted_augroup())
 	/* skip deleted entries */
 	return (char_u *)"";
     return AUGROUP_NAME(idx);		/* return a name */
@@ -9935,7 +9940,7 @@ get_event_name(expand_T *xp UNUSED, int idx)
     if (idx < augroups.ga_len)		/* First list group names, if wanted */
     {
 	if (!include_groups || AUGROUP_NAME(idx) == NULL
-				       || AUGROUP_NAME(idx) == deleted_augroup)
+				 || AUGROUP_NAME(idx) == get_deleted_augroup())
 	    return (char_u *)"";	/* skip deleted entries */
 	return AUGROUP_NAME(idx);	/* return a name */
     }

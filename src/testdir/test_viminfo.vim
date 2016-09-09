@@ -214,6 +214,19 @@ func Test_viminfo_registers()
   call assert_equal(l, getreg('d', 1, 1))
   call assert_equal("V", getregtype('d'))
 
+  " Length around 440 switches to line continuation.
+  let len = 434
+  while len < 445
+    let s = repeat('a', len)
+    call setreg('"', s)
+    wviminfo Xviminfo
+    call setreg('"', '')
+    rviminfo Xviminfo
+    call assert_equal(s, getreg('"'), 'wrong register at length: ' . len)
+
+    let len += 1
+  endwhile
+
   call delete('Xviminfo')
 endfunc
 
@@ -454,4 +467,29 @@ func Test_viminfo_file_mark_tabclose()
 
   call delete('Xviminfo')
   silent! bwipe Xtestfileintab
+endfunc
+
+func Test_oldfiles()
+  let v:oldfiles = []
+  let lines = [
+	\ '# comment line',
+	\ '*encoding=utf-8',
+	\ '',
+	\ "> /tmp/file_one.txt",
+	\ "\t\"\t11\t0",
+	\ "",
+	\ "> /tmp/file_two.txt",
+	\ "\t\"\t11\t0",
+	\ "",
+	\ "> /tmp/another.txt",
+	\ "\t\"\t11\t0",
+	\ "",
+	\ ]
+  call writefile(lines, 'Xviminfo')
+  rviminfo! Xviminfo
+  call delete('Xviminfo')
+
+  call assert_equal(['1: /tmp/file_one.txt', '2: /tmp/file_two.txt', '3: /tmp/another.txt'], filter(split(execute('oldfiles'), "\n"), {i, v -> v =~ '/tmp/'}))
+  call assert_equal(['1: /tmp/file_one.txt', '2: /tmp/file_two.txt'], filter(split(execute('filter file_ oldfiles'), "\n"), {i, v -> v =~ '/tmp/'}))
+  call assert_equal(['3: /tmp/another.txt'], filter(split(execute('filter /another/ oldfiles'), "\n"), {i, v -> v =~ '/tmp/'}))
 endfunc

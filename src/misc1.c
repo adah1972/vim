@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -3416,7 +3416,7 @@ get_keystroke(void)
 	if (n > 0)
 	{
 	    /* Replace zero and CSI by a special key code. */
-	    n = fix_input_buffer(buf + len, n, FALSE);
+	    n = fix_input_buffer(buf + len, n);
 	    len += n;
 	    waited = 0;
 	}
@@ -10514,18 +10514,34 @@ uniquefy_paths(garray_T *gap, char_u *pattern)
 	/* Shorten the filename while maintaining its uniqueness */
 	path_cutoff = get_path_cutoff(path, &path_ga);
 
-	/* we start at the end of the path */
-	pathsep_p = path + len - 1;
+	/* Don't assume all files can be reached without path when search
+	 * pattern starts with star star slash, so only remove path_cutoff
+	 * when possible. */
+	if (pattern[0] == '*' && pattern[1] == '*'
+		&& vim_ispathsep_nocolon(pattern[2])
+		&& path_cutoff != NULL
+		&& vim_regexec(&regmatch, path_cutoff, (colnr_T)0)
+		&& is_unique(path_cutoff, gap, i))
+	{
+	    sort_again = TRUE;
+	    mch_memmove(path, path_cutoff, STRLEN(path_cutoff) + 1);
+	}
+	else
+	{
+	    /* Here all files can be reached without path, so get shortest
+	     * unique path.  We start at the end of the path. */
+	    pathsep_p = path + len - 1;
 
-	while (find_previous_pathsep(path, &pathsep_p))
-	    if (vim_regexec(&regmatch, pathsep_p + 1, (colnr_T)0)
-		    && is_unique(pathsep_p + 1, gap, i)
-		    && path_cutoff != NULL && pathsep_p + 1 >= path_cutoff)
-	    {
-		sort_again = TRUE;
-		mch_memmove(path, pathsep_p + 1, STRLEN(pathsep_p));
-		break;
-	    }
+	    while (find_previous_pathsep(path, &pathsep_p))
+		if (vim_regexec(&regmatch, pathsep_p + 1, (colnr_T)0)
+			&& is_unique(pathsep_p + 1, gap, i)
+			&& path_cutoff != NULL && pathsep_p + 1 >= path_cutoff)
+		{
+		    sort_again = TRUE;
+		    mch_memmove(path, pathsep_p + 1, STRLEN(pathsep_p));
+		    break;
+		}
+	}
 
 	if (mch_isFullName(path))
 	{

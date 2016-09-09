@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -3542,10 +3542,12 @@ win_line(
 	shl->startcol = MAXCOL;
 	shl->endcol = MAXCOL;
 	shl->attr_cur = 0;
+	shl->is_addpos = FALSE;
 	v = (long)(ptr - line);
 	if (cur != NULL)
 	    cur->pos.cur = 0;
-	next_search_hl(wp, shl, lnum, (colnr_T)v, cur);
+	next_search_hl(wp, shl, lnum, (colnr_T)v,
+					       shl == &search_hl ? NULL : cur);
 
 	/* Need to get the line again, a multi-line regexp may have made it
 	 * invalid. */
@@ -3979,7 +3981,8 @@ win_line(
 #ifdef FEAT_CONCEAL
 			    prev_syntax_id = 0;
 #endif
-			    next_search_hl(wp, shl, lnum, (colnr_T)v, cur);
+			    next_search_hl(wp, shl, lnum, (colnr_T)v,
+					       shl == &search_hl ? NULL : cur);
 			    pos_inprogress = cur == NULL || cur->pos.cur == 0
 							       ? FALSE : TRUE;
 
@@ -5125,14 +5128,14 @@ win_line(
 	     * needed when a '$' was displayed for 'list'. */
 #ifdef FEAT_SEARCH_EXTRA
 	    prevcol_hl_flag = FALSE;
-	    if (prevcol == (long)search_hl.startcol)
+	    if (!search_hl.is_addpos && prevcol == (long)search_hl.startcol)
 		prevcol_hl_flag = TRUE;
 	    else
 	    {
 		cur = wp->w_match_head;
 		while (cur != NULL)
 		{
-		    if (prevcol == (long)cur->hl.startcol)
+		    if (!cur->hl.is_addpos && prevcol == (long)cur->hl.startcol)
 		    {
 			prevcol_hl_flag = TRUE;
 			break;
@@ -5207,7 +5210,8 @@ win_line(
 			}
 			else
 			    shl = &cur->hl;
-			if ((ptr - line) - 1 == (long)shl->startcol)
+			if ((ptr - line) - 1 == (long)shl->startcol
+				&& (shl == &search_hl || !shl->is_addpos))
 			    char_attr = shl->attr;
 			if (shl != &search_hl && cur != NULL)
 			    cur = cur->next;
@@ -7605,7 +7609,8 @@ prepare_search_hl(win_T *wp, linenr_T lnum)
 	    while (shl->first_lnum < lnum && (shl->rm.regprog != NULL
 					  || (cur != NULL && pos_inprogress)))
 	    {
-		next_search_hl(wp, shl, shl->first_lnum, (colnr_T)n, cur);
+		next_search_hl(wp, shl, shl->first_lnum, (colnr_T)n,
+					       shl == &search_hl ? NULL : cur);
 		pos_inprogress = cur == NULL || cur->pos.cur == 0
 							      ? FALSE : TRUE;
 		if (shl->lnum != 0)
@@ -7815,6 +7820,7 @@ next_search_hl_pos(
 	shl->rm.startpos[0].col = start;
 	shl->rm.endpos[0].lnum = 0;
 	shl->rm.endpos[0].col = end;
+	shl->is_addpos = TRUE;
 	posmatch->cur = bot + 1;
 	return TRUE;
     }
@@ -7862,7 +7868,7 @@ screen_start_highlight(int attr)
 	    else if (aep != NULL && cterm_normal_fg_bold &&
 #ifdef FEAT_TERMGUICOLORS
 			(p_tgc ?
-			    (aep->ae_u.cterm.fg_rgb != (long_u)INVALCOLOR):
+			    (aep->ae_u.cterm.fg_rgb != INVALCOLOR):
 #endif
 			    (t_colors > 1 && aep->ae_u.cterm.fg_color)
 #ifdef FEAT_TERMGUICOLORS
@@ -7891,9 +7897,9 @@ screen_start_highlight(int attr)
 #ifdef FEAT_TERMGUICOLORS
 		if (p_tgc)
 		{
-		    if (aep->ae_u.cterm.fg_rgb != (long_u)INVALCOLOR)
+		    if (aep->ae_u.cterm.fg_rgb != INVALCOLOR)
 			term_fg_rgb_color(aep->ae_u.cterm.fg_rgb);
-		    if (aep->ae_u.cterm.bg_rgb != (long_u)INVALCOLOR)
+		    if (aep->ae_u.cterm.bg_rgb != INVALCOLOR)
 			term_bg_rgb_color(aep->ae_u.cterm.bg_rgb);
 		}
 		else
@@ -7953,8 +7959,8 @@ screen_stop_highlight(void)
 		    if (aep != NULL &&
 #ifdef FEAT_TERMGUICOLORS
 			    (p_tgc ?
-				(aep->ae_u.cterm.fg_rgb != (long_u)INVALCOLOR ||
-				 aep->ae_u.cterm.bg_rgb != (long_u)INVALCOLOR):
+				(aep->ae_u.cterm.fg_rgb != INVALCOLOR
+				 || aep->ae_u.cterm.bg_rgb != INVALCOLOR):
 #endif
 				(aep->ae_u.cterm.fg_color || aep->ae_u.cterm.bg_color)
 #ifdef FEAT_TERMGUICOLORS
@@ -8011,9 +8017,9 @@ screen_stop_highlight(void)
 #ifdef FEAT_TERMGUICOLORS
 	    if (p_tgc)
 	    {
-		if (cterm_normal_fg_gui_color != (long_u)INVALCOLOR)
+		if (cterm_normal_fg_gui_color != INVALCOLOR)
 		    term_fg_rgb_color(cterm_normal_fg_gui_color);
-		if (cterm_normal_bg_gui_color != (long_u)INVALCOLOR)
+		if (cterm_normal_bg_gui_color != INVALCOLOR)
 		    term_bg_rgb_color(cterm_normal_bg_gui_color);
 	    }
 	    else
@@ -8046,10 +8052,9 @@ reset_cterm_colors(void)
     {
 	/* set Normal cterm colors */
 #ifdef FEAT_TERMGUICOLORS
-	if (p_tgc ?
-		(cterm_normal_fg_gui_color != (long_u)INVALCOLOR
-		 || cterm_normal_bg_gui_color != (long_u)INVALCOLOR):
-		(cterm_normal_fg_color > 0 || cterm_normal_bg_color > 0))
+	if (p_tgc ? (cterm_normal_fg_gui_color != INVALCOLOR
+		 || cterm_normal_bg_gui_color != INVALCOLOR)
+		: (cterm_normal_fg_color > 0 || cterm_normal_bg_color > 0))
 #else
 	if (cterm_normal_fg_color > 0 || cterm_normal_bg_color > 0)
 #endif
@@ -8980,7 +8985,7 @@ can_clear(char_u *p)
 		|| gui.in_use
 #endif
 #ifdef FEAT_TERMGUICOLORS
-		|| (p_tgc && cterm_normal_bg_gui_color == (long_u)INVALCOLOR)
+		|| (p_tgc && cterm_normal_bg_gui_color == INVALCOLOR)
 		|| (!p_tgc && cterm_normal_bg_color == 0)
 #else
 		|| cterm_normal_bg_color == 0

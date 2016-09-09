@@ -400,6 +400,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'langmap'	options.txt	/*'langmap'*
 'langmenu'	options.txt	/*'langmenu'*
 'langnoremap'	options.txt	/*'langnoremap'*
+'langremap'	options.txt	/*'langremap'*
 'laststatus'	options.txt	/*'laststatus'*
 'lazyredraw'	options.txt	/*'lazyredraw'*
 'lbr'	options.txt	/*'lbr'*
@@ -416,6 +417,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'lnr'	options.txt	/*'lnr'*
 'loadplugins'	options.txt	/*'loadplugins'*
 'lpl'	options.txt	/*'lpl'*
+'lrm'	options.txt	/*'lrm'*
 'ls'	options.txt	/*'ls'*
 'lsp'	options.txt	/*'lsp'*
 'luadll'	options.txt	/*'luadll'*
@@ -586,6 +588,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'nojoinspaces'	options.txt	/*'nojoinspaces'*
 'nojs'	options.txt	/*'nojs'*
 'nolangnoremap'	options.txt	/*'nolangnoremap'*
+'nolangremap'	options.txt	/*'nolangremap'*
 'nolazyredraw'	options.txt	/*'nolazyredraw'*
 'nolbr'	options.txt	/*'nolbr'*
 'nolinebreak'	options.txt	/*'nolinebreak'*
@@ -594,6 +597,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 'nolnr'	options.txt	/*'nolnr'*
 'noloadplugins'	options.txt	/*'noloadplugins'*
 'nolpl'	options.txt	/*'nolpl'*
+'nolrm'	options.txt	/*'nolrm'*
 'nolz'	options.txt	/*'nolz'*
 'noma'	options.txt	/*'noma'*
 'nomacatsui'	options.txt	/*'nomacatsui'*
@@ -1593,6 +1597,9 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 /\{-	pattern.txt	/*\/\\{-*
 /\~	pattern.txt	/*\/\\~*
 /^	pattern.txt	/*\/^*
+/_CTRL-G	cmdline.txt	/*\/_CTRL-G*
+/_CTRL-L	cmdline.txt	/*\/_CTRL-L*
+/_CTRL-T	cmdline.txt	/*\/_CTRL-T*
 /atom	pattern.txt	/*\/atom*
 /bar	pattern.txt	/*\/bar*
 /branch	pattern.txt	/*\/branch*
@@ -2267,6 +2274,8 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 :filetype-overview	filetype.txt	/*:filetype-overview*
 :filetype-plugin-off	filetype.txt	/*:filetype-plugin-off*
 :filetype-plugin-on	filetype.txt	/*:filetype-plugin-on*
+:filt	various.txt	/*:filt*
+:filter	various.txt	/*:filter*
 :fin	editing.txt	/*:fin*
 :fina	eval.txt	/*:fina*
 :finally	eval.txt	/*:finally*
@@ -4474,6 +4483,9 @@ E930	eval.txt	/*E930*
 E931	message.txt	/*E931*
 E932	eval.txt	/*E932*
 E933	eval.txt	/*E933*
+E934	sign.txt	/*E934*
+E935	eval.txt	/*E935*
+E936	autocmd.txt	/*E936*
 E94	windows.txt	/*E94*
 E95	message.txt	/*E95*
 E96	diff.txt	/*E96*
@@ -5069,6 +5081,7 @@ beval_lnum-variable	eval.txt	/*beval_lnum-variable*
 beval_text-variable	eval.txt	/*beval_text-variable*
 beval_winid-variable	eval.txt	/*beval_winid-variable*
 beval_winnr-variable	eval.txt	/*beval_winnr-variable*
+binary-number	eval.txt	/*binary-number*
 bitwise-function	usr_41.txt	/*bitwise-function*
 blockwise-examples	visual.txt	/*blockwise-examples*
 blockwise-operators	visual.txt	/*blockwise-operators*
@@ -5164,6 +5177,7 @@ c_CTRL-C	cmdline.txt	/*c_CTRL-C*
 c_CTRL-D	cmdline.txt	/*c_CTRL-D*
 c_CTRL-E	cmdline.txt	/*c_CTRL-E*
 c_CTRL-F	cmdline.txt	/*c_CTRL-F*
+c_CTRL-G	cmdline.txt	/*c_CTRL-G*
 c_CTRL-H	cmdline.txt	/*c_CTRL-H*
 c_CTRL-I	cmdline.txt	/*c_CTRL-I*
 c_CTRL-J	cmdline.txt	/*c_CTRL-J*
@@ -5180,6 +5194,7 @@ c_CTRL-R_CTRL-O	cmdline.txt	/*c_CTRL-R_CTRL-O*
 c_CTRL-R_CTRL-P	cmdline.txt	/*c_CTRL-R_CTRL-P*
 c_CTRL-R_CTRL-R	cmdline.txt	/*c_CTRL-R_CTRL-R*
 c_CTRL-R_CTRL-W	cmdline.txt	/*c_CTRL-R_CTRL-W*
+c_CTRL-T	cmdline.txt	/*c_CTRL-T*
 c_CTRL-U	cmdline.txt	/*c_CTRL-U*
 c_CTRL-V	cmdline.txt	/*c_CTRL-V*
 c_CTRL-W	cmdline.txt	/*c_CTRL-W*
@@ -5231,6 +5246,7 @@ cc	change.txt	/*cc*
 ceil()	eval.txt	/*ceil()*
 ch.vim	syntax.txt	/*ch.vim*
 ch_close()	eval.txt	/*ch_close()*
+ch_close_in()	eval.txt	/*ch_close_in()*
 ch_evalexpr()	eval.txt	/*ch_evalexpr()*
 ch_evalraw()	eval.txt	/*ch_evalraw()*
 ch_getbufnr()	eval.txt	/*ch_getbufnr()*
@@ -5273,6 +5289,7 @@ changing	change.txt	/*changing*
 channel	channel.txt	/*channel*
 channel-callback	channel.txt	/*channel-callback*
 channel-close	channel.txt	/*channel-close*
+channel-close-in	channel.txt	/*channel-close-in*
 channel-commands	channel.txt	/*channel-commands*
 channel-demo	channel.txt	/*channel-demo*
 channel-functions	usr_41.txt	/*channel-functions*
@@ -5718,6 +5735,8 @@ erlang.vim	syntax.txt	/*erlang.vim*
 err_buf	channel.txt	/*err_buf*
 err_cb	channel.txt	/*err_cb*
 err_mode	channel.txt	/*err_mode*
+err_modifiable	channel.txt	/*err_modifiable*
+err_msg	channel.txt	/*err_msg*
 err_name	channel.txt	/*err_name*
 err_timeout	channel.txt	/*err_timeout*
 errmsg-variable	eval.txt	/*errmsg-variable*
@@ -6638,6 +6657,7 @@ hl-DiffChange	syntax.txt	/*hl-DiffChange*
 hl-DiffDelete	syntax.txt	/*hl-DiffDelete*
 hl-DiffText	syntax.txt	/*hl-DiffText*
 hl-Directory	syntax.txt	/*hl-Directory*
+hl-EndOfBuffer	syntax.txt	/*hl-EndOfBuffer*
 hl-ErrorMsg	syntax.txt	/*hl-ErrorMsg*
 hl-FoldColumn	syntax.txt	/*hl-FoldColumn*
 hl-Folded	syntax.txt	/*hl-Folded*
@@ -6850,6 +6870,7 @@ improvements-7	version7.txt	/*improvements-7*
 improvements-8	version8.txt	/*improvements-8*
 in_bot	channel.txt	/*in_bot*
 in_buf	channel.txt	/*in_buf*
+in_io-buffer	channel.txt	/*in_io-buffer*
 in_mode	channel.txt	/*in_mode*
 in_name	channel.txt	/*in_name*
 in_top	channel.txt	/*in_top*
@@ -7591,6 +7612,7 @@ new-search-path	version6.txt	/*new-search-path*
 new-searchpat	version6.txt	/*new-searchpat*
 new-session-files	version5.txt	/*new-session-files*
 new-spell	version7.txt	/*new-spell*
+new-style-testing	eval.txt	/*new-style-testing*
 new-tab-pages	version7.txt	/*new-tab-pages*
 new-undo-branches	version7.txt	/*new-undo-branches*
 new-unlisted-buffers	version6.txt	/*new-unlisted-buffers*
@@ -7634,6 +7656,7 @@ ocaml.vim	syntax.txt	/*ocaml.vim*
 octal	eval.txt	/*octal*
 octal-nrformats	options.txt	/*octal-nrformats*
 octal-number	eval.txt	/*octal-number*
+old-style-testing	eval.txt	/*old-style-testing*
 oldfiles-variable	eval.txt	/*oldfiles-variable*
 ole-activation	if_ole.txt	/*ole-activation*
 ole-eval	if_ole.txt	/*ole-eval*
@@ -7678,7 +7701,10 @@ os_win32.txt	os_win32.txt	/*os_win32.txt*
 other-features	vi_diff.txt	/*other-features*
 out_buf	channel.txt	/*out_buf*
 out_cb	channel.txt	/*out_cb*
+out_io-buffer	channel.txt	/*out_io-buffer*
 out_mode	channel.txt	/*out_mode*
+out_modifiable	channel.txt	/*out_modifiable*
+out_msg	channel.txt	/*out_msg*
 out_name	channel.txt	/*out_name*
 out_timeout	channel.txt	/*out_timeout*
 p	change.txt	/*p*
@@ -7790,10 +7816,12 @@ print-options	print.txt	/*print-options*
 print.txt	print.txt	/*print.txt*
 printf()	eval.txt	/*printf()*
 printf-%	eval.txt	/*printf-%*
+printf-B	eval.txt	/*printf-B*
 printf-E	eval.txt	/*printf-E*
 printf-G	eval.txt	/*printf-G*
 printf-S	eval.txt	/*printf-S*
 printf-X	eval.txt	/*printf-X*
+printf-b	eval.txt	/*printf-b*
 printf-c	eval.txt	/*printf-c*
 printf-d	eval.txt	/*printf-d*
 printf-e	eval.txt	/*printf-e*
@@ -8678,6 +8706,7 @@ test_null_list()	eval.txt	/*test_null_list()*
 test_null_partial()	eval.txt	/*test_null_partial()*
 test_null_string()	eval.txt	/*test_null_string()*
 test_settime()	eval.txt	/*test_settime()*
+testing	eval.txt	/*testing*
 testing-variable	eval.txt	/*testing-variable*
 tex-cchar	syntax.txt	/*tex-cchar*
 tex-cole	syntax.txt	/*tex-cole*
@@ -8708,12 +8737,14 @@ throw-from-catch	eval.txt	/*throw-from-catch*
 throw-variables	eval.txt	/*throw-variables*
 throwpoint-variable	eval.txt	/*throwpoint-variable*
 time-functions	usr_41.txt	/*time-functions*
+timer	eval.txt	/*timer*
 timer-functions	usr_41.txt	/*timer-functions*
 timer_info()	eval.txt	/*timer_info()*
 timer_pause()	eval.txt	/*timer_pause()*
 timer_start()	eval.txt	/*timer_start()*
 timer_stop()	eval.txt	/*timer_stop()*
 timer_stopall()	eval.txt	/*timer_stopall()*
+timers	eval.txt	/*timers*
 timestamp	editing.txt	/*timestamp*
 timestamps	editing.txt	/*timestamps*
 tips	tips.txt	/*tips*
@@ -9196,6 +9227,7 @@ win_id2win()	eval.txt	/*win_id2win()*
 winbufnr()	eval.txt	/*winbufnr()*
 wincol()	eval.txt	/*wincol()*
 window	windows.txt	/*window*
+window-ID	windows.txt	/*window-ID*
 window-contents	intro.txt	/*window-contents*
 window-exit	editing.txt	/*window-exit*
 window-functions	usr_41.txt	/*window-functions*
@@ -9206,6 +9238,7 @@ window-size	term.txt	/*window-size*
 window-size-functions	usr_41.txt	/*window-size-functions*
 window-tag	windows.txt	/*window-tag*
 window-variable	eval.txt	/*window-variable*
+windowid	windows.txt	/*windowid*
 windowid-variable	eval.txt	/*windowid-variable*
 windows	windows.txt	/*windows*
 windows-3.1	os_win32.txt	/*windows-3.1*
@@ -9215,6 +9248,7 @@ windows-starting	windows.txt	/*windows-starting*
 windows.txt	windows.txt	/*windows.txt*
 windows95	os_win32.txt	/*windows95*
 winheight()	eval.txt	/*winheight()*
+winid	windows.txt	/*winid*
 winline()	eval.txt	/*winline()*
 winnr()	eval.txt	/*winnr()*
 winrestcmd()	eval.txt	/*winrestcmd()*

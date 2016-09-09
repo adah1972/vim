@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -2470,7 +2470,7 @@ did_set_spelllang(win_T *wp)
 		 * destroying the buffer we are using... */
 		if (!bufref_valid(&bufref))
 		{
-		    ret_msg = (char_u *)"E797: SpellFileMissing autocommand deleted buffer";
+		    ret_msg = (char_u *)N_("E797: SpellFileMissing autocommand deleted buffer");
 		    goto theend;
 		}
 #endif
@@ -5379,7 +5379,7 @@ suggest_trie_walk(
 #ifdef FEAT_MBYTE
 	    if (has_mbyte)
 	    {
-		n = mb_cptr2len(p);
+		n = MB_CPTR2LEN(p);
 		c = mb_ptr2char(p);
 		if (p[n] == NUL)
 		    c2 = NUL;
@@ -5477,9 +5477,9 @@ suggest_trie_walk(
 #ifdef FEAT_MBYTE
 	    if (has_mbyte)
 	    {
-		n = mb_cptr2len(p);
+		n = MB_CPTR2LEN(p);
 		c = mb_ptr2char(p);
-		fl = mb_cptr2len(p + n);
+		fl = MB_CPTR2LEN(p + n);
 		c2 = mb_ptr2char(p + n);
 		if (!soundfold && !spell_iswordp(p + n + fl, curwin))
 		    c3 = c;	/* don't swap non-word char */
@@ -5596,10 +5596,10 @@ suggest_trie_walk(
 #ifdef FEAT_MBYTE
 		if (has_mbyte)
 		{
-		    n = mb_cptr2len(p);
+		    n = MB_CPTR2LEN(p);
 		    c = mb_ptr2char(p);
-		    fl = mb_cptr2len(p + n);
-		    fl += mb_cptr2len(p + n + fl);
+		    fl = MB_CPTR2LEN(p + n);
+		    fl += MB_CPTR2LEN(p + n + fl);
 		    mch_memmove(p, p + n, fl);
 		    mb_char2bytes(c, p + fl);
 		    stack[depth].ts_fidxtry = sp->ts_fidx + n + fl;
@@ -5661,10 +5661,10 @@ suggest_trie_walk(
 #ifdef FEAT_MBYTE
 		if (has_mbyte)
 		{
-		    n = mb_cptr2len(p);
-		    n += mb_cptr2len(p + n);
+		    n = MB_CPTR2LEN(p);
+		    n += MB_CPTR2LEN(p + n);
 		    c = mb_ptr2char(p + n);
-		    tl = mb_cptr2len(p + n);
+		    tl = MB_CPTR2LEN(p + n);
 		    mch_memmove(p + tl, p, n);
 		    mb_char2bytes(c, p);
 		    stack[depth].ts_fidxtry = sp->ts_fidx + n + tl;
@@ -5955,8 +5955,8 @@ find_keepcap_word(slang_T *slang, char_u *fword, char_u *kword)
 #ifdef FEAT_MBYTE
 	    if (has_mbyte)
 	    {
-		flen = mb_cptr2len(fword + fwordidx[depth]);
-		ulen = mb_cptr2len(uword + uwordidx[depth]);
+		flen = MB_CPTR2LEN(fword + fwordidx[depth]);
+		ulen = MB_CPTR2LEN(uword + uwordidx[depth]);
 	    }
 	    else
 #endif

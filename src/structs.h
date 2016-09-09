@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -92,8 +92,7 @@ typedef struct {
 # ifdef FEAT_XCLIPBOARD
 #  include <X11/Intrinsic.h>
 # endif
-# define guicolor_T long_u		/* avoid error in prototypes and
-					 * make FEAT_TERMGUICOLORS work */
+# define guicolor_T long
 # define INVALCOLOR ((guicolor_T)0x1ffffff)
 #endif
 
@@ -572,6 +571,8 @@ typedef struct
 # ifdef FEAT_AUTOCMD
     char_u	*save_ei;		/* saved value of 'eventignore' */
 # endif
+    regmatch_T	filter_regmatch;	/* set by :filter /pat/ */
+    int		filter_force;		/* set for :filter! */
 } cmdmod_T;
 
 #define MF_SEED_LEN	8
@@ -929,8 +930,8 @@ typedef struct attr_entry
 	    short_u	    fg_color;	/* foreground color number */
 	    short_u	    bg_color;	/* background color number */
 # ifdef FEAT_TERMGUICOLORS
-	    long_u	    fg_rgb;	/* foreground color RGB */
-	    long_u	    bg_rgb;	/* background color RGB */
+	    guicolor_T	    fg_rgb;	/* foreground color RGB */
+	    guicolor_T	    bg_rgb;	/* background color RGB */
 # endif
 	} cterm;
 # ifdef FEAT_GUI
@@ -1126,8 +1127,13 @@ typedef long_u hash_T;		/* Type for hi_hash */
 #ifdef FEAT_NUM64
 /* Use 64-bit Number. */
 # ifdef WIN3264
+#  ifdef PROTO
+typedef long		    varnumber_T;
+typedef unsigned long	    uvarnumber_T;
+#  else
 typedef __int64		    varnumber_T;
 typedef unsigned __int64    uvarnumber_T;
+#  endif
 # elif defined(HAVE_STDINT_H)
 typedef int64_t		    varnumber_T;
 typedef uint64_t	    uvarnumber_T;
@@ -1628,6 +1634,10 @@ struct channel_S {
 #define JO_ERR_MODIFIABLE   0x40000000	/* "err_modifiable" (JO_OUT_ << 1) */
 #define JO_ALL		    0x7fffffff
 
+#define JO2_OUT_MSG	    0x0001	/* "out_msg" */
+#define JO2_ERR_MSG	    0x0002	/* "err_msg" (JO_OUT_ << 1) */
+#define JO2_ALL		    0x0003
+
 #define JO_MODE_ALL	(JO_MODE + JO_IN_MODE + JO_OUT_MODE + JO_ERR_MODE)
 #define JO_CB_ALL \
     (JO_CALLBACK + JO_OUT_CALLBACK + JO_ERR_CALLBACK + JO_CLOSE_CALLBACK)
@@ -1639,6 +1649,7 @@ struct channel_S {
 typedef struct
 {
     int		jo_set;		/* JO_ bits for values that were set */
+    int		jo_set2;	/* JO2_ bits for values that were set */
 
     ch_mode_T	jo_mode;
     ch_mode_T	jo_in_mode;
@@ -1650,6 +1661,7 @@ typedef struct
     char_u	*jo_io_name[4];	/* not allocated! */
     int		jo_io_buf[4];
     int		jo_modifiable[4];
+    int		jo_message[4];
     channel_T	*jo_channel;
 
     linenr_T	jo_in_top;
@@ -1839,8 +1851,8 @@ struct file_buffer
 
     int		b_flags;	/* various BF_ flags */
 #ifdef FEAT_AUTOCMD
-    int		b_closing;	/* buffer is being closed, don't let
-				   autocommands close it too. */
+    int		b_locked;	/* Buffer is being closed or referenced, don't
+				   let autocommands wipe it out. */
 #endif
 
     /*
@@ -2296,7 +2308,7 @@ struct file_buffer
 /*
  * Stuff for diff mode.
  */
-# define DB_COUNT 4	/* up to four buffers can be diff'ed */
+# define DB_COUNT 8	/* up to eight buffers can be diff'ed */
 
 /*
  * Each diffblock defines where a block of lines starts in each of the buffers
@@ -2439,6 +2451,8 @@ typedef struct
     linenr_T	first_lnum;	/* first lnum to search for multi-line pat */
     colnr_T	startcol; /* in win_line() points to char where HL starts */
     colnr_T	endcol;	 /* in win_line() points to char where HL ends */
+    int		is_addpos;	/* position specified directly by
+				   matchaddpos(). TRUE/FALSE */
 #ifdef FEAT_RELTIME
     proftime_T	tm;	/* for a time limit */
 #endif
@@ -3158,12 +3172,13 @@ typedef struct js_reader js_read_T;
 typedef struct timer_S timer_T;
 struct timer_S
 {
-    int		tr_id;
+    long	tr_id;
 #ifdef FEAT_TIMERS
     timer_T	*tr_next;
     timer_T	*tr_prev;
     proftime_T	tr_due;		    /* when the callback is to be invoked */
-    int		tr_paused;	    /* when TRUE callback is not invoked */
+    char	tr_firing;	    /* when TRUE callback is being called */
+    char	tr_paused;	    /* when TRUE callback is not invoked */
     int		tr_repeat;	    /* number of times to repeat, -1 forever */
     long	tr_interval;	    /* msec */
     char_u	*tr_callback;	    /* allocated */

@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved		by Bram Moolenaar
  *				GUI support by Robert Webb
@@ -2263,11 +2263,11 @@ SaveInst(HINSTANCE hInst)
 /*
  * Return the RGB value of a pixel as a long.
  */
-    long_u
+    guicolor_T
 gui_mch_get_rgb(guicolor_T pixel)
 {
-    return (GetRValue(pixel) << 16) + (GetGValue(pixel) << 8)
-							   + GetBValue(pixel);
+    return (guicolor_T)((GetRValue(pixel) << 16) + (GetGValue(pixel) << 8)
+							   + GetBValue(pixel));
 }
 
 #if defined(FEAT_GUI_DIALOG) || defined(PROTO)
@@ -4531,15 +4531,6 @@ is_winnt_3(void)
     return ((os_version.dwPlatformId == VER_PLATFORM_WIN32_NT
 		&& os_version.dwMajorVersion == 3)
 	    || (os_version.dwPlatformId == VER_PLATFORM_WIN32s));
-}
-
-/*
- * Return TRUE when running under Win32s.
- */
-    int
-gui_is_win32s(void)
-{
-    return (os_version.dwPlatformId == VER_PLATFORM_WIN32s);
 }
 
 #ifdef FEAT_MENU

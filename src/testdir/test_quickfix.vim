@@ -1527,6 +1527,16 @@ function Xproperty_tests(cchar)
     call assert_equal('Sample', w:quickfix_title)
     Xclose
 
+    " Tests for action argument
+    silent! Xolder 999
+    let qfnr = g:Xgetlist({'all':1}).nr
+    call g:Xsetlist([], 'r', {'title' : 'N1'})
+    call assert_equal('N1', g:Xgetlist({'all':1}).title)
+    call g:Xsetlist([], ' ', {'title' : 'N2'})
+    call assert_equal(qfnr + 1, g:Xgetlist({'all':1}).nr)
+    call g:Xsetlist([], ' ', {'title' : 'N3'})
+    call assert_equal('N2', g:Xgetlist({'nr':2, 'title':1}).title)
+
     " Invalid arguments
     call assert_fails('call g:Xgetlist([])', 'E715')
     call assert_fails('call g:Xsetlist([], "a", [])', 'E715')
@@ -1543,4 +1553,39 @@ endfunction
 function Test_qf_property()
     call Xproperty_tests('c')
     call Xproperty_tests('l')
+endfunction
+
+" Tests for the QuickFixCmdPre/QuickFixCmdPost autocommands
+function QfAutoCmdHandler(loc, cmd)
+  call add(g:acmds, a:loc . a:cmd)
+endfunction
+
+function Test_Autocmd()
+  autocmd QuickFixCmdPre * call QfAutoCmdHandler('pre', expand('<amatch>'))
+  autocmd QuickFixCmdPost * call QfAutoCmdHandler('post', expand('<amatch>'))
+
+  let g:acmds = []
+  cexpr "F1:10:Line 10"
+  caddexpr "F1:20:Line 20"
+  cgetexpr "F1:30:Line 30"
+  enew! | call append(0, "F2:10:Line 10")
+  cbuffer!
+  enew! | call append(0, "F2:20:Line 20")
+  cgetbuffer
+  enew! | call append(0, "F2:30:Line 30")
+  caddbuffer
+
+  let l = ['precexpr',
+	      \ 'postcexpr',
+	      \ 'precaddexpr',
+	      \ 'postcaddexpr',
+	      \ 'precgetexpr',
+	      \ 'postcgetexpr',
+	      \ 'precbuffer',
+	      \ 'postcbuffer',
+	      \ 'precgetbuffer',
+	      \ 'postcgetbuffer',
+	      \ 'precaddbuffer',
+	      \ 'postcaddbuffer']
+  call assert_equal(l, g:acmds)
 endfunction

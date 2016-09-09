@@ -1,4 +1,4 @@
-/* vi:set ts=8 sts=4 sw=4:
+/* vi:set ts=8 sts=4 sw=4 noet:
  *
  * VIM - Vi IMproved	by Bram Moolenaar
  *
@@ -543,6 +543,9 @@ EX(CMD_files,		"files",	buflist_list,
 			ADDR_LINES),
 EX(CMD_filetype,	"filetype",	ex_filetype,
 			EXTRA|TRLBAR|CMDWIN,
+			ADDR_LINES),
+EX(CMD_filter,		"filter",	ex_wrongmodifier,
+			BANG|NEEDARG|EXTRA|NOTRLCOM,
 			ADDR_LINES),
 EX(CMD_find,		"find",		ex_find,
 			RANGE|NOTADR|BANG|FILE1|EDITCMD|ARGOPT|TRLBAR,
