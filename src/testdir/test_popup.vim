@@ -17,16 +17,18 @@ func! ListMonths()
 endfunc
 
 func! Test_popup_complete2()
-  " Insert match immediately, if there is only one match
-  "  <c-e> Should select a character from the line below
-  " TODO: test disabled because the code change has been reverted.
-  throw "Skipped: Bug with <c-e> and popupmenu not fixed yet"
+  " Although the popupmenu is not visible, this does not mean completion mode
+  " has ended. After pressing <f5> to complete the currently typed char, Vim
+  " still stays in the first state of the completion (:h ins-completion-menu),
+  " although the popupmenu wasn't shown <c-e> will remove the inserted
+  " completed text (:h complete_CTRL-E), while the following <c-e> will behave
+  " like expected (:h i_CTRL-E)
   new
   inoremap <f5> <c-r>=ListMonths()<cr>
   call append(1, ["December2015"])
   :1
   call feedkeys("aD\<f5>\<C-E>\<C-E>\<C-E>\<C-E>\<enter>\<esc>", 'tx')
-  call assert_equal(["December2015", "", "December2015"], getline(1,3))
+  call assert_equal(["Dece", "", "December2015"], getline(1,3))
   %d
   bw!
 endfu
@@ -286,5 +288,142 @@ func Test_compl_vim_cmds_after_register_expr()
   augroup! AAAAA_Group
   bwipe!
 endfunc
+
+func DummyCompleteOne(findstart, base)
+  if a:findstart
+    return 0
+  else
+    wincmd n
+    return ['onedef', 'oneDEF']
+  endif
+endfunc
+
+" Test that nothing happens if the 'completefunc' opens
+" a new window (no completion, no crash)
+func Test_completefunc_opens_new_window_one()
+  new
+  let winid = win_getid()
+  setlocal completefunc=DummyCompleteOne
+  call setline(1, 'one')
+  /^one
+  call assert_fails('call feedkeys("A\<C-X>\<C-U>\<C-N>\<Esc>", "x")', 'E839:')
+  call assert_notequal(winid, win_getid())
+  q!
+  call assert_equal(winid, win_getid())
+  call assert_equal('', getline(1))
+  q!
+endfunc
+
+" Test that nothing happens if the 'completefunc' opens
+" a new window (no completion, no crash)
+func DummyCompleteTwo(findstart, base)
+  if a:findstart
+    wincmd n
+    return 0
+  else
+    return ['twodef', 'twoDEF']
+  endif
+endfunction
+
+" Test that nothing happens if the 'completefunc' opens
+" a new window (no completion, no crash)
+func Test_completefunc_opens_new_window_two()
+  new
+  let winid = win_getid()
+  setlocal completefunc=DummyCompleteTwo
+  call setline(1, 'two')
+  /^two
+  call assert_fails('call feedkeys("A\<C-X>\<C-U>\<C-N>\<Esc>", "x")', 'E764:')
+  call assert_notequal(winid, win_getid())
+  q!
+  call assert_equal(winid, win_getid())
+  call assert_equal('two', getline(1))
+  q!
+endfunc
+
+func DummyCompleteThree(findstart, base)
+  if a:findstart
+    return 0
+  else
+    return ['threedef', 'threeDEF']
+  endif
+endfunc
+
+:"Test that 'completefunc' works when it's OK.
+func Test_completefunc_works()
+  new
+  let winid = win_getid()
+  setlocal completefunc=DummyCompleteThree
+  call setline(1, 'three')
+  /^three
+  call feedkeys("A\<C-X>\<C-U>\<C-N>\<Esc>", "x")
+  call assert_equal(winid, win_getid())
+  call assert_equal('threeDEF', getline(1))
+  q!
+endfunc
+
+func DummyCompleteFour(findstart, base)
+  if a:findstart
+    return 0
+  else
+    call complete_add('four1')
+    call complete_add('four2')
+    call complete_check()
+    call complete_add('four3')
+    call complete_add('four4')
+    call complete_check()
+    call complete_add('four5')
+    call complete_add('four6')
+    return []
+  endif
+endfunc
+
+" Test that 'completefunc' works when it's OK.
+func Test_omnifunc_with_check()
+  new
+  setlocal omnifunc=DummyCompleteFour
+  call setline(1, 'four')
+  /^four
+  call feedkeys("A\<C-X>\<C-O>\<C-N>\<Esc>", "x")
+  call assert_equal('four2', getline(1))
+
+  call setline(1, 'four')
+  /^four
+  call feedkeys("A\<C-X>\<C-O>\<C-N>\<C-N>\<Esc>", "x")
+  call assert_equal('four3', getline(1))
+
+  call setline(1, 'four')
+  /^four
+  call feedkeys("A\<C-X>\<C-O>\<C-N>\<C-N>\<C-N>\<C-N>\<Esc>", "x")
+  call assert_equal('four5', getline(1))
+
+  q!
+endfunc
+
+function UndoComplete()
+  call complete(1, ['January', 'February', 'March',
+        \ 'April', 'May', 'June', 'July', 'August', 'September',
+        \ 'October', 'November', 'December'])
+  return ''
+endfunc
+
+" Test that no undo item is created when no completion is inserted
+func Test_complete_no_undo()
+  set completeopt=menu,preview,noinsert,noselect
+  inoremap <Right> <C-R>=UndoComplete()<CR>
+  new
+  call feedkeys("ixxx\<CR>\<CR>yyy\<Esc>k", 'xt')
+  call feedkeys("iaaa\<Esc>0", 'xt')
+  call assert_equal('aaa', getline(2))
+  call feedkeys("i\<Right>\<Esc>", 'xt')
+  call assert_equal('aaa', getline(2))
+  call feedkeys("u", 'xt')
+  call assert_equal('', getline(2))
+
+  iunmap <Right>
+  set completeopt&
+  q!
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

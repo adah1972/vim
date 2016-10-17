@@ -53,10 +53,8 @@ SCRIPTS_ALL = \
 	test68.out \
 	test69.out \
 	test70.out \
-	test71.out \
 	test73.out \
 	test75.out \
-	test76.out \
 	test77.out \
 	test79.out \
 	test80.out \
@@ -80,7 +78,6 @@ SCRIPTS_ALL = \
 	test_breakindent.out \
 	test_changelist.out \
 	test_close_count.out \
-	test_command_count.out \
 	test_comparators.out \
 	test_erasebackword.out \
 	test_eval.out \
@@ -149,6 +146,7 @@ NEW_TESTS = test_arglist.res \
 	    test_channel.res \
 	    test_charsearch.res \
 	    test_cmdline.res \
+	    test_crypt.res \
 	    test_cscope.res \
 	    test_diffmode.res \
 	    test_digraph.res \

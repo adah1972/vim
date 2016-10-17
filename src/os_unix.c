@@ -2261,6 +2261,7 @@ use_xterm_like_mouse(char_u *name)
     return (name != NULL
 	    && (term_is_xterm
 		|| STRNICMP(name, "screen", 6) == 0
+		|| STRNICMP(name, "tmux", 4) == 0
 		|| STRICMP(name, "st") == 0
 		|| STRNICMP(name, "st-", 3) == 0
 		|| STRNICMP(name, "stterm", 6) == 0));
@@ -2324,6 +2325,7 @@ vim_is_fastterm(char_u *name)
     return (   STRNICMP(name, "hpterm", 6) == 0
 	    || STRNICMP(name, "sun-cmd", 7) == 0
 	    || STRNICMP(name, "screen", 6) == 0
+	    || STRNICMP(name, "tmux", 4) == 0
 	    || STRNICMP(name, "dtterm", 6) == 0);
 }
 
@@ -5292,8 +5294,7 @@ mch_job_status(job_T *job)
     if (wait_pid == -1)
     {
 	/* process must have exited */
-	job->jv_status = JOB_ENDED;
-	return "dead";
+	goto return_dead;
     }
     if (wait_pid == 0)
 	return "run";
@@ -5301,16 +5302,62 @@ mch_job_status(job_T *job)
     {
 	/* LINTED avoid "bitwise operation on signed value" */
 	job->jv_exitval = WEXITSTATUS(status);
-	job->jv_status = JOB_ENDED;
-	return "dead";
+	goto return_dead;
     }
     if (WIFSIGNALED(status))
     {
 	job->jv_exitval = -1;
-	job->jv_status = JOB_ENDED;
-	return "dead";
+	goto return_dead;
     }
     return "run";
+
+return_dead:
+    if (job->jv_status != JOB_ENDED)
+    {
+	ch_log(job->jv_channel, "Job ended");
+	job->jv_status = JOB_ENDED;
+    }
+    return "dead";
+}
+
+    job_T *
+mch_detect_ended_job(job_T *job_list)
+{
+# ifdef HAVE_UNION_WAIT
+    union wait	status;
+# else
+    int		status = -1;
+# endif
+    pid_t	wait_pid = 0;
+    job_T	*job;
+
+# ifdef __NeXT__
+    wait_pid = wait4(-1, &status, WNOHANG, (struct rusage *)0);
+# else
+    wait_pid = waitpid(-1, &status, WNOHANG);
+# endif
+    if (wait_pid <= 0)
+	/* no process ended */
+	return NULL;
+    for (job = job_list; job != NULL; job = job->jv_next)
+    {
+	if (job->jv_pid == wait_pid)
+	{
+	    if (WIFEXITED(status))
+		/* LINTED avoid "bitwise operation on signed value" */
+		job->jv_exitval = WEXITSTATUS(status);
+	    else if (WIFSIGNALED(status))
+		job->jv_exitval = -1;
+	    if (job->jv_status != JOB_ENDED)
+	    {
+		ch_log(job->jv_channel, "Job ended");
+		job->jv_status = JOB_ENDED;
+	    }
+	    return job;
+	}
+    }
+    return NULL;
+
 }
 
     int
@@ -5364,9 +5411,10 @@ mch_clear_job(job_T *job)
  * In cooked mode we should get SIGINT, no need to check.
  */
     void
-mch_breakcheck(void)
+mch_breakcheck(int force)
 {
-    if (curr_tmode == TMODE_RAW && RealWaitForChar(read_cmd_fd, 0L, NULL, NULL))
+    if ((curr_tmode == TMODE_RAW || force)
+			       && RealWaitForChar(read_cmd_fd, 0L, NULL, NULL))
 	fill_input_buf(FALSE);
 }
 

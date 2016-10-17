@@ -4281,6 +4281,11 @@ set_one_cmd_context(
 	    xp->xp_pattern = arg;
 	    break;
 
+	case CMD_messages:
+	    xp->xp_context = EXPAND_MESSAGES;
+	    xp->xp_pattern = arg;
+	    break;
+
 #if defined(FEAT_CMDHIST)
 	case CMD_history:
 	    xp->xp_context = EXPAND_HISTORY;
@@ -5893,6 +5898,7 @@ static struct
 #endif
     {EXPAND_MAPPINGS, "mapping"},
     {EXPAND_MENUS, "menu"},
+    {EXPAND_MESSAGES, "messages"},
     {EXPAND_OWNSYNTAX, "syntax"},
 #if defined(FEAT_PROFILE)
     {EXPAND_SYNTIME, "syntime"},
@@ -7611,14 +7617,7 @@ ex_stop(exarg_T *eap)
     /*
      * Disallow suspending for "rvim".
      */
-    if (!check_restricted()
-#ifdef WIN3264
-	/*
-	 * Check if external commands are allowed now.
-	 */
-	&& can_end_termcap_mode(TRUE)
-#endif
-					)
+    if (!check_restricted())
     {
 	if (!eap->forceit)
 	    autowrite_all();
@@ -9065,8 +9064,17 @@ do_sleep(long msec)
 		wait_now = due_time;
 	}
 #endif
+#ifdef FEAT_JOB_CHANNEL
+	if (has_any_channel() && wait_now > 100L)
+	    wait_now = 100L;
+#endif
 	ui_delay(wait_now, TRUE);
-	ui_breakcheck();
+#ifdef FEAT_JOB_CHANNEL
+	if (has_any_channel())
+	    ui_breakcheck_force(TRUE);
+	else
+#endif
+	    ui_breakcheck();
 #ifdef MESSAGE_QUEUE
 	/* Process the netbeans and clientserver messages that may have been
 	 * received in the call to ui_breakcheck() when the GUI is in use. This
@@ -11897,6 +11905,18 @@ get_behave_arg(expand_T *xp UNUSED, int idx)
 	return (char_u *)"mswin";
     if (idx == 1)
 	return (char_u *)"xterm";
+    return NULL;
+}
+
+/*
+ * Function given to ExpandGeneric() to obtain the possible arguments of the
+ * ":messages {clear}" command.
+ */
+    char_u *
+get_messages_arg(expand_T *xp UNUSED, int idx)
+{
+    if (idx == 0)
+	return (char_u *)"clear";
     return NULL;
 }
 #endif

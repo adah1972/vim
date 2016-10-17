@@ -5622,7 +5622,7 @@ set_ref_in_item(
     else if (tv->v_type == VAR_CHANNEL)
     {
 	channel_T   *ch =tv->vval.v_channel;
-	int	    part;
+	ch_part_T   part;
 	typval_T    dtv;
 	jsonq_T	    *jq;
 	cbq_T	    *cq;
@@ -5630,7 +5630,7 @@ set_ref_in_item(
 	if (ch != NULL && ch->ch_copyID != copyID)
 	{
 	    ch->ch_copyID = copyID;
-	    for (part = PART_SOCK; part <= PART_IN; ++part)
+	    for (part = PART_SOCK; part < PART_COUNT; ++part)
 	    {
 		for (jq = ch->ch_part[part].ch_json_head.jq_next; jq != NULL;
 							     jq = jq->jq_next)
@@ -7305,7 +7305,7 @@ get_tv_string_buf_chk(typval_T *varp, char_u *buf)
 #ifdef FEAT_JOB_CHANNEL
 	    {
 		channel_T *channel = varp->vval.v_channel;
-		char      *status = channel_status(channel);
+		char      *status = channel_status(channel, -1);
 
 		if (channel == NULL)
 		    vim_snprintf((char *)buf, NUMBUFLEN, "channel %s", status);

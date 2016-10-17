@@ -434,6 +434,23 @@ func Test_raw_pipe()
   let job = job_start(s:python . " test_channel_pipe.py", {'mode': 'raw'})
   call assert_equal(v:t_job, type(job))
   call assert_equal("run", job_status(job))
+
+  call assert_equal("open", ch_status(job))
+  call assert_equal("open", ch_status(job), {"part": "out"})
+  call assert_equal("open", ch_status(job), {"part": "err"})
+  call assert_fails('call ch_status(job, {"in_mode": "raw"})', 'E475:')
+  call assert_fails('call ch_status(job, {"part": "in"})', 'E475:')
+
+  let dict = ch_info(job)
+  call assert_true(dict.id != 0)
+  call assert_equal('open', dict.status)
+  call assert_equal('open', dict.out_status)
+  call assert_equal('RAW', dict.out_mode)
+  call assert_equal('pipe', dict.out_io)
+  call assert_equal('open', dict.err_status)
+  call assert_equal('RAW', dict.err_mode)
+  call assert_equal('pipe', dict.err_io)
+
   try
     " For a change use the job where a channel is expected.
     call ch_sendraw(job, "echo something\n")
@@ -1345,6 +1362,24 @@ func Test_exit_callback()
   endif
 endfunc
 
+let g:exit_cb_time = {'start': 0, 'end': 0}
+function MyExitTimeCb(job, status)
+  let g:exit_cb_time.end = reltime(g:exit_cb_time.start)
+endfunction
+
+func Test_exit_callback_interval()
+  if !has('job')
+    return
+  endif
+
+  let g:exit_cb_time.start = reltime()
+  let job = job_start([s:python, '-c', 'import time;time.sleep(0.5)'], {'exit_cb': 'MyExitTimeCb'})
+  call WaitFor('g:exit_cb_time.end != 0')
+  let elapsed = reltimefloat(g:exit_cb_time.end)
+  call assert_true(elapsed > 0.3)
+  call assert_true(elapsed < 1.0)
+endfunc
+
 """""""""
 
 let g:Ch_close_ret = 'alive'
@@ -1465,6 +1500,44 @@ func Test_raw_passes_nul()
 
   call delete('Xtestwrite')
   bwipe!
+endfunc
+
+func MyLineCountCb(ch, msg)
+  let g:linecount += 1
+endfunc
+
+func Test_read_nonl_line()
+  if !has('job')
+    return
+  endif
+
+  let g:linecount = 0
+  if has('win32')
+    " workaround: 'shellescape' does improper escaping double quotes
+    let arg = 'import sys;sys.stdout.write(\"1\n2\n3\")'
+  else
+    let arg = 'import sys;sys.stdout.write("1\n2\n3")'
+  endif
+  call job_start([s:python, '-c', arg], {'callback': 'MyLineCountCb'})
+  call WaitFor('3 <= g:linecount')
+  call assert_equal(3, g:linecount)
+endfunc
+
+func Test_read_from_terminated_job()
+  if !has('job')
+    return
+  endif
+
+  let g:linecount = 0
+  if has('win32')
+    " workaround: 'shellescape' does improper escaping double quotes 
+    let arg = 'import os,sys;os.close(1);sys.stderr.write(\"test\n\")'
+  else
+    let arg = 'import os,sys;os.close(1);sys.stderr.write("test\n")'
+  endif
+  call job_start([s:python, '-c', arg], {'callback': 'MyLineCountCb'})
+  call WaitFor('1 <= g:linecount')
+  call assert_equal(1, g:linecount)
 endfunc
 
 function Ch_test_close_lambda(port)

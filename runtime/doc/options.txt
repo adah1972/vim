@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.0.  Last change: 2016 Sep 02
+*options.txt*	For Vim version 8.0.  Last change: 2016 Oct 12
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -10,7 +10,7 @@ Options							*options*
 2. Automatically setting options	|auto-setting|
 3. Options summary			|option-summary|
 
-For an overview of options see help.txt |option-list|.
+For an overview of options see quickref.txt |option-list|.
 
 Vim has a number of internal variables and switches which can be set to
 achieve special effects.  These options come in three forms:
@@ -1734,12 +1734,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 	option		+ set value	effect	~
 
 	'allowrevins'	  off		no CTRL-_ command
-	'backupcopy'	  Unix: "yes"	  backup file is a copy
-			  others: "auto"  copy or rename backup file
 	'backspace'	  ""		normal backspace
+	'backupcopy'	  Unix: "yes"	backup file is a copy
+			  else: "auto"  copy or rename backup file
 	'backup'	  off		no backup file
-	'cindent'	  off		no C code indentation
 	'cedit'		+ ""		no key to open the |cmdwin|
+	'cindent'	  off		no C code indentation
 	'cpoptions'	+ (all flags)	Vi-compatible flags
 	'cscopetag'	  off		don't use cscope for ":tag"
 	'cscopetagorder'  0		see |cscopetagorder|
@@ -1781,6 +1781,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	'textwidth'	  0		no automatic line wrap
 	'tildeop'	  off		tilde is not an operator
 	'ttimeout'	  off		no terminal timeout
+	'viminfo'       + {unchanged}	no viminfo file	
 	'whichwrap'	+ ""		left-right movements don't wrap
 	'wildchar'	+ CTRL-E	only when the current value is <Tab>
 					use CTRL-E for cmdline completion
@@ -2633,7 +2634,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	uhex		Show unprintable characters hexadecimal as <xx>
 			instead of using ^C and ~C.
 
-	When neither "lastline" or "truncate" is included, a last line that
+	When neither "lastline" nor "truncate" is included, a last line that
 	doesn't fit is replaced with "@" lines.
 
 						*'eadirection'* *'ead'*
@@ -4326,8 +4327,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	original position when no match is found and when pressing <Esc>.  You
 	still need to finish the search command with <Enter> to move the
 	cursor to the match.
-	You can use the CTRL-N and CTRL-P keys to move to the next and
-	previous match. |c_CTRL-N| |c_CTRL-P|
+	You can use the CTRL-G and CTRL-T keys to move to the next and
+	previous match. |c_CTRL-G| |c_CTRL-T|
 	When compiled with the |+reltime| feature Vim only searches for about
 	half a second.  With a complicated pattern and/or a lot of text the
 	match may not be found.  This is to avoid that Vim hangs while you
@@ -6122,7 +6123,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	   personal preferences to overrule or add to the distributed defaults
 	   or system-wide settings (rarely needed).
 
-	More entries are added when using |packages|.
+	More entries are added when using |packages|.  If it gets very long
+	then `:set rtp` will be truncated, use `:echo &rtp` to see the full
+	string.
 
 	Note that, unlike 'path', no wildcards like "**" are allowed.  Normal
 	wildcards are allowed, but can significantly slow down searching for
@@ -6183,7 +6186,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	NOTE: This option is set to 1 when 'compatible' is set.
 
 						*'scrolloff'* *'so'*
-'scrolloff' 'so'	number	(default 0)
+'scrolloff' 'so'	number	(default 0, set to 5 in |defaults.vim|)
 			global
 			{not in Vi}
 	Minimal number of screen lines to keep above and below the cursor.
@@ -7685,7 +7688,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 'timeout' 'to'		boolean (default on)
 			global
 						*'ttimeout'* *'nottimeout'*
-'ttimeout'		boolean (default off)
+'ttimeout'		boolean (default off, set in |defaults.vim|))
 			global
 			{not in Vi}
 	These two options together determine the behavior when part of a
@@ -7720,7 +7723,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 			{not in all versions of Vi}
 						*'ttimeoutlen'* *'ttm'*
-'ttimeoutlen' 'ttm'	number	(default -1)
+'ttimeoutlen' 'ttm'	number	(default -1, set to 100 in |defaults.vim|))
 			global
 			{not in Vi}
 	The time in milliseconds that is waited for a key code or mapped key
@@ -7963,8 +7966,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	"xterm", "xterm2", "urxvt" or "sgr" (because dec mouse codes conflict
 	with them).
 	This option is automatically set to "xterm", when the 'term' option is
-	set to a name that starts with "xterm", "mlterm", "screen", "st" (full
-	match only), "st-" or "stterm", and 'ttymouse' is not set already.
+	set to a name that starts with "xterm", "mlterm", "screen", "tmux",
+	"st" (full match only), "st-" or "stterm", and 'ttymouse' is not set
+	already.
 	Additionally, if vim is compiled with the |+termresponse| feature and
 	|t_RV| is set to the escape sequence to request the xterm version
 	number, more intelligent detection process runs.

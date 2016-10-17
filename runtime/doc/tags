@@ -5184,6 +5184,7 @@ c_CTRL-I	cmdline.txt	/*c_CTRL-I*
 c_CTRL-J	cmdline.txt	/*c_CTRL-J*
 c_CTRL-K	cmdline.txt	/*c_CTRL-K*
 c_CTRL-L	cmdline.txt	/*c_CTRL-L*
+c_CTRL-M	cmdline.txt	/*c_CTRL-M*
 c_CTRL-N	cmdline.txt	/*c_CTRL-N*
 c_CTRL-P	cmdline.txt	/*c_CTRL-P*
 c_CTRL-Q	cmdline.txt	/*c_CTRL-Q*
@@ -5200,6 +5201,7 @@ c_CTRL-U	cmdline.txt	/*c_CTRL-U*
 c_CTRL-V	cmdline.txt	/*c_CTRL-V*
 c_CTRL-W	cmdline.txt	/*c_CTRL-W*
 c_CTRL-Y	cmdline.txt	/*c_CTRL-Y*
+c_CTRL-[	cmdline.txt	/*c_CTRL-[*
 c_CTRL-\_CTRL-G	intro.txt	/*c_CTRL-\\_CTRL-G*
 c_CTRL-\_CTRL-N	intro.txt	/*c_CTRL-\\_CTRL-N*
 c_CTRL-\_e	cmdline.txt	/*c_CTRL-\\_e*
@@ -6025,6 +6027,7 @@ ft-csh-syntax	syntax.txt	/*ft-csh-syntax*
 ft-css-omni	insert.txt	/*ft-css-omni*
 ft-cweb-syntax	syntax.txt	/*ft-cweb-syntax*
 ft-cynlib-syntax	syntax.txt	/*ft-cynlib-syntax*
+ft-dash-syntax	syntax.txt	/*ft-dash-syntax*
 ft-desktop-syntax	syntax.txt	/*ft-desktop-syntax*
 ft-dircolors-syntax	syntax.txt	/*ft-dircolors-syntax*
 ft-docbk-syntax	syntax.txt	/*ft-docbk-syntax*
@@ -6085,6 +6088,7 @@ ft-php-syntax	syntax.txt	/*ft-php-syntax*
 ft-php3-syntax	syntax.txt	/*ft-php3-syntax*
 ft-phtml-syntax	syntax.txt	/*ft-phtml-syntax*
 ft-plaintex-syntax	syntax.txt	/*ft-plaintex-syntax*
+ft-posix-synax	syntax.txt	/*ft-posix-synax*
 ft-postscr-syntax	syntax.txt	/*ft-postscr-syntax*
 ft-ppwiz-syntax	syntax.txt	/*ft-ppwiz-syntax*
 ft-printcap-syntax	syntax.txt	/*ft-printcap-syntax*
@@ -6338,8 +6342,6 @@ g:netrw_win95ftp	pi_netrw.txt	/*g:netrw_win95ftp*
 g:netrw_winsize	pi_netrw.txt	/*g:netrw_winsize*
 g:netrw_wiw	pi_netrw.txt	/*g:netrw_wiw*
 g:netrw_xstrlen	pi_netrw.txt	/*g:netrw_xstrlen*
-g:sh_isk	syntax.txt	/*g:sh_isk*
-g:sh_noisk	syntax.txt	/*g:sh_noisk*
 g:syntax_on	syntax.txt	/*g:syntax_on*
 g:tar_browseoptions	pi_tar.txt	/*g:tar_browseoptions*
 g:tar_cmd	pi_tar.txt	/*g:tar_cmd*
@@ -6370,6 +6372,8 @@ g:vimsyn_maxlines	syntax.txt	/*g:vimsyn_maxlines*
 g:vimsyn_minlines	syntax.txt	/*g:vimsyn_minlines*
 g:vimsyn_noerror	syntax.txt	/*g:vimsyn_noerror*
 g:yaml_schema	syntax.txt	/*g:yaml_schema*
+g:zipPlugin_ext	pi_zip.txt	/*g:zipPlugin_ext*
+g:zip_extractcmd	pi_zip.txt	/*g:zip_extractcmd*
 g:zip_nomax	pi_zip.txt	/*g:zip_nomax*
 g:zip_shq	pi_zip.txt	/*g:zip_shq*
 g:zip_unzipcmd	pi_zip.txt	/*g:zip_unzipcmd*
@@ -6552,7 +6556,7 @@ gui-w32-printing	gui_w32.txt	/*gui-w32-printing*
 gui-w32-start	gui_w32.txt	/*gui-w32-start*
 gui-w32-various	gui_w32.txt	/*gui-w32-various*
 gui-w32-windowid	gui_w32.txt	/*gui-w32-windowid*
-gui-w32s	gui_w32.txt	/*gui-w32s*
+gui-w32s	os_win32.txt	/*gui-w32s*
 gui-win32-maximized	gui_w32.txt	/*gui-win32-maximized*
 gui-x11	gui_x11.txt	/*gui-x11*
 gui-x11-athena	gui_x11.txt	/*gui-x11-athena*
@@ -7258,7 +7262,6 @@ mouse_winid-variable	eval.txt	/*mouse_winid-variable*
 movement	intro.txt	/*movement*
 ms-dos	os_msdos.txt	/*ms-dos*
 msdos	os_msdos.txt	/*msdos*
-msdos-mode	gui_w32.txt	/*msdos-mode*
 msql.vim	syntax.txt	/*msql.vim*
 mswin.vim	gui_w32.txt	/*mswin.vim*
 multi-byte	mbyte.txt	/*multi-byte*
@@ -9228,6 +9231,7 @@ win32-startup	os_win32.txt	/*win32-startup*
 win32-term	os_win32.txt	/*win32-term*
 win32-vimrun	gui_w32.txt	/*win32-vimrun*
 win32-win3.1	os_win32.txt	/*win32-win3.1*
+win32-win95	os_win32.txt	/*win32-win95*
 win32s	os_win32.txt	/*win32s*
 win_findbuf()	eval.txt	/*win_findbuf()*
 win_getid()	eval.txt	/*win_getid()*
@@ -9257,6 +9261,8 @@ windows-intro	windows.txt	/*windows-intro*
 windows-starting	windows.txt	/*windows-starting*
 windows.txt	windows.txt	/*windows.txt*
 windows95	os_win32.txt	/*windows95*
+windows98	os_win32.txt	/*windows98*
+windowsme	os_win32.txt	/*windowsme*
 winheight()	eval.txt	/*winheight()*
 winid	windows.txt	/*winid*
 winline()	eval.txt	/*winline()*
@@ -9386,6 +9392,7 @@ zip-extension	pi_zip.txt	/*zip-extension*
 zip-history	pi_zip.txt	/*zip-history*
 zip-manual	pi_zip.txt	/*zip-manual*
 zip-usage	pi_zip.txt	/*zip-usage*
+zip-x	pi_zip.txt	/*zip-x*
 zj	fold.txt	/*zj*
 zk	fold.txt	/*zk*
 zl	scroll.txt	/*zl*
