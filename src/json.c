@@ -16,6 +16,10 @@
 
 #include "vim.h"
 
+#ifdef VAX
+# undef FEAT_FLOAT // VAX does not handle well the Infinities
+#endif
+
 #if defined(FEAT_EVAL) || defined(PROTO)
 
 static int json_encode_item(garray_T *gap, typval_T *val, int copyID, int options);
@@ -861,7 +865,7 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 	    break;
     }
 
-    if (res != NUL)
+    if (res != NULL)
     {
 	res->v_type = VAR_SPECIAL;
 	res->vval.v_number = VVAL_NONE;
