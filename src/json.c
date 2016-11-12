@@ -16,10 +16,6 @@
 
 #include "vim.h"
 
-#ifdef VAX
-# undef FEAT_FLOAT // VAX does not handle well the Infinities
-#endif
-
 #if defined(FEAT_EVAL) || defined(PROTO)
 
 static int json_encode_item(garray_T *gap, typval_T *val, int copyID, int options);
@@ -332,7 +328,7 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
 	    break;
 #endif
 	case VAR_UNKNOWN:
-	    EMSG2(_(e_intern2), "json_encode_item()");
+	    internal_error("json_encode_item()");
 	    return FAIL;
     }
     return OK;
