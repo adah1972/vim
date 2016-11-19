@@ -265,7 +265,7 @@ static xsmp_config_T xsmp;
  * that describe the signals. That is nearly what we want here.  But
  * autoconf does only check for sys_siglist (without the underscore), I
  * do not want to change everything today.... jw.
- * This is why AC_DECL_SYS_SIGLIST is commented out in configure.in
+ * This is why AC_DECL_SYS_SIGLIST is commented out in configure.ac.
  */
 #endif
 
@@ -5354,7 +5354,7 @@ mch_job_status(job_T *job)
     return "run";
 
 return_dead:
-    if (job->jv_status != JOB_ENDED)
+    if (job->jv_status < JOB_ENDED)
     {
 	ch_log(job->jv_channel, "Job ended");
 	job->jv_status = JOB_ENDED;
@@ -5398,7 +5398,7 @@ mch_detect_ended_job(job_T *job_list)
 		job->jv_exitval = WEXITSTATUS(status);
 	    else if (WIFSIGNALED(status))
 		job->jv_exitval = -1;
-	    if (job->jv_status != JOB_ENDED)
+	    if (job->jv_status < JOB_ENDED)
 	    {
 		ch_log(job->jv_channel, "Job ended");
 		job->jv_status = JOB_ENDED;

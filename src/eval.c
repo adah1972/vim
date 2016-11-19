@@ -4339,10 +4339,17 @@ eval7(
 		 * use its contents. */
 		s = deref_func_name(s, &len, &partial, !evaluate);
 
-		/* Invoke the function. */
-		ret = get_func_tv(s, len, rettv, arg,
-			  curwin->w_cursor.lnum, curwin->w_cursor.lnum,
-			  &len, evaluate, partial, NULL);
+		/* Need to make a copy, in case evaluating the arguments makes
+		 * the name invalid. */
+		s = vim_strsave(s);
+		if (s == NULL)
+		    ret = FAIL;
+		else
+		    /* Invoke the function. */
+		    ret = get_func_tv(s, len, rettv, arg,
+			      curwin->w_cursor.lnum, curwin->w_cursor.lnum,
+			      &len, evaluate, partial, NULL);
+		vim_free(s);
 
 		/* If evaluate is FALSE rettv->v_type was not set in
 		 * get_func_tv, but it's needed in handle_subscript() to parse
@@ -7283,7 +7290,7 @@ get_tv_string_buf_chk(typval_T *varp, char_u *buf)
 		if (job == NULL)
 		    return (char_u *)"no process";
 		status = job->jv_status == JOB_FAILED ? "fail"
-				: job->jv_status == JOB_ENDED ? "dead"
+				: job->jv_status >= JOB_ENDED ? "dead"
 				: "run";
 # ifdef UNIX
 		vim_snprintf((char *)buf, NUMBUFLEN,

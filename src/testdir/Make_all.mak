@@ -75,7 +75,6 @@ SCRIPTS_ALL = \
 	test108.out \
 	test_autocmd_option.out \
 	test_autoformat_join.out \
-	test_breakindent.out \
 	test_changelist.out \
 	test_close_count.out \
 	test_comparators.out \
@@ -141,6 +140,7 @@ NEW_TESTS = test_arglist.res \
 	    test_assert.res \
 	    test_autochdir.res \
 	    test_backspace_opt.res \
+	    test_breakindent.res \
 	    test_bufwintabinfo.res \
 	    test_cdo.res \
 	    test_channel.res \
@@ -156,6 +156,7 @@ NEW_TESTS = test_arglist.res \
 	    test_gn.res \
 	    test_gui.res \
 	    test_hardcopy.res \
+	    test_hide.res \
 	    test_history.res \
 	    test_hlsearch.res \
 	    test_increment.res \
