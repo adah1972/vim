@@ -63,8 +63,6 @@ SCRIPTS_ALL = \
 	test88.out \
 	test90.out \
 	test91.out \
-	test92.out \
-	test93.out \
 	test94.out \
 	test95.out \
 	test98.out \
@@ -150,6 +148,7 @@ NEW_TESTS = test_arglist.res \
 	    test_cscope.res \
 	    test_diffmode.res \
 	    test_digraph.res \
+	    test_display.res \
 	    test_farsi.res \
 	    test_fnameescape.res \
 	    test_gf.res \
@@ -167,6 +166,8 @@ NEW_TESTS = test_arglist.res \
 	    test_man.res \
 	    test_marks.res \
 	    test_matchadd_conceal.res \
+	    test_mksession.res \
+	    test_mksession_utf8.res \
 	    test_nested_function.res \
 	    test_netbeans.res \
 	    test_normal.res \

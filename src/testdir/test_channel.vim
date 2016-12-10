@@ -26,7 +26,10 @@ func Ch_requestHandler(handle, msg)
 endfunc
 
 func Ch_communicate(port)
+  " Avoid dropping messages, since we don't use a callback here.
+  let s:chopt.drop = 'never'
   let handle = ch_open('localhost:' . a:port, s:chopt)
+  unlet s:chopt.drop
   if ch_status(handle) == "fail"
     call assert_false(1, "Can't open channel")
     return
@@ -57,6 +60,9 @@ func Ch_communicate(port)
 
   " string with ][ should work
   call assert_equal('this][that', ch_evalexpr(handle, 'echo this][that'))
+
+  " nothing to read now
+  call assert_equal(0, ch_canread(handle))
 
   " sending three messages quickly then reading should work
   for i in range(3)
@@ -126,6 +132,9 @@ func Ch_communicate(port)
   call ch_setoptions(handle, {'mode': 'json'})
   call assert_fails("call ch_setoptions(handle, {'waittime': 111})", "E475")
   call ch_setoptions(handle, {'callback': ''})
+  call ch_setoptions(handle, {'drop': 'never'})
+  call ch_setoptions(handle, {'drop': 'auto'})
+  call assert_fails("call ch_setoptions(handle, {'drop': 'bad'})", "E475")
 
   " Send an eval request that works.
   call assert_equal('ok', ch_evalexpr(handle, 'eval-works'))
@@ -246,6 +255,7 @@ endfunc
 """""""""
 
 func Ch_handler(chan, msg)
+  call ch_log('Ch_handler()')
   unlet g:Ch_reply
   let g:Ch_reply = a:msg
 endfunc
@@ -269,6 +279,7 @@ func Ch_channel_handler(port)
 endfunc
 
 func Test_channel_handler()
+call ch_logfile('channellog', 'w')
   call ch_log('Test_channel_handler()')
   let g:Ch_reply = ""
   let s:chopt.callback = 'Ch_handler'
@@ -368,7 +379,7 @@ func Ch_raw_one_time_callback(port)
   endif
   call ch_setoptions(handle, {'mode': 'raw'})
 
-  " The message are sent raw, we do our own JSON strings here.
+  " The messages are sent raw, we do our own JSON strings here.
   call ch_sendraw(handle, "[1, \"hello!\"]\n", {'callback': 'Ch_handleRaw1'})
   call WaitFor('g:Ch_reply1 != ""')
   call assert_equal("[1, \"got it\"]", g:Ch_reply1)
@@ -431,7 +442,10 @@ func Test_raw_pipe()
     return
   endif
   call ch_log('Test_raw_pipe()')
-  let job = job_start(s:python . " test_channel_pipe.py", {'mode': 'raw'})
+  " Add a dummy close callback to avoid that messages are dropped when calling
+  " ch_canread().
+  let job = job_start(s:python . " test_channel_pipe.py",
+	\ {'mode': 'raw', 'drop': 'never'})
   call assert_equal(v:t_job, type(job))
   call assert_equal("run", job_status(job))
 
@@ -458,6 +472,9 @@ func Test_raw_pipe()
     call assert_equal("something\n", substitute(msg, "\r", "", 'g'))
 
     call ch_sendraw(job, "double this\n")
+    let g:handle = job_getchannel(job)
+    call WaitFor('ch_canread(g:handle)')
+    unlet g:handle
     let msg = ch_readraw(job)
     call assert_equal("this\nAND this\n", substitute(msg, "\r", "", 'g'))
 

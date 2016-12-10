@@ -435,8 +435,8 @@ struct vimoption
 
 				/* when option changed, what to display: */
 #define P_RSTAT		0x1000	/* redraw status lines */
-#define P_RWIN		0x2000	/* redraw current window */
-#define P_RBUF		0x4000	/* redraw current buffer */
+#define P_RWIN		0x2000	/* redraw current window and recompute text */
+#define P_RBUF		0x4000	/* redraw current buffer and recompute text */
 #define P_RALL		0x6000	/* redraw all windows */
 #define P_RCLR		0x7000	/* clear and redraw all */
 
@@ -457,6 +457,7 @@ struct vimoption
 #define P_CURSWANT    0x4000000L /* update curswant required; not needed when
 				  * there is a redraw flag */
 #define P_NDNAME      0x8000000L /* only normal dir name chars allowed */
+#define P_RWINONLY   0x10000000L /* only redraw current window */
 
 #define ISK_LATIN1  (char_u *)"@,48-57,_,192-255"
 
@@ -967,7 +968,7 @@ static struct vimoption options[] =
 			    (char_u *)NULL, PV_NONE,
 #endif
 			    {(char_u *)FALSE, (char_u *)0L} SCRIPTID_INIT},
-    {"cursorline",   "cul", P_BOOL|P_VI_DEF|P_RWIN,
+    {"cursorline",   "cul", P_BOOL|P_VI_DEF|P_RWINONLY,
 #ifdef FEAT_SYN_HL
 			    (char_u *)VAR_WIN, PV_CUL,
 #else
@@ -2660,7 +2661,7 @@ static struct vimoption options[] =
     {"textwidth",   "tw",   P_NUM|P_VI_DEF|P_VIM|P_RBUF,
 			    (char_u *)&p_tw, PV_TW,
 			    {(char_u *)0L, (char_u *)0L} SCRIPTID_INIT},
-    {"thesaurus",   "tsr",  P_STRING|P_EXPAND|P_VI_DEF|P_ONECOMMA|P_NODUP,
+    {"thesaurus",   "tsr",  P_STRING|P_EXPAND|P_VI_DEF|P_ONECOMMA|P_NODUP|P_NDNAME,
 #ifdef FEAT_INS_EXPAND
 			    (char_u *)&p_tsr, PV_TSR,
 #else
@@ -5879,9 +5880,11 @@ did_set_string_option(
 
     /* Check for a "normal" directory or file name in some options.  Disallow a
      * path separator (slash and/or backslash), wildcards and characters that
-     * are often illegal in a file name. */
+     * are often illegal in a file name. Be more permissive if "secure" is off.
+     */
     else if (((options[opt_idx].flags & P_NFNAME)
-		    && vim_strpbrk(*varp, (char_u *)"/\\*?[|;&<>\r\n") != NULL)
+		    && vim_strpbrk(*varp, (char_u *)(secure
+			    ? "/\\*?[|;&<>\r\n" : "/\\*?[<>\r\n")) != NULL)
 	  || ((options[opt_idx].flags & P_NDNAME)
 		    && vim_strpbrk(*varp, (char_u *)"*?[|;&<>\r\n") != NULL))
     {
@@ -9053,6 +9056,8 @@ check_redraw(long_u flags)
 	changed_window_setting();
     if (flags & P_RBUF)
 	redraw_curbuf_later(NOT_VALID);
+    if (flags & P_RWINONLY)
+	redraw_later(NOT_VALID);
     if (doclear)
 	redraw_all_later(CLEAR);
     else if (all)

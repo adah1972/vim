@@ -1740,27 +1740,6 @@ vim_memset(void *ptr, int c, size_t size)
 }
 #endif
 
-#ifdef VIM_MEMCMP
-/*
- * Return zero when "b1" and "b2" are the same for "len" bytes.
- * Return non-zero otherwise.
- */
-    int
-vim_memcmp(void *b1, void *b2, size_t len)
-{
-    char_u  *p1 = (char_u *)b1, *p2 = (char_u *)b2;
-
-    for ( ; len > 0; --len)
-    {
-	if (*p1 != *p2)
-	    return 1;
-	++p1;
-	++p2;
-    }
-    return 0;
-}
-#endif
-
 /* skipped when generating prototypes, the prototype is in vim.h */
 #ifdef VIM_MEMMOVE
 /*
@@ -6264,7 +6243,8 @@ parse_queued_messages(void)
 }
 #endif
 
-#ifdef ELAPSED_TIMEVAL  /* proto is defined in vim.h */
+#ifndef PROTO  /* proto is defined in vim.h */
+# ifdef ELAPSED_TIMEVAL
 /*
  * Return time in msec since "start_tv".
  */
@@ -6277,9 +6257,9 @@ elapsed(struct timeval *start_tv)
     return (now_tv.tv_sec - start_tv->tv_sec) * 1000L
 	 + (now_tv.tv_usec - start_tv->tv_usec) / 1000L;
 }
-#endif
+# endif
 
-#ifdef ELAPSED_TICKCOUNT
+# ifdef ELAPSED_TICKCOUNT
 /*
  * Return time in msec since "start_tick".
  */
@@ -6288,9 +6268,7 @@ elapsed(DWORD start_tick)
 {
     DWORD	now = GetTickCount();
 
-    if (now < start_tick)
-	/* overflow */
-	return (long)now;
     return (long)now - (long)start_tick;
 }
+# endif
 #endif
