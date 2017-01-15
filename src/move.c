@@ -2841,6 +2841,8 @@ do_check_cursorbind(void)
 	    restart_edit_save = restart_edit;
 	    restart_edit = TRUE;
 	    check_cursor();
+	    if (curwin->w_p_cul || curwin->w_p_cuc)
+		validate_cursor();
 	    restart_edit = restart_edit_save;
 # ifdef FEAT_MBYTE
 	    /* Correct cursor for multi-byte character. */

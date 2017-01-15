@@ -710,7 +710,14 @@ channel_open(
 	channel_free(channel);
 	return NULL;
     }
-    memcpy((char *)&server.sin_addr, host->h_addr, host->h_length);
+    {
+	char		*p;
+
+	/* When using host->h_addr directly ubsan warns for it to not be
+	 * aligned.  First copy the pointer to aviod that. */
+	memcpy(&p, &host->h_addr, sizeof(p));
+	memcpy((char *)&server.sin_addr, p, host->h_length);
+    }
 
     /* On Mac and Solaris a zero timeout almost never works.  At least wait
      * one millisecond. Let's do it for all systems, because we don't know why
@@ -1567,7 +1574,7 @@ invoke_callback(channel_T *channel, char_u *callback, partial_T *partial,
     int		dummy;
 
     if (safe_to_invoke_callback == 0)
-	EMSG("INTERNAL: Invoking callback when it is not safe");
+	IEMSG("INTERNAL: Invoking callback when it is not safe");
 
     argv[0].v_type = VAR_CHANNEL;
     argv[0].vval.v_channel = channel;
@@ -1896,9 +1903,12 @@ channel_parse_json(channel_T *channel, ch_part_T part)
 
     /* When a message is incomplete we wait for a short while for more to
      * arrive.  After the delay drop the input, otherwise a truncated string
-     * or list will make us hang.  */
+     * or list will make us hang.
+     * Do not generate error messages, they will be written in a channel log. */
+    ++emsg_silent;
     status = json_decode(&reader, &listtv,
 				  chanpart->ch_mode == MODE_JS ? JSON_JS : 0);
+    --emsg_silent;
     if (status == OK)
     {
 	/* Only accept the response when it is a list with at least two

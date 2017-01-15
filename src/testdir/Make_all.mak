@@ -144,6 +144,7 @@ NEW_TESTS = test_arglist.res \
 	    test_channel.res \
 	    test_charsearch.res \
 	    test_cmdline.res \
+	    test_command_count.res \
 	    test_crypt.res \
 	    test_cscope.res \
 	    test_diffmode.res \
@@ -151,6 +152,7 @@ NEW_TESTS = test_arglist.res \
 	    test_display.res \
 	    test_farsi.res \
 	    test_fnameescape.res \
+	    test_fold.res \
 	    test_gf.res \
 	    test_gn.res \
 	    test_gui.res \
@@ -173,6 +175,7 @@ NEW_TESTS = test_arglist.res \
 	    test_normal.res \
 	    test_packadd.res \
 	    test_perl.res \
+	    test_profile.res \
 	    test_quickfix.res \
 	    test_ruby.res \
 	    test_search.res \
@@ -183,6 +186,7 @@ NEW_TESTS = test_arglist.res \
 	    test_stat.res \
 	    test_substitute.res \
 	    test_syntax.res \
+	    test_system.res \
 	    test_textobjects.res \
 	    test_undo.res \
 	    test_usercommands.res \

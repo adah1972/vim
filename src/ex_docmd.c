@@ -137,7 +137,7 @@ static int	getargopt(exarg_T *eap);
 #endif
 
 static int	check_more(int, int);
-static linenr_T get_address(exarg_T *, char_u **, int addr_type, int skip, int to_other_file);
+static linenr_T get_address(exarg_T *, char_u **, int addr_type, int skip, int to_other_file, int address_count);
 static void	get_flags(exarg_T *eap);
 #if !defined(FEAT_PERL) \
 	|| !defined(FEAT_PYTHON) || !defined(FEAT_PYTHON3) \
@@ -787,8 +787,13 @@ do_cmdline(
 #endif
 
     /* It's possible to create an endless loop with ":execute", catch that
-     * here.  The value of 200 allows nested function calls, ":source", etc. */
-    if (call_depth == 200)
+     * here.  The value of 200 allows nested function calls, ":source", etc.
+     * Allow 200 or 'maxfuncdepth', whatever is larger. */
+    if (call_depth >= 200
+#ifdef FEAT_EVAL
+	    && call_depth >= p_mfd
+#endif
+	    )
     {
 	EMSG(_("E169: Command too recursive"));
 #ifdef FEAT_EVAL
@@ -1791,6 +1796,7 @@ do_one_cmd(
     cmdmod_T		save_cmdmod;
     int			ni;			/* set when Not Implemented */
     char_u		*cmd;
+    int			address_count = 1;
 
     vim_memset(&ea, 0, sizeof(ea));
     ea.line1 = 1;
@@ -2015,7 +2021,7 @@ do_one_cmd(
 			{
 #ifdef FEAT_WINDOWS
 			    long tabnr = get_address(&ea, &ea.cmd, ADDR_TABS,
-								ea.skip, FALSE);
+							    ea.skip, FALSE, 1);
 			    if (tabnr == MAXLNUM)
 				cmdmod.tab = tabpage_index(curtab) + 1;
 			    else
@@ -2175,7 +2181,7 @@ do_one_cmd(
 	}
 	ea.cmd = skipwhite(ea.cmd);
 	lnum = get_address(&ea, &ea.cmd, ea.addr_type, ea.skip,
-							  ea.addr_count == 0);
+					  ea.addr_count == 0, address_count++);
 	if (ea.cmd == NULL)		    /* error detected */
 	    goto doend;
 	if (lnum == MAXLNUM)
@@ -3865,7 +3871,6 @@ set_one_cmd_context(
 	case CMD_cfdo:
 	case CMD_confirm:
 	case CMD_debug:
-	case CMD_filter:
 	case CMD_folddoclosed:
 	case CMD_folddoopen:
 	case CMD_hide:
@@ -3889,6 +3894,16 @@ set_one_cmd_context(
 	case CMD_vertical:
 	case CMD_windo:
 	    return arg;
+
+	case CMD_filter:
+	    if (*arg != NUL)
+		arg = skip_vimgrep_pat(arg, NULL, NULL);
+	    if (arg == NULL || *arg == NUL)
+	    {
+		xp->xp_context = EXPAND_NOTHING;
+		return NULL;
+	    }
+	    return skipwhite(arg);
 
 #ifdef FEAT_CMDL_COMPL
 # ifdef FEAT_SEARCH_EXTRA
@@ -4363,7 +4378,8 @@ get_address(
     char_u	**ptr,
     int		addr_type,  /* flag: one of ADDR_LINES, ... */
     int		skip,	    /* only skip the address, don't use it */
-    int		to_other_file)  /* flag: may jump to other file */
+    int		to_other_file,  /* flag: may jump to other file */
+    int		address_count UNUSED) /* 1 for first address, >1 after comma */
 {
     int		c;
     int		i;
@@ -4639,10 +4655,20 @@ get_address(
 		    || addr_type == ADDR_BUFFERS)
 		lnum = compute_buffer_local_count(
 				    addr_type, lnum, (i == '-') ? -1 * n : n);
-	    else if (i == '-')
-		lnum -= n;
 	    else
-		lnum += n;
+	    {
+#ifdef FEAT_FOLDING
+		/* Relative line addressing, need to adjust for folded lines
+		 * now, but only do it after the first address. */
+		if (addr_type == ADDR_LINES && (i == '-' || i == '+')
+			&& address_count >= 2)
+		    (void)hasFolding(lnum, NULL, &lnum);
+#endif
+		if (i == '-')
+		    lnum -= n;
+		else
+		    lnum += n;
+	    }
 	}
     } while (*cmd == '/' || *cmd == '?');
 
@@ -7572,7 +7598,7 @@ ex_all(exarg_T *eap)
 #endif /* FEAT_WINDOWS */
 
     static void
-ex_hide(exarg_T *eap)
+ex_hide(exarg_T *eap UNUSED)
 {
     /* ":hide" or ":hide | cmd": hide current window */
 #ifdef FEAT_WINDOWS
@@ -8831,7 +8857,7 @@ ex_read(exarg_T *eap)
 			  eap->line2, (linenr_T)0, (linenr_T)MAXLNUM, eap, 0);
 
 	}
-	if (i == FAIL)
+	if (i != OK)
 	{
 #if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
 	    if (!aborting())
@@ -9301,7 +9327,7 @@ ex_copymove(exarg_T *eap)
 {
     long	n;
 
-    n = get_address(eap, &eap->arg, eap->addr_type, FALSE, FALSE);
+    n = get_address(eap, &eap->arg, eap->addr_type, FALSE, FALSE, 1);
     if (eap->arg == NULL)	    /* error detected */
     {
 	eap->nextcmd = NULL;

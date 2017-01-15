@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.0.  Last change: 2016 Nov 26
+*options.txt*	For Vim version 8.0.  Last change: 2017 Jan 02
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -3417,7 +3417,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'formatprg'* *'fp'*
 'formatprg' 'fp'	string (default "")
-			global
+			global or local to buffer |global-local|
 			{not in Vi}
 	The name of an external program that will be used to format the lines
 	selected with the |gq| operator.  The program must take the input on
@@ -5021,6 +5021,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	catches endless recursion.  When using a recursive function with
 	more depth, set 'maxfuncdepth' to a bigger number.  But this will use
 	more memory, there is the danger of failing when memory is exhausted.
+	Increasing this limit above 200 also changes the maximum for Ex
+	command resursion, see |E169|.
 	See also |:function|.
 
 						*'maxmapdepth'* *'mmd'* *E223*
