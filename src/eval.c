@@ -4109,21 +4109,12 @@ eval6(
 		{
 		    if (n2 == 0)	/* give an error message? */
 		    {
-#ifdef FEAT_NUM64
 			if (n1 == 0)
-			    n1 = -0x7fffffffffffffffLL - 1; /* similar to NaN */
+			    n1 = VARNUM_MIN; /* similar to NaN */
 			else if (n1 < 0)
-			    n1 = -0x7fffffffffffffffLL;
+			    n1 = -VARNUM_MAX;
 			else
-			    n1 = 0x7fffffffffffffffLL;
-#else
-			if (n1 == 0)
-			    n1 = -0x7fffffffL - 1L;	/* similar to NaN */
-			else if (n1 < 0)
-			    n1 = -0x7fffffffL;
-			else
-			    n1 = 0x7fffffffL;
-#endif
+			    n1 = VARNUM_MAX;
 		    }
 		    else
 			n1 = n1 / n2;
@@ -9249,35 +9240,34 @@ fill_assert_error(
 
     if (opt_msg_tv->v_type != VAR_UNKNOWN)
     {
-	ga_concat(gap, tv2string(opt_msg_tv, &tofree, numbuf, 0));
+	ga_concat(gap, echo_string(opt_msg_tv, &tofree, numbuf, 0));
+	vim_free(tofree);
+	ga_concat(gap, (char_u *)": ");
+    }
+
+    if (atype == ASSERT_MATCH || atype == ASSERT_NOTMATCH)
+	ga_concat(gap, (char_u *)"Pattern ");
+    else if (atype == ASSERT_NOTEQUAL)
+	ga_concat(gap, (char_u *)"Expected not equal to ");
+    else
+	ga_concat(gap, (char_u *)"Expected ");
+    if (exp_str == NULL)
+    {
+	ga_concat_esc(gap, tv2string(exp_tv, &tofree, numbuf, 0));
 	vim_free(tofree);
     }
     else
+	ga_concat_esc(gap, exp_str);
+    if (atype != ASSERT_NOTEQUAL)
     {
-	if (atype == ASSERT_MATCH || atype == ASSERT_NOTMATCH)
-	    ga_concat(gap, (char_u *)"Pattern ");
-	else if (atype == ASSERT_NOTEQUAL)
-	    ga_concat(gap, (char_u *)"Expected not equal to ");
+	if (atype == ASSERT_MATCH)
+	    ga_concat(gap, (char_u *)" does not match ");
+	else if (atype == ASSERT_NOTMATCH)
+	    ga_concat(gap, (char_u *)" does match ");
 	else
-	    ga_concat(gap, (char_u *)"Expected ");
-	if (exp_str == NULL)
-	{
-	    ga_concat_esc(gap, tv2string(exp_tv, &tofree, numbuf, 0));
-	    vim_free(tofree);
-	}
-	else
-	    ga_concat_esc(gap, exp_str);
-	if (atype != ASSERT_NOTEQUAL)
-	{
-	    if (atype == ASSERT_MATCH)
-		ga_concat(gap, (char_u *)" does not match ");
-	    else if (atype == ASSERT_NOTMATCH)
-		ga_concat(gap, (char_u *)" does match ");
-	    else
-		ga_concat(gap, (char_u *)" but got ");
-	    ga_concat_esc(gap, tv2string(got_tv, &tofree, numbuf, 0));
-	    vim_free(tofree);
-	}
+	    ga_concat(gap, (char_u *)" but got ");
+	ga_concat_esc(gap, tv2string(got_tv, &tofree, numbuf, 0));
+	vim_free(tofree);
     }
 }
 

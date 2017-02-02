@@ -288,6 +288,11 @@ static void	ex_popup(exarg_T *eap);
 # define ex_py3do		ex_ni
 # define ex_py3file		ex_ni
 #endif
+#if !defined(FEAT_PYTHON) && !defined(FEAT_PYTHON3)
+# define ex_pyx			ex_script_ni
+# define ex_pyxdo		ex_ni
+# define ex_pyxfile		ex_ni
+#endif
 #ifndef FEAT_TCL
 # define ex_tcl			ex_script_ni
 # define ex_tcldo		ex_ni
@@ -2157,8 +2162,7 @@ do_one_cmd(
 		ea.line2 = curwin->w_cursor.lnum;
 		break;
 	    case ADDR_WINDOWS:
-		lnum = CURRENT_WIN_NR;
-		ea.line2 = lnum;
+		ea.line2 = CURRENT_WIN_NR;
 		break;
 	    case ADDR_ARGUMENTS:
 		ea.line2 = curwin->w_arg_idx + 1;
@@ -2170,8 +2174,10 @@ do_one_cmd(
 		ea.line2 = curbuf->b_fnum;
 		break;
 	    case ADDR_TABS:
-		lnum = CURRENT_TAB_NR;
-		ea.line2 = lnum;
+		ea.line2 = CURRENT_TAB_NR;
+		break;
+	    case ADDR_TABS_RELATIVE:
+		ea.line2 = 1;
 		break;
 #ifdef FEAT_QUICKFIX
 	    case ADDR_QUICKFIX:
@@ -2229,6 +2235,10 @@ do_one_cmd(
 			    errormsg = (char_u *)_(e_invrange);
 			    goto doend;
 			}
+			break;
+		    case ADDR_TABS_RELATIVE:
+			errormsg = (char_u *)_(e_invrange);
+			goto doend;
 			break;
 		    case ADDR_ARGUMENTS:
 			if (ARGCOUNT == 0)
@@ -2705,6 +2715,9 @@ do_one_cmd(
 	    case ADDR_TABS:
 		ea.line2 = LAST_TAB_NR;
 		break;
+	    case ADDR_TABS_RELATIVE:
+		ea.line2 = 1;
+		break;
 	    case ADDR_ARGUMENTS:
 		if (ARGCOUNT == 0)
 		    ea.line1 = ea.line2 = 0;
@@ -2781,7 +2794,8 @@ do_one_cmd(
 	    /*
 	     * Be vi compatible: no error message for out of range.
 	     */
-	    if (ea.line2 > curbuf->b_ml.ml_line_count)
+	    if (ea.addr_type == ADDR_LINES
+		    && ea.line2 > curbuf->b_ml.ml_line_count)
 		ea.line2 = curbuf->b_ml.ml_line_count;
 	}
     }
@@ -4109,6 +4123,12 @@ set_one_cmd_context(
 	case CMD_echoerr:
 	case CMD_call:
 	case CMD_return:
+	case CMD_cexpr:
+	case CMD_caddexpr:
+	case CMD_cgetexpr:
+	case CMD_lexpr:
+	case CMD_laddexpr:
+	case CMD_lgetexpr:
 	    set_context_for_expression(xp, arg, ea.cmdidx);
 	    break;
 
@@ -4416,6 +4436,11 @@ get_address(
 		    case ADDR_TABS:
 			lnum = CURRENT_TAB_NR;
 			break;
+		    case ADDR_TABS_RELATIVE:
+			EMSG(_(e_invrange));
+			cmd = NULL;
+			goto error;
+			break;
 #ifdef FEAT_QUICKFIX
 		    case ADDR_QUICKFIX:
 			lnum = qf_get_cur_valid_idx(eap);
@@ -4452,6 +4477,11 @@ get_address(
 			break;
 		    case ADDR_TABS:
 			lnum = LAST_TAB_NR;
+			break;
+		    case ADDR_TABS_RELATIVE:
+			EMSG(_(e_invrange));
+			cmd = NULL;
+			goto error;
 			break;
 #ifdef FEAT_QUICKFIX
 		    case ADDR_QUICKFIX:
@@ -4635,6 +4665,9 @@ get_address(
 		    case ADDR_TABS:
 			lnum = CURRENT_TAB_NR;
 			break;
+		    case ADDR_TABS_RELATIVE:
+			lnum = 1;
+			break;
 #ifdef FEAT_QUICKFIX
 		    case ADDR_QUICKFIX:
 			lnum = qf_get_cur_valid_idx(eap);
@@ -4651,7 +4684,14 @@ get_address(
 		n = 1;
 	    else
 		n = getdigits(&cmd);
-	    if (addr_type == ADDR_LOADED_BUFFERS
+
+	    if (addr_type == ADDR_TABS_RELATIVE)
+	    {
+		EMSG(_(e_invrange));
+		cmd = NULL;
+		goto error;
+	    }
+	    else if (addr_type == ADDR_LOADED_BUFFERS
 		    || addr_type == ADDR_BUFFERS)
 		lnum = compute_buffer_local_count(
 				    addr_type, lnum, (i == '-') ? -1 * n : n);
@@ -4783,6 +4823,9 @@ invalid_range(exarg_T *eap)
 	    case ADDR_TABS:
 		if (eap->line2 > LAST_TAB_NR)
 		    return (char_u *)_(e_invrange);
+		break;
+	    case ADDR_TABS_RELATIVE:
+		/* Do nothing */
 		break;
 #ifdef FEAT_QUICKFIX
 	    case ADDR_QUICKFIX:
@@ -7426,6 +7469,107 @@ ex_win_close(
 }
 
 /*
+ * Handle the argument for a tabpage related ex command.
+ * Returns a tabpage number.
+ * When an error is encountered then eap->errmsg is set.
+ */
+    static int
+get_tabpage_arg(exarg_T *eap)
+{
+    int tab_number;
+    int unaccept_arg0 = (eap->cmdidx == CMD_tabmove) ? 0 : 1;
+
+    if (eap->arg && *eap->arg != NUL)
+    {
+	char_u *p = eap->arg;
+	char_u *p_save;
+	int    relative = 0; /* argument +N/-N means: go to N places to the
+			      * right/left relative to the current position. */
+
+	if (*p == '-')
+	{
+	    relative = -1;
+	    p++;
+	}
+	else if (*p == '+')
+	{
+	    relative = 1;
+	    p++;
+	}
+
+	p_save = p;
+	tab_number = getdigits(&p);
+
+	if (relative == 0)
+	{
+	    if (STRCMP(p, "$") == 0)
+		tab_number = LAST_TAB_NR;
+	    else if (p == p_save || *p_save == '-' || *p != NUL
+		    || tab_number > LAST_TAB_NR)
+	    {
+		/* No numbers as argument. */
+		eap->errmsg = e_invarg;
+		goto theend;
+	    }
+	}
+	else
+	{
+	    if (*p_save == NUL)
+		tab_number = 1;
+	    else if (p == p_save || *p_save == '-' || *p != NUL
+		    || tab_number == 0)
+	    {
+		/* No numbers as argument. */
+		eap->errmsg = e_invarg;
+		goto theend;
+	    }
+	    tab_number = tab_number * relative + tabpage_index(curtab);
+	    if (!unaccept_arg0 && relative == -1)
+		--tab_number;
+	}
+	if (tab_number < unaccept_arg0 || tab_number > LAST_TAB_NR)
+	    eap->errmsg = e_invarg;
+    }
+    else if (eap->addr_count > 0)
+    {
+	if (unaccept_arg0 && eap->line2 == 0)
+	{
+	    eap->errmsg = e_invrange;
+	    tab_number = 0;
+	}
+	else
+	{
+	    tab_number = eap->line2;
+	    if (!unaccept_arg0 && **eap->cmdlinep == '-')
+	    {
+		--tab_number;
+		if (tab_number < unaccept_arg0)
+		    eap->errmsg = e_invarg;
+	    }
+	}
+    }
+    else
+    {
+	switch (eap->cmdidx)
+	{
+	case CMD_tabnext:
+	    tab_number = tabpage_index(curtab) + 1;
+	    if (tab_number > LAST_TAB_NR)
+		tab_number = 1;
+	    break;
+	case CMD_tabmove:
+	    tab_number = LAST_TAB_NR;
+	    break;
+	default:
+	    tab_number = tabpage_index(curtab);
+	}
+    }
+
+theend:
+    return tab_number;
+}
+
+/*
  * ":tabclose": close current tab page, unless it is the last one.
  * ":tabclose N": close tab page N.
  */
@@ -7433,6 +7577,7 @@ ex_win_close(
 ex_tabclose(exarg_T *eap)
 {
     tabpage_T	*tp;
+    int		tab_number;
 
 # ifdef FEAT_CMDWIN
     if (cmdwin_type != 0)
@@ -7443,9 +7588,10 @@ ex_tabclose(exarg_T *eap)
 	    EMSG(_("E784: Cannot close last tab page"));
 	else
 	{
-	    if (eap->addr_count > 0)
+	    tab_number = get_tabpage_arg(eap);
+	    if (eap->errmsg == NULL)
 	    {
-		tp = find_tabpage((int)eap->line2);
+		tp = find_tabpage(tab_number);
 		if (tp == NULL)
 		{
 		    beep_flush();
@@ -7456,13 +7602,13 @@ ex_tabclose(exarg_T *eap)
 		    tabpage_close_other(tp, eap->forceit);
 		    return;
 		}
-	    }
-	    if (!text_locked()
+		else if (!text_locked()
 #ifdef FEAT_AUTOCMD
-		    && !curbuf_locked()
+			&& !curbuf_locked()
 #endif
-	       )
-		tabpage_close(eap->forceit);
+		)
+		    tabpage_close(eap->forceit);
+	    }
 	}
 }
 
@@ -7474,6 +7620,7 @@ ex_tabonly(exarg_T *eap)
 {
     tabpage_T	*tp;
     int		done;
+    int		tab_number;
 
 # ifdef FEAT_CMDWIN
     if (cmdwin_type != 0)
@@ -7484,24 +7631,27 @@ ex_tabonly(exarg_T *eap)
 	    MSG(_("Already only one tab page"));
 	else
 	{
-	    if (eap->addr_count > 0)
-		goto_tabpage(eap->line2);
-	    /* Repeat this up to a 1000 times, because autocommands may mess
-	     * up the lists. */
-	    for (done = 0; done < 1000; ++done)
+	    tab_number = get_tabpage_arg(eap);
+	    if (eap->errmsg == NULL)
 	    {
-		FOR_ALL_TABPAGES(tp)
-		    if (tp->tp_topframe != topframe)
-		    {
-			tabpage_close_other(tp, eap->forceit);
-			/* if we failed to close it quit */
-			if (valid_tabpage(tp))
-			    done = 1000;
-			/* start over, "tp" is now invalid */
+		goto_tabpage(tab_number);
+		/* Repeat this up to a 1000 times, because autocommands may
+		 * mess up the lists. */
+		for (done = 0; done < 1000; ++done)
+		{
+		    FOR_ALL_TABPAGES(tp)
+			if (tp->tp_topframe != topframe)
+			{
+			    tabpage_close_other(tp, eap->forceit);
+			    /* if we failed to close it quit */
+			    if (valid_tabpage(tp))
+				done = 1000;
+			    /* start over, "tp" is now invalid */
+			    break;
+			}
+		    if (first_tabpage->tp_next == NULL)
 			break;
-		    }
-		if (first_tabpage->tp_next == NULL)
-		    break;
+		}
 	    }
 	}
 }
@@ -8243,6 +8393,8 @@ tabpage_new(void)
     static void
 ex_tabnext(exarg_T *eap)
 {
+    int tab_number;
+
     switch (eap->cmdidx)
     {
 	case CMD_tabfirst:
@@ -8254,10 +8406,40 @@ ex_tabnext(exarg_T *eap)
 	    break;
 	case CMD_tabprevious:
 	case CMD_tabNext:
-	    goto_tabpage(eap->addr_count == 0 ? -1 : -(int)eap->line2);
+	    if (eap->arg && *eap->arg != NUL)
+	    {
+		char_u *p = eap->arg;
+		char_u *p_save = p;
+
+		tab_number = getdigits(&p);
+		if (p == p_save || *p_save == '-' || *p != NUL
+			    || tab_number == 0)
+		{
+		    /* No numbers as argument. */
+		    eap->errmsg = e_invarg;
+		    return;
+		}
+	    }
+	    else
+	    {
+		if (eap->addr_count == 0)
+		    tab_number = 1;
+		else
+		{
+		    tab_number = eap->line2;
+		    if (tab_number < 1)
+		    {
+			eap->errmsg = e_invrange;
+			return;
+		    }
+		}
+	    }
+	    goto_tabpage(-tab_number);
 	    break;
 	default: /* CMD_tabnext */
-	    goto_tabpage(eap->addr_count == 0 ? 0 : (int)eap->line2);
+	    tab_number = get_tabpage_arg(eap);
+	    if (eap->errmsg == NULL)
+		goto_tabpage(tab_number);
 	    break;
     }
 }
@@ -8270,59 +8452,9 @@ ex_tabmove(exarg_T *eap)
 {
     int tab_number;
 
-    if (eap->arg && *eap->arg != NUL)
-    {
-	char_u *p = eap->arg;
-	int    relative = 0; /* argument +N/-N means: move N places to the
-			      * right/left relative to the current position. */
-
-	if (*eap->arg == '-')
-	{
-	    relative = -1;
-	    p = eap->arg + 1;
-	}
-	else if (*eap->arg == '+')
-	{
-	    relative = 1;
-	    p = eap->arg + 1;
-	}
-	else
-	    p = eap->arg;
-
-	if (relative == 0)
-	{
-	    if (STRCMP(p, "$") == 0)
-		tab_number = LAST_TAB_NR;
-	    else if (p == skipdigits(p))
-	    {
-		/* No numbers as argument. */
-		eap->errmsg = e_invarg;
-		return;
-	    }
-	    else
-		tab_number = getdigits(&p);
-	}
-	else
-	{
-	    if (*p != NUL)
-		tab_number = getdigits(&p);
-	    else
-		tab_number = 1;
-	    tab_number = tab_number * relative + tabpage_index(curtab);
-	    if (relative == -1)
-		--tab_number;
-	}
-    }
-    else if (eap->addr_count != 0)
-    {
-	tab_number = eap->line2;
-	if (**eap->cmdlinep == '-')
-	    --tab_number;
-    }
-    else
-	tab_number = LAST_TAB_NR;
-
-    tabpage_move(tab_number);
+    tab_number = get_tabpage_arg(eap);
+    if (eap->errmsg == NULL)
+	tabpage_move(tab_number);
 }
 
 /*
@@ -11186,8 +11318,10 @@ makeopens(
 	 * resized when moving between windows.
 	 * Do this before restoring the view, so that the topline and the
 	 * cursor can be set.  This is done again below.
+	 * winminheight and winminwidth need to be set to avoid an error if the
+	 * user has set winheight or winwidth.
 	 */
-	if (put_line(fd, "set winheight=1 winwidth=1") == FAIL)
+	if (put_line(fd, "set winminheight=1 winheight=1 winminwidth=1 winwidth=1") == FAIL)
 	    return FAIL;
 	if (nr > 1 && ses_winsizes(fd, restore_size, tab_firstwin) == FAIL)
 	    return FAIL;
@@ -11256,6 +11390,10 @@ makeopens(
     /* Re-apply 'winheight', 'winwidth' and 'shortmess'. */
     if (fprintf(fd, "set winheight=%ld winwidth=%ld shortmess=%s",
 			       p_wh, p_wiw, p_shm) < 0 || put_eol(fd) == FAIL)
+	return FAIL;
+    /* Re-apply 'winminheight' and 'winminwidth'. */
+    if (fprintf(fd, "set winminheight=%ld winminwidth=%ld",
+				      p_wmh, p_wmw) < 0 || put_eol(fd) == FAIL)
 	return FAIL;
 
     /*
@@ -11652,7 +11790,7 @@ ses_arglist(
 		    s = buf;
 		}
 	    }
-	    if (fputs("argadd ", fd) < 0
+	    if (fputs("$argadd ", fd) < 0
 		    || ses_put_fname(fd, s, flagp) == FAIL
 		    || put_eol(fd) == FAIL)
 	    {

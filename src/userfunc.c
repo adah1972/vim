@@ -2102,7 +2102,9 @@ ex_function(exarg_T *eap)
 	    arg = skipwhite(skiptowhite(p));
 	    if (arg[0] == '<' && arg[1] =='<'
 		    && ((p[0] == 'p' && p[1] == 'y'
-				    && (!ASCII_ISALPHA(p[2]) || p[2] == 't'))
+				    && (!ASCII_ISALNUM(p[2]) || p[2] == 't'
+					|| ((p[2] == '3' || p[2] == 'x')
+						   && !ASCII_ISALPHA(p[3]))))
 			|| (p[0] == 'p' && p[1] == 'e'
 				    && (!ASCII_ISALPHA(p[2]) || p[2] == 'r'))
 			|| (p[0] == 't' && p[1] == 'c'
@@ -3554,7 +3556,7 @@ get_funccal_args_var()
 {
     if (current_funccal == NULL)
 	return NULL;
-    return &current_funccal->l_avars_var;
+    return &get_funccal()->l_avars_var;
 }
 
 /*

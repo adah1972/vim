@@ -88,6 +88,14 @@ endfunc
 
 function RunTheTest(test)
   echo 'Executing ' . a:test
+
+  " Avoid stopping at the "hit enter" prompt
+  set nomore
+
+  " Avoid a three second wait when a message is about to be overwritten by the
+  " mode message.
+  set noshowmode
+
   if exists("*SetUp")
     try
       call SetUp()
@@ -153,15 +161,16 @@ endif
 
 " Names of flaky tests.
 let s:flaky = [
-      \ 'Test_reltime()',
-      \ 'Test_nb_basic()',
+      \ 'Test_close_and_exit_cb()',
+      \ 'Test_collapse_buffers()',
       \ 'Test_communicate()',
+      \ 'Test_nb_basic()',
       \ 'Test_pipe_through_sort_all()',
-      \ 'Test_pipe_through_sort_some()'
+      \ 'Test_pipe_through_sort_some()',
+      \ 'Test_reltime()',
       \ ]
 
 " Locate Test_ functions and execute them.
-set nomore
 redir @q
 silent function /^Test_
 redir END

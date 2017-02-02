@@ -1584,14 +1584,16 @@ EXTRA_SRC = hangulin.c if_lua.c if_mzsch.c auto/if_perl.c if_perlsfio.c \
 # Unittest files
 JSON_TEST_SRC = json_test.c
 JSON_TEST_TARGET = json_test$(EXEEXT)
+KWORD_TEST_SRC = kword_test.c
+KWORD_TEST_TARGET = kword_test$(EXEEXT)
 MEMFILE_TEST_SRC = memfile_test.c
 MEMFILE_TEST_TARGET = memfile_test$(EXEEXT)
 MESSAGE_TEST_SRC = message_test.c
 MESSAGE_TEST_TARGET = message_test$(EXEEXT)
 
-UNITTEST_SRC = $(JSON_TEST_SRC) $(MEMFILE_TEST_SRC) $(MESSAGE_TEST_SRC)
-UNITTEST_TARGETS = $(JSON_TEST_TARGET) $(MEMFILE_TEST_TARGET) $(MESSAGE_TEST_TARGET)
-RUN_UNITTESTS = run_json_test run_memfile_test run_message_test
+UNITTEST_SRC = $(JSON_TEST_SRC) $(KWORD_TEST_SRC) $(MEMFILE_TEST_SRC) $(MESSAGE_TEST_SRC)
+UNITTEST_TARGETS = $(JSON_TEST_TARGET) $(KWORD_TEST_TARGET) $(MEMFILE_TEST_TARGET) $(MESSAGE_TEST_TARGET)
+RUN_UNITTESTS = run_json_test run_kword_test run_memfile_test run_message_test
 
 # All sources, also the ones that are not configured
 ALL_SRC = $(BASIC_SRC) $(ALL_GUI_SRC) $(UNITTEST_SRC) $(EXTRA_SRC)
@@ -1611,7 +1613,6 @@ OBJ_COMMON = \
 	objects/arabic.o \
 	objects/buffer.o \
 	objects/blowfish.o \
-	objects/charset.o \
 	objects/crypt.o \
 	objects/crypt_zip.o \
 	objects/dict.o \
@@ -1679,6 +1680,7 @@ OBJ_COMMON = \
 
 # The files included by tests are not in OBJ_COMMON.
 OBJ_MAIN = \
+	objects/charset.o \
 	objects/json.o \
 	objects/main.o \
 	objects/memfile.o \
@@ -1687,13 +1689,23 @@ OBJ_MAIN = \
 OBJ = $(OBJ_COMMON) $(OBJ_MAIN)
 
 OBJ_JSON_TEST = \
+	objects/charset.o \
 	objects/memfile.o \
 	objects/message.o \
 	objects/json_test.o
 
 JSON_TEST_OBJ = $(OBJ_COMMON) $(OBJ_JSON_TEST)
 
+OBJ_KWORD_TEST = \
+	objects/json.o \
+	objects/memfile.o \
+	objects/message.o \
+	objects/kword_test.o
+
+KWORD_TEST_OBJ = $(OBJ_COMMON) $(OBJ_KWORD_TEST)
+
 OBJ_MEMFILE_TEST = \
+	objects/charset.o \
 	objects/json.o \
 	objects/message.o \
 	objects/memfile_test.o
@@ -1701,6 +1713,7 @@ OBJ_MEMFILE_TEST = \
 MEMFILE_TEST_OBJ = $(OBJ_COMMON) $(OBJ_MEMFILE_TEST)
 
 OBJ_MESSAGE_TEST = \
+	objects/charset.o \
 	objects/json.o \
 	objects/memfile.o \
 	objects/message_test.o
@@ -1710,6 +1723,7 @@ MESSAGE_TEST_OBJ = $(OBJ_COMMON) $(OBJ_MESSAGE_TEST)
 ALL_OBJ = $(OBJ_COMMON) \
 	  $(OBJ_MAIN) \
 	  $(OBJ_JSON_TEST) \
+	  $(OBJ_KWORD_TEST) \
 	  $(OBJ_MEMFILE_TEST) \
 	  $(OBJ_MESSAGE_TEST)
 
@@ -2036,6 +2050,9 @@ unittest unittests: $(RUN_UNITTESTS)
 run_json_test: $(JSON_TEST_TARGET)
 	$(VALGRIND) ./$(JSON_TEST_TARGET) || exit 1; echo $* passed;
 
+run_kword_test: $(KWORD_TEST_TARGET)
+	$(VALGRIND) ./$(KWORD_TEST_TARGET) || exit 1; echo $* passed;
+
 run_memfile_test: $(MEMFILE_TEST_TARGET)
 	$(VALGRIND) ./$(MEMFILE_TEST_TARGET) || exit 1; echo $* passed;
 
@@ -2058,7 +2075,6 @@ test1 \
 	test_listlbr \
 	test_listlbr_utf8 \
 	test_search_mbyte \
-	test_utf8 \
 	test_wordcount \
 	test3 test4 test5 test6 test7 test8 test9 \
 	test11 test12 test14 test15 test17 test18 test19 \
@@ -2111,8 +2127,9 @@ test_arglist \
 	test_fnameescape \
 	test_fnamemodify \
 	test_fold \
-	test_glob2regpat \
+	test_ga \
 	test_gf \
+	test_glob2regpat \
 	test_gn \
 	test_goto \
 	test_gui \
@@ -2131,6 +2148,7 @@ test_arglist \
 	test_langmap \
 	test_largefile \
 	test_lispwords \
+	test_lua \
 	test_man \
 	test_mapping \
 	test_marks \
@@ -2147,9 +2165,15 @@ test_arglist \
 	test_options \
 	test_packadd \
 	test_partial \
+	test_paste \
 	test_perl \
 	test_popup \
 	test_profile \
+	test_put \
+	test_python2 \
+	test_python3 \
+	test_pyx2 \
+	test_pyx3 \
 	test_quickfix \
 	test_regexp_latin \
 	test_regexp_utf8 \
@@ -2160,9 +2184,9 @@ test_arglist \
 	test_searchpos \
 	test_set \
 	test_signs \
+	test_smartindent \
 	test_sort \
 	test_source_utf8 \
-	test_smartindent \
 	test_startup \
 	test_startup_utf8 \
 	test_stat \
@@ -2175,12 +2199,14 @@ test_arglist \
 	test_tabpage \
 	test_tagcase \
 	test_tagjump \
+	test_tcl \
 	test_textobjects \
 	test_timers \
 	test_true_false \
 	test_undo \
 	test_unlet \
 	test_usercommands \
+	test_utf8 \
 	test_viminfo \
 	test_viml \
 	test_visual \
@@ -2215,6 +2241,13 @@ $(JSON_TEST_TARGET): auto/config.mk objects $(JSON_TEST_OBJ)
 	$(CCC) version.c -o objects/version.o
 	@LINK="$(PURIFY) $(SHRPENV) $(CClink) $(ALL_LIB_DIRS) $(LDFLAGS) \
 		-o $(JSON_TEST_TARGET) $(JSON_TEST_OBJ) $(ALL_LIBS)" \
+		MAKE="$(MAKE)" LINK_AS_NEEDED=$(LINK_AS_NEEDED) \
+		sh $(srcdir)/link.sh
+
+$(KWORD_TEST_TARGET): auto/config.mk objects $(KWORD_TEST_OBJ)
+	$(CCC) version.c -o objects/version.o
+	@LINK="$(PURIFY) $(SHRPENV) $(CClink) $(ALL_LIB_DIRS) $(LDFLAGS) \
+		-o $(KWORD_TEST_TARGET) $(KWORD_TEST_OBJ) $(ALL_LIBS)" \
 		MAKE="$(MAKE)" LINK_AS_NEEDED=$(LINK_AS_NEEDED) \
 		sh $(srcdir)/link.sh
 
@@ -2752,6 +2785,7 @@ shadow:	runtime pixmaps
 				 ../../testdir/*.vim \
 				 ../../testdir/*.py \
 				 ../../testdir/python* \
+				 ../../testdir/pyxfile \
 				 ../../testdir/sautest \
 				 ../../testdir/samples \
 				 ../../testdir/test83-tags? \
@@ -3052,6 +3086,9 @@ objects/json.o: json.c
 
 objects/json_test.o: json_test.c
 	$(CCC) -o $@ json_test.c
+
+objects/kword_test.o: kword_test.c
+	$(CCC) -o $@ kword_test.c
 
 objects/list.o: list.c
 	$(CCC) -o $@ list.c
@@ -3592,6 +3629,10 @@ objects/json_test.o: json_test.c main.c vim.h auto/config.h feature.h os_unix.h 
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
  regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h \
  proto.h globals.h farsi.h arabic.h json.c
+objects/kword_test.o: kword_test.c main.c vim.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
+ regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h \
+ proto.h globals.h farsi.h arabic.h charset.c mbyte.c
 objects/memfile_test.o: memfile_test.c main.c vim.h auto/config.h feature.h \
  os_unix.h auto/osdef.h ascii.h keymap.h term.h macros.h option.h \
  structs.h regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h \

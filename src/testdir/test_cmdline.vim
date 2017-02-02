@@ -25,6 +25,60 @@ func Test_complete_wildmenu()
   set nowildmenu
 endfunc
 
+func Test_match_completion()
+  if !has('cmdline_compl')
+    return
+  endif
+  hi Aardig ctermfg=green
+  call feedkeys(":match \<Tab>\<Home>\"\<CR>", 'xt')
+  call assert_equal('"match Aardig', getreg(':'))
+  call feedkeys(":match \<S-Tab>\<Home>\"\<CR>", 'xt')
+  call assert_equal('"match none', getreg(':'))
+endfunc
+
+func Test_highlight_completion()
+  if !has('cmdline_compl')
+    return
+  endif
+  hi Aardig ctermfg=green
+  call feedkeys(":hi \<Tab>\<Home>\"\<CR>", 'xt')
+  call assert_equal('"hi Aardig', getreg(':'))
+  call feedkeys(":hi li\<S-Tab>\<Home>\"\<CR>", 'xt')
+  call assert_equal('"hi link', getreg(':'))
+  call feedkeys(":hi d\<S-Tab>\<Home>\"\<CR>", 'xt')
+  call assert_equal('"hi default', getreg(':'))
+  call feedkeys(":hi c\<S-Tab>\<Home>\"\<CR>", 'xt')
+  call assert_equal('"hi clear', getreg(':'))
+endfunc
+
+func Test_expr_completion()
+  if !has('cmdline_compl')
+    return
+  endif
+  for cmd in [
+	\ 'let a = ',
+	\ 'if',
+	\ 'elseif',
+	\ 'while',
+	\ 'for',
+	\ 'echo',
+	\ 'echon',
+	\ 'execute',
+	\ 'echomsg',
+	\ 'echoerr',
+	\ 'call',
+	\ 'return',
+	\ 'cexpr',
+	\ 'caddexpr',
+	\ 'cgetexpr',
+	\ 'lexpr',
+	\ 'laddexpr',
+	\ 'lgetexpr']
+    call feedkeys(":" . cmd . " getl\<Tab>\<Home>\"\<CR>", 'xt')
+    call assert_equal('"' . cmd . ' getline(', getreg(':'))
+  endfor
+endfunc
+
 func Test_getcompletion()
   if !has('cmdline_compl')
     return
@@ -240,4 +294,15 @@ func Test_illegal_address()
   2;'(
   2;')
   quit
+endfunc
+
+func Test_cmdline_complete_wildoptions()
+  help
+  call feedkeys(":tag /\<c-a>\<c-b>\"\<cr>", 'tx')
+  let a = join(sort(split(@:)),' ')
+  set wildoptions=tagfile
+  call feedkeys(":tag /\<c-a>\<c-b>\"\<cr>", 'tx')
+  let b = join(sort(split(@:)),' ')
+  call assert_equal(a, b)
+  bw!
 endfunc
