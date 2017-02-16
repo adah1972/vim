@@ -2295,8 +2295,8 @@ do_one_cmd(
 	    if (!ea.skip)
 	    {
 		curwin->w_cursor.lnum = ea.line2;
-		/* don't leave the cursor on an illegal line */
-		check_cursor_lnum();
+		/* don't leave the cursor on an illegal line or column */
+		check_cursor();
 	    }
 	}
 	else if (*ea.cmd != ',')
@@ -2490,7 +2490,7 @@ do_one_cmd(
 		&& !IS_USER_CMDIDX(ea.cmdidx))
 	{
 	    /* Command not allowed when editing the command line. */
-	    errormsg = get_text_locked_msg();
+	    errormsg = (char_u *)_(get_text_locked_msg());
 	    goto doend;
 	}
 #ifdef FEAT_AUTOCMD
