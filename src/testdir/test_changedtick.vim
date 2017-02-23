@@ -32,14 +32,26 @@ func Test_changedtick_bdel()
   call assert_equal(v + 1, getbufvar(bnr, 'changedtick'))
 endfunc
 
-func Test_changedtick_fixed()
-  call assert_fails('let b:changedtick = 4', 'E46')
-  call assert_fails('let b:["changedtick"] = 4', 'E46')
+func Test_changedtick_islocked()
+  call assert_equal(0, islocked('b:changedtick'))
+  let d = b:
+  call assert_equal(0, islocked('d.changedtick'))
+endfunc
 
-  call assert_fails('unlet b:changedtick', 'E795')
-  call assert_fails('unlet b:["changedtick"]', 'E46')
+func Test_changedtick_fixed()
+  call assert_fails('let b:changedtick = 4', 'E46:')
+  call assert_fails('let b:["changedtick"] = 4', 'E46:')
+
+  call assert_fails('lockvar b:changedtick', 'E940:')
+  call assert_fails('lockvar b:["changedtick"]', 'E46:')
+  call assert_fails('unlockvar b:changedtick', 'E940:')
+  call assert_fails('unlockvar b:["changedtick"]', 'E46:')
+  call assert_fails('unlet b:changedtick', 'E795:')
+  call assert_fails('unlet b:["changedtick"]', 'E46:')
 
   let d = b:
-  call assert_fails('unlet d["changedtick"]', 'E46')
+  call assert_fails('lockvar d["changedtick"]', 'E46:')
+  call assert_fails('unlockvar d["changedtick"]', 'E46:')
+  call assert_fails('unlet d["changedtick"]', 'E46:')
 
 endfunc

@@ -2177,6 +2177,7 @@ test_arglist \
 	test_pyx2 \
 	test_pyx3 \
 	test_quickfix \
+	test_recover \
 	test_regexp_latin \
 	test_regexp_utf8 \
 	test_reltime \
@@ -2762,7 +2763,7 @@ SHADOWDIR = shadow
 
 shadow:	runtime pixmaps
 	mkdir $(SHADOWDIR)
-	cd $(SHADOWDIR); ln -s ../*.[ch] ../*.in ../*.sh ../*.xs ../*.xbm ../gui_gtk_res.xml ../toolcheck ../proto ../vimtutor ../gvimtutor ../mkinstalldirs .
+	cd $(SHADOWDIR); ln -s ../*.[chm] ../*.in ../*.sh ../*.xs ../*.xbm ../gui_gtk_res.xml ../toolcheck ../proto ../vimtutor ../gvimtutor ../mkinstalldirs .
 	mkdir $(SHADOWDIR)/auto
 	cd $(SHADOWDIR)/auto; ln -s ../../auto/configure .
 	mkdir $(SHADOWDIR)/po
