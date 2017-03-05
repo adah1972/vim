@@ -84,8 +84,12 @@ func Test_quoteplus()
     let test_response = 'Yes, I can.'
     let vim_exe = exepath(v:progpath)
     let testee = 'VIMRUNTIME=' . $VIMRUNTIME . '; export VIMRUNTIME;'
-          \ . vim_exe . ' -f -g -u NONE -U NONE --noplugin -c ''%s'''
-    let cmd = 'call feedkeys("'
+          \ . vim_exe
+	  \ . ' -u NONE -U NONE --noplugin --not-a-term -c ''%s'''
+    " Ignore the "failed to create input context" error.
+    let cmd = 'call test_ignore_error("E285") | '
+	  \ . 'gui -f | '
+	  \ . 'call feedkeys("'
           \ . '\"+p'
           \ . ':s/' . test_call . '/' . test_response . '/\<CR>'
           \ . '\"+yis'

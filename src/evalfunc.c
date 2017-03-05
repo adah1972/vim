@@ -58,6 +58,9 @@ static void f_asin(typval_T *argvars, typval_T *rettv);
 static void f_atan(typval_T *argvars, typval_T *rettv);
 static void f_atan2(typval_T *argvars, typval_T *rettv);
 #endif
+#ifdef FEAT_BEVAL
+static void f_balloon_show(typval_T *argvars, typval_T *rettv);
+#endif
 static void f_browse(typval_T *argvars, typval_T *rettv);
 static void f_browsedir(typval_T *argvars, typval_T *rettv);
 static void f_bufexists(typval_T *argvars, typval_T *rettv);
@@ -389,6 +392,7 @@ static void f_test_alloc_fail(typval_T *argvars, typval_T *rettv);
 static void f_test_autochdir(typval_T *argvars, typval_T *rettv);
 static void f_test_disable_char_avail(typval_T *argvars, typval_T *rettv);
 static void f_test_garbagecollect_now(typval_T *argvars, typval_T *rettv);
+static void f_test_ignore_error(typval_T *argvars, typval_T *rettv);
 #ifdef FEAT_JOB_CHANNEL
 static void f_test_null_channel(typval_T *argvars, typval_T *rettv);
 #endif
@@ -482,6 +486,9 @@ static struct fst
 #ifdef FEAT_FLOAT
     {"atan",		1, 1, f_atan},
     {"atan2",		2, 2, f_atan2},
+#endif
+#ifdef FEAT_BEVAL
+    {"balloon_show",	1, 1, f_balloon_show},
 #endif
     {"browse",		4, 4, f_browse},
     {"browsedir",	2, 2, f_browsedir},
@@ -823,6 +830,7 @@ static struct fst
     {"test_autochdir",	0, 0, f_test_autochdir},
     {"test_disable_char_avail", 1, 1, f_test_disable_char_avail},
     {"test_garbagecollect_now",	0, 0, f_test_garbagecollect_now},
+    {"test_ignore_error",	1, 1, f_test_ignore_error},
 #ifdef FEAT_JOB_CHANNEL
     {"test_null_channel", 0, 0, f_test_null_channel},
 #endif
@@ -1357,6 +1365,18 @@ f_atan2(typval_T *argvars, typval_T *rettv)
 	rettv->vval.v_float = atan2(fx, fy);
     else
 	rettv->vval.v_float = 0.0;
+}
+#endif
+
+/*
+ * "balloon_show()" function
+ */
+#ifdef FEAT_BEVAL
+    static void
+f_balloon_show(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    if (balloonEval != NULL)
+	gui_mch_post_balloon(balloonEval, get_tv_string_chk(&argvars[0]));
 }
 #endif
 
@@ -12323,6 +12343,15 @@ f_test_garbagecollect_now(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     /* This is dangerous, any Lists and Dicts used internally may be freed
      * while still in use. */
     garbage_collect(TRUE);
+}
+
+/*
+ * "test_ignore_error()" function
+ */
+    static void
+f_test_ignore_error(typval_T *argvars, typval_T *rettv UNUSED)
+{
+     ignore_error_for_testing(get_tv_string(&argvars[0]));
 }
 
 #ifdef FEAT_JOB_CHANNEL
