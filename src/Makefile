@@ -2025,7 +2025,6 @@ test check: scripttests unittests
 #
 scripttests:
 	$(MAKE) -f Makefile $(VIMTARGET)
-	$(MAKE) -f Makefile testdir/opt_test.vim
 	if test -n "$(MAKEMO)" -a -f $(PODIR)/Makefile; then \
 		cd $(PODIR); $(MAKE) -f Makefile check VIM=../$(VIMTARGET); \
 	fi
@@ -2033,9 +2032,6 @@ scripttests:
 		ln -s $(VIMTARGET) vim; \
 	fi
 	cd testdir; $(MAKE) -f Makefile $(GUI_TESTTARGET) VIMPROG=../$(VIMTARGET) $(GUI_TESTARG) SCRIPTSOURCE=../$(SCRIPTSOURCE)
-
-testdir/opt_test.vim: option.c gen_opt_test.vim
-	./$(VIMTARGET) -u gen_opt_test.vim --noplugin --not-a-term
 
 # Run the tests with the GUI.  Assumes vim/gvim was already built
 testgui:
@@ -2103,7 +2099,9 @@ test_arglist \
 	test_cdo \
 	test_channel \
 	test_charsearch \
+	test_charsearch_utf8 \
 	test_changedtick \
+	test_cindent \
 	test_cmdline \
 	test_command_count \
 	test_crypt \
@@ -2114,6 +2112,7 @@ test_arglist \
 	test_digraph \
 	test_functions \
 	test_display \
+	test_edit \
 	test_ex_undo \
 	test_execute_func \
 	test_expand \
@@ -2157,6 +2156,7 @@ test_arglist \
 	test_listlbr \
 	test_listlbr_utf8 \
 	test_lua \
+	test_makeencoding \
 	test_man \
 	test_mapping \
 	test_marks \
@@ -2772,7 +2772,7 @@ SHADOWDIR = shadow
 
 shadow:	runtime pixmaps
 	mkdir $(SHADOWDIR)
-	cd $(SHADOWDIR); ln -s ../*.[chm] ../*.in ../*.vim ../*.sh ../*.xs ../*.xbm ../gui_gtk_res.xml ../toolcheck ../proto ../vimtutor ../gvimtutor ../mkinstalldirs .
+	cd $(SHADOWDIR); ln -s ../*.[chm] ../*.in ../*.sh ../*.xs ../*.xbm ../gui_gtk_res.xml ../toolcheck ../proto ../vimtutor ../gvimtutor ../mkinstalldirs .
 	mkdir $(SHADOWDIR)/auto
 	cd $(SHADOWDIR)/auto; ln -s ../../auto/configure .
 	mkdir $(SHADOWDIR)/po

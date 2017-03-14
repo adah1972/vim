@@ -67,8 +67,8 @@ dnl clang-500.2.75 or around has abandoned -f[no-]strength-reduce and issues a
 dnl warning when that flag is passed to.  Accordingly, adjust CFLAGS based on
 dnl the version number of the clang in use.
 dnl Note that this does not work to get the version of clang 3.1 or 3.2.
-AC_MSG_CHECKING(for recent clang version)
-CLANG_VERSION_STRING=`$CC --version 2>/dev/null | sed  -n -e 's/^.*clang.*\([[0-9]][[0-9]]*\.[[0-9]][[0-9]]*\.[[0-9]][[0-9]]*\).*$/\1/p'`
+AC_MSG_CHECKING(for clang version)
+CLANG_VERSION_STRING=`$CC --version 2>/dev/null | sed  -n -e 's/^.*clang[[^0-9]]*\([[0-9]][[0-9]]*\.[[0-9]][[0-9]]*\.[[0-9]][[0-9]]*\).*$/\1/p'`
 if test x"$CLANG_VERSION_STRING" != x"" ; then
   CLANG_MAJOR=`echo "$CLANG_VERSION_STRING" | sed -n -e 's/\([[0-9]][[0-9]]*\)\.[[0-9]][[0-9]]*\.[[0-9]][[0-9]]*/\1/p'`
   CLANG_MINOR=`echo "$CLANG_VERSION_STRING" | sed -n -e 's/[[0-9]][[0-9]]*\.\([[0-9]][[0-9]]*\)\.[[0-9]][[0-9]]*/\1/p'`
@@ -79,11 +79,15 @@ if test x"$CLANG_VERSION_STRING" != x"" ; then
   dnl change the constant 500002075 below appropriately.  To get the
   dnl integer corresponding to a version number, refer to the
   dnl definition of CLANG_VERSION above.
+  AC_MSG_CHECKING(if clang supports -fno-strength-reduce)
   if test "$CLANG_VERSION" -ge 500002075 ; then
-    CFLAGS=`echo "$CFLAGS" | sed -n -e 's/-fno-strength-reduce/ /p'`
+    AC_MSG_RESULT(no)
+    CFLAGS=`echo "$CFLAGS" | sed -e 's/-fno-strength-reduce/ /'`
+  else
+    AC_MSG_RESULT(yes)
   fi
 else
-  AC_MSG_RESULT(no)
+  AC_MSG_RESULT(N/A)
 fi
 
 dnl If configure thinks we are cross compiling, there might be something
@@ -3016,6 +3020,14 @@ dnl ---------------------------------------------------------------------------
 dnl end of GUI-checking
 dnl ---------------------------------------------------------------------------
 
+AC_MSG_CHECKING([for /proc/self/exe])
+if test -L "/proc/self/exe"; then
+    AC_MSG_RESULT(yes)
+    AC_DEFINE(HAVE_PROC_SELF_EXE)
+else
+    AC_MSG_RESULT(no)
+fi
+
 dnl Check for Cygwin, which needs an extra source file if not using X11
 AC_MSG_CHECKING(for CYGWIN or MSYS environment)
 case `uname` in
@@ -3597,7 +3609,7 @@ dnl Can only be used for functions that do not require any include.
 AC_CHECK_FUNCS(fchdir fchown fsync getcwd getpseudotty \
 	getpwent getpwnam getpwuid getrlimit gettimeofday getwd lstat \
 	memset mkdtemp nanosleep opendir putenv qsort readlink select setenv \
-	setpgid setsid sigaltstack sigstack sigset sigsetjmp sigaction \
+	getpgid setpgid setsid sigaltstack sigstack sigset sigsetjmp sigaction \
 	sigprocmask sigvec strcasecmp strerror strftime stricmp strncasecmp \
 	strnicmp strpbrk strtol tgetent towlower towupper iswupper \
 	usleep utime utimes)

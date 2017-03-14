@@ -781,7 +781,7 @@ cs_create_cmd(char *csoption, char *pattern)
      * they may want to use the leading white space. */
     pat = pattern;
     if (search != 4 && search != 6)
-	while vim_iswhite(*pat)
+	while VIM_ISWHITE(*pat)
 	    ++pat;
 
     if ((cmd = (char *)alloc((unsigned)(strlen(pat) + 2))) == NULL)
@@ -1242,7 +1242,7 @@ cs_find_common(
 		wp = curwin;
 	    /* '-' starts a new error list */
 	    if (qf_init(wp, tmp, (char_u *)"%f%*\\t%l%*\\t%m",
-						  *qfpos == '-', cmdline) > 0)
+					  *qfpos == '-', cmdline, NULL) > 0)
 	    {
 # ifdef FEAT_WINDOWS
 		if (postponed_split != 0)

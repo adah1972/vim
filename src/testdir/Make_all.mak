@@ -143,6 +143,7 @@ NEW_TESTS = test_arabic.res \
 	    test_cdo.res \
 	    test_channel.res \
 	    test_charsearch.res \
+	    test_cindent.res \
 	    test_cmdline.res \
 	    test_command_count.res \
 	    test_crypt.res \
@@ -150,6 +151,7 @@ NEW_TESTS = test_arabic.res \
 	    test_diffmode.res \
 	    test_digraph.res \
 	    test_display.res \
+	    test_edit.res \
 	    test_farsi.res \
 	    test_fnameescape.res \
 	    test_fold.res \
@@ -170,6 +172,7 @@ NEW_TESTS = test_arabic.res \
 	    test_listlbr.res \
 	    test_listlbr_utf8.res \
 	    test_lua.res \
+	    test_makeencoding.res \
 	    test_man.res \
 	    test_marks.res \
 	    test_matchadd_conceal.res \
@@ -179,6 +182,7 @@ NEW_TESTS = test_arabic.res \
 	    test_netbeans.res \
 	    test_normal.res \
 	    test_number.res \
+	    test_options.res \
 	    test_packadd.res \
 	    test_paste.res \
 	    test_perl.res \
@@ -219,3 +223,4 @@ test49.out: test49.vim
 
 test60.out: test60.vim
 
+test_options.res test_alot.res: opt_test.vim

@@ -559,11 +559,16 @@ vim_main2(void)
      */
     if (params.edit_type == EDIT_QF)
     {
+	char_u	*enc = NULL;
+
+# ifdef FEAT_MBYTE
+	enc = p_menc;
+# endif
 	if (params.use_ef != NULL)
 	    set_string_option_direct((char_u *)"ef", -1,
 					   params.use_ef, OPT_FREE, SID_CARG);
 	vim_snprintf((char *)IObuff, IOSIZE, "cfile %s", p_ef);
-	if (qf_init(NULL, p_ef, p_efm, TRUE, IObuff) < 0)
+	if (qf_init(NULL, p_ef, p_efm, TRUE, IObuff, enc) < 0)
 	{
 	    out_char('\n');
 	    mch_exit(3);
@@ -1139,7 +1144,7 @@ main_loop(
 # endif
 			)
 # ifdef FEAT_AUTOCMD
-		 && !equalpos(last_cursormoved, curwin->w_cursor)
+		 && !EQUAL_POS(last_cursormoved, curwin->w_cursor)
 # endif
 		 )
 	    {
@@ -3533,21 +3538,44 @@ time_msg(
 set_progpath(char_u *argv0)
 {
     char_u *val = argv0;
-    char_u buf[MAXPATHL];
 
+# ifdef HAVE_PROC_SELF_EXE
+    char    buf[PATH_MAX + 1];
+    ssize_t len;
+
+    len = readlink("/proc/self/exe", buf, PATH_MAX);
+    if (len > 0)
+    {
+	buf[len] = NUL;
+	val = (char_u *)buf;
+    }
+# else
     /* A relative path containing a "/" will become invalid when using ":cd",
      * turn it into a full path.
-     * On MS-Windows "vim.exe" is found in the current directory, thus also do
-     * it when there is no path and the file exists. */
-    if ( !mch_isFullName(argv0)
-# ifdef WIN32
-	    && mch_can_exe(argv0, NULL, TRUE)
-# else
-	    && gettail(argv0) != argv0
+     * On MS-Windows "vim" should be expanded to "vim.exe", thus always do
+     * this. */
+#  ifdef WIN32
+    char_u *path = NULL;
+
+    if (mch_can_exe(argv0, &path, FALSE) && path != NULL)
+	val = path;
+#  else
+    char_u buf[MAXPATHL];
+
+    if (!mch_isFullName(argv0))
+    {
+	if (gettail(argv0) != argv0
+			   && vim_FullName(argv0, buf, MAXPATHL, TRUE) != FAIL)
+	    val = buf;
+    }
+#  endif
 # endif
-	    && vim_FullName(argv0, buf, MAXPATHL, TRUE) != FAIL)
-	val = buf;
+
     set_vim_var_string(VV_PROGPATH, val, -1);
+
+# ifdef WIN32
+    vim_free(path);
+# endif
 }
 
 #endif /* NO_VIM_MAIN */

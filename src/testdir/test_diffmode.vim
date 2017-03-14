@@ -1,4 +1,5 @@
 " Tests for diff mode
+set belloff=all
 
 func Test_diff_fold_sync()
   enew!
@@ -317,9 +318,20 @@ func Test_diffpatch()
   bwipe!
   new
   call assert_fails('diffpatch Xpatch', 'E816:')
-  call setline(1, ['1', '2', '3'])
-  diffpatch Xpatch
-  call assert_equal(['1', '2x', '3', '4'], getline(1, '$'))
+
+  for name in ['Xpatch', 'Xpatch$HOME', 'Xpa''tch']
+    call setline(1, ['1', '2', '3'])
+    if name != 'Xpatch'
+      call rename('Xpatch', name)
+    endif
+    exe 'diffpatch ' . escape(name, '$')
+    call assert_equal(['1', '2x', '3', '4'], getline(1, '$'))
+    if name != 'Xpatch'
+      call rename(name, 'Xpatch')
+    endif
+    bwipe!
+  endfor
+
   call delete('Xpatch')
   bwipe!
 endfunc
@@ -346,4 +358,24 @@ func Test_diff_nomodifiable()
   setl nomodifiable
   call assert_fails('norm do', 'E21:')
   %bwipe!
+endfunc
+
+func Test_diff_lastline()
+  enew!
+  only!
+  call setline(1, ['This is a ', 'line with five ', 'rows'])
+  diffthis
+  botright vert new
+  call setline(1, ['This is', 'a line with ', 'four rows'])
+  diffthis
+  1
+  call feedkeys("Je a\<CR>", 'tx')
+  call feedkeys("Je a\<CR>", 'tx')
+  let w1lines = winline()
+  wincmd w
+  $
+  let w2lines = winline()
+  call assert_equal(w2lines, w1lines)
+  bwipe!
+  bwipe!
 endfunc
