@@ -3539,11 +3539,11 @@ set_progpath(char_u *argv0)
 {
     char_u *val = argv0;
 
-# ifdef HAVE_PROC_SELF_EXE
+# ifdef PROC_EXE_LINK
     char    buf[PATH_MAX + 1];
     ssize_t len;
 
-    len = readlink("/proc/self/exe", buf, PATH_MAX);
+    len = readlink(PROC_EXE_LINK, buf, PATH_MAX);
     if (len > 0)
     {
 	buf[len] = NUL;
@@ -3791,10 +3791,10 @@ cmdsrv_main(
 	    }
 	    else
 		ret = serverSendToVim(xterm_dpy, sname, *serverStr,
-						    NULL, &srv, 0, 0, silent);
+						  NULL, &srv, 0, 0, 0, silent);
 # else
 	    /* Win32 always works? */
-	    ret = serverSendToVim(sname, *serverStr, NULL, &srv, 0, silent);
+	    ret = serverSendToVim(sname, *serverStr, NULL, &srv, 0, 0, silent);
 # endif
 	    if (ret < 0)
 	    {
@@ -3854,11 +3854,11 @@ cmdsrv_main(
 		while (memchr(done, 0, numFiles) != NULL)
 		{
 # ifdef WIN32
-		    p = serverGetReply(srv, NULL, TRUE, TRUE);
+		    p = serverGetReply(srv, NULL, TRUE, TRUE, 0);
 		    if (p == NULL)
 			break;
 # else
-		    if (serverReadReply(xterm_dpy, srv, &p, TRUE) < 0)
+		    if (serverReadReply(xterm_dpy, srv, &p, TRUE, -1) < 0)
 			break;
 # endif
 		    j = atoi((char *)p);
@@ -3885,12 +3885,12 @@ cmdsrv_main(
 # ifdef WIN32
 	    /* Win32 always works? */
 	    if (serverSendToVim(sname, (char_u *)argv[i + 1],
-						    &res, NULL, 1, FALSE) < 0)
+						  &res, NULL, 1, 0, FALSE) < 0)
 # else
 	    if (xterm_dpy == NULL)
 		mch_errmsg(_("No display: Send expression failed.\n"));
 	    else if (serverSendToVim(xterm_dpy, sname, (char_u *)argv[i + 1],
-						 &res, NULL, 1, 1, FALSE) < 0)
+					       &res, NULL, 1, 0, 1, FALSE) < 0)
 # endif
 	    {
 		if (res != NULL && *res != NUL)
@@ -4140,6 +4140,11 @@ eval_client_expr_to_string(char_u *expr)
     char_u	*res;
     int		save_dbl = debug_break_level;
     int		save_ro = redir_off;
+    void	*fc;
+
+    /* Evaluate the expression at the toplevel, don't use variables local to
+     * the calling function. */
+    fc = clear_current_funccal();
 
      /* Disable debugging, otherwise Vim hangs, waiting for "cont" to be
       * typed. */
@@ -4156,6 +4161,7 @@ eval_client_expr_to_string(char_u *expr)
     --emsg_silent;
     if (emsg_silent < 0)
 	emsg_silent = 0;
+    restore_current_funccal(fc);
 
     /* A client can tell us to redraw, but not to display the cursor, so do
      * that here. */
@@ -4167,6 +4173,41 @@ eval_client_expr_to_string(char_u *expr)
 #endif
 
     return res;
+}
+
+/*
+ * Evaluate a command or expression sent to ourselves.
+ */
+    int
+sendToLocalVim(char_u *cmd, int asExpr, char_u **result)
+{
+    if (asExpr)
+    {
+	char_u *ret;
+
+	ret = eval_client_expr_to_string(cmd);
+	if (result != NULL)
+	{
+	    if (ret == NULL)
+	    {
+		char	*err = _(e_invexprmsg);
+		size_t	len = STRLEN(cmd) + STRLEN(err) + 5;
+		char_u	*msg;
+
+		msg = alloc((unsigned)len);
+		if (msg != NULL)
+		    vim_snprintf((char *)msg, len, "%s: \"%s\"", err, cmd);
+		*result = msg;
+	    }
+	    else
+		*result = ret;
+	}
+	else
+	    vim_free(ret);
+	return ret == NULL ? -1 : 0;
+    }
+    server_to_input_buf(cmd);
+    return 0;
 }
 
 /*

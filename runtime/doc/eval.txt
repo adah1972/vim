@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.0.  Last change: 2017 Mar 04
+*eval.txt*	For Vim version 8.0.  Last change: 2017 Mar 21
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1904,6 +1904,8 @@ v:termresponse	The escape sequence returned by the terminal for the |t_RV|
 
 					*v:testing* *testing-variable*
 v:testing	Must be set before using `test_garbagecollect_now()`.
+		Also, when set certain error messages won't be shown for 2
+		seconds. (e.g. "'dictionary' option is empty") 
 
 				*v:this_session* *this_session-variable*
 v:this_session	Full filename of the last loaded or saved session file.  See
@@ -1984,16 +1986,23 @@ argidx()			Number	current index in the argument list
 arglistid([{winnr} [, {tabnr}]]) Number	argument list id
 argv({nr})			String	{nr} entry of the argument list
 argv()				List	the argument list
-assert_equal({exp}, {act} [, {msg}])  none  assert {exp} is equal to {act}
-assert_exception({error} [, {msg}])   none  assert {error} is in v:exception
-assert_fails({cmd} [, {error}])	      none  assert {cmd} fails
-assert_false({actual} [, {msg}])      none  assert {actual} is false
+assert_equal({exp}, {act} [, {msg}])
+				none	assert {exp} is equal to {act}
+assert_exception({error} [, {msg}])
+				none	assert {error} is in v:exception
+assert_fails({cmd} [, {error}])	none	assert {cmd} fails
+assert_false({actual} [, {msg}])
+				none	assert {actual} is false
 assert_inrange({lower}, {upper}, {actual} [, {msg}])
 				none	assert {actual} is inside the range
-assert_match({pat}, {text} [, {msg}])	 none  assert {pat} matches {text}
-assert_notequal({exp}, {act} [, {msg}])  none  assert {exp} is not equal {act}
-assert_notmatch({pat}, {text} [, {msg}]) none  assert {pat} not matches {text}
-assert_true({actual} [, {msg}])		 none  assert {actual} is true
+assert_match({pat}, {text} [, {msg}])
+				none	assert {pat} matches {text}
+assert_notequal({exp}, {act} [, {msg}])
+				none	assert {exp} is not equal {act}
+assert_notmatch({pat}, {text} [, {msg}])
+				none	assert {pat} not matches {text}
+assert_report({msg})		none	report a test failure
+assert_true({actual} [, {msg}])	none	assert {actual} is true
 asin({expr})			Float	arc sine of {expr}
 atan({expr})			Float	arc tangent of {expr}
 atan2({expr1}, {expr2})		Float	arc tangent of {expr1} / {expr2}
@@ -2252,13 +2261,16 @@ readfile({fname} [, {binary} [, {max}]])
 reltime([{start} [, {end}]])	List	get time value
 reltimefloat({time})		Float	turn the time value into a Float
 reltimestr({time})		String	turn time value into a String
-remote_expr({server}, {string} [, {idvar}])
+remote_expr({server}, {string} [, {idvar} [, {timeout}]])
 				String	send expression
 remote_foreground({server})	Number	bring Vim server to the foreground
 remote_peek({serverid} [, {retvar}])
 				Number	check for reply string
-remote_read({serverid})		String	read reply string
+remote_read({serverid} [, {timeout}])
+				String	read reply string
 remote_send({server}, {string} [, {idvar}])
+				String	send key sequence
+remote_startserver({name})	none	become server {name}
 				String	send key sequence
 remove({list}, {idx} [, {end}])	any	remove items {idx}-{end} from {list}
 remove({dict}, {key})		any	remove entry {key} from {dict}
@@ -2352,7 +2364,7 @@ systemlist({expr} [, {input}])	List	output of shell command/filter {expr}
 tabpagebuflist([{arg}])		List	list of buffer numbers in tab page
 tabpagenr([{arg}])		Number	number of current or last tab page
 tabpagewinnr({tabarg}[, {arg}]) Number	number of current window in tab page
-taglist({expr})			List	list of tags matching {expr}
+taglist({expr}[, {filename}])	List	list of tags matching {expr}
 tagfiles()			List	tags files used
 tan({expr})			Float	tangent of {expr}
 tanh({expr})			Float	hyperbolic tangent of {expr}
@@ -2579,7 +2591,10 @@ assert_notmatch({pattern}, {actual} [, {msg}])
 		The opposite of `assert_match()`: add an error message to
 		|v:errors| when {pattern} matches {actual}.
 
-assert_true({actual} [, {msg}])					*assert_true()*
+assert_report({msg})					*assert_report()*
+		Report a test failure directly, using {msg}.
+
+assert_true({actual} [, {msg}])				*assert_true()*
 		When {actual} is not true an error message is added to
 		|v:errors|, like with |assert_equal()|.
 		A value is TRUE when it is a non-zero number.  When {actual}
@@ -3921,11 +3936,14 @@ foldtext()	Returns a String, to be displayed for a closed fold.  This is
 		|v:foldstart|, |v:foldend| and |v:folddashes| variables.
 		The returned string looks like this: >
 			+-- 45 lines: abcdef
-<		The number of dashes depends on the foldlevel.  The "45" is
-		the number of lines in the fold.  "abcdef" is the text in the
-		first non-blank line of the fold.  Leading white space, "//"
-		or "/*" and the text from the 'foldmarker' and 'commentstring'
-		options is removed.
+<		The number of leading dashes depends on the foldlevel.  The
+		"45" is the number of lines in the fold.  "abcdef" is the text
+		in the first non-blank line of the fold.  Leading white space,
+		"//" or "/*" and the text from the 'foldmarker' and
+		'commentstring' options is removed.
+		When used to draw the actual foldtext, the rest of the line
+		will be filled with the fold char from the 'fillchars'
+		setting.
 		{not available when compiled without the |+folding| feature}
 
 foldtextresult({lnum})					*foldtextresult()*
@@ -6303,15 +6321,17 @@ reltimestr({time})				*reltimestr()*
 		{only available when compiled with the |+reltime| feature}
 
 							*remote_expr()* *E449*
-remote_expr({server}, {string} [, {idvar}])
+remote_expr({server}, {string} [, {idvar} [, {timeout}]])
 		Send the {string} to {server}.  The string is sent as an
 		expression and the result is returned after evaluation.
 		The result must be a String or a |List|.  A |List| is turned
 		into a String by joining the items with a line break in
 		between (not at the end), like with join(expr, "\n").
-		If {idvar} is present, it is taken as the name of a
-		variable and a {serverid} for later use with
+		If {idvar} is present and not empty, it is taken as the name
+		of a variable and a {serverid} for later use with
 		remote_read() is stored there.
+		If {timeout} is given the read times out after this many
+		seconds.  Otherwise a timeout of 600 seconds is used.
 		See also |clientserver| |RemoteReply|.
 		This function is not available in the |sandbox|.
 		{only available when compiled with the |+clientserver| feature}
@@ -6350,9 +6370,10 @@ remote_peek({serverid} [, {retvar}])		*remote_peek()*
 			:let repl = ""
 			:echo "PEEK: ".remote_peek(id, "repl").": ".repl
 
-remote_read({serverid})				*remote_read()*
+remote_read({serverid}, [{timeout}])			*remote_read()*
 		Return the oldest available reply from {serverid} and consume
-		it.  It blocks until a reply is available.
+		it.  Unless a {timeout} in seconds is given, it blocks until a
+		reply is available.
 		See also |clientserver|.
 		This function is not available in the |sandbox|.
 		{only available when compiled with the |+clientserver| feature}
@@ -6370,6 +6391,7 @@ remote_send({server}, {string} [, {idvar}])
 		See also |clientserver| |RemoteReply|.
 		This function is not available in the |sandbox|.
 		{only available when compiled with the |+clientserver| feature}
+
 		Note: Any errors will be reported in the server and may mess
 		up the display.
 		Examples: >
@@ -6381,6 +6403,12 @@ remote_send({server}, {string} [, {idvar}])
 		:echo remote_send("gvim", ":sleep 10 | echo ".
 		 \ 'server2client(expand("<client>"), "HELLO")<CR>')
 <
+					*remote_startserver()* *E941* *E942*
+remote_startserver({name})
+		Become the server {name}.  This fails if already running as a
+		server, when |v:servername| is not empty.
+		{only available when compiled with the |+clientserver| feature}
+
 remove({list}, {idx} [, {end}])				*remove()*
 		Without {end}: Remove the item at {idx} from |List| {list} and
 		return the item.
@@ -7714,8 +7742,13 @@ tagfiles()	Returns a |List| with the file names used to search for tags
 		for the current buffer.  This is the 'tags' option expanded.
 
 
-taglist({expr})							*taglist()*
+taglist({expr}[, {filename}])				*taglist()*
 		Returns a list of tags matching the regular expression {expr}.
+
+		If {filename} is passed it is used to prioritize the results
+		in the same way that |:tselect| does. See |tag-priority|.
+		{filename} should be the full path of the file.
+
 		Each list item is a dictionary with at least the following
 		entries:
 			name		Name of the tag.
@@ -7797,14 +7830,6 @@ test_autochdir()					*test_autochdir()*
 		Set a flag to enable the effect of 'autochdir' before Vim
 		startup has finished.
 
-						*test_disable_char_avail()*
-test_disable_char_avail({expr})
-		When {expr} is 1 the internal char_avail() function will
-		return |FALSE|.  When {expr} is 0 the char_avail() function will
-		function normally.
-		Only use this for a test where typeahead causes the test not
-		to work.  E.g., to trigger the CursorMovedI autocommand event.
-
 test_garbagecollect_now()			 *test_garbagecollect_now()*
 		Like garbagecollect(), but executed right away.  This must
 		only be called directly to avoid any structure to exist
@@ -7839,6 +7864,18 @@ test_null_partial()					*test_null_partial()*
 
 test_null_string()					*test_null_string()*
 		Return a String that is null. Only useful for testing.
+
+test_override({name}, {val})				*test_override()*
+		Overrides certain parts of Vims internal processing to be able
+		to run tests. Only to be used for testing Vim!
+		The override is enabled when {val} is non-zero and removed
+		when {val} is zero.
+		Current supported values for name are: 
+
+		name	     effect when {val} is non-zero ~
+		redraw       disable the redrawing() function
+		char_avail   disable the char_avail() function
+		ALL	     clear all overrides ({val} is not used)
 
 test_settime({expr})					*test_settime()*
 		Set the time Vim uses internally.  Currently only used for

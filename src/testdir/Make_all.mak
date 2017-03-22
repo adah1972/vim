@@ -137,6 +137,7 @@ NEW_TESTS = test_arabic.res \
 	    test_arglist.res \
 	    test_assert.res \
 	    test_autochdir.res \
+	    test_autocmd.res \
 	    test_backspace_opt.res \
 	    test_breakindent.res \
 	    test_bufwintabinfo.res \
@@ -144,6 +145,7 @@ NEW_TESTS = test_arabic.res \
 	    test_channel.res \
 	    test_charsearch.res \
 	    test_cindent.res \
+	    test_clientserver.res \
 	    test_cmdline.res \
 	    test_command_count.res \
 	    test_crypt.res \
@@ -192,6 +194,7 @@ NEW_TESTS = test_arabic.res \
 	    test_pyx2.res \
 	    test_pyx3.res \
 	    test_quickfix.res \
+	    test_quotestar.res \
 	    test_retab.res \
 	    test_ruby.res \
 	    test_search.res \

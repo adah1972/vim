@@ -2555,7 +2555,7 @@ qf_list(exarg_T *eap)
 		vim_snprintf((char *)IObuff, IOSIZE, "%2d %s",
 							    i, (char *)fname);
 	    msg_outtrans_attr(IObuff, i == qi->qf_lists[qi->qf_curlist].qf_index
-					   ? hl_attr(HLF_L) : hl_attr(HLF_D));
+					   ? HL_ATTR(HLF_L) : HL_ATTR(HLF_D));
 	    if (qfp->qf_lnum == 0)
 		IObuff[0] = NUL;
 	    else if (qfp->qf_col == 0)
@@ -2565,7 +2565,7 @@ qf_list(exarg_T *eap)
 						   qfp->qf_lnum, qfp->qf_col);
 	    sprintf((char *)IObuff + STRLEN(IObuff), "%s:",
 				  (char *)qf_types(qfp->qf_type, qfp->qf_nr));
-	    msg_puts_attr(IObuff, hl_attr(HLF_N));
+	    msg_puts_attr(IObuff, HL_ATTR(HLF_N));
 	    if (qfp->qf_pattern != NULL)
 	    {
 		qf_fmt_text(qfp->qf_pattern, IObuff, IOSIZE);
@@ -5077,6 +5077,7 @@ ex_helpgrep(exarg_T *eap)
     char_u	*lang;
 #endif
     qf_info_T	*qi = &ql_info;
+    qf_info_T	*save_qi;
     int		new_qi = FALSE;
     win_T	*wp;
 #ifdef FEAT_AUTOCMD
@@ -5129,6 +5130,9 @@ ex_helpgrep(exarg_T *eap)
 	    new_qi = TRUE;
 	}
     }
+
+    /* Autocommands may change the list. Save it for later comparison */
+    save_qi = qi;
 
     regmatch.regprog = vim_regcomp(eap->arg, RE_MAGIC + RE_STRING);
     regmatch.rm_ic = FALSE;
@@ -5262,7 +5266,7 @@ ex_helpgrep(exarg_T *eap)
     {
 	apply_autocmds(EVENT_QUICKFIXCMDPOST, au_name,
 					       curbuf->b_fname, TRUE, curbuf);
-	if (!new_qi && qi != &ql_info && qf_find_buf(qi) == NULL)
+	if (!new_qi && qi != save_qi && qf_find_buf(qi) == NULL)
 	    /* autocommands made "qi" invalid */
 	    return;
     }

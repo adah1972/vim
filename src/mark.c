@@ -37,6 +37,8 @@ static void cleanup_jumplist(void);
 #ifdef FEAT_VIMINFO
 static void write_one_filemark(FILE *fp, xfmark_T *fm, int c1, int c2);
 #endif
+static void mark_adjust_internal(linenr_T line1, linenr_T line2, long amount,
+    long amount_after, int adjust_folds);
 
 /*
  * Set named mark "c" at current cursor position.
@@ -792,7 +794,7 @@ show_one_mark(
 	    }
 	    if (name != NULL)
 	    {
-		msg_outtrans_attr(name, current ? hl_attr(HLF_D) : 0);
+		msg_outtrans_attr(name, current ? HL_ATTR(HLF_D) : 0);
 		if (mustfree)
 		    vim_free(name);
 	    }
@@ -924,7 +926,7 @@ ex_jumps(exarg_T *eap UNUSED)
 	    msg_outtrans(IObuff);
 	    msg_outtrans_attr(name,
 			    curwin->w_jumplist[i].fmark.fnum == curbuf->b_fnum
-							? hl_attr(HLF_D) : 0);
+							? HL_ATTR(HLF_D) : 0);
 	    vim_free(name);
 	    ui_breakcheck();
 	}
@@ -971,7 +973,7 @@ ex_changes(exarg_T *eap UNUSED)
 	    name = mark_line(&curbuf->b_changelist[i], 17);
 	    if (name == NULL)
 		break;
-	    msg_outtrans_attr(name, hl_attr(HLF_D));
+	    msg_outtrans_attr(name, HL_ATTR(HLF_D));
 	    vim_free(name);
 	    ui_breakcheck();
 	}
@@ -1028,6 +1030,27 @@ mark_adjust(
     linenr_T	line2,
     long	amount,
     long	amount_after)
+{
+    mark_adjust_internal(line1, line2, amount, amount_after, TRUE);
+}
+
+    void
+mark_adjust_nofold(
+    linenr_T line1,
+    linenr_T line2,
+    long amount,
+    long amount_after)
+{
+    mark_adjust_internal(line1, line2, amount, amount_after, FALSE);
+}
+
+    static void
+mark_adjust_internal(
+    linenr_T line1,
+    linenr_T line2,
+    long amount,
+    long amount_after,
+    int adjust_folds UNUSED)
 {
     int		i;
     int		fnum = curbuf->b_fnum;
@@ -1174,7 +1197,8 @@ mark_adjust(
 
 #ifdef FEAT_FOLDING
 	    /* adjust folds */
-	    foldMarkAdjust(win, line1, line2, amount, amount_after);
+	    if (adjust_folds)
+		foldMarkAdjust(win, line1, line2, amount, amount_after);
 #endif
 	}
     }

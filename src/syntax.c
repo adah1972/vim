@@ -1782,36 +1782,33 @@ syn_finish_line(
     stateitem_T	*cur_si;
     colnr_T	prev_current_col;
 
-    if (!current_finished)
+    while (!current_finished)
     {
-	while (!current_finished)
+	(void)syn_current_attr(syncing, FALSE, NULL, FALSE);
+	/*
+	 * When syncing, and found some item, need to check the item.
+	 */
+	if (syncing && current_state.ga_len)
 	{
-	    (void)syn_current_attr(syncing, FALSE, NULL, FALSE);
 	    /*
-	     * When syncing, and found some item, need to check the item.
+	     * Check for match with sync item.
 	     */
-	    if (syncing && current_state.ga_len)
-	    {
-		/*
-		 * Check for match with sync item.
-		 */
-		cur_si = &CUR_STATE(current_state.ga_len - 1);
-		if (cur_si->si_idx >= 0
-			&& (SYN_ITEMS(syn_block)[cur_si->si_idx].sp_flags
-					      & (HL_SYNC_HERE|HL_SYNC_THERE)))
-		    return TRUE;
+	    cur_si = &CUR_STATE(current_state.ga_len - 1);
+	    if (cur_si->si_idx >= 0
+		    && (SYN_ITEMS(syn_block)[cur_si->si_idx].sp_flags
+					  & (HL_SYNC_HERE|HL_SYNC_THERE)))
+		return TRUE;
 
-		/* syn_current_attr() will have skipped the check for an item
-		 * that ends here, need to do that now.  Be careful not to go
-		 * past the NUL. */
-		prev_current_col = current_col;
-		if (syn_getcurline()[current_col] != NUL)
-		    ++current_col;
-		check_state_ends();
-		current_col = prev_current_col;
-	    }
-	    ++current_col;
+	    /* syn_current_attr() will have skipped the check for an item
+	     * that ends here, need to do that now.  Be careful not to go
+	     * past the NUL. */
+	    prev_current_col = current_col;
+	    if (syn_getcurline()[current_col] != NUL)
+		++current_col;
+	    check_state_ends();
+	    current_col = prev_current_col;
 	}
+	++current_col;
     }
     return FALSE;
 }
@@ -3333,7 +3330,7 @@ syn_regexec(
 /*
  * Check one position in a line for a matching keyword.
  * The caller must check if a keyword can start at startcol.
- * Return it's ID if found, 0 otherwise.
+ * Return its ID if found, 0 otherwise.
  */
     static int
 check_keyword_id(
@@ -4070,7 +4067,7 @@ syn_list_one(
 		    {0, NULL}
 		};
 
-    attr = hl_attr(HLF_D);		/* highlight like directories */
+    attr = HL_ATTR(HLF_D);		/* highlight like directories */
 
     /* list the keywords for "id" */
     if (!syncing)
@@ -4181,11 +4178,11 @@ syn_list_cluster(int id)
     if (SYN_CLSTR(curwin->w_s)[id].scl_list != NULL)
     {
 	put_id_list((char_u *)"cluster", SYN_CLSTR(curwin->w_s)[id].scl_list,
-		    hl_attr(HLF_D));
+		    HL_ATTR(HLF_D));
     }
     else
     {
-	msg_puts_attr((char_u *)"cluster", hl_attr(HLF_D));
+	msg_puts_attr((char_u *)"cluster", HL_ATTR(HLF_D));
 	msg_puts((char_u *)"=NONE");
     }
 }
@@ -5495,7 +5492,7 @@ syn_combine_list(short **clstr1, short **clstr2, int list_op)
 }
 
 /*
- * Lookup a syntax cluster name and return it's ID.
+ * Lookup a syntax cluster name and return its ID.
  * If it is not found, 0 is returned.
  */
     static int
@@ -5535,7 +5532,7 @@ syn_scl_namen2id(char_u *linep, int len)
 }
 
 /*
- * Find syntax cluster name in the table and return it's ID.
+ * Find syntax cluster name in the table and return its ID.
  * The argument is a pointer to the name and the length of the name.
  * If it doesn't exist yet, a new entry is created.
  * Return 0 for failure.
@@ -5559,7 +5556,7 @@ syn_check_cluster(char_u *pp, int len)
 }
 
 /*
- * Add new syntax cluster and return it's ID.
+ * Add new syntax cluster and return its ID.
  * "name" must be an allocated string, it will be consumed.
  * Return 0 for failure.
  */
@@ -7752,7 +7749,7 @@ do_highlight(
 		    break;
 		}
 
-		/* Use the _16 table to check if its a valid color name. */
+		/* Use the _16 table to check if it's a valid color name. */
 		color = color_numbers_16[i];
 		if (color >= 0)
 		{
@@ -8999,7 +8996,7 @@ highlight_list_one(int id)
     {
 	(void)syn_list_header(didh, 9999, id);
 	didh = TRUE;
-	msg_puts_attr((char_u *)"links to", hl_attr(HLF_D));
+	msg_puts_attr((char_u *)"links to", HL_ATTR(HLF_D));
 	msg_putchar(' ');
 	msg_outtrans(HL_TABLE()[HL_TABLE()[id - 1].sg_link - 1].sg_name);
     }
@@ -9056,8 +9053,8 @@ highlight_list_arg(
 	{
 	    if (*name != NUL)
 	    {
-		MSG_PUTS_ATTR(name, hl_attr(HLF_D));
-		MSG_PUTS_ATTR("=", hl_attr(HLF_D));
+		MSG_PUTS_ATTR(name, HL_ATTR(HLF_D));
+		MSG_PUTS_ATTR("=", HL_ATTR(HLF_D));
 	    }
 	    msg_outtrans(ts);
 	}
@@ -9346,7 +9343,7 @@ set_hl_attr(
 }
 
 /*
- * Lookup a highlight group name and return it's ID.
+ * Lookup a highlight group name and return its ID.
  * If it is not found, 0 is returned.
  */
     int
@@ -9411,7 +9408,7 @@ syn_namen2id(char_u *linep, int len)
 }
 
 /*
- * Find highlight group name in the table and return it's ID.
+ * Find highlight group name in the table and return its ID.
  * The argument is a pointer to the name and the length of the name.
  * If it doesn't exist yet, a new entry is created.
  * Return 0 for failure.
@@ -9435,7 +9432,7 @@ syn_check_group(char_u *pp, int len)
 }
 
 /*
- * Add new highlight group and return it's ID.
+ * Add new highlight group and return its ID.
  * "name" must be an allocated string, it will be consumed.
  * Return 0 for failure.
  */
@@ -9457,7 +9454,7 @@ syn_add_group(char_u *name)
 	{
 	    /* This is an error, but since there previously was no check only
 	     * give a warning. */
-	    msg_source(hl_attr(HLF_W));
+	    msg_source(HL_ATTR(HLF_W));
 	    MSG(_("W18: Invalid character in group name"));
 	    break;
 	}
@@ -9932,7 +9929,7 @@ highlight_list(void)
     int		i;
 
     for (i = 10; --i >= 0; )
-	highlight_list_two(i, hl_attr(HLF_D));
+	highlight_list_two(i, HL_ATTR(HLF_D));
     for (i = 40; --i >= 0; )
 	highlight_list_two(99, 0);
 }
