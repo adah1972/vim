@@ -2122,10 +2122,10 @@ test_arglist \
 	test_delete \
 	test_diffmode \
 	test_digraph \
-	test_functions \
 	test_display \
 	test_edit \
 	test_ex_undo \
+	test_ex_z \
 	test_execute_func \
 	test_expand \
 	test_expand_dllpath \
@@ -2142,9 +2142,11 @@ test_arglist \
 	test_fnameescape \
 	test_fnamemodify \
 	test_fold \
+	test_functions \
 	test_ga \
 	test_gf \
 	test_glob2regpat \
+	test_global \
 	test_gn \
 	test_goto \
 	test_gui \
