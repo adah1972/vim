@@ -1324,18 +1324,31 @@ func! Test_edit_rightleft()
 endfunc
 
 func Test_edit_complete_very_long_name()
-  if !has('unix') || has('mac')
+  if !has('unix')
     " Long directory names only work on Unix.
     return
   endif
-  let save_columns = &columns
-  set columns=5000
-  call assert_equal(5000, &columns)
-  set noswapfile
+
   let dirname = getcwd() . "/Xdir"
   let longdirname = dirname . repeat('/' . repeat('d', 255), 4)
+  try
+    call mkdir(longdirname, 'p')
+  catch /E739:/
+    " Long directory name probably not supported.
+    call delete(dirname, 'rf')
+    return
+  endtry
+
+  " Try to get the Vim window position before setting 'columns'.
+  let winposx = getwinposx()
+  let winposy = getwinposy()
+  let save_columns = &columns
+  " Need at least about 1100 columns to reproduce the problem.
+  set columns=2000
+  call assert_equal(2000, &columns)
+  set noswapfile
+
   let longfilename = longdirname . '/' . repeat('a', 255)
-  call mkdir(longdirname, 'p')
   call writefile(['Totum', 'Table'], longfilename)
   new
   exe "next Xfile " . longfilename
@@ -1345,5 +1358,8 @@ func Test_edit_complete_very_long_name()
   exe 'bwipe! ' . longfilename
   call delete(dirname, 'rf')
   let &columns = save_columns
+  if winposx >= 0 && winposy >= 0
+    exe 'winpos ' . winposx . ' ' . winposy
+  endif
   set swapfile&
 endfunc

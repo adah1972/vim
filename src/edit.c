@@ -9032,7 +9032,7 @@ ins_bs(
 			       (linenr_T)(curwin->w_cursor.lnum + 1)) == FAIL)
 		return FALSE;
 	    --Insstart.lnum;
-	    Insstart.col = STRLEN(ml_get(Insstart.lnum));
+	    Insstart.col = (colnr_T)STRLEN(ml_get(Insstart.lnum));
 	}
 	/*
 	 * In replace mode:
@@ -9524,7 +9524,7 @@ bracketed_paste(paste_mode_T mode, int drop, garray_T *gap)
 #endif
 	    buf[idx++] = c;
 	buf[idx] = NUL;
-	if (end != NUL && STRNCMP(buf, end, idx) == 0)
+	if (end != NULL && STRNCMP(buf, end, idx) == 0)
 	{
 	    if (end[idx] == NUL)
 		break; /* Found the end of paste code. */
