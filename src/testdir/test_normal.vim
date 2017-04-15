@@ -1605,7 +1605,7 @@ fun! Test_normal30_changecase()
 
   " Turkish ASCII turns to multi-byte.  On Mac the Turkish locale is available
   " but toupper()/tolower() don't do the right thing.
-  if !has('mac')
+  if !has('mac') && !has('osx')
     try
       lang tr_TR.UTF-8
       set casemap=
@@ -1618,6 +1618,17 @@ fun! Test_normal30_changecase()
       1normal guu
       call assert_equal("i\u0131", getline(1))
       call assert_equal("i\u0131", tolower("iI"))
+
+      set casemap&
+      call setline(1, 'iI')
+      1normal gUU
+      call assert_equal("II", getline(1))
+      call assert_equal("II", toupper("iI"))
+
+      call setline(1, 'iI')
+      1normal guu
+      call assert_equal("ii", getline(1))
+      call assert_equal("ii", tolower("iI"))
 
       lang en_US.UTF-8
     catch /E197:/
