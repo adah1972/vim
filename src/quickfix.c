@@ -2750,11 +2750,18 @@ qf_free(qf_info_T *qi, int idx)
     vim_free(qi->qf_lists[idx].qf_title);
     qi->qf_lists[idx].qf_title = NULL;
     qi->qf_lists[idx].qf_index = 0;
+    qi->qf_lists[idx].qf_start = NULL;
+    qi->qf_lists[idx].qf_last = NULL;
+    qi->qf_lists[idx].qf_ptr = NULL;
+    qi->qf_lists[idx].qf_nonevalid = TRUE;
 
     qf_clean_dir_stack(&qi->qf_dir_stack);
     qi->qf_directory = NULL;
     qf_clean_dir_stack(&qi->qf_file_stack);
     qi->qf_currfile = NULL;
+    qi->qf_multiline = FALSE;
+    qi->qf_multiignore = FALSE;
+    qi->qf_multiscan = FALSE;
 }
 
 /*
@@ -4772,6 +4779,10 @@ qf_add_entries(
 	    bufnum = 0;
 	}
 
+	/* If the 'valid' field is present it overrules the detected value. */
+	if ((dict_find(d, (char_u *)"valid", -1)) != NULL)
+	    valid = (int)get_dict_number(d, (char_u *)"valid");
+
 	status =  qf_add_entry(qi,
 			       NULL,	    /* dir */
 			       filename,
@@ -4922,6 +4933,10 @@ qf_free_stack(win_T *wp, qf_info_T *qi)
 	/* If the location list window is open, then create a new empty
 	 * location list */
 	qf_info_T *new_ll = ll_new_list();
+
+	/* first free the list reference in the location list window */
+	ll_free_all(&orig_wp->w_llist_ref);
+
 	orig_wp->w_llist_ref = new_ll;
 	if (llwin != NULL)
 	{
