@@ -1492,7 +1492,7 @@ getcmdline(
 			    if (c != NUL)
 			    {
 				if (c == firstc || vim_strchr((char_u *)(
-					      p_magic ? "\\^$.*[" : "\\^$"), c)
+					      p_magic ? "\\~^$.*[" : "\\^$"), c)
 								       != NULL)
 				{
 				    /* put a backslash before special
@@ -1707,6 +1707,14 @@ getcmdline(
 			     * put back on the match */
 			    search_start = t;
 			    (void)decl(&search_start);
+			}
+			else if (c == Ctrl_G && firstc == '?')
+			{
+			    /* move just after the current match, so that
+			     * when nv_search finishes the cursor will be
+			     * put back on the match */
+			    search_start = t;
+			    (void)incl(&search_start);
 			}
 			if (LT_POS(t, search_start) && c == Ctrl_G)
 			{
@@ -6878,6 +6886,8 @@ open_cmdwin(void)
 # ifdef FEAT_AUTOCMD
     /* Do execute autocommands for setting the filetype (load syntax). */
     unblock_autocmds();
+    /* But don't allow switching to another buffer. */
+    ++curbuf_lock;
 # endif
 
     /* Showing the prompt may have set need_wait_return, reset it. */
@@ -6893,6 +6903,9 @@ open_cmdwin(void)
 	}
 	set_option_value((char_u *)"ft", 0L, (char_u *)"vim", OPT_LOCAL);
     }
+# ifdef FEAT_AUTOCMD
+    --curbuf_lock;
+# endif
 
     /* Reset 'textwidth' after setting 'filetype' (the Vim filetype plugin
      * sets 'textwidth' to 78). */
@@ -7029,7 +7042,13 @@ open_cmdwin(void)
 	else
 	    ccline.cmdbuff = vim_strsave(ml_get_curline());
 	if (ccline.cmdbuff == NULL)
+	{
+	    ccline.cmdbuff = vim_strsave((char_u *)"");
+	    ccline.cmdlen = 0;
+	    ccline.cmdbufflen = 1;
+	    ccline.cmdpos = 0;
 	    cmdwin_result = Ctrl_C;
+	}
 	else
 	{
 	    ccline.cmdlen = (int)STRLEN(ccline.cmdbuff);

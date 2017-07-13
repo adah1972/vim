@@ -4308,9 +4308,17 @@ ins_compl_get_exp(pos_T *ini)
 	    {
 		ins_buf = curbuf;
 		first_match_pos = *ini;
-		/* So that ^N can match word immediately after cursor */
-		if (ctrl_x_mode == 0)
-		    dec(&first_match_pos);
+		/* Move the cursor back one character so that ^N can match the
+		 * word immediately after the cursor. */
+		if (ctrl_x_mode == 0 && dec(&first_match_pos) < 0)
+		{
+		    /* Move the cursor to after the last character in the
+		     * buffer, so that word at start of buffer is found
+		     * correctly. */
+		    first_match_pos.lnum = ins_buf->b_ml.ml_line_count;
+		    first_match_pos.col =
+				 (colnr_T)STRLEN(ml_get(first_match_pos.lnum));
+		}
 		last_match_pos = first_match_pos;
 		type = 0;
 
@@ -7321,7 +7329,9 @@ oneleft(void)
 #ifdef FEAT_VIRTUALEDIT
     if (virtual_active())
     {
+# ifdef FEAT_LINEBREAK
 	int width;
+# endif
 	int v = getviscol();
 
 	if (v == 0)

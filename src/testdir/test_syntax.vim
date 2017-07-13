@@ -4,6 +4,8 @@ if !has("syntax")
   finish
 endif
 
+source view_util.vim
+
 func GetSyntaxItem(pat)
   let c = ''
   let a = ['a', getreg('a'), getregtype('a')]
@@ -416,7 +418,7 @@ func Test_bg_detection()
   hi Normal ctermbg=15
   call assert_equal('light', &bg)
 
-  " manually-set &bg takes precendence over auto-detection
+  " manually-set &bg takes precedence over auto-detection
   set bg=light
   hi Normal ctermbg=4
   call assert_equal('light', &bg)
@@ -457,4 +459,64 @@ func Test_syntax_hangs()
 
   set redrawtime&
   bwipe!
+endfunc
+
+func Test_conceal()
+  if !has('conceal')
+    return
+  endif
+
+  new
+  call setline(1, ['', '123456'])
+  syn match test23 "23" conceal cchar=X
+  syn match test45 "45" conceal
+
+  set conceallevel=0
+  call assert_equal('123456 ', ScreenLines(2, 7)[0])
+  call assert_equal([[0, '', 0], [0, '', 0], [0, '', 0], [0, '', 0], [0, '', 0], [0, '', 0]], map(range(1, 6), 'synconcealed(2, v:val)'))
+
+  set conceallevel=1
+  call assert_equal('1X 6   ', ScreenLines(2, 7)[0])
+  call assert_equal([[0, '', 0], [1, 'X', 1], [1, 'X', 1], [1, ' ', 2], [1, ' ', 2], [0, '', 0]], map(range(1, 6), 'synconcealed(2, v:val)'))
+
+  set conceallevel=1
+  set listchars=conceal:Y
+  call assert_equal([[0, '', 0], [1, 'X', 1], [1, 'X', 1], [1, 'Y', 2], [1, 'Y', 2], [0, '', 0]], map(range(1, 6), 'synconcealed(2, v:val)'))
+  call assert_equal('1XY6   ', ScreenLines(2, 7)[0])
+
+  set conceallevel=2
+  call assert_match('1X6    ', ScreenLines(2, 7)[0])
+  call assert_equal([[0, '', 0], [1, 'X', 1], [1, 'X', 1], [1, '', 2], [1, '', 2], [0, '', 0]], map(range(1, 6), 'synconcealed(2, v:val)'))
+
+  set conceallevel=3
+  call assert_match('16     ', ScreenLines(2, 7)[0])
+  call assert_equal([[0, '', 0], [1, '', 1], [1, '', 1], [1, '', 2], [1, '', 2], [0, '', 0]], map(range(1, 6), 'synconcealed(2, v:val)'))
+
+  syn clear
+  set conceallevel&
+  bw!
+endfunc
+
+fun Test_synstack_synIDtrans()
+  new
+  setfiletype c
+  syntax on
+  call setline(1, ' /* A comment with a TODO */')
+
+  call assert_equal([], synstack(1, 1))
+
+  norm f/
+  call assert_equal(['cComment', 'cCommentStart'], map(synstack(line("."), col(".")), 'synIDattr(v:val, "name")'))
+  call assert_equal(['Comment', 'Comment'],        map(synstack(line("."), col(".")), 'synIDattr(synIDtrans(v:val), "name")'))
+
+  norm fA
+  call assert_equal(['cComment'], map(synstack(line("."), col(".")), 'synIDattr(v:val, "name")'))
+  call assert_equal(['Comment'],  map(synstack(line("."), col(".")), 'synIDattr(synIDtrans(v:val), "name")'))
+
+  norm fT
+  call assert_equal(['cComment', 'cTodo'], map(synstack(line("."), col(".")), 'synIDattr(v:val, "name")'))
+  call assert_equal(['Comment', 'Todo'],   map(synstack(line("."), col(".")), 'synIDattr(synIDtrans(v:val), "name")'))
+
+  syn clear
+  bw!
 endfunc

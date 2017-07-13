@@ -482,6 +482,11 @@ CClink = $(CC)
 # Uncomment this when you do not want inter process communication.
 #CONF_OPT_CHANNEL = --disable-channel
 
+# TERMINAL - Terminal emulator support, :terminal command.  Requires the
+# channel feature.
+# Uncomment this when you want terminal emulator support.
+#CONF_OPT_TERMINAL = --enable-terminal
+
 # MULTIBYTE - To edit multi-byte characters.
 # Uncomment this when you want to edit a multibyte language.
 # It's automatically enabled with normal features, GTK or IME support.
@@ -598,6 +603,9 @@ CClink = $(CC)
 
 # Use this with GCC to check for mistakes, unused arguments, etc.
 #CFLAGS = -g -Wall -Wextra -Wshadow -Wmissing-prototypes -Wunreachable-code -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
+# Add -Wpedantic to find // comments and other C99 constructs.
+# Better disable Perl and Python to avoid a lot of warnings.
+#CFLAGS = -g -Wall -Wextra -Wshadow -Wmissing-prototypes -Wpedantic -Wunreachable-code -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
 #CFLAGS = -g -O2 -Wall -Wextra -Wmissing-prototypes -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1 -DU_DEBUG
 #PYTHON_CFLAGS_EXTRA = -Wno-missing-field-initializers
 #MZSCHEME_CFLAGS_EXTRA = -Wno-unreachable-code -Wno-unused-parameter
@@ -1371,6 +1379,13 @@ ALL_GUI_PRO  = gui.pro gui_gtk.pro gui_motif.pro gui_xmdlg.pro gui_athena.pro gu
 
 # }}}
 
+TERM_DEPS = \
+	libvterm/include/vterm.h \
+	libvterm/include/vterm_keycodes.h \
+	libvterm/src/rect.h \
+	libvterm/src/utf8.h \
+	libvterm/src/vterm_internal.h
+
 ### Command to create dependencies based on #include "..."
 ### prototype headers are ignored due to -DPROTO, system
 ### headers #include <...> are ignored if we use the -MM option, as
@@ -1560,6 +1575,7 @@ BASIC_SRC = \
 	syntax.c \
 	tag.c \
 	term.c \
+	terminal.c \
 	ui.c \
 	undo.c \
 	userfunc.c \
@@ -1569,6 +1585,7 @@ BASIC_SRC = \
 
 SRC =	$(BASIC_SRC) \
 	$(GUI_SRC) \
+	$(TERM_SRC) \
 	$(HANGULIN_SRC) \
 	$(LUA_SRC) \
 	$(MZSCHEME_SRC) \
@@ -1610,7 +1627,7 @@ ALL_SRC = $(BASIC_SRC) $(ALL_GUI_SRC) $(UNITTEST_SRC) $(EXTRA_SRC)
 LINT_SRC = $(BASIC_SRC) $(GUI_SRC) $(HANGULIN_SRC) \
 	   $(PYTHON_SRC) $(PYTHON3_SRC) $(TCL_SRC) \
 	   $(WORKSHOP_SRC) $(WSDEBUG_SRC) \
-	   $(NETBEANS_SRC) $(CHANNEL_SRC)
+	   $(NETBEANS_SRC) $(CHANNEL_SRC) $(TERM_SRC)
 #LINT_SRC = $(SRC)
 #LINT_SRC = $(ALL_SRC)
 #LINT_SRC = $(BASIC_SRC)
@@ -1665,12 +1682,14 @@ OBJ_COMMON = \
 	objects/syntax.o \
 	objects/tag.o \
 	objects/term.o \
+	objects/terminal.o \
 	objects/ui.o \
 	objects/undo.o \
 	objects/userfunc.o \
 	objects/version.o \
 	objects/window.o \
 	$(GUI_OBJ) \
+	$(TERM_OBJ) \
 	$(LUA_OBJ) \
 	$(MZSCHEME_OBJ) \
 	$(PERL_OBJ) \
@@ -1795,6 +1814,7 @@ PRO_AUTO = \
 	syntax.pro \
 	tag.pro \
 	term.pro \
+	terminal.pro \
 	termlib.pro \
 	ui.pro \
 	undo.pro \
@@ -1848,7 +1868,7 @@ config auto/config.mk: auto/configure config.mk.in config.h.in
 		$(CONF_OPT_OUTPUT) $(CONF_OPT_GPM) $(CONF_OPT_WORKSHOP) \
 		$(CONF_OPT_FEAT) $(CONF_TERM_LIB) \
 		$(CONF_OPT_COMPBY) $(CONF_OPT_ACL) $(CONF_OPT_NETBEANS) \
-		$(CONF_OPT_CHANNEL) \
+		$(CONF_OPT_CHANNEL) $(CONF_OPT_TERMINAL) \
 		$(CONF_ARGS) $(CONF_OPT_MZSCHEME) $(CONF_OPT_PLTHOME) \
 		$(CONF_OPT_LUA) $(CONF_OPT_LUA_PREFIX) \
 		$(CONF_OPT_SYSMOUSE); \
@@ -2072,25 +2092,23 @@ test1 \
 	test_autoformat_join \
 	test_changelist \
 	test_close_count \
-	test_comparators \
 	test_erasebackword \
 	test_eval \
 	test_fixeol \
-	test_getcwd \
 	test_insertcount \
 	test_listchars \
 	test_search_mbyte \
 	test_wordcount \
 	test3 test4 test5 test6 test7 test8 test9 \
 	test11 test12 test14 test15 test17 test18 test19 \
-	test20 test21 test22 test23 test24 test25 test26 test27 test28 test29 \
+	test20 test21 test22 test25 test27 test28 test29 \
 	test30 test31 test32 test33 test34 test36 test37 test38 test39 \
 	test40 test41 test42 test43 test44 test45 test48 test49 \
-	test50 test51 test52 test53 test54 test55 test56 test57 test58 test59 \
-	test60 test64 test66 test67 test68 test69 \
-	test70 test72 test73 test74 test75 test77 test78 test79 \
-	test80 test82 test83 test84 test85 test86 test87 test88 \
-	test90 test91 test94 test95 test97 test98 test99 \
+	test50 test51 test52 test53 test54 test55 test56 test57 test59 \
+	test60 test64 test66 test68 test69 \
+	test70 test72 test73 test74 test77 test78 test79 \
+	test80 test83 test84 test85 test86 test87 test88 \
+	test91 test94 test95 test98 test99 \
 	test100 test101 test103 test104 test107 test108:
 	cd testdir; rm -f $@.out; $(MAKE) -f Makefile $@.out VIMPROG=../$(VIMTARGET) $(GUI_TESTARG) SCRIPTSOURCE=../$(SCRIPTSOURCE)
 
@@ -2114,6 +2132,7 @@ test_arglist \
 	test_clientserver \
 	test_cmdline \
 	test_command_count \
+	test_comparators \
 	test_crypt \
 	test_cscope \
 	test_cursor_func \
@@ -2122,9 +2141,12 @@ test_arglist \
 	test_digraph \
 	test_display \
 	test_edit \
+	test_escaped_glob \
 	test_ex_undo \
 	test_ex_z \
+	test_exec_while_if \
 	test_execute_func \
+	test_exists_autocmd \
 	test_expand \
 	test_expand_dllpath \
 	test_expr \
@@ -2143,6 +2165,7 @@ test_arglist \
 	test_fold \
 	test_functions \
 	test_ga \
+	test_getcwd \
 	test_gf \
 	test_glob2regpat \
 	test_global \
@@ -2171,6 +2194,7 @@ test_arglist \
 	test_lua \
 	test_makeencoding \
 	test_man \
+	test_maparg \
 	test_mapping \
 	test_marks \
 	test_match \
@@ -2189,6 +2213,7 @@ test_arglist \
 	test_partial \
 	test_paste \
 	test_perl \
+	test_plus_arg_edit \
 	test_popup \
 	test_profile \
 	test_put \
@@ -2199,6 +2224,7 @@ test_arglist \
 	test_quickfix \
 	test_quotestar \
 	test_recover \
+	test_regex_char_classes \
 	test_regexp_latin \
 	test_regexp_utf8 \
 	test_reltime \
@@ -2207,6 +2233,7 @@ test_arglist \
 	test_search \
 	test_searchpos \
 	test_set \
+	test_sha256 \
 	test_signs \
 	test_smartindent \
 	test_sort \
@@ -2233,6 +2260,7 @@ test_arglist \
 	test_unlet \
 	test_usercommands \
 	test_utf8 \
+	test_utf8_comparisons \
 	test_viminfo \
 	test_vimscript \
 	test_visual \
@@ -2788,7 +2816,7 @@ SHADOWDIR = shadow
 
 shadow:	runtime pixmaps
 	$(MKDIR_P) $(SHADOWDIR)
-	cd $(SHADOWDIR); ln -s ../*.[chm] ../*.in ../*.sh ../*.xs ../*.xbm ../gui_gtk_res.xml ../toolcheck ../proto ../vimtutor ../gvimtutor ../install-sh .
+	cd $(SHADOWDIR); ln -s ../*.[chm] ../*.in ../*.sh ../*.xs ../*.xbm ../gui_gtk_res.xml ../toolcheck ../proto ../libvterm ../vimtutor ../gvimtutor ../install-sh .
 	mkdir $(SHADOWDIR)/auto
 	cd $(SHADOWDIR)/auto; ln -s ../../auto/configure .
 	$(MKDIR_P) $(SHADOWDIR)/po
@@ -3226,6 +3254,9 @@ objects/tag.o: tag.c
 objects/term.o: term.c
 	$(CCC) -o $@ term.c
 
+objects/terminal.o: terminal.c $(TERM_DEPS)
+	$(CCC) -o $@ terminal.c
+
 objects/ui.o: ui.c
 	$(CCC) -o $@ ui.c
 
@@ -3252,6 +3283,34 @@ objects/channel.o: channel.c
 
 Makefile:
 	@echo The name of the makefile MUST be "Makefile" (with capital M)!!!!
+
+CCCTERM = $(CCC) -Ilibvterm/include -DINLINE="" -DVSNPRINTF=vim_vsnprintf
+objects/term_encoding.o: libvterm/src/encoding.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/encoding.c
+
+objects/term_keyboard.o: libvterm/src/keyboard.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/keyboard.c
+
+objects/term_mouse.o: libvterm/src/mouse.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/mouse.c
+
+objects/term_parser.o: libvterm/src/parser.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/parser.c
+
+objects/term_pen.o: libvterm/src/pen.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/pen.c
+
+objects/term_screen.o: libvterm/src/screen.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/screen.c
+
+objects/term_state.o: libvterm/src/state.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/state.c
+
+objects/term_unicode.o: libvterm/src/unicode.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/unicode.c
+
+objects/term_vterm.o: libvterm/src/vterm.c $(TERM_DEPS)
+	$(CCCTERM) -o $@ libvterm/src/vterm.c
 
 ###############################################################################
 ### MacOS X installation
@@ -3397,7 +3456,7 @@ objects/ex_cmds2.o: ex_cmds2.c vim.h auto/config.h feature.h os_unix.h \
 objects/ex_docmd.o: ex_docmd.c vim.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
  regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h \
- proto.h globals.h farsi.h arabic.h
+ proto.h globals.h farsi.h arabic.h ex_cmdidxs.h
 objects/ex_eval.o: ex_eval.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h \
  ascii.h keymap.h term.h macros.h option.h structs.h regexp.h gui.h \
  gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h proto.h \
@@ -3501,7 +3560,7 @@ objects/option.o: option.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h 
 objects/os_unix.o: os_unix.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h \
  ascii.h keymap.h term.h macros.h option.h structs.h regexp.h gui.h \
  gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h proto.h \
- globals.h farsi.h arabic.h if_mzsch.h os_unixx.h
+ globals.h farsi.h arabic.h os_unixx.h
 objects/pathdef.o: auto/pathdef.c vim.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
  regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h \
@@ -3550,6 +3609,10 @@ objects/term.o: term.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h \
  ascii.h keymap.h term.h macros.h option.h structs.h regexp.h gui.h \
  gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h proto.h \
  globals.h farsi.h arabic.h
+objects/terminal.o: terminal.c vim.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
+ regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h \
+ proto.h globals.h farsi.h arabic.h
 objects/ui.o: ui.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h ascii.h \
  keymap.h term.h macros.h option.h structs.h regexp.h gui.h gui_beval.h \
  proto/gui_beval.pro alloc.h ex_cmds.h spell.h proto.h globals.h farsi.h \
@@ -3659,7 +3722,7 @@ objects/json_test.o: json_test.c main.c vim.h auto/config.h feature.h os_unix.h 
 objects/kword_test.o: kword_test.c main.c vim.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
  regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h \
- proto.h globals.h farsi.h arabic.h charset.c mbyte.c
+ proto.h globals.h farsi.h arabic.h charset.c
 objects/memfile_test.o: memfile_test.c main.c vim.h auto/config.h feature.h \
  os_unix.h auto/osdef.h ascii.h keymap.h term.h macros.h option.h \
  structs.h regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h \
@@ -3679,7 +3742,7 @@ objects/if_lua.o: if_lua.c vim.h auto/config.h feature.h os_unix.h auto/osdef.h 
 objects/if_mzsch.o: if_mzsch.c vim.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
  regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h \
- proto.h globals.h farsi.h arabic.h if_mzsch.h mzscheme_base.c
+ proto.h globals.h farsi.h arabic.h if_mzsch.h
 objects/if_perl.o: auto/if_perl.c vim.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h structs.h \
  regexp.h gui.h gui_beval.h proto/gui_beval.pro alloc.h ex_cmds.h spell.h \
