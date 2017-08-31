@@ -52,6 +52,10 @@ static int	cmd_showtail;		/* Only show path tail in lists ? */
 static int	new_cmdpos;	/* position set by set_cmdline_pos() */
 #endif
 
+static int	extra_char = NUL;  /* extra character to display when redrawing
+				    * the command line */
+static int	extra_char_shift;
+
 #ifdef FEAT_CMDHIST
 typedef struct hist_entry
 {
@@ -1179,6 +1183,7 @@ getcmdline(
 		    i = Ctrl_R;		/* CTRL-R CTRL-O == CTRL-R CTRL-R */
 		if (i == Ctrl_R)
 		    c = plain_vgetc();	/* CTRL-R CTRL-R <char> */
+		extra_char = NUL;
 		--no_mapping;
 #ifdef FEAT_EVAL
 		/*
@@ -1757,6 +1762,7 @@ getcmdline(
 		putcmdline('^', TRUE);
 		c = get_literal();	    /* get next (two) character(s) */
 		do_abbr = FALSE;	    /* don't do abbreviation now */
+		extra_char = NUL;
 #ifdef FEAT_MBYTE
 		/* may need to remove ^ when composing char was typed */
 		if (enc_utf8 && utf_iscomposing(c) && !cmd_silent)
@@ -1778,6 +1784,7 @@ getcmdline(
 		dont_scroll = TRUE;	    /* disallow scrolling here */
 #endif
 		c = get_digraph(TRUE);
+		extra_char = NUL;
 		if (c != NUL)
 		    break;
 
@@ -2937,6 +2944,8 @@ putcmdline(int c, int shift)
 	draw_cmdline(ccline.cmdpos, ccline.cmdlen - ccline.cmdpos);
     msg_no_more = FALSE;
     cursorcmd();
+    extra_char = c;
+    extra_char_shift = shift;
 }
 
 /*
@@ -2959,6 +2968,7 @@ unputcmdline(void)
 	draw_cmdline(ccline.cmdpos, 1);
     msg_no_more = FALSE;
     cursorcmd();
+    extra_char = NUL;
 }
 
 /*
@@ -3409,6 +3419,8 @@ redrawcmd(void)
     msg_no_more = FALSE;
 
     set_cmdspos_cursor();
+    if (extra_char != NUL)
+	putcmdline(extra_char, extra_char_shift);
 
     /*
      * An emsg() before may have set msg_scroll. This is used in normal mode,
@@ -3456,7 +3468,8 @@ cursorcmd(void)
 
     windgoto(msg_row, msg_col);
 #if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
-    redrawcmd_preedit();
+    if (p_imst == IM_ON_THE_SPOT)
+	redrawcmd_preedit();
 #endif
 #ifdef MCH_CURSOR_SHAPE
     mch_update_cursor();
@@ -4867,6 +4880,7 @@ ExpandFromContext(
 	{
 	    {EXPAND_COMMANDS, get_command_name, FALSE, TRUE},
 	    {EXPAND_BEHAVE, get_behave_arg, TRUE, TRUE},
+	    {EXPAND_MAPCLEAR, get_mapclear_arg, TRUE, TRUE},
 	    {EXPAND_MESSAGES, get_messages_arg, TRUE, TRUE},
 #ifdef FEAT_CMDHIST
 	    {EXPAND_HISTORY, get_history_arg, TRUE, TRUE},
