@@ -38,8 +38,9 @@
  * in tl_scrollback are no longer used.
  *
  * TODO:
- * - ":term NONE" does not work in MS-Windows.
- * - test for writing lines to terminal job does not work on MS-Windows
+ * - ":term NONE" does not work on MS-Windows.
+ *   https://github.com/vim/vim/pull/2056
+ * - Redirecting output does not work on MS-Windows.
  * - implement term_setsize()
  * - add test for giving error for invalid 'termsize' value.
  * - support minimal size when 'termsize' is "rows*cols".
@@ -48,16 +49,6 @@
  * - GUI: when 'confirm' is set and trying to exit Vim, dialog offers to save
  *   changes to "!shell".
  *   (justrajdeep, 2017 Aug 22)
- * - command argument with spaces doesn't work #1999
- *       :terminal ls dir\ with\ spaces
- * - implement job options when starting a terminal.  Allow:
- *	"in_io", "in_top", "in_bot", "in_name", "in_buf"
-	"out_io", "out_name", "out_buf", "out_modifiable", "out_msg"
-	"err_io", "err_name", "err_buf", "err_modifiable", "err_msg"
- *   Check that something is connected to the terminal.
- *   Test: "cat" reading from a file or buffer
- *	   "ls" writing stdout to a file or buffer
- *	   shell writing stderr to a file or buffer
  * - For the GUI fill termios with default values, perhaps like pangoterm:
  *   http://bazaar.launchpad.net/~leonerd/pangoterm/trunk/view/head:/main.c#L134
  * - if the job in the terminal does not support the mouse, we can use the
@@ -67,6 +58,8 @@
  * - In the GUI use a terminal emulator for :!cmd.
  * - Copy text in the vterm to the Vim buffer once in a while, so that
  *   completion works.
+ * - add an optional limit for the scrollback size.  When reaching it remove
+ *   10% at the start.
  */
 
 #include "vim.h"
@@ -110,6 +103,7 @@ struct terminal_S {
     int		tl_channel_closed;
     int		tl_finish;	/* 'c' for ++close, 'o' for ++open */
     char_u	*tl_opencmd;
+    char_u	*tl_eof_chars;
 
 #ifdef WIN3264
     void	*tl_winpty_config;
@@ -218,16 +212,6 @@ init_job_options(jobopt_T *opt)
     opt->jo_out_mode = MODE_RAW;
     opt->jo_err_mode = MODE_RAW;
     opt->jo_set = JO_MODE | JO_OUT_MODE | JO_ERR_MODE;
-
-    opt->jo_io[PART_OUT] = JIO_BUFFER;
-    opt->jo_io[PART_ERR] = JIO_BUFFER;
-    opt->jo_set |= JO_OUT_IO + JO_ERR_IO;
-
-    opt->jo_modifiable[PART_OUT] = 0;
-    opt->jo_modifiable[PART_ERR] = 0;
-    opt->jo_set |= JO_OUT_MODIFIABLE + JO_ERR_MODIFIABLE;
-
-    opt->jo_set |= JO_OUT_BUF + JO_ERR_BUF;
 }
 
 /*
@@ -236,8 +220,24 @@ init_job_options(jobopt_T *opt)
     static void
 setup_job_options(jobopt_T *opt, int rows, int cols)
 {
-    opt->jo_io_buf[PART_OUT] = curbuf->b_fnum;
-    opt->jo_io_buf[PART_ERR] = curbuf->b_fnum;
+    if (!(opt->jo_set & JO_OUT_IO))
+    {
+	/* Connect stdout to the terminal. */
+	opt->jo_io[PART_OUT] = JIO_BUFFER;
+	opt->jo_io_buf[PART_OUT] = curbuf->b_fnum;
+	opt->jo_modifiable[PART_OUT] = 0;
+	opt->jo_set |= JO_OUT_IO + JO_OUT_BUF + JO_OUT_MODIFIABLE;
+    }
+
+    if (!(opt->jo_set & JO_ERR_IO))
+    {
+	/* Connect stderr to the terminal. */
+	opt->jo_io[PART_ERR] = JIO_BUFFER;
+	opt->jo_io_buf[PART_ERR] = curbuf->b_fnum;
+	opt->jo_modifiable[PART_ERR] = 0;
+	opt->jo_set |= JO_ERR_IO + JO_ERR_BUF + JO_ERR_MODIFIABLE;
+    }
+
     opt->jo_pty = TRUE;
     if ((opt->jo_set2 & JO2_TERM_ROWS) == 0)
 	opt->jo_term_rows = rows;
@@ -256,6 +256,15 @@ term_start(typval_T *argvar, jobopt_T *opt, int forceit)
 
     if (check_restricted() || check_secure())
 	return;
+
+    if ((opt->jo_set & (JO_IN_IO + JO_OUT_IO + JO_ERR_IO))
+					 == (JO_IN_IO + JO_OUT_IO + JO_ERR_IO)
+	|| (!(opt->jo_set & JO_OUT_IO) && (opt->jo_set & JO_OUT_BUF))
+	|| (!(opt->jo_set & JO_ERR_IO) && (opt->jo_set & JO_ERR_BUF)))
+    {
+	EMSG(_(e_invarg));
+	return;
+    }
 
     term = (term_T *)alloc_clear(sizeof(term_T));
     if (term == NULL)
@@ -361,10 +370,10 @@ term_start(typval_T *argvar, jobopt_T *opt, int forceit)
 	}
 	else if (argvar->v_type != VAR_LIST
 		|| argvar->vval.v_list == NULL
-		|| argvar->vval.v_list->lv_len < 1)
+		|| argvar->vval.v_list->lv_len < 1
+		|| (cmd = get_tv_string_chk(
+			       &argvar->vval.v_list->lv_first->li_tv)) == NULL)
 	    cmd = (char_u*)"";
-	else
-	    cmd = get_tv_string_chk(&argvar->vval.v_list->lv_first->li_tv);
 
 	len = STRLEN(cmd) + 10;
 	p = alloc((int)len);
@@ -388,6 +397,9 @@ term_start(typval_T *argvar, jobopt_T *opt, int forceit)
 
     if (opt->jo_term_opencmd != NULL)
 	term->tl_opencmd = vim_strsave(opt->jo_term_opencmd);
+
+    if (opt->jo_eof_chars != NULL)
+	term->tl_eof_chars = vim_strsave(opt->jo_eof_chars);
 
     set_string_option_direct((char_u *)"buftype", -1,
 				  (char_u *)"terminal", OPT_FREE|OPT_LOCAL, 0);
@@ -450,7 +462,7 @@ term_start(typval_T *argvar, jobopt_T *opt, int forceit)
     void
 ex_terminal(exarg_T *eap)
 {
-    typval_T	argvar;
+    typval_T	argvar[2];
     jobopt_T	opt;
     char_u	*cmd;
     char_u	*tofree = NULL;
@@ -490,6 +502,20 @@ ex_terminal(exarg_T *eap)
 	    opt.jo_term_cols = atoi((char *)ep + 1);
 	    p = skiptowhite(cmd);
 	}
+	else if ((int)(p - cmd) == 3 && STRNICMP(cmd, "eof", 3) == 0
+								 && ep != NULL)
+	{
+	    char_u *buf = NULL;
+	    char_u *keys;
+
+	    p = skiptowhite(cmd);
+	    *p = NUL;
+	    keys = replace_termcodes(ep + 1, &buf, TRUE, TRUE, TRUE);
+	    opt.jo_set2 |= JO2_EOF_CHARS;
+	    opt.jo_eof_chars = vim_strsave(keys);
+	    vim_free(buf);
+	    *p = ' ';
+	}
 	else
 	{
 	    if (*p)
@@ -499,8 +525,8 @@ ex_terminal(exarg_T *eap)
 	}
 	cmd = skipwhite(p);
     }
-    if (cmd == NULL || *cmd == NUL)
-	/* Make a copy, an autocommand may set 'shell'. */
+    if (*cmd == NUL)
+	/* Make a copy of 'shell', an autocommand may change the option. */
 	tofree = cmd = vim_strsave(p_sh);
 
     if (eap->addr_count > 0)
@@ -513,9 +539,10 @@ ex_terminal(exarg_T *eap)
 	opt.jo_in_bot = eap->line2;
     }
 
-    argvar.v_type = VAR_STRING;
-    argvar.vval.v_string = cmd;
-    term_start(&argvar, &opt, eap->forceit);
+    argvar[0].v_type = VAR_STRING;
+    argvar[0].vval.v_string = cmd;
+    argvar[1].v_type = VAR_UNKNOWN;
+    term_start(argvar, &opt, eap->forceit);
     vim_free(tofree);
 }
 
@@ -570,6 +597,7 @@ free_terminal(buf_T *buf)
     vim_free(term->tl_title);
     vim_free(term->tl_status_text);
     vim_free(term->tl_opencmd);
+    vim_free(term->tl_eof_chars);
     vim_free(term->tl_cursor_color);
     vim_free(term);
     buf->b_term = NULL;
@@ -1716,7 +1744,7 @@ cell2attr(VTermScreenCellAttrs cellattrs, VTermColor cellfg, VTermColor cellbg)
     if (cellattrs.italic)
 	attr |= HL_ITALIC;
     if (cellattrs.strike)
-	attr |= HL_STANDOUT;
+	attr |= HL_STRIKETHROUGH;
     if (cellattrs.reverse)
 	attr |= HL_INVERSE;
 
@@ -2432,7 +2460,7 @@ f_term_getattr(typval_T *argvars, typval_T *rettv)
 	{"bold",      HL_BOLD},
 	{"italic",    HL_ITALIC},
 	{"underline", HL_UNDERLINE},
-	{"strike",    HL_STANDOUT},
+	{"strike",    HL_STRIKETHROUGH},
 	{"reverse",   HL_INVERSE},
     };
 
@@ -2814,14 +2842,13 @@ f_term_start(typval_T *argvars, typval_T *rettv)
     jobopt_T	opt;
 
     init_job_options(&opt);
-    /* TODO: allow more job options */
     if (argvars[1].v_type != VAR_UNKNOWN
 	    && get_job_options(&argvars[1], &opt,
 		JO_TIMEOUT_ALL + JO_STOPONEXIT
-		    + JO_EXIT_CB + JO_CLOSE_CALLBACK,
+		    + JO_EXIT_CB + JO_CLOSE_CALLBACK + JO_OUT_IO,
 		JO2_TERM_NAME + JO2_TERM_FINISH + JO2_HIDDEN + JO2_TERM_OPENCMD
 		    + JO2_TERM_COLS + JO2_TERM_ROWS + JO2_VERTICAL + JO2_CURWIN
-		    + JO2_CWD + JO2_ENV) == FAIL)
+		    + JO2_CWD + JO2_ENV + JO2_EOF_CHARS) == FAIL)
 	return;
 
     if (opt.jo_vertical)
@@ -2860,7 +2887,8 @@ f_term_wait(typval_T *argvars, typval_T *rettv UNUSED)
 	    && STRCMP(job_status(buf->b_term->tl_job), "dead") == 0)
     {
 	/* The job is dead, keep reading channel I/O until the channel is
-	 * closed. */
+	 * closed. buf->b_term may become NULL if the terminal was closed while
+	 * waiting. */
 	ch_log(NULL, "term_wait(): waiting for channel to close");
 	while (buf->b_term != NULL && !buf->b_term->tl_channel_closed)
 	{
@@ -2888,6 +2916,32 @@ f_term_wait(typval_T *argvars, typval_T *rettv UNUSED)
 	 * TODO: is there a better way? */
 	parse_queued_messages();
     }
+}
+
+/*
+ * Called when a channel has sent all the lines to a terminal.
+ * Send a CTRL-D to mark the end of the text.
+ */
+    void
+term_send_eof(channel_T *ch)
+{
+    term_T	*term;
+
+    for (term = first_term; term != NULL; term = term->tl_next)
+	if (term->tl_job == ch->ch_job)
+	{
+	    if (term->tl_eof_chars != NULL)
+	    {
+		channel_send(ch, PART_IN, term->tl_eof_chars,
+					(int)STRLEN(term->tl_eof_chars), NULL);
+		channel_send(ch, PART_IN, (char_u *)"\r", 1, NULL);
+	    }
+# ifdef WIN3264
+	    else
+		/* Default: CTRL-D */
+		channel_send(ch, PART_IN, (char_u *)"\004\r", 2, NULL);
+# endif
+	}
 }
 
 # if defined(WIN3264) || defined(PROTO)
@@ -3060,8 +3114,6 @@ term_and_job_init(
     if (job == NULL)
 	goto failed;
 
-    /* TODO: when all lines are written and the fd is closed, the command
-     * doesn't get EOF and hangs. */
     if (opt->jo_set & JO_IN_BUF)
 	job->jv_in_buf = buflist_findnr(opt->jo_io_buf[PART_IN]);
 
@@ -3082,6 +3134,9 @@ term_and_job_init(
 	    winpty_conerr_name(term->tl_winpty),
 	    GENERIC_READ, 0, NULL,
 	    OPEN_EXISTING, 0, NULL));
+
+    /* Write lines with CR instead of NL. */
+    channel->ch_write_text_mode = TRUE;
 
     jo = CreateJobObject(NULL, NULL);
     if (jo == NULL)
@@ -3188,7 +3243,6 @@ terminal_enabled(void)
     return dyn_winpty_init(FALSE) == OK;
 }
 
-
 # else
 
 /**************************************
@@ -3209,7 +3263,6 @@ term_and_job_init(
 {
     create_vterm(term, term->tl_rows, term->tl_cols);
 
-    /* TODO: if the command is "NONE" only create a pty. */
     term->tl_job = job_start(argvar, opt);
     if (term->tl_job != NULL)
 	++term->tl_job->jv_refcount;
