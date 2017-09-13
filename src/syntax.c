@@ -7364,6 +7364,7 @@ do_highlight(
     int		attr;
     int		id;
     int		idx;
+    struct hl_group item_before;
     int		dodefault = FALSE;
     int		doclear = FALSE;
     int		dolink = FALSE;
@@ -7378,6 +7379,9 @@ do_highlight(
 #else
 # define is_menu_group 0
 # define is_tooltip_group 0
+#endif
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+    int		did_highlight_changed = FALSE;
 #endif
 
     /*
@@ -7476,7 +7480,11 @@ do_highlight(
 		if (sourcing_name == NULL && !dodefault)
 		    EMSG(_("E414: group has settings, highlight link ignored"));
 	    }
-	    else
+	    else if (HL_TABLE()[from_id - 1].sg_link != to_id
+#ifdef FEAT_EVAL
+		    || HL_TABLE()[from_id - 1].sg_scriptID != current_SID
+#endif
+		    || HL_TABLE()[from_id - 1].sg_cleared)
 	    {
 		if (!init)
 		    HL_TABLE()[from_id - 1].sg_set |= SG_LINK;
@@ -7486,11 +7494,11 @@ do_highlight(
 #endif
 		HL_TABLE()[from_id - 1].sg_cleared = FALSE;
 		redraw_all_later(SOME_VALID);
+
+		/* Only call highlight_changed() once after multiple changes. */
+		need_highlight_changed = TRUE;
 	    }
 	}
-
-	/* Only call highlight_changed() once, after sourcing a syntax file */
-	need_highlight_changed = TRUE;
 
 	return;
     }
@@ -7561,8 +7569,9 @@ do_highlight(
 #if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 	    if (USE_24BIT)
 		highlight_gui_started();
+	    else
 #endif
-	    highlight_changed();
+		highlight_changed();
 	    redraw_later_clear();
 	    return;
 	}
@@ -7581,6 +7590,9 @@ do_highlight(
     /* Return if "default" was used and the group already has settings. */
     if (dodefault && hl_has_settings(idx, TRUE))
 	return;
+
+    /* Make a copy so we can check if any attribute actually changed. */
+    item_before = HL_TABLE()[idx];
 
     if (STRCMP(HL_TABLE()[idx].sg_name_u, "NORMAL") == 0)
 	is_normal_group = TRUE;
@@ -7752,7 +7764,12 @@ do_highlight(
 	{
 	    /* in non-GUI fonts are simply ignored */
 #ifdef FEAT_GUI
-	    if (!gui.shell_created)
+	    if (HL_TABLE()[idx].sg_font_name != NULL
+			     && STRCMP(HL_TABLE()[idx].sg_font_name, arg) == 0)
+	    {
+		/* Font name didn't change, ignore. */
+	    }
+	    else if (!gui.shell_created)
 	    {
 		/* GUI not started yet, always accept the name. */
 		vim_free(HL_TABLE()[idx].sg_font_name);
@@ -8158,7 +8175,11 @@ do_highlight(
 #endif
 #if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 	    if (USE_24BIT)
+	    {
 		highlight_gui_started();
+		did_highlight_changed = TRUE;
+		redraw_all_later(NOT_VALID);
+	    }
 #endif
 	}
 #ifdef FEAT_GUI_X11
@@ -8187,13 +8208,22 @@ do_highlight(
 #ifdef FEAT_EVAL
 	HL_TABLE()[idx].sg_scriptID = current_SID;
 #endif
-	redraw_all_later(NOT_VALID);
     }
+
     vim_free(key);
     vim_free(arg);
 
-    /* Only call highlight_changed() once, after sourcing a syntax file */
-    need_highlight_changed = TRUE;
+    /* Only call highlight_changed() once, after a sequence of highlight
+     * commands, and only if an attribute actually changed. */
+    if (memcmp(&HL_TABLE()[idx], &item_before, sizeof(item_before)) != 0
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+	    && !did_highlight_changed
+#endif
+       )
+    {
+	redraw_all_later(NOT_VALID);
+	need_highlight_changed = TRUE;
+    }
 }
 
 #if defined(EXITFREE) || defined(PROTO)

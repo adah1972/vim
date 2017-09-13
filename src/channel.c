@@ -969,7 +969,13 @@ ch_close_part(channel_T *channel, ch_part_T part)
 	    if ((part == PART_IN || channel->CH_IN_FD != *fd)
 		    && (part == PART_OUT || channel->CH_OUT_FD != *fd)
 		    && (part == PART_ERR || channel->CH_ERR_FD != *fd))
+	    {
+#ifdef WIN32
+		if (channel->ch_named_pipe)
+		    DisconnectNamedPipe((HANDLE)fd);
+#endif
 		fd_close(*fd);
+	    }
 	}
 	*fd = INVALID_FD;
 
@@ -2924,14 +2930,27 @@ channel_close_in(channel_T *channel)
     ch_close_part(channel, PART_IN);
 }
 
+    static void
+remove_from_writeque(writeq_T *wq, writeq_T *entry)
+{
+    ga_clear(&entry->wq_ga);
+    wq->wq_next = entry->wq_next;
+    if (wq->wq_next == NULL)
+	wq->wq_prev = NULL;
+    else
+	wq->wq_next->wq_prev = NULL;
+    vim_free(entry);
+}
+
 /*
  * Clear the read buffer on "channel"/"part".
  */
     static void
 channel_clear_one(channel_T *channel, ch_part_T part)
 {
-    jsonq_T *json_head = &channel->ch_part[part].ch_json_head;
-    cbq_T   *cb_head = &channel->ch_part[part].ch_cb_head;
+    chanpart_T *ch_part = &channel->ch_part[part];
+    jsonq_T *json_head = &ch_part->ch_json_head;
+    cbq_T   *cb_head = &ch_part->ch_cb_head;
 
     while (channel_peek(channel, part) != NULL)
 	vim_free(channel_get(channel, part));
@@ -2951,10 +2970,13 @@ channel_clear_one(channel_T *channel, ch_part_T part)
 	remove_json_node(json_head, json_head->jq_next);
     }
 
-    free_callback(channel->ch_part[part].ch_callback,
-					channel->ch_part[part].ch_partial);
-    channel->ch_part[part].ch_callback = NULL;
-    channel->ch_part[part].ch_partial = NULL;
+    free_callback(ch_part->ch_callback, ch_part->ch_partial);
+    ch_part->ch_callback = NULL;
+    ch_part->ch_partial = NULL;
+
+    while (ch_part->ch_writeque.wq_next != NULL)
+	remove_from_writeque(&ch_part->ch_writeque,
+						 ch_part->ch_writeque.wq_next);
 }
 
 /*
@@ -2969,7 +2991,7 @@ channel_clear(channel_T *channel)
     channel_clear_one(channel, PART_SOCK);
     channel_clear_one(channel, PART_OUT);
     channel_clear_one(channel, PART_ERR);
-    /* there is no callback or queue for PART_IN */
+    channel_clear_one(channel, PART_IN);
     free_callback(channel->ch_callback, channel->ch_partial);
     channel->ch_callback = NULL;
     channel->ch_partial = NULL;
@@ -3086,7 +3108,20 @@ channel_wait(channel_T *channel, sock_T fd, int timeout)
 	    if (r && nread > 0)
 		return CW_READY;
 	    if (r == 0)
-		return CW_ERROR;
+	    {
+		DWORD err = GetLastError();
+
+		if (err != ERROR_BAD_PIPE && err != ERROR_BROKEN_PIPE)
+		    return CW_ERROR;
+
+		if (channel->ch_named_pipe)
+		{
+		    DisconnectNamedPipe((HANDLE)fd);
+		    ConnectNamedPipe((HANDLE)fd, NULL);
+		}
+		else
+		    return CW_ERROR;
+	    }
 
 	    /* perhaps write some buffer lines */
 	    channel_write_any_lines();
@@ -3670,7 +3705,17 @@ channel_send(
 	if (part == PART_SOCK)
 	    res = sock_write(fd, (char *)buf, len);
 	else
+	{
 	    res = fd_write(fd, (char *)buf, len);
+#ifdef WIN32
+	    if (channel->ch_named_pipe && res < 0)
+	    {
+		DisconnectNamedPipe((HANDLE)fd);
+		ConnectNamedPipe((HANDLE)fd, NULL);
+	    }
+#endif
+
+	}
 	if (res < 0 && (errno == EWOULDBLOCK
 #ifdef EAGAIN
 			|| errno == EAGAIN
@@ -3690,12 +3735,7 @@ channel_send(
 		if (entry != NULL)
 		{
 		    /* Remove the entry from the write queue. */
-		    ga_clear(&entry->wq_ga);
-		    wq->wq_next = entry->wq_next;
-		    if (wq->wq_next == NULL)
-			wq->wq_prev = NULL;
-		    else
-			wq->wq_next->wq_prev = NULL;
+		    remove_from_writeque(wq, entry);
 		    continue;
 		}
 		if (did_use_queue)
@@ -4052,6 +4092,7 @@ channel_select_check(int ret_in, void *rfds_in, void *wfds_in)
 	    if (ret > 0 && fd != INVALID_FD && FD_ISSET(fd, rfds))
 	    {
 		channel_read(channel, part, "channel_select_check");
+		FD_CLR(fd, rfds);
 		--ret;
 	    }
 	}
@@ -4061,6 +4102,7 @@ channel_select_check(int ret_in, void *rfds_in, void *wfds_in)
 					    && FD_ISSET(in_part->ch_fd, wfds))
 	{
 	    channel_write_input(channel);
+	    FD_CLR(in_part->ch_fd, wfds);
 	    --ret;
 	}
     }
@@ -4849,7 +4891,8 @@ job_free_contents(job_T *job)
     }
     mch_clear_job(job);
 
-    vim_free(job->jv_tty_name);
+    vim_free(job->jv_tty_in);
+    vim_free(job->jv_tty_out);
     vim_free(job->jv_stoponexit);
     free_callback(job->jv_exit_cb, job->jv_exit_partial);
 }
@@ -5503,8 +5546,10 @@ job_info(job_T *job, dict_T *dict)
     nr = job->jv_proc_info.dwProcessId;
 #endif
     dict_add_nr_str(dict, "process", nr, NULL);
-    dict_add_nr_str(dict, "tty", 0L,
-		   job->jv_tty_name != NULL ? job->jv_tty_name : (char_u *)"");
+    dict_add_nr_str(dict, "tty_in", 0L,
+		   job->jv_tty_in != NULL ? job->jv_tty_in : (char_u *)"");
+    dict_add_nr_str(dict, "tty_out", 0L,
+		   job->jv_tty_out != NULL ? job->jv_tty_out : (char_u *)"");
 
     dict_add_nr_str(dict, "exitval", job->jv_exitval, NULL);
     dict_add_nr_str(dict, "exit_cb", 0L, job->jv_exit_cb);
