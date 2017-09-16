@@ -38,9 +38,9 @@
  * in tl_scrollback are no longer used.
  *
  * TODO:
- * - patch to use GUI or cterm colors for vterm. Yasuhiro, #2067
- * - patch to add tmap, jakalope (Jacob Askeland) #2073
- * - Redirecting output does not work on MS-Windows.
+ * - test_terminal_no_cmd hangs (Christian)
+ * - Redirecting output does not work on MS-Windows, Test_terminal_redir_file()
+ *   is disabled.
  * - implement term_setsize()
  * - add test for giving error for invalid 'termsize' value.
  * - support minimal size when 'termsize' is "rows*cols".
@@ -55,7 +55,9 @@
  *   mouse in the Terminal window for copy/paste.
  * - when 'encoding' is not utf-8, or the job is using another encoding, setup
  *   conversions.
- * - In the GUI use a terminal emulator for :!cmd.
+ * - In the GUI use a terminal emulator for :!cmd.  Make the height the same as
+ *   the window and position it higher up when it gets filled, so it looks like
+ *   the text scrolls up.
  * - Copy text in the vterm to the Vim buffer once in a while, so that
  *   completion works.
  * - add an optional limit for the scrollback size.  When reaching it remove
@@ -1200,23 +1202,22 @@ term_enter_job_mode()
  * Get a key from the user without mapping.
  * Note: while waiting a terminal may be closed and freed if the channel is
  * closed and ++close was used.
- * TODO: use terminal mode mappings.
+ * Uses terminal mode mappings.
  */
     static int
 term_vgetc()
 {
     int c;
+    int save_State = State;
 
-    ++no_mapping;
-    ++allow_keys;
+    State = TERMINAL;
     got_int = FALSE;
 #ifdef WIN3264
     ctrl_break_was_pressed = FALSE;
 #endif
     c = vgetc();
     got_int = FALSE;
-    --no_mapping;
-    --allow_keys;
+    State = save_State;
     return c;
 }
 
@@ -1405,7 +1406,7 @@ term_paste_register(int prev_c UNUSED)
  * Return TRUE when the cursor of the terminal should be displayed.
  */
     int
-use_terminal_cursor()
+terminal_is_active()
 {
     return in_terminal_loop != NULL;
 }
@@ -1495,13 +1496,15 @@ term_use_loop(void)
 
 /*
  * Wait for input and send it to the job.
+ * When "blocking" is TRUE wait for a character to be typed.  Otherwise return
+ * when there is no more typahead.
  * Return when the start of a CTRL-W command is typed or anything else that
  * should be handled as a Normal mode command.
  * Returns OK if a typed character is to be handled in Normal mode, FAIL if
  * the terminal was closed.
  */
     int
-terminal_loop(void)
+terminal_loop(int blocking)
 {
     int		c;
     int		termkey = 0;
@@ -1538,12 +1541,13 @@ terminal_loop(void)
     }
 #endif
 
-    for (;;)
+    while (blocking || vpeekc() != NUL)
     {
 	/* TODO: skip screen update when handling a sequence of keys. */
 	/* Repeat redrawing in case a message is received while redrawing. */
 	while (curwin->w_redr_type != 0)
-	    update_screen(0);
+	    if (update_screen(0) == FAIL)
+		break;
 	update_cursor(curbuf->b_term, FALSE);
 
 	c = term_vgetc();
@@ -1559,7 +1563,7 @@ terminal_loop(void)
 	if (ctrl_break_was_pressed)
 	    mch_signal_job(curbuf->b_term->tl_job, (char_u *)"kill");
 #endif
-
+	/* Was either CTRL-W (termkey) or CTRL-\ pressed? */
 	if (c == (termkey == 0 ? Ctrl_W : termkey) || c == Ctrl_BSL)
 	{
 	    int	    prev_c = c;
@@ -1736,7 +1740,7 @@ color2index(VTermColor *color, int fg, int *boldp)
     else if (red == 128)
     {
 	if (green == 128 && blue == 128)
-	    return lookup_color(12, fg, boldp) + 1; /* high intensity black / dark grey */
+	    return lookup_color(12, fg, boldp) + 1; /* dark grey */
     }
     else if (red == 255)
     {
@@ -2382,6 +2386,65 @@ term_get_attr(buf_T *buf, linenr_T lnum, int col)
     return cell2attr(cellattr->attrs, cellattr->fg, cellattr->bg);
 }
 
+static VTermColor ansi_table[16] = {
+  {  0,   0,   0}, /* black */
+  {224,   0,   0}, /* dark red */
+  {  0, 224,   0}, /* dark green */
+  {224, 224,   0}, /* dark yellow / brown */
+  {  0,   0, 224}, /* dark blue */
+  {224,   0, 224}, /* dark magenta */
+  {  0, 224, 224}, /* dark cyan */
+  {224, 224, 224}, /* light grey */
+
+  {128, 128, 128}, /* dark grey */
+  {255,  64,  64}, /* light red */
+  { 64, 255,  64}, /* light green */
+  {255, 255,  64}, /* yellow */
+  { 64,  64, 255}, /* light blue */
+  {255,  64, 255}, /* light magenta */
+  { 64, 255, 255}, /* light cyan */
+  {255, 255, 255}, /* white */
+};
+
+static int cube_value[] = {
+    0x00, 0x33, 0x66, 0x99, 0xCC, 0xFF,
+};
+
+static int grey_ramp[] = {
+    0x00, 0x0B, 0x16, 0x21, 0x2C, 0x37, 0x42, 0x4D, 0x58, 0x63, 0x6E, 0x79,
+    0x85, 0x90, 0x9B, 0xA6, 0xB1, 0xBC, 0xC7, 0xD2, 0xDD, 0xE8, 0xF3, 0xFF,
+};
+
+/*
+ * Convert a cterm color number 0 - 255 to RGB.
+ */
+    static void
+cterm_color2rgb(int nr, VTermColor *rgb)
+{
+    int idx;
+
+    if (nr < 16)
+    {
+	*rgb = ansi_table[nr];
+    }
+    else if (nr < 232)
+    {
+	/* 216 color cube */
+	idx = nr - 16;
+	rgb->blue  = cube_value[idx      % 6];
+	rgb->green = cube_value[idx / 6  % 6];
+	rgb->red   = cube_value[idx / 36 % 6];
+    }
+    else if (nr < 256)
+    {
+	/* 24 grey scale ramp */
+	idx = nr - 232;
+	rgb->blue  = grey_ramp[idx];
+	rgb->green = grey_ramp[idx];
+	rgb->red   = grey_ramp[idx];
+    }
+}
+
 /*
  * Create a new vterm and initialize it.
  */
@@ -2393,6 +2456,7 @@ create_vterm(term_T *term, int rows, int cols)
     VTermValue	    value;
     VTermColor	    *fg, *bg;
     int		    fgval, bgval;
+    int		    id;
 
     vterm = vterm_new(rows, cols);
     term->tl_vterm = vterm;
@@ -2401,12 +2465,13 @@ create_vterm(term_T *term, int rows, int cols)
     /* TODO: depends on 'encoding'. */
     vterm_set_utf8(vterm, 1);
 
-    /* Vterm uses a default black background.  Set it to white when
-     * 'background' is "light". */
     vim_memset(&term->tl_default_color.attrs, 0, sizeof(VTermScreenCellAttrs));
     term->tl_default_color.width = 1;
     fg = &term->tl_default_color.fg;
     bg = &term->tl_default_color.bg;
+
+    /* Vterm uses a default black background.  Set it to white when
+     * 'background' is "light". */
     if (*p_bg == 'l')
     {
 	fgval = 0;
@@ -2419,6 +2484,99 @@ create_vterm(term_T *term, int rows, int cols)
     }
     fg->red = fg->green = fg->blue = fgval;
     bg->red = bg->green = bg->blue = bgval;
+
+    /* The "Terminal" highlight group overrules the defaults. */
+    id = syn_name2id((char_u *)"Terminal");
+
+    /* Use the actual color for the GUI and when 'guitermcolors' is set. */
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+    if (0
+# ifdef FEAT_GUI
+	    || gui.in_use
+# endif
+# ifdef FEAT_TERMGUICOLORS
+	    || p_tgc
+# endif
+       )
+    {
+	guicolor_T	fg_rgb = INVALCOLOR;
+	guicolor_T	bg_rgb = INVALCOLOR;
+
+	if (id != 0)
+	    syn_id2colors(id, &fg_rgb, &bg_rgb);
+
+# ifdef FEAT_GUI
+	if (gui.in_use)
+	{
+	    if (fg_rgb == INVALCOLOR)
+		fg_rgb = gui.norm_pixel;
+	    if (bg_rgb == INVALCOLOR)
+		bg_rgb = gui.back_pixel;
+	}
+#  ifdef FEAT_TERMGUICOLORS
+	else
+#  endif
+# endif
+# ifdef FEAT_TERMGUICOLORS
+	{
+	    if (fg_rgb == INVALCOLOR)
+		fg_rgb = cterm_normal_fg_gui_color;
+	    if (bg_rgb == INVALCOLOR)
+		bg_rgb = cterm_normal_bg_gui_color;
+	}
+# endif
+	if (fg_rgb != INVALCOLOR)
+	{
+	    long_u rgb = GUI_MCH_GET_RGB(fg_rgb);
+
+	    fg->red = (unsigned)(rgb >> 16);
+	    fg->green = (unsigned)(rgb >> 8) & 255;
+	    fg->blue = (unsigned)rgb & 255;
+	}
+	if (bg_rgb != INVALCOLOR)
+	{
+	    long_u rgb = GUI_MCH_GET_RGB(bg_rgb);
+
+	    bg->red = (unsigned)(rgb >> 16);
+	    bg->green = (unsigned)(rgb >> 8) & 255;
+	    bg->blue = (unsigned)rgb & 255;
+	}
+    }
+    else
+#endif
+    if (id != 0 && t_colors >= 16)
+    {
+	int cterm_fg, cterm_bg;
+
+	syn_id2cterm_bg(id, &cterm_fg, &cterm_bg);
+	if (cterm_fg >= 0)
+	    cterm_color2rgb(cterm_fg, fg);
+	if (cterm_bg >= 0)
+	    cterm_color2rgb(cterm_bg, bg);
+    }
+#if defined(WIN3264) && !defined(FEAT_GUI_W32)
+    else
+    {
+	int tmp;
+
+	/* In an MS-Windows console we know the normal colors. */
+	if (cterm_normal_fg_color > 0)
+	{
+	    cterm_color2rgb(cterm_normal_fg_color - 1, fg);
+	    tmp = fg->red;
+	    fg->red = fg->blue;
+	    fg->blue = tmp;
+	}
+	if (cterm_normal_bg_color > 0)
+	{
+	    cterm_color2rgb(cterm_normal_bg_color - 1, bg);
+	    tmp = bg->red;
+	    bg->red = bg->blue;
+	    bg->blue = tmp;
+	}
+    }
+#endif
+
     vterm_state_set_default_colors(vterm_obtain_state(vterm), fg, bg);
 
     /* Required to initialize most things. */
