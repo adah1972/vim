@@ -368,7 +368,7 @@ static win_T	*syn_win;		/* current window for highlighting */
 static buf_T	*syn_buf;		/* current buffer for highlighting */
 static synblock_T *syn_block;		/* current buffer for highlighting */
 #ifdef FEAT_RELTIME
-static proftime_T *syn_tm;
+static proftime_T *syn_tm;		/* timeout limit */
 #endif
 static linenr_T current_lnum = 0;	/* lnum of current state */
 static colnr_T	current_col = 0;	/* column of current state */
@@ -489,6 +489,18 @@ static int get_id_list(char_u **arg, int keylen, short **list, int skip);
 static void syn_combine_list(short **clstr1, short **clstr2, int list_op);
 static void syn_incl_toplevel(int id, int *flagsp);
 
+#if defined(FEAT_RELTIME) || defined(PROTO)
+/*
+ * Set the timeout used for syntax highlighting.
+ * Use NULL to reset, no timeout.
+ */
+    void
+syn_set_timeout(proftime_T *tm)
+{
+    syn_tm = tm;
+}
+#endif
+
 /*
  * Start the syntax recognition for a line.  This function is normally called
  * from the screen updating, once for each displayed line.
@@ -497,7 +509,7 @@ static void syn_incl_toplevel(int id, int *flagsp);
  * window.
  */
     void
-syntax_start(win_T *wp, linenr_T lnum, proftime_T *syntax_tm UNUSED)
+syntax_start(win_T *wp, linenr_T lnum)
 {
     synstate_T	*p;
     synstate_T	*last_valid = NULL;
@@ -527,9 +539,6 @@ syntax_start(win_T *wp, linenr_T lnum, proftime_T *syntax_tm UNUSED)
     }
     changedtick = CHANGEDTICK(syn_buf);
     syn_win = wp;
-#ifdef FEAT_RELTIME
-    syn_tm = syntax_tm;
-#endif
 
     /*
      * Allocate syntax stack when needed.
@@ -6569,7 +6578,7 @@ syn_get_id(
     if (wp->w_buffer != syn_buf
 	    || lnum != current_lnum
 	    || col < current_col)
-	syntax_start(wp, lnum, NULL);
+	syntax_start(wp, lnum);
     else if (wp->w_buffer == syn_buf
 	    && lnum == current_lnum
 	    && col > current_col)
@@ -6645,7 +6654,7 @@ syn_get_foldlevel(win_T *wp, long lnum)
 # endif
 	    )
     {
-	syntax_start(wp, lnum, NULL);
+	syntax_start(wp, lnum);
 
 	for (i = 0; i < current_state.ga_len; ++i)
 	    if (CUR_STATE(i).si_flags & HL_FOLD)
@@ -7006,7 +7015,7 @@ static char *(highlight_init_light[]) = {
     CENT("ToolbarLine term=underline ctermbg=LightGrey",
 	 "ToolbarLine term=underline ctermbg=LightGrey guibg=LightGrey"),
     CENT("ToolbarButton cterm=bold ctermfg=White ctermbg=DarkGrey",
-	 "ToolbarButton cterm=bold ctermfg=White ctermbg=DarkGrey gui=bold guifg=White guibg=DarkGrey"),
+	 "ToolbarButton cterm=bold ctermfg=White ctermbg=DarkGrey gui=bold guifg=White guibg=Grey40"),
 #endif
     NULL
 };
@@ -7102,7 +7111,7 @@ static char *(highlight_init_dark[]) = {
 #endif
 #ifdef FEAT_MENU
     CENT("ToolbarLine term=underline ctermbg=DarkGrey",
-	 "ToolbarLine term=underline ctermbg=DarkGrey guibg=DarkGrey"),
+	 "ToolbarLine term=underline ctermbg=DarkGrey guibg=Grey50"),
     CENT("ToolbarButton cterm=bold ctermfg=Black ctermbg=LightGrey",
 	 "ToolbarButton cterm=bold ctermfg=Black ctermbg=LightGrey gui=bold guifg=Black guibg=LightGrey"),
 #endif
@@ -7961,6 +7970,8 @@ do_highlight(
 	else if (STRCMP(key, "GUIFG") == 0)
 	{
 #if defined(FEAT_GUI) || defined(FEAT_EVAL)
+	    char_u **namep = &HL_TABLE()[idx].sg_gui_fg_name;
+
 	    if (!init || !(HL_TABLE()[idx].sg_set & SG_GUI))
 	    {
 		if (!init)
@@ -7973,22 +7984,33 @@ do_highlight(
 		{
 		    HL_TABLE()[idx].sg_gui_fg = i;
 # endif
-		    vim_free(HL_TABLE()[idx].sg_gui_fg_name);
-		    if (STRCMP(arg, "NONE") != 0)
-			HL_TABLE()[idx].sg_gui_fg_name = vim_strsave(arg);
-		    else
-			HL_TABLE()[idx].sg_gui_fg_name = NULL;
+		    if (*namep == NULL || STRCMP(*namep, arg) != 0)
+		    {
+			vim_free(*namep);
+			if (STRCMP(arg, "NONE") != 0)
+			    *namep = vim_strsave(arg);
+			else
+			    *namep = NULL;
+		    }
 # if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 #  ifdef FEAT_GUI_X11
-		    if (is_menu_group)
+		    if (is_menu_group && gui.menu_fg_pixel != i)
+		    {
 			gui.menu_fg_pixel = i;
-		    if (is_scrollbar_group)
+			do_colors = TRUE;
+		    }
+		    if (is_scrollbar_group && gui.scroll_fg_pixel != i)
+		    {
 			gui.scroll_fg_pixel = i;
+			do_colors = TRUE;
+		    }
 #   ifdef FEAT_BEVAL
-		    if (is_tooltip_group)
+		    if (is_tooltip_group && gui.tooltip_fg_pixel != i)
+		    {
 			gui.tooltip_fg_pixel = i;
+			do_colors = TRUE;
+		    }
 #   endif
-		    do_colors = TRUE;
 #  endif
 		}
 # endif
@@ -7998,6 +8020,8 @@ do_highlight(
 	else if (STRCMP(key, "GUIBG") == 0)
 	{
 #if defined(FEAT_GUI) || defined(FEAT_EVAL)
+	    char_u **namep = &HL_TABLE()[idx].sg_gui_bg_name;
+
 	    if (!init || !(HL_TABLE()[idx].sg_set & SG_GUI))
 	    {
 		if (!init)
@@ -8010,22 +8034,33 @@ do_highlight(
 		{
 		    HL_TABLE()[idx].sg_gui_bg = i;
 # endif
-		    vim_free(HL_TABLE()[idx].sg_gui_bg_name);
-		    if (STRCMP(arg, "NONE") != 0)
-			HL_TABLE()[idx].sg_gui_bg_name = vim_strsave(arg);
-		    else
-			HL_TABLE()[idx].sg_gui_bg_name = NULL;
+		    if (*namep == NULL || STRCMP(*namep, arg) != 0)
+		    {
+			vim_free(*namep);
+			if (STRCMP(arg, "NONE") != 0)
+			    *namep = vim_strsave(arg);
+			else
+			    *namep = NULL;
+		    }
 # if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 #  ifdef FEAT_GUI_X11
-		    if (is_menu_group)
+		    if (is_menu_group && gui.menu_bg_pixel != i)
+		    {
 			gui.menu_bg_pixel = i;
-		    if (is_scrollbar_group)
+			do_colors = TRUE;
+		    }
+		    if (is_scrollbar_group && gui.scroll_bg_pixel != i)
+		    {
 			gui.scroll_bg_pixel = i;
+			do_colors = TRUE;
+		    }
 #   ifdef FEAT_BEVAL
-		    if (is_tooltip_group)
+		    if (is_tooltip_group && gui.tooltip_bg_pixel != i)
+		    {
 			gui.tooltip_bg_pixel = i;
+			do_colors = TRUE;
+		    }
 #   endif
-		    do_colors = TRUE;
 #  endif
 		}
 # endif
@@ -8035,6 +8070,8 @@ do_highlight(
 	else if (STRCMP(key, "GUISP") == 0)
 	{
 #if defined(FEAT_GUI) || defined(FEAT_EVAL)
+	    char_u **namep = &HL_TABLE()[idx].sg_gui_sp_name;
+
 	    if (!init || !(HL_TABLE()[idx].sg_set & SG_GUI))
 	    {
 		if (!init)
@@ -8046,11 +8083,14 @@ do_highlight(
 		{
 		    HL_TABLE()[idx].sg_gui_sp = i;
 # endif
-		    vim_free(HL_TABLE()[idx].sg_gui_sp_name);
-		    if (STRCMP(arg, "NONE") != 0)
-			HL_TABLE()[idx].sg_gui_sp_name = vim_strsave(arg);
-		    else
-			HL_TABLE()[idx].sg_gui_sp_name = NULL;
+		    if (*namep == NULL || STRCMP(*namep, arg) != 0)
+		    {
+			vim_free(*namep);
+			if (STRCMP(arg, "NONE") != 0)
+			    *namep = vim_strsave(arg);
+			else
+			    *namep = NULL;
+		    }
 # ifdef FEAT_GUI
 		}
 # endif
@@ -9547,7 +9587,7 @@ syn_name2attr(char_u *name)
     int id = syn_name2id(name);
 
     if (id != 0)
-	return syn_id2attr(syn_get_final_id(id));
+	return syn_id2attr(id);
     return 0;
 }
 
@@ -9746,7 +9786,7 @@ syn_id2colors(int hl_id, guicolor_T *fgp, guicolor_T *bgp)
 }
 #endif
 
-#if defined(FEAT_TERMINAL) || defined(PROT)
+#if defined(FEAT_TERMINAL) || defined(PROTO)
     void
 syn_id2cterm_bg(int hl_id, int *fgp, int *bgp)
 {
