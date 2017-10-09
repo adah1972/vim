@@ -40,8 +40,12 @@
  * TODO:
  * - in GUI vertical split causes problems.  Cursor is flickering. (Hirohito
  *   Higashi, 2017 Sep 19)
+ * - Can we get the default fg/bg color of the terminal and use it for
+ *   libvterm?  Should also fix ssh-in-a-win.
+ * - double click in Window toolbar starts Visual mode (but not always?).
  * - Shift-Tab does not work.
- * - double click in Window toolbar starts Visual mode.
+ * - after resizing windows overlap. (Boris Staletic, #2164)
+ * - :wall gives an error message. (Marius Gedminas, #2190)
  * - Redirecting output does not work on MS-Windows, Test_terminal_redir_file()
  *   is disabled.
  * - cursor blinks in terminal on widows with a timer. (xtal8, #2142)
@@ -55,6 +59,7 @@
  * - GUI: when 'confirm' is set and trying to exit Vim, dialog offers to save
  *   changes to "!shell".
  *   (justrajdeep, 2017 Aug 22)
+ * - Redrawing is slow with Athena and Motif.
  * - For the GUI fill termios with default values, perhaps like pangoterm:
  *   http://bazaar.launchpad.net/~leonerd/pangoterm/trunk/view/head:/main.c#L134
  * - if the job in the terminal does not support the mouse, we can use the
@@ -134,7 +139,7 @@ struct terminal_S {
     char_u	*tl_status_text; /* NULL or allocated */
 
     /* Range of screen rows to update.  Zero based. */
-    int		tl_dirty_row_start; /* -1 if nothing dirty */
+    int		tl_dirty_row_start; /* MAX_ROW if nothing dirty */
     int		tl_dirty_row_end;   /* row below last one to update */
 
     garray_T	tl_scrollback;
@@ -1925,6 +1930,10 @@ handle_moverect(VTermRect dest, VTermRect src, void *user)
 				 clear_attr);
 	}
     }
+
+    term->tl_dirty_row_start = MIN(term->tl_dirty_row_start, dest.start_row);
+    term->tl_dirty_row_end = MIN(term->tl_dirty_row_end, dest.end_row);
+
     redraw_buf_later(term->tl_buffer, NOT_VALID);
     return 1;
 }
@@ -2233,6 +2242,12 @@ term_update_window(win_T *wp)
     screen = vterm_obtain_screen(vterm);
     state = vterm_obtain_state(vterm);
 
+    if (wp->w_redr_type >= SOME_VALID)
+    {
+	term->tl_dirty_row_start = 0;
+	term->tl_dirty_row_end = MAX_ROW;
+    }
+
     /*
      * If the window was resized a redraw will be triggered and we get here.
      * Adjust the size of the vterm unless 'termsize' specifies a fixed size.
@@ -2268,8 +2283,8 @@ term_update_window(win_T *wp)
     vterm_state_get_cursorpos(state, &pos);
     position_cursor(wp, &pos);
 
-    /* TODO: Only redraw what changed. */
-    for (pos.row = 0; pos.row < wp->w_height; ++pos.row)
+    for (pos.row = term->tl_dirty_row_start; pos.row < term->tl_dirty_row_end
+					  && pos.row < wp->w_height; ++pos.row)
     {
 	int off = screen_get_current_line_off();
 	int max_col = MIN(wp->w_width, term->tl_cols);
@@ -2352,6 +2367,8 @@ term_update_window(win_T *wp)
 	screen_line(wp->w_winrow + pos.row, wp->w_wincol,
 						  pos.col, wp->w_width, FALSE);
     }
+    term->tl_dirty_row_start = MAX_ROW;
+    term->tl_dirty_row_end = 0;
 
     return OK;
 }

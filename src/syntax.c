@@ -7350,6 +7350,12 @@ lookup_color(int idx, int foreground, int *boldp)
 	    else
 		color = color_numbers_8[idx];
 	}
+#ifdef FEAT_TERMRESPONSE
+	if (t_colors >= 256 && color == 15 && is_mac_terminal)
+	    /* Terminal.app has a bug: 15 is light grey. Use white
+	     * from the color cube instead. */
+	    color = 231;
+#endif
     }
     return color;
 }
@@ -7378,6 +7384,7 @@ do_highlight(
     int		id;
     int		idx;
     struct hl_group item_before;
+    int		did_change = FALSE;
     int		dodefault = FALSE;
     int		doclear = FALSE;
     int		dolink = FALSE;
@@ -7787,6 +7794,7 @@ do_highlight(
 		/* GUI not started yet, always accept the name. */
 		vim_free(HL_TABLE()[idx].sg_font_name);
 		HL_TABLE()[idx].sg_font_name = vim_strsave(arg);
+		did_change = TRUE;
 	    }
 	    else
 	    {
@@ -7815,6 +7823,7 @@ do_highlight(
 		    gui_mch_free_fontset(temp_sg_fontset);
 		    vim_free(HL_TABLE()[idx].sg_font_name);
 		    HL_TABLE()[idx].sg_font_name = vim_strsave(arg);
+		    did_change = TRUE;
 		}
 		else
 		    HL_TABLE()[idx].sg_fontset = temp_sg_fontset;
@@ -7826,6 +7835,7 @@ do_highlight(
 		    gui_mch_free_font(temp_sg_font);
 		    vim_free(HL_TABLE()[idx].sg_font_name);
 		    HL_TABLE()[idx].sg_font_name = vim_strsave(arg);
+		    did_change = TRUE;
 		}
 		else
 		    HL_TABLE()[idx].sg_font = temp_sg_font;
@@ -7991,6 +8001,7 @@ do_highlight(
 			    *namep = vim_strsave(arg);
 			else
 			    *namep = NULL;
+			did_change = TRUE;
 		    }
 # if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 #  ifdef FEAT_GUI_X11
@@ -8041,6 +8052,7 @@ do_highlight(
 			    *namep = vim_strsave(arg);
 			else
 			    *namep = NULL;
+			did_change = TRUE;
 		    }
 # if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 #  ifdef FEAT_GUI_X11
@@ -8090,6 +8102,7 @@ do_highlight(
 			    *namep = vim_strsave(arg);
 			else
 			    *namep = NULL;
+			did_change = TRUE;
 		    }
 # ifdef FEAT_GUI
 		}
@@ -8259,13 +8272,18 @@ do_highlight(
 
     /* Only call highlight_changed() once, after a sequence of highlight
      * commands, and only if an attribute actually changed. */
-    if (memcmp(&HL_TABLE()[idx], &item_before, sizeof(item_before)) != 0
+    if ((did_change
+	   || memcmp(&HL_TABLE()[idx], &item_before, sizeof(item_before)) != 0)
 #if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 	    && !did_highlight_changed
 #endif
        )
     {
-	redraw_all_later(NOT_VALID);
+	/* Do not trigger a redraw when highlighting is changed while
+	 * redrawing.  This may happen when evaluating 'statusline' changes the
+	 * StatusLine group. */
+	if (!updating_screen)
+	    redraw_all_later(NOT_VALID);
 	need_highlight_changed = TRUE;
     }
 }
