@@ -249,6 +249,23 @@ func Test_augroup_warning()
   au! VimEnter
 endfunc
 
+func Test_BufReadCmdHelp()
+  " This used to cause access to free memory
+  au BufReadCmd * e +h
+  help
+
+  au! BufReadCmd
+endfunc
+
+func Test_BufReadCmdHelpJump()
+  " This used to cause access to free memory
+  au BufReadCmd * e +h{
+  " } to fix highlighting
+  call assert_fails('help', 'E434:')
+
+  au! BufReadCmd
+endfunc
+
 func Test_augroup_deleted()
   " This caused a crash before E936 was introduced
   augroup x
@@ -773,9 +790,130 @@ func Test_BufLeave_Wipe()
 
   call delete('Xxx1')
   call delete('Xxx2')
+  call delete('test.out')
   %bwipe
   au! BufLeave
 
   " check that bufinfo doesn't contain a pointer to freed memory
   call test_garbagecollect_now()
+endfunc
+
+func Test_QuitPre()
+  edit Xfoo
+  let winid = win_getid(winnr())
+  split Xbar
+  au! QuitPre * let g:afile = expand('<afile>')
+  " Close the other window, <afile> should be correct.
+  exe win_id2win(winid) . 'q'
+  call assert_equal('Xfoo', g:afile)
+ 
+  unlet g:afile
+  bwipe Xfoo
+  bwipe Xbar
+endfunc
+
+func Test_Cmdline()
+  au! CmdlineEnter : let g:entered = expand('<afile>')
+  au! CmdlineLeave : let g:left = expand('<afile>')
+  let g:entered = 0
+  let g:left = 0
+  call feedkeys(":echo 'hello'\<CR>", 'xt')
+  call assert_equal(':', g:entered)
+  call assert_equal(':', g:left)
+  au! CmdlineEnter
+  au! CmdlineLeave
+
+  au! CmdlineEnter / let g:entered = expand('<afile>')
+  au! CmdlineLeave / let g:left = expand('<afile>')
+  let g:entered = 0
+  let g:left = 0
+  new
+  call setline(1, 'hello')
+  call feedkeys("/hello\<CR>", 'xt')
+  call assert_equal('/', g:entered)
+  call assert_equal('/', g:left)
+  bwipe!
+  au! CmdlineEnter
+  au! CmdlineLeave
+endfunc
+
+" Test for BufWritePre autocommand that deletes or unloads the buffer.
+func Test_BufWritePre()
+  %bwipe
+  au BufWritePre Xxx1 bunload
+  au BufWritePre Xxx2 bwipe
+
+  call writefile(['start of Xxx1', 'test', 'end of Xxx1'], 'Xxx1')
+  call writefile(['start of Xxx2', 'test', 'end of Xxx2'], 'Xxx2')
+
+  edit Xtest
+  e! Xxx2
+  bdel Xtest
+  e Xxx1
+  " write it, will unload it and give an error msg
+  call assert_fails('w', 'E203')
+  call assert_equal('Xxx2', bufname('%'))
+  edit Xtest
+  e! Xxx2
+  bwipe Xtest
+  " write it, will delete the buffer and give an error msg
+  call assert_fails('w', 'E203')
+  call assert_equal('Xxx1', bufname('%'))
+  au! BufWritePre
+  call delete('Xxx1')
+  call delete('Xxx2')
+endfunc
+
+" Test for BufUnload autocommand that unloads all the other buffers
+func Test_bufunload_all()
+  call writefile(['Test file Xxx1'], 'Xxx1')"
+  call writefile(['Test file Xxx2'], 'Xxx2')"
+
+  let content = [
+	      \ "func UnloadAllBufs()",
+	      \ "  let i = 1",
+	      \ "  while i <= bufnr('$')",
+	      \ "    if i != bufnr('%') && bufloaded(i)",
+	      \ "      exe  i . 'bunload'",
+	      \ "    endif",
+	      \ "    let i += 1",
+	      \ "  endwhile",
+	      \ "endfunc",
+	      \ "au BufUnload * call UnloadAllBufs()",
+	      \ "au VimLeave * call writefile(['Test Finished'], 'Xout')",
+	      \ "edit Xxx1",
+	      \ "split Xxx2",
+	      \ "q"]
+  call writefile(content, 'Xtest')
+
+  call delete('Xout')
+  call system(v:progpath. ' --clean -N --not-a-term -S Xtest')
+  call assert_true(filereadable('Xout'))
+
+  call delete('Xxx1')
+  call delete('Xxx2')
+  call delete('Xtest')
+  call delete('Xout')
+endfunc
+
+" Some tests for buffer-local autocommands
+func Test_buflocal_autocmd()
+  let g:bname = ''
+  edit xx
+  au BufLeave <buffer> let g:bname = expand("%")
+  " here, autocommand for xx should trigger.
+  " but autocommand shall not apply to buffer named <buffer>.
+  edit somefile
+  call assert_equal('xx', g:bname)
+  let g:bname = ''
+  " here, autocommand shall be auto-deleted
+  bwipe xx
+  " autocmd should not trigger
+  edit xx
+  call assert_equal('', g:bname)
+  " autocmd should not trigger
+  edit somefile
+  call assert_equal('', g:bname)
+  enew
+  unlet g:bname
 endfunc

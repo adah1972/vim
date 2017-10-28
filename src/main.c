@@ -403,12 +403,26 @@ main
     debug_break_level = params.use_debug_break_level;
 #endif
 
+    /* Reset 'loadplugins' for "-u NONE" before "--cmd" arguments.
+     * Allows for setting 'loadplugins' there. */
+    if (params.use_vimrc != NULL
+	    && (STRCMP(params.use_vimrc, "NONE") == 0
+		|| STRCMP(params.use_vimrc, "DEFAULTS") == 0))
+	p_lpl = FALSE;
+
+    /* Execute --cmd arguments. */
+    exe_pre_commands(&params);
+
+    /* Source startup scripts. */
+    source_startup_scripts(&params);
+
 #ifdef FEAT_MZSCHEME
     /*
      * Newer version of MzScheme (Racket) require earlier (trampolined)
      * initialisation via scheme_main_setup.
      * Implement this by initialising it as early as possible
      * and splitting off remaining Vim main into vim_main2().
+     * Do source startup scripts, so that 'mzschemedll' can be set.
      */
     return mzscheme_main();
 #else
@@ -427,19 +441,6 @@ main
 vim_main2(void)
 {
 #ifndef NO_VIM_MAIN
-    /* Reset 'loadplugins' for "-u NONE" before "--cmd" arguments.
-     * Allows for setting 'loadplugins' there. */
-    if (params.use_vimrc != NULL
-	    && (STRCMP(params.use_vimrc, "NONE") == 0
-		|| STRCMP(params.use_vimrc, "DEFAULTS") == 0))
-	p_lpl = FALSE;
-
-    /* Execute --cmd arguments. */
-    exe_pre_commands(&params);
-
-    /* Source startup scripts. */
-    source_startup_scripts(&params);
-
 #ifdef FEAT_EVAL
     /*
      * Read all the plugin files.
@@ -2227,7 +2228,7 @@ command_line_scan(mparm_T *parmp)
 		    argv_idx = -1;
 		    break;
 		}
-		/*FALLTHROUGH*/
+		/* FALLTHROUGH */
 	    case 'S':		/* "-S {file}" execute Vim script */
 	    case 'i':		/* "-i {viminfo}" use for viminfo */
 #ifndef FEAT_DIFF
@@ -2385,7 +2386,7 @@ scripterror:
 			argv_idx = -1;
 			break;
 		    }
-		    /*FALLTHROUGH*/
+		    /* FALLTHROUGH */
 		case 'W':	/* "-W {scriptout}" overwrite script file */
 		    if (scriptout != NULL)
 			goto scripterror;
@@ -4179,11 +4180,12 @@ eval_client_expr_to_string(char_u *expr)
     char_u	*res;
     int		save_dbl = debug_break_level;
     int		save_ro = redir_off;
-    void	*fc;
+    void	*fc = NULL;
 
     /* Evaluate the expression at the toplevel, don't use variables local to
-     * the calling function. */
-    fc = clear_current_funccal();
+     * the calling function. Except when in debug mode. */
+    if (!debug_mode)
+	fc = clear_current_funccal();
 
      /* Disable debugging, otherwise Vim hangs, waiting for "cont" to be
       * typed. */
@@ -4200,7 +4202,8 @@ eval_client_expr_to_string(char_u *expr)
     --emsg_silent;
     if (emsg_silent < 0)
 	emsg_silent = 0;
-    restore_current_funccal(fc);
+    if (fc != NULL)
+	restore_current_funccal(fc);
 
     /* A client can tell us to redraw, but not to display the cursor, so do
      * that here. */

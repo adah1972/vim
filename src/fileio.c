@@ -1956,17 +1956,17 @@ retry:
 		    {
 			if (fio_flags & FIO_ENDIAN_L)
 			{
-			    u8c = (*--p << 24);
-			    u8c += (*--p << 16);
-			    u8c += (*--p << 8);
+			    u8c = (unsigned)*--p << 24;
+			    u8c += (unsigned)*--p << 16;
+			    u8c += (unsigned)*--p << 8;
 			    u8c += *--p;
 			}
 			else	/* big endian */
 			{
 			    u8c = *--p;
-			    u8c += (*--p << 8);
-			    u8c += (*--p << 16);
-			    u8c += (*--p << 24);
+			    u8c += (unsigned)*--p << 8;
+			    u8c += (unsigned)*--p << 16;
+			    u8c += (unsigned)*--p << 24;
 			}
 		    }
 		    else    /* UTF-8 */
@@ -7731,6 +7731,8 @@ static struct event_name
     {"BufWritePost",	EVENT_BUFWRITEPOST},
     {"BufWritePre",	EVENT_BUFWRITEPRE},
     {"BufWriteCmd",	EVENT_BUFWRITECMD},
+    {"CmdlineEnter",	EVENT_CMDLINEENTER},
+    {"CmdlineLeave",	EVENT_CMDLINELEAVE},
     {"CmdwinEnter",	EVENT_CMDWINENTER},
     {"CmdwinLeave",	EVENT_CMDWINLEAVE},
     {"CmdUndefined",	EVENT_CMDUNDEFINED},
