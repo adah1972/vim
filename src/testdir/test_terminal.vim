@@ -11,7 +11,11 @@ let s:python = PythonProg()
 " Open a terminal with a shell, assign the job to g:job and return the buffer
 " number.
 func Run_shell_in_terminal(options)
-  let buf = term_start(&shell, a:options)
+  if has('win32')
+    let buf = term_start([&shell,'/k'], a:options)
+  else
+    let buf = term_start(&shell, a:options)
+  endif
 
   let termlist = term_list()
   call assert_equal(1, len(termlist))
@@ -430,13 +434,14 @@ func Test_terminal_cwd()
 endfunc
 
 func Test_terminal_env()
-  if !has('unix')
-    return
-  endif
   let g:buf = Run_shell_in_terminal({'env': {'TESTENV': 'correct'}})
   " Wait for the shell to display a prompt
   call WaitFor('term_getline(g:buf, 1) != ""')
-  call term_sendkeys(g:buf, "echo $TESTENV\r")
+  if has('win32')
+    call term_sendkeys(g:buf, "echo %TESTENV%\r")
+  else
+    call term_sendkeys(g:buf, "echo $TESTENV\r")
+  endif
   call term_wait(g:buf)
   call Stop_shell_in_terminal(g:buf)
   call WaitFor('getline(2) == "correct"')
@@ -700,7 +705,7 @@ func Test_terminal_composing_unicode()
 
   enew
   let buf = term_start(cmd, {'curwin': bufnr('')})
-  let job = term_getjob(buf)
+  let g:job = term_getjob(buf)
   call term_wait(buf, 50)
 
   " ascii + composing
@@ -737,8 +742,9 @@ func Test_terminal_composing_unicode()
   call assert_equal("\u00a0\u0308", l[3].chars)
 
   call term_sendkeys(buf, "exit\r")
-  call WaitFor('job_status(job) == "dead"')
-  call assert_equal('dead', job_status(job))
+  call WaitFor('job_status(g:job) == "dead"')
+  call assert_equal('dead', job_status(g:job))
   bwipe!
+  unlet g:job
   let &encoding = save_enc
 endfunc
