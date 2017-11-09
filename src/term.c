@@ -4547,22 +4547,6 @@ check_termcode(
 		    {
 			int need_flush = FALSE;
 
-			/* Only set 'ttymouse' automatically if it was not set
-			 * by the user already. */
-			if (!option_was_set((char_u *)"ttym"))
-			{
-# ifdef TTYM_SGR
-			    if (version >= 277)
-				set_option_value((char_u *)"ttym", 0L,
-							  (char_u *)"sgr", 0);
-			    else
-# endif
-			    /* if xterm version >= 95 use mouse dragging */
-			    if (version >= 95)
-				set_option_value((char_u *)"ttym", 0L,
-						       (char_u *)"xterm2", 0);
-			}
-
 			/* if xterm version >= 141 try to get termcap codes */
 			if (version >= 141)
 			{
@@ -4581,6 +4565,28 @@ check_termcode(
 			     * 256, libvterm supports even more. */
 			    if (mch_getenv((char_u *)"COLORS") == NULL)
 				may_adjust_color_count(256);
+# ifdef FEAT_MOUSE_SGR
+			    /* Libvterm can handle SGR mouse reporting. */
+			    if (!option_was_set((char_u *)"ttym"))
+				set_option_value((char_u *)"ttym", 0L,
+							   (char_u *)"sgr", 0);
+# endif
+			}
+
+			/* Only set 'ttymouse' automatically if it was not set
+			 * by the user already. */
+			if (!option_was_set((char_u *)"ttym"))
+			{
+# ifdef FEAT_MOUSE_SGR
+			    if (version >= 277)
+				set_option_value((char_u *)"ttym", 0L,
+							  (char_u *)"sgr", 0);
+			    else
+# endif
+			    /* if xterm version >= 95 use mouse dragging */
+			    if (version >= 95)
+				set_option_value((char_u *)"ttym", 0L,
+						       (char_u *)"xterm2", 0);
 			}
 
 			/* Detect terminals that set $TERM to something like
@@ -4751,10 +4757,11 @@ check_termcode(
 			if (i - j >= 21 && STRNCMP(tp + j + 3, "rgb:", 4) == 0
 			    && tp[j + 11] == '/' && tp[j + 16] == '/')
 			{
+#ifdef FEAT_TERMINAL
 			    int rval = hexhex2nr(tp + j + 7);
 			    int gval = hexhex2nr(tp + j + 12);
 			    int bval = hexhex2nr(tp + j + 17);
-
+#endif
 			    if (is_bg)
 			    {
 				char *newval = (3 * '6' < tp[j+7] + tp[j+12]
