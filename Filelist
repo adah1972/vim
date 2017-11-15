@@ -135,6 +135,7 @@ SRC_ALL =	\
 		src/testdir/bench*.in \
 		src/testdir/bench*.vim \
 		src/testdir/samples/*.txt \
+		src/testdir/samples/test000 \
 		src/testdir/if_ver*.vim \
 		src/testdir/xterm_ramp.vim \
 		src/proto.h \
@@ -659,6 +660,7 @@ RT_SCRIPTS =	\
 		runtime/makemenu.vim \
 		runtime/autoload/*.vim \
 		runtime/autoload/README.txt \
+		runtime/autoload/dist/*.vim \
 		runtime/autoload/xml/*.vim \
 		runtime/colors/*.vim \
 		runtime/colors/README.txt \

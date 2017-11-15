@@ -1,4 +1,4 @@
-*if_pyth.txt*   For Vim version 8.0.  Last change: 2017 Mar 09
+*if_pyth.txt*   For Vim version 8.0.  Last change: 2017 Nov 09
 
 
 		  VIM REFERENCE MANUAL    by Paul Moore
@@ -714,6 +714,8 @@ vim.Function object				*python-Function*
 To facilitate bi-directional interface, you can use |pyeval()| and |py3eval()| 
 functions to evaluate Python expressions and pass their values to Vim script.
 |pyxeval()| is also available.
+
+The Python value "None" is converted to v:none.
 
 ==============================================================================
 9. Dynamic loading					*python-dynamic*
