@@ -359,11 +359,11 @@ getcmdline(
 	    b_im_ptr = &curbuf->b_p_imsearch;
 	if (*b_im_ptr == B_IMODE_LMAP)
 	    State |= LANGMAP;
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
 	im_set_active(*b_im_ptr == B_IMODE_IM);
 #endif
     }
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
     else if (p_imcmdline)
 	im_set_active(TRUE);
 #endif
@@ -417,12 +417,12 @@ getcmdline(
 
 	cursorcmd();		/* set the cursor on the right spot */
 
-	/* Get a character.  Ignore K_IGNORE, it should not do anything, such
-	 * as stop completion. */
+	/* Get a character.  Ignore K_IGNORE and K_NOP, they should not do
+	 * anything, such as stop completion. */
 	do
 	{
 	    c = safe_vgetc();
-	} while (c == K_IGNORE);
+	} while (c == K_IGNORE || c == K_NOP);
 
 	if (KeyTyped)
 	{
@@ -1119,7 +1119,7 @@ getcmdline(
 		{
 		    /* ":lmap" mappings exists, toggle use of mappings. */
 		    State ^= LANGMAP;
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
 		    im_set_active(FALSE);	/* Disable input method */
 #endif
 		    if (b_im_ptr != NULL)
@@ -1130,7 +1130,7 @@ getcmdline(
 			    *b_im_ptr = B_IMODE_NONE;
 		    }
 		}
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
 		else
 		{
 		    /* There are no ":lmap" mappings, toggle IM.  When
@@ -2143,7 +2143,7 @@ returncmd:
 #endif
 
     State = save_State;
-#ifdef USE_IM_CONTROL
+#ifdef FEAT_MBYTE
     if (b_im_ptr != NULL && *b_im_ptr != B_IMODE_LMAP)
 	im_save_status(b_im_ptr);
     im_set_active(FALSE);
