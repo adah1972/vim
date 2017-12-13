@@ -1154,7 +1154,7 @@ win_update(win_T *wp)
     }
 
     /* Window is zero-height: nothing to draw. */
-    if (wp->w_height == 0)
+    if (wp->w_height + WINBAR_HEIGHT(wp) == 0)
     {
 	wp->w_redr_type = 0;
 	return;
@@ -8317,15 +8317,29 @@ screen_char(unsigned off, int row, int col)
     {
 	char_u	    buf[MB_MAXBYTES + 1];
 
-	/* Convert UTF-8 character to bytes and write it. */
-
-	buf[utfc_char2bytes(off, buf)] = NUL;
-
-	out_str(buf);
 	if (utf_ambiguous_width(ScreenLinesUC[off]))
+	{
+	    if (*p_ambw == 'd'
+# ifdef FEAT_GUI
+		    && !gui.in_use
+# endif
+		    )
+	    {
+		/* Clear the two screen cells. If the character is actually
+		 * single width it won't change the second cell. */
+		out_str((char_u *)"  ");
+		term_windgoto(row, col);
+	    }
+	    /* not sure where the cursor is after drawing the ambiguous width
+	     * character */
 	    screen_cur_col = 9999;
+	}
 	else if (utf_char2cells(ScreenLinesUC[off]) > 1)
 	    ++screen_cur_col;
+
+	/* Convert the UTF-8 character to bytes and write it. */
+	buf[utfc_char2bytes(off, buf)] = NUL;
+	out_str(buf);
     }
     else
 #endif

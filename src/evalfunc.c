@@ -441,6 +441,7 @@ static void f_win_getid(typval_T *argvars, typval_T *rettv);
 static void f_win_gotoid(typval_T *argvars, typval_T *rettv);
 static void f_win_id2tabwin(typval_T *argvars, typval_T *rettv);
 static void f_win_id2win(typval_T *argvars, typval_T *rettv);
+static void f_win_screenpos(typval_T *argvars, typval_T *rettv);
 static void f_winbufnr(typval_T *argvars, typval_T *rettv);
 static void f_wincol(typval_T *argvars, typval_T *rettv);
 static void f_winheight(typval_T *argvars, typval_T *rettv);
@@ -899,6 +900,7 @@ static struct fst
     {"win_gotoid",	1, 1, f_win_gotoid},
     {"win_id2tabwin",	1, 1, f_win_id2tabwin},
     {"win_id2win",	1, 1, f_win_id2win},
+    {"win_screenpos",	1, 1, f_win_screenpos},
     {"winbufnr",	1, 1, f_winbufnr},
     {"wincol",		0, 0, f_wincol},
     {"winheight",	1, 1, f_winheight},
@@ -4135,6 +4137,7 @@ f_getbufinfo(typval_T *argvars, typval_T *rettv)
     int		filtered = FALSE;
     int		sel_buflisted = FALSE;
     int		sel_bufloaded = FALSE;
+    int		sel_bufmodified = FALSE;
 
     if (rettv_list_alloc(rettv) != OK)
 	return;
@@ -4157,6 +4160,10 @@ f_getbufinfo(typval_T *argvars, typval_T *rettv)
 	    di = dict_find(sel_d, (char_u *)"bufloaded", -1);
 	    if (di != NULL && get_tv_number(&di->di_tv))
 		sel_bufloaded = TRUE;
+
+	    di = dict_find(sel_d, (char_u *)"bufmodified", -1);
+	    if (di != NULL && get_tv_number(&di->di_tv))
+		sel_bufmodified = TRUE;
 	}
     }
     else if (argvars[0].v_type != VAR_UNKNOWN)
@@ -4176,7 +4183,8 @@ f_getbufinfo(typval_T *argvars, typval_T *rettv)
 	if (argbuf != NULL && argbuf != buf)
 	    continue;
 	if (filtered && ((sel_bufloaded && buf->b_ml.ml_mfp == NULL)
-					   || (sel_buflisted && !buf->b_p_bl)))
+			|| (sel_buflisted && !buf->b_p_bl)
+			|| (sel_bufmodified && !buf->b_changed)))
 	    continue;
 
 	d = get_buffer_info(buf);
@@ -5376,6 +5384,22 @@ f_win_id2tabwin(typval_T *argvars, typval_T *rettv)
 f_win_id2win(typval_T *argvars, typval_T *rettv)
 {
     rettv->vval.v_number = win_id2win(argvars);
+}
+
+/*
+ * "win_screenpos()" function
+ */
+    static void
+f_win_screenpos(typval_T *argvars, typval_T *rettv)
+{
+    win_T	*wp;
+
+    if (rettv_list_alloc(rettv) == FAIL)
+	return;
+
+    wp = find_win_by_nr(&argvars[0], NULL);
+    list_append_number(rettv->vval.v_list, wp == NULL ? 0 : wp->w_winrow + 1);
+    list_append_number(rettv->vval.v_list, wp == NULL ? 0 : wp->w_wincol + 1);
 }
 
 /*
