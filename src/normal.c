@@ -6814,6 +6814,8 @@ nv_brackets(cmdarg_T *cap)
 		clearopbeep(cap->oap);
 		break;
 	    }
+	    else
+		curwin->w_set_curswant = TRUE;
 # ifdef FEAT_FOLDING
 	if (cap->oap->op_type == OP_NOP && (fdo_flags & FDO_SEARCH) && KeyTyped)
 	    foldOpenCursor();
@@ -7850,8 +7852,12 @@ n_start_visual_mode(int c)
 nv_window(cmdarg_T *cap)
 {
     if (cap->nchar == ':')
+    {
 	/* "CTRL-W :" is the same as typing ":"; useful in a terminal window */
+	cap->cmdchar = ':';
+	cap->nchar = NUL;
 	nv_colon(cap);
+    }
     else if (!checkclearop(cap->oap))
 	do_window(cap->nchar, cap->count0, NUL); /* everything is in window.c */
 }

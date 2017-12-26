@@ -2382,7 +2382,7 @@ f_count(typval_T *argvars, typval_T *rettv)
 	char_u *p = argvars[0].vval.v_string;
 	char_u *next;
 
-	if (!error && expr != NULL && p != NULL)
+	if (!error && expr != NULL && *expr != NUL && p != NULL)
 	{
 	    if (ic)
 	    {
@@ -2886,6 +2886,7 @@ f_execute(typval_T *argvars, typval_T *rettv)
     int		save_emsg_silent = emsg_silent;
     int		save_emsg_noredir = emsg_noredir;
     int		save_redir_execute = redir_execute;
+    int		save_redir_off = redir_off;
     garray_T	save_ga;
 
     rettv->vval.v_string = NULL;
@@ -2928,6 +2929,7 @@ f_execute(typval_T *argvars, typval_T *rettv)
 	save_ga = redir_execute_ga;
     ga_init2(&redir_execute_ga, (int)sizeof(char), 500);
     redir_execute = TRUE;
+    redir_off = FALSE;
 
     if (cmd != NULL)
 	do_cmdline_cmd(cmd);
@@ -2958,6 +2960,7 @@ f_execute(typval_T *argvars, typval_T *rettv)
     redir_execute = save_redir_execute;
     if (redir_execute)
 	redir_execute_ga = save_ga;
+    redir_off = save_redir_off;
 
     /* "silent reg" or "silent echo x" leaves msg_col somewhere in the
      * line.  Put it back in the first column. */
@@ -11173,7 +11176,10 @@ f_spellbadword(typval_T *argvars UNUSED, typval_T *rettv)
 	/* Find the start and length of the badly spelled word. */
 	len = spell_move_to(curwin, FORWARD, TRUE, TRUE, &attr);
 	if (len != 0)
+	{
 	    word = ml_get_cursor();
+	    curwin->w_set_curswant = TRUE;
+	}
     }
     else if (curwin->w_p_spell && *curbuf->b_s.b_p_spl != NUL)
     {
