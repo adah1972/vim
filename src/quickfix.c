@@ -3222,6 +3222,8 @@ ex_copen(exarg_T *eap)
     }
     else
     {
+	int flags = 0;
+
 	qf_buf = qf_find_buf(qi);
 
 	/* The current window becomes the previous window afterwards. */
@@ -3229,10 +3231,14 @@ ex_copen(exarg_T *eap)
 
 	if ((eap->cmdidx == CMD_copen || eap->cmdidx == CMD_cwindow)
 		&& cmdmod.split == 0)
-	    /* Create the new window at the very bottom, except when
+	    /* Create the new quickfix window at the very bottom, except when
 	     * :belowright or :aboveleft is used. */
 	    win_goto(lastwin);
-	if (win_split(height, WSP_BELOW | WSP_NEWLOC) == FAIL)
+	/* Default is to open the window below the current window */
+	if (cmdmod.split == 0)
+	    flags = WSP_BELOW;
+	flags |= WSP_NEWLOC;
+	if (win_split(height, flags) == FAIL)
 	    return;		/* not enough room for window */
 	RESET_BINDING(curwin);
 
@@ -3415,7 +3421,7 @@ is_qf_win(win_T *win, qf_info_T *qi)
 
 /*
  * Find a window displaying the quickfix/location list 'qi'
- * Searches in only the windows opened in the current tab.
+ * Only searches in the current tabpage.
  */
     static win_T *
 qf_find_win(qf_info_T *qi)
@@ -3424,9 +3430,8 @@ qf_find_win(qf_info_T *qi)
 
     FOR_ALL_WINDOWS(win)
 	if (is_qf_win(win, qi))
-	    break;
-
-    return win;
+	    return win;
+    return NULL;
 }
 
 /*
@@ -4939,6 +4944,24 @@ qf_id2nr(qf_info_T *qi, int_u qfid)
 }
 
 /*
+ * Return the quickfix/location list window identifier in the current tabpage.
+ */
+    static int
+qf_winid(qf_info_T *qi)
+{
+    win_T	*win;
+
+    /* The quickfix window can be opened even if the quickfix list is not set
+     * using ":copen". This is not true for location lists.  */
+    if (qi == NULL)
+	return 0;
+    win = qf_find_win(qi);
+    if (win != NULL)
+	return win->w_id;
+    return 0;
+}
+
+/*
  * Return quickfix/location list details (title) as a
  * dictionary. 'what' contains the details to return. If 'list_idx' is -1,
  * then current list is used. Otherwise the specified list is used.
@@ -5047,7 +5070,7 @@ qf_get_properties(win_T *wp, dict_T *what, dict_T *retdict)
 	if ((status == OK) && (flags & QF_GETLIST_NR))
 	    status = dict_add_nr_str(retdict, "nr", 0L, NULL);
 	if ((status == OK) && (flags & QF_GETLIST_WINID))
-	    status = dict_add_nr_str(retdict, "winid", 0L, NULL);
+	    status = dict_add_nr_str(retdict, "winid", qf_winid(qi), NULL);
 	if ((status == OK) && (flags & QF_GETLIST_CONTEXT))
 	    status = dict_add_nr_str(retdict, "context", 0L, (char_u *)"");
 	if ((status == OK) && (flags & QF_GETLIST_ID))
@@ -5073,15 +5096,7 @@ qf_get_properties(win_T *wp, dict_T *what, dict_T *retdict)
     if ((status == OK) && (flags & QF_GETLIST_NR))
 	status = dict_add_nr_str(retdict, "nr", qf_idx + 1, NULL);
     if ((status == OK) && (flags & QF_GETLIST_WINID))
-    {
-	win_T	*win;
-	int	win_id = 0;
-
-	win = qf_find_win(qi);
-	if (win != NULL)
-	    win_id = win->w_id;
-	status = dict_add_nr_str(retdict, "winid", win_id, NULL);
-    }
+	status = dict_add_nr_str(retdict, "winid", qf_winid(qi), NULL);
     if ((status == OK) && (flags & QF_GETLIST_ITEMS))
     {
 	list_T	*l = list_alloc();
