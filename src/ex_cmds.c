@@ -1957,8 +1957,7 @@ write_viminfo(char_u *file, int forceit)
 		    if (!shortname && st_new.st_dev == st_old.st_dev
 						&& st_new.st_ino == st_old.st_ino)
 		    {
-			vim_free(tempname);
-			tempname = NULL;
+			VIM_CLEAR(tempname);
 			shortname = TRUE;
 			break;
 		    }
@@ -4368,8 +4367,22 @@ do_ecmd(
     if (p_im)
 	need_start_insertmode = TRUE;
 
-    /* Change directories when the 'acd' option is set. */
-    DO_AUTOCHDIR
+#ifdef FEAT_AUTOCHDIR
+    /* Change directories when the 'acd' option is set and we aren't already in
+     * that directory (should already be done above). Expect getcwd() to be
+     * faster than calling shorten_fnames() unnecessarily. */
+    if (p_acd && curbuf->b_ffname != NULL)
+    {
+	char_u	curdir[MAXPATHL];
+	char_u	filedir[MAXPATHL];
+
+	vim_strncpy(filedir, curbuf->b_ffname, MAXPATHL - 1);
+	*gettail_sep(filedir) = NUL;
+	if (mch_dirname(curdir, MAXPATHL) != FAIL
+		&& vim_fnamecmp(curdir, filedir) != 0)
+	    do_autochdir();
+    }
+#endif
 
 #if defined(FEAT_SUN_WORKSHOP) || defined(FEAT_NETBEANS_INTG)
     if (curbuf->b_ffname != NULL)
@@ -5211,8 +5224,7 @@ do_sub(exarg_T *eap)
 		    lnum += regmatch.startpos[0].lnum;
 		    sub_firstlnum += regmatch.startpos[0].lnum;
 		    nmatch -= regmatch.startpos[0].lnum;
-		    vim_free(sub_firstline);
-		    sub_firstline = NULL;
+		    VIM_CLEAR(sub_firstline);
 		}
 
 		if (sub_firstline == NULL)
@@ -5374,10 +5386,7 @@ do_sub(exarg_T *eap)
 						     sub_firstline + copycol);
 
 				    if (new_line == NULL)
-				    {
-					vim_free(orig_line);
-					orig_line = NULL;
-				    }
+					VIM_CLEAR(orig_line);
 				    else
 				    {
 					/* Position the cursor relative to the
@@ -5806,8 +5815,7 @@ skip:
 	    if (did_sub)
 		++sub_nlines;
 	    vim_free(new_start);	/* for when substitute was cancelled */
-	    vim_free(sub_firstline);	/* free the copy of the original line */
-	    sub_firstline = NULL;
+	    VIM_CLEAR(sub_firstline);	/* free the copy of the original line */
 	}
 
 	line_breakcheck();
@@ -6910,7 +6918,7 @@ fix_help_buffer(void)
 		copy_option_part(&p, NameBuff, MAXPATHL, ",");
 		mustfree = FALSE;
 		rt = vim_getenv((char_u *)"VIMRUNTIME", &mustfree);
-		if (fullpathcmp(rt, NameBuff, FALSE) != FPC_SAME)
+		if (rt != NULL && fullpathcmp(rt, NameBuff, FALSE) != FPC_SAME)
 		{
 		    int		fcount;
 		    char_u	**fnames;
@@ -6961,8 +6969,7 @@ fix_help_buffer(void)
 				    && fnamecmp(e1, fname + 4) != 0)
 				{
 				    /* Not .txt and not .abx, remove it. */
-				    vim_free(fnames[i1]);
-				    fnames[i1] = NULL;
+				    VIM_CLEAR(fnames[i1]);
 				    continue;
 				}
 				if (e1 - f1 != e2 - f2
@@ -6970,11 +6977,8 @@ fix_help_buffer(void)
 				    continue;
 				if (fnamecmp(e1, ".txt") == 0
 				    && fnamecmp(e2, fname + 4) == 0)
-				{
 				    /* use .abx instead of .txt */
-				    vim_free(fnames[i1]);
-				    fnames[i1] = NULL;
-				}
+				    VIM_CLEAR(fnames[i1]);
 			    }
 			}
 #endif
@@ -8331,7 +8335,6 @@ ex_smile(exarg_T *eap UNUSED)
     msg_clr_eos();
 }
 
-#if defined(FEAT_GUI) || defined(FEAT_CLIENTSERVER) || defined(PROTO)
 /*
  * ":drop"
  * Opens the first argument in a window.  When there are two or more arguments
@@ -8411,7 +8414,6 @@ ex_drop(exarg_T *eap)
 	ex_rewind(eap);
     }
 }
-#endif
 
 /*
  * Skip over the pattern argument of ":vimgrep /pat/[g][j]".

@@ -424,6 +424,7 @@ EXTERN int	p_cp;		/* 'compatible' */
 #ifdef FEAT_INS_EXPAND
 EXTERN char_u	*p_cot;		/* 'completeopt' */
 EXTERN long	p_ph;		/* 'pumheight' */
+EXTERN long	p_pw;		/* 'pumwidth' */
 #endif
 EXTERN char_u	*p_cpo;		/* 'cpoptions' */
 #ifdef FEAT_CSCOPE
@@ -696,8 +697,14 @@ EXTERN char_u	*p_perldll;	/* 'perldll' */
 #if defined(DYNAMIC_PYTHON3)
 EXTERN char_u	*p_py3dll;	/* 'pythonthreedll' */
 #endif
+#ifdef FEAT_PYTHON3
+EXTERN char_u	*p_py3home;	/* 'pythonthreehome' */
+#endif
 #if defined(DYNAMIC_PYTHON)
 EXTERN char_u	*p_pydll;	/* 'pythondll' */
+#endif
+#ifdef FEAT_PYTHON
+EXTERN char_u	*p_pyhome;	/* 'pythonhome' */
 #endif
 #if defined(FEAT_PYTHON) || defined(FEAT_PYTHON3)
 EXTERN long	p_pyx;		/* 'pyxversion' */

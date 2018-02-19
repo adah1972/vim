@@ -826,7 +826,7 @@ gui_x11_key_hit_cb(
 #  endif
 		)
 	{
-	    int		maxlen = len * 4 + 40;  /* guessed */
+	    int		maxlen = len * 4 + 40;	/* guessed */
 	    char_u	*p = (char_u *)XtMalloc(maxlen);
 
 	    mch_memmove(p, string, len);
@@ -1567,8 +1567,7 @@ gui_mch_uninit(void)
     XtCloseDisplay(gui.dpy);
     gui.dpy = NULL;
     vimShell = (Widget)0;
-    vim_free(gui_argv);
-    gui_argv = NULL;
+    VIM_CLEAR(gui_argv);
 }
 
 /*
@@ -1741,8 +1740,7 @@ gui_mch_exit(int rc UNUSED)
      * says that this isn't needed when exiting, so just skip it. */
     XtCloseDisplay(gui.dpy);
 #endif
-    vim_free(gui_argv);
-    gui_argv = NULL;
+    VIM_CLEAR(gui_argv);
 }
 
 /*
@@ -1956,7 +1954,7 @@ gui_mch_get_font(char_u *name, int giveErrorIfMissing)
 {
     XFontStruct	*font;
 
-    if (!gui.in_use || name == NULL)    /* can't do this when GUI not running */
+    if (!gui.in_use || name == NULL)	/* can't do this when GUI not running */
 	return NOFONT;
 
     font = XLoadQueryFont(gui.dpy, (char *)name);
@@ -2275,7 +2273,7 @@ fontset_ascent(XFontSet fs)
     guicolor_T
 gui_mch_get_color(char_u *name)
 {
-    guicolor_T  requested;
+    guicolor_T	requested;
 
     /* can't do this when GUI not running */
     if (!gui.in_use || name == NULL || *name == NUL)
@@ -2298,8 +2296,8 @@ gui_mch_get_color(char_u *name)
     guicolor_T
 gui_mch_get_rgb_color(int r, int g, int b)
 {
-    char        spec[8]; /* space enough to hold "#RRGGBB" */
-    XColor      available;
+    char	spec[8]; /* space enough to hold "#RRGGBB" */
+    XColor	available;
     Colormap	colormap;
 
     vim_snprintf(spec, sizeof(spec), "#%.2x%.2x%.2x", r, g, b);
@@ -2746,7 +2744,7 @@ gui_mch_wait_for_chars(long wtime)
 	    if (gui.in_focus)
 		gui_mch_start_blink();
 	    else
-		gui_mch_stop_blink();
+		gui_mch_stop_blink(TRUE);
 	    focus = gui.in_focus;
 	}
 
@@ -3105,14 +3103,14 @@ gui_mch_set_blinking(long waittime, long on, long off)
  * Stop the cursor blinking.  Show the cursor if it wasn't shown.
  */
     void
-gui_mch_stop_blink(void)
+gui_mch_stop_blink(int may_call_gui_update_cursor)
 {
     if (blink_timer != (XtIntervalId)0)
     {
 	XtRemoveTimeOut(blink_timer);
 	blink_timer = (XtIntervalId)0;
     }
-    if (blink_state == BLINK_OFF)
+    if (blink_state == BLINK_OFF && may_call_gui_update_cursor)
 	gui_update_cursor(TRUE, FALSE);
     blink_state = BLINK_NONE;
 }

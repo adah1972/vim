@@ -1557,7 +1557,13 @@ WaitForChar(long msec, int ignore_input)
 	    if (ir.EventType == FOCUS_EVENT)
 		handle_focus_event(ir);
 	    else if (ir.EventType == WINDOW_BUFFER_SIZE_EVENT)
-		shell_resized();
+	    {
+		/* Only call shell_resized() when the size actually change to
+		 * avoid the screen is cleard. */
+		if (ir.Event.WindowBufferSizeEvent.dwSize.X != Columns
+			|| ir.Event.WindowBufferSizeEvent.dwSize.Y != Rows)
+		    shell_resized();
+	    }
 #ifdef FEAT_MOUSE
 	    else if (ir.EventType == MOUSE_EVENT
 		    && decode_mouse_event(&ir.Event.MouseEvent))
@@ -2252,8 +2258,7 @@ SaveConsoleBuffer(
 	cb->Regions = (PSMALL_RECT)alloc(cb->NumRegions * sizeof(SMALL_RECT));
 	if (cb->Regions == NULL)
 	{
-	    vim_free(cb->Buffer);
-	    cb->Buffer = NULL;
+	    VIM_CLEAR(cb->Buffer);
 	    return FALSE;
 	}
     }
@@ -2278,10 +2283,8 @@ SaveConsoleBuffer(
 		BufferCoord,			/* offset in our buffer */
 		&ReadRegion))			/* region to save */
 	{
-	    vim_free(cb->Buffer);
-	    cb->Buffer = NULL;
-	    vim_free(cb->Regions);
-	    cb->Regions = NULL;
+	    VIM_CLEAR(cb->Buffer);
+	    VIM_CLEAR(cb->Regions);
 	    return FALSE;
 	}
 	cb->Regions[i] = ReadRegion;
@@ -7201,7 +7204,7 @@ fix_arg_enc(void)
     {
 	do_cmdline_cmd((char_u *)":rewind");
 	if (GARGCOUNT == 1 && used_file_full_path)
-	    (void)vim_chdirfile(alist_name(&GARGLIST[0]));
+	    (void)vim_chdirfile(alist_name(&GARGLIST[0]), "drop");
     }
 
     set_alist_count();

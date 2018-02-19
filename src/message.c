@@ -415,8 +415,7 @@ static char_u   *last_sourcing_name = NULL;
     void
 reset_last_sourcing(void)
 {
-    vim_free(last_sourcing_name);
-    last_sourcing_name = NULL;
+    VIM_CLEAR(last_sourcing_name);
     last_sourcing_lnum = 0;
 }
 
@@ -761,7 +760,7 @@ emsgn(char_u *s, long n)
     void
 iemsg(char_u *s)
 {
-    msg(s);
+    emsg(s);
 #ifdef ABORT_ON_INTERNAL_ERROR
     abort();
 #endif
@@ -1249,10 +1248,7 @@ wait_return(int redraw)
     reset_last_sourcing();
     if (keep_msg != NULL && vim_strsize(keep_msg) >=
 				  (Rows - cmdline_row - 1) * Columns + sc_col)
-    {
-	vim_free(keep_msg);
-	keep_msg = NULL;	    /* don't redisplay message, it's too long */
-    }
+	VIM_CLEAR(keep_msg);	    /* don't redisplay message, it's too long */
 
     if (tmpState == SETWSIZE)	    /* got resize event while in vgetc() */
     {
@@ -1325,10 +1321,7 @@ msg_start(void)
     int		did_return = FALSE;
 
     if (!msg_silent)
-    {
-	vim_free(keep_msg);
-	keep_msg = NULL;		/* don't display old message now */
-    }
+	VIM_CLEAR(keep_msg);
 
 #ifdef FEAT_EVAL
     if (need_clr_eos)
@@ -2316,7 +2309,9 @@ msg_scroll_up(void)
 	gui_undraw_cursor();
 #endif
     /* scrolling up always works */
+    mch_disable_flush();
     screen_del_lines(0, 0, 1, (int)Rows, TRUE, 0, NULL);
+    mch_enable_flush();
 
     if (!can_clear((char_u *)" "))
     {
@@ -3479,8 +3474,7 @@ give_warning(char_u *message, int hl)
 #ifdef FEAT_EVAL
     set_vim_var_string(VV_WARNINGMSG, message, -1);
 #endif
-    vim_free(keep_msg);
-    keep_msg = NULL;
+    VIM_CLEAR(keep_msg);
     if (hl)
 	keep_msg_attr = HL_ATTR(HLF_W);
     else
@@ -4991,7 +4985,7 @@ vim_vsnprintf_typval(
 			    zero_padding = 0;
 			}
 			else
-                        {
+			{
 			    /* Regular float number */
 			    format[0] = '%';
 			    l = 1;
@@ -5014,7 +5008,7 @@ vim_vsnprintf_typval(
 			    format[l + 1] = NUL;
 
 			    str_arg_l = sprintf(tmp, format, f);
-                        }
+			}
 
 			if (remove_trailing_zeroes)
 			{

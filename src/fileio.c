@@ -1073,8 +1073,7 @@ retry:
 	if (tmpname != NULL)
 	{
 	    mch_remove(tmpname);		/* delete converted file */
-	    vim_free(tmpname);
-	    tmpname = NULL;
+	    VIM_CLEAR(tmpname);
 	}
     }
 
@@ -2602,8 +2601,7 @@ failed:
 #endif
 		msg_add_lines(c, (long)linecnt, filesize);
 
-	    vim_free(keep_msg);
-	    keep_msg = NULL;
+	    VIM_CLEAR(keep_msg);
 	    msg_scrolled_ign = TRUE;
 #ifdef ALWAYS_USE_GUI
 	    /* Don't show the message when reading stdin, it would end up in a
@@ -2955,8 +2953,7 @@ readfile_charconvert(
 	if (tmpname != NULL)
 	{
 	    mch_remove(tmpname);	/* delete converted file */
-	    vim_free(tmpname);
-	    tmpname = NULL;
+	    VIM_CLEAR(tmpname);
 	}
     }
 
@@ -3945,8 +3942,7 @@ buf_write(
 			if (st_new.st_dev == st_old.st_dev
 					    && st_new.st_ino == st_old.st_ino)
 			{
-			    vim_free(backup);
-			    backup = NULL;	/* no backup file to delete */
+			    VIM_CLEAR(backup);	/* no backup file to delete */
 			    /*
 			     * may try again with 'shortname' set
 			     */
@@ -3980,10 +3976,7 @@ buf_write(
 				--*wp;
 			    /* They all exist??? Must be something wrong. */
 			    if (*wp == 'a')
-			    {
-				vim_free(backup);
-				backup = NULL;
-			    }
+				VIM_CLEAR(backup);
 			}
 		    }
 		    break;
@@ -4010,10 +4003,7 @@ buf_write(
 		    (void)umask(umask_save);
 #endif
 		    if (bfd < 0)
-		    {
-			vim_free(backup);
-			backup = NULL;
-		    }
+			VIM_CLEAR(backup);
 		    else
 		    {
 			/* Set file protection same as original file, but
@@ -4156,10 +4146,7 @@ buf_write(
 			    --*p;
 			/* They all exist??? Must be something wrong! */
 			if (*p == 'a')
-			{
-			    vim_free(backup);
-			    backup = NULL;
-			}
+			    VIM_CLEAR(backup);
 		    }
 		}
 		if (backup != NULL)
@@ -4177,8 +4164,7 @@ buf_write(
 		    if (vim_rename(fname, backup) == 0)
 			break;
 
-		    vim_free(backup);   /* don't do the rename below */
-		    backup = NULL;
+		    VIM_CLEAR(backup);   /* don't do the rename below */
 		}
 	    }
 	    if (backup == NULL && !forceit)
@@ -5037,9 +5023,8 @@ restore_backup:
 #ifdef FEAT_AUTOCMD
 	/* b:changedtick is always incremented in unchanged() but that
 	 * should not trigger a TextChanged event. */
-	if (last_changedtick + 1 == CHANGEDTICK(buf)
-					       && last_changedtick_buf == buf)
-	    last_changedtick = CHANGEDTICK(buf);
+	if (buf->b_last_changedtick + 1 == CHANGEDTICK(buf))
+	    buf->b_last_changedtick = CHANGEDTICK(buf);
 #endif
 	u_unchanged(buf);
 	u_update_save_nr(buf);
@@ -5080,8 +5065,7 @@ restore_backup:
 	    else if (mch_stat(org, &st) < 0)
 	    {
 		vim_rename(backup, (char_u *)org);
-		vim_free(backup);	    /* don't delete the file */
-		backup = NULL;
+		VIM_CLEAR(backup);	    /* don't delete the file */
 #ifdef UNIX
 		set_file_time((char_u *)org, st_old.st_atime, st_old.st_mtime);
 #endif
@@ -6228,8 +6212,7 @@ shorten_fnames(int force)
 		    || buf->b_sfname == NULL
 		    || mch_isFullName(buf->b_sfname)))
 	{
-	    vim_free(buf->b_sfname);
-	    buf->b_sfname = NULL;
+	    VIM_CLEAR(buf->b_sfname);
 	    p = shorten_fname(buf->b_ffname, dirname);
 	    if (p != NULL)
 	    {
@@ -7428,8 +7411,7 @@ vim_deltempdir(void)
 	/* remove the trailing path separator */
 	gettail(vim_tempdir)[-1] = NUL;
 	delete_recursive(vim_tempdir);
-	vim_free(vim_tempdir);
-	vim_tempdir = NULL;
+	VIM_CLEAR(vim_tempdir);
     }
 }
 
@@ -7786,6 +7768,7 @@ static struct event_name
     {"BufWritePost",	EVENT_BUFWRITEPOST},
     {"BufWritePre",	EVENT_BUFWRITEPRE},
     {"BufWriteCmd",	EVENT_BUFWRITECMD},
+    {"CmdlineChanged",	EVENT_CMDLINECHANGED},
     {"CmdlineEnter",	EVENT_CMDLINEENTER},
     {"CmdlineLeave",	EVENT_CMDLINELEAVE},
     {"CmdwinEnter",	EVENT_CMDWINENTER},
@@ -7797,6 +7780,7 @@ static struct event_name
     {"CursorHoldI",	EVENT_CURSORHOLDI},
     {"CursorMoved",	EVENT_CURSORMOVED},
     {"CursorMovedI",	EVENT_CURSORMOVEDI},
+    {"DirChanged",	EVENT_DIRCHANGED},
     {"EncodingChanged",	EVENT_ENCODINGCHANGED},
     {"FileEncoding",	EVENT_ENCODINGCHANGED},
     {"FileAppendPost",	EVENT_FILEAPPENDPOST},
@@ -7849,6 +7833,7 @@ static struct event_name
     {"TermResponse",	EVENT_TERMRESPONSE},
     {"TextChanged",	EVENT_TEXTCHANGED},
     {"TextChangedI",	EVENT_TEXTCHANGEDI},
+    {"TextChangedP",	EVENT_TEXTCHANGEDP},
     {"User",		EVENT_USER},
     {"VimEnter",	EVENT_VIMENTER},
     {"VimLeave",	EVENT_VIMLEAVE},
@@ -8016,8 +8001,7 @@ show_autocmd(AutoPat *ap, event_T event)
     static void
 au_remove_pat(AutoPat *ap)
 {
-    vim_free(ap->pat);
-    ap->pat = NULL;
+    VIM_CLEAR(ap->pat);
     ap->buflocal_nr = -1;
     au_need_clean = TRUE;
 }
@@ -8031,10 +8015,7 @@ au_remove_cmds(AutoPat *ap)
     AutoCmd *ac;
 
     for (ac = ap->cmds; ac != NULL; ac = ac->next)
-    {
-	vim_free(ac->cmd);
-	ac->cmd = NULL;
-    }
+	VIM_CLEAR(ac->cmd);
     au_need_clean = TRUE;
 }
 
@@ -9092,8 +9073,7 @@ aucmd_prepbuf(
 
 	/* Make sure w_localdir and globaldir are NULL to avoid a chdir() in
 	 * win_enter_ext(). */
-	vim_free(aucmd_win->w_localdir);
-	aucmd_win->w_localdir = NULL;
+	VIM_CLEAR(aucmd_win->w_localdir);
 	aco->globaldir = globaldir;
 	globaldir = NULL;
 
@@ -9375,6 +9355,15 @@ has_textchangedI(void)
 }
 
 /*
+ * Return TRUE when there is a TextChangedP autocommand defined.
+ */
+    int
+has_textchangedP(void)
+{
+    return (first_autopat[(int)EVENT_TEXTCHANGEDP] != NULL);
+}
+
+/*
  * Return TRUE when there is an InsertCharPre autocommand defined.
  */
     int
@@ -9587,7 +9576,7 @@ apply_autocmds_group(
     {
 	sfname = vim_strsave(fname);
 	/* Don't try expanding FileType, Syntax, FuncUndefined, WindowID,
-	 * ColorScheme or QuickFixCmd* */
+	 * ColorScheme, QuickFixCmd* or DirChanged */
 	if (event == EVENT_FILETYPE
 		|| event == EVENT_SYNTAX
 		|| event == EVENT_FUNCUNDEFINED
@@ -9596,7 +9585,8 @@ apply_autocmds_group(
 		|| event == EVENT_QUICKFIXCMDPRE
 		|| event == EVENT_COLORSCHEME
 		|| event == EVENT_OPTIONSET
-		|| event == EVENT_QUICKFIXCMDPOST)
+		|| event == EVENT_QUICKFIXCMDPOST
+		|| event == EVENT_DIRCHANGED)
 	    fname = vim_strsave(fname);
 	else
 	    fname = FullName_save(fname, FALSE);
@@ -9865,8 +9855,7 @@ auto_next_pat(
     char_u	*name;
     char	*s;
 
-    vim_free(sourcing_name);
-    sourcing_name = NULL;
+    VIM_CLEAR(sourcing_name);
 
     for (ap = apc->curpat; ap != NULL && !got_int; ap = ap->next)
     {
@@ -10549,8 +10538,7 @@ file_pat_to_reg_pat(
 	    EMSG(_("E219: Missing {."));
 	else
 	    EMSG(_("E220: Missing }."));
-	vim_free(reg_pat);
-	reg_pat = NULL;
+	VIM_CLEAR(reg_pat);
     }
     return reg_pat;
 }

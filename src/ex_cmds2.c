@@ -73,6 +73,16 @@ static void do_setdebugtracelevel(char_u *arg);
 static void do_checkbacktracelevel(void);
 static void do_showbacktrace(char_u *cmd);
 
+static char_u *debug_oldval = NULL;	/* old and newval for debug expressions */
+static char_u *debug_newval = NULL;
+static int     debug_expr   = 0;        /* use debug_expr */
+
+    int
+has_watchexpr(void)
+{
+    return debug_expr;
+}
+
 /*
  * do_debug(): Debug mode.
  * Repeatedly get Ex commands, until told to continue normal execution.
@@ -135,13 +145,24 @@ do_debug(char_u *cmd)
 
     if (!debug_did_msg)
 	MSG(_("Entering Debug mode.  Type \"cont\" to continue."));
+    if (debug_oldval != NULL)
+    {
+	smsg((char_u *)_("Oldval = \"%s\""), debug_oldval);
+	vim_free(debug_oldval);
+	debug_oldval = NULL;
+    }
+    if (debug_newval != NULL)
+    {
+	smsg((char_u *)_("Newval = \"%s\""), debug_newval);
+	vim_free(debug_newval);
+	debug_newval = NULL;
+    }
     if (sourcing_name != NULL)
 	msg(sourcing_name);
     if (sourcing_lnum != 0)
 	smsg((char_u *)_("line %ld: %s"), (long)sourcing_lnum, cmd);
     else
 	smsg((char_u *)_("cmd: %s"), cmd);
-
     /*
      * Repeat getting a command and executing it.
      */
@@ -528,11 +549,15 @@ dbg_check_skipped(exarg_T *eap)
 struct debuggy
 {
     int		dbg_nr;		/* breakpoint number */
-    int		dbg_type;	/* DBG_FUNC or DBG_FILE */
-    char_u	*dbg_name;	/* function or file name */
+    int		dbg_type;	/* DBG_FUNC, DBG_FILE or DBG_EXPR */
+    char_u	*dbg_name;	/* function, expression or file name */
     regprog_T	*dbg_prog;	/* regexp program */
     linenr_T	dbg_lnum;	/* line number in function or file */
     int		dbg_forceit;	/* ! used */
+#ifdef FEAT_EVAL
+    typval_T    *dbg_val;       /* last result of watchexpression */
+#endif
+    int		dbg_level;      /* stored nested level for expr */
 };
 
 static garray_T dbg_breakp = {0, 0, sizeof(struct debuggy), 4, NULL};
@@ -546,6 +571,7 @@ static garray_T prof_ga = {0, 0, sizeof(struct debuggy), 4, NULL};
 #endif
 #define DBG_FUNC	1
 #define DBG_FILE	2
+#define DBG_EXPR	3
 
 static int dbg_parsearg(char_u *arg, garray_T *gap);
 static linenr_T debuggy_find(int file,char_u *fname, linenr_T after, garray_T *gap, int *fp);
@@ -589,6 +615,12 @@ dbg_parsearg(
 	bp->dbg_type = DBG_FILE;
 	here = TRUE;
     }
+    else if (
+#ifdef FEAT_PROFILE
+	    gap != &prof_ga &&
+#endif
+	    STRNCMP(p, "expr", 4) == 0)
+	bp->dbg_type = DBG_EXPR;
     else
     {
 	EMSG2(_(e_invarg2), p);
@@ -624,6 +656,12 @@ dbg_parsearg(
 	bp->dbg_name = vim_strsave(p);
     else if (here)
 	bp->dbg_name = vim_strsave(curbuf->b_ffname);
+    else if (bp->dbg_type == DBG_EXPR)
+    {
+	bp->dbg_name = vim_strsave(p);
+	if (bp->dbg_name != NULL)
+	    bp->dbg_val = eval_expr(bp->dbg_name, NULL);
+    }
     else
     {
 	/* Expand the file name in the same way as do_source().  This means
@@ -671,26 +709,35 @@ ex_breakadd(exarg_T *eap)
 	bp = &DEBUGGY(gap, gap->ga_len);
 	bp->dbg_forceit = eap->forceit;
 
-	pat = file_pat_to_reg_pat(bp->dbg_name, NULL, NULL, FALSE);
-	if (pat != NULL)
+	if (bp->dbg_type != DBG_EXPR)
 	{
-	    bp->dbg_prog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
-	    vim_free(pat);
+	    pat = file_pat_to_reg_pat(bp->dbg_name, NULL, NULL, FALSE);
+	    if (pat != NULL)
+	    {
+		bp->dbg_prog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
+		vim_free(pat);
+	    }
+	    if (pat == NULL || bp->dbg_prog == NULL)
+		vim_free(bp->dbg_name);
+	    else
+	    {
+		if (bp->dbg_lnum == 0)	/* default line number is 1 */
+		    bp->dbg_lnum = 1;
+#ifdef FEAT_PROFILE
+		if (eap->cmdidx != CMD_profile)
+#endif
+		{
+		    DEBUGGY(gap, gap->ga_len).dbg_nr = ++last_breakp;
+		    ++debug_tick;
+		}
+		++gap->ga_len;
+	    }
 	}
-	if (pat == NULL || bp->dbg_prog == NULL)
-	    vim_free(bp->dbg_name);
 	else
 	{
-	    if (bp->dbg_lnum == 0)	/* default line number is 1 */
-		bp->dbg_lnum = 1;
-#ifdef FEAT_PROFILE
-	    if (eap->cmdidx != CMD_profile)
-#endif
-	    {
-		DEBUGGY(gap, gap->ga_len).dbg_nr = ++last_breakp;
-		++debug_tick;
-	    }
-	    ++gap->ga_len;
+	    /* DBG_EXPR */
+	    DEBUGGY(gap, gap->ga_len++).dbg_nr = ++last_breakp;
+	    ++debug_tick;
 	}
     }
 }
@@ -750,7 +797,7 @@ ex_breakdel(exarg_T *eap)
     }
     else
     {
-	/* ":breakdel {func|file} [lnum] {name}" */
+	/* ":breakdel {func|file|expr} [lnum] {name}" */
 	if (dbg_parsearg(eap->arg, gap) == FAIL)
 	    return;
 	bp = &DEBUGGY(gap, gap->ga_len);
@@ -778,6 +825,11 @@ ex_breakdel(exarg_T *eap)
 	while (gap->ga_len > 0)
 	{
 	    vim_free(DEBUGGY(gap, todel).dbg_name);
+#ifdef FEAT_EVAL
+	    if (DEBUGGY(gap, todel).dbg_type == DBG_EXPR
+		    && DEBUGGY(gap, todel).dbg_val != NULL)
+		free_tv(DEBUGGY(gap, todel).dbg_val);
+#endif
 	    vim_regfree(DEBUGGY(gap, todel).dbg_prog);
 	    --gap->ga_len;
 	    if (todel < gap->ga_len)
@@ -814,11 +866,15 @@ ex_breaklist(exarg_T *eap UNUSED)
 	    bp = &BREAKP(i);
 	    if (bp->dbg_type == DBG_FILE)
 		home_replace(NULL, bp->dbg_name, NameBuff, MAXPATHL, TRUE);
-	    smsg((char_u *)_("%3d  %s %s  line %ld"),
+	    if (bp->dbg_type != DBG_EXPR)
+		smsg((char_u *)_("%3d  %s %s  line %ld"),
 		    bp->dbg_nr,
 		    bp->dbg_type == DBG_FUNC ? "func" : "file",
 		    bp->dbg_type == DBG_FUNC ? bp->dbg_name : NameBuff,
 		    (long)bp->dbg_lnum);
+	    else
+		smsg((char_u *)_("%3d  expr %s"),
+		    bp->dbg_nr, bp->dbg_name);
 	}
 }
 
@@ -889,7 +945,8 @@ debuggy_find(
 	/* Skip entries that are not useful or are for a line that is beyond
 	 * an already found breakpoint. */
 	bp = &DEBUGGY(gap, i);
-	if (((bp->dbg_type == DBG_FILE) == file && (
+	if (((bp->dbg_type == DBG_FILE) == file &&
+		bp->dbg_type != DBG_EXPR && (
 #ifdef FEAT_PROFILE
 		gap == &prof_ga ||
 #endif
@@ -910,6 +967,63 @@ debuggy_find(
 	    }
 	    got_int |= prev_got_int;
 	}
+#ifdef FEAT_EVAL
+	else if (bp->dbg_type == DBG_EXPR)
+	{
+	    typval_T *tv;
+	    int	      line = FALSE;
+
+	    prev_got_int = got_int;
+	    got_int = FALSE;
+
+	    tv = eval_expr(bp->dbg_name, NULL);
+	    if (tv != NULL)
+	    {
+		if (bp->dbg_val == NULL)
+		{
+		    debug_oldval = typval_tostring(NULL);
+		    bp->dbg_val = tv;
+		    debug_newval = typval_tostring(bp->dbg_val);
+		    line = TRUE;
+		}
+		else
+		{
+		    if (typval_compare(tv, bp->dbg_val, TYPE_EQUAL,
+							     TRUE, FALSE) == OK
+			    && tv->vval.v_number == FALSE)
+		    {
+			typval_T *v;
+
+			line = TRUE;
+			debug_oldval = typval_tostring(bp->dbg_val);
+			/* Need to evaluate again, typval_compare() overwrites
+			 * "tv". */
+			v = eval_expr(bp->dbg_name, NULL);
+			debug_newval = typval_tostring(v);
+			free_tv(bp->dbg_val);
+			bp->dbg_val = v;
+		    }
+		    free_tv(tv);
+		}
+	    }
+	    else if (bp->dbg_val != NULL)
+	    {
+		debug_oldval = typval_tostring(bp->dbg_val);
+		debug_newval = typval_tostring(NULL);
+		free_tv(bp->dbg_val);
+		bp->dbg_val = NULL;
+		line = TRUE;
+	    }
+
+	    if (line)
+	    {
+		lnum = after > 0 ? after : 1;
+		break;
+	    }
+
+	    got_int |= prev_got_int;
+	}
+#endif
     }
     if (name != fname)
 	vim_free(name);
@@ -1298,7 +1412,6 @@ check_due_timer(void)
 	if (this_due <= 1)
 	{
 	    bevalexpr_due_set = FALSE;
-
 	    if (balloonEval == NULL)
 	    {
 		balloonEval = (BalloonEval *)alloc(sizeof(BalloonEval));
@@ -2433,7 +2546,6 @@ get_arglist_exp(
 }
 #endif
 
-#if defined(FEAT_GUI) || defined(FEAT_CLIENTSERVER) || defined(PROTO)
 /*
  * Redefine the argument list.
  */
@@ -2442,7 +2554,6 @@ set_arglist(char_u *str)
 {
     do_arglist(str, AL_SET, 0);
 }
-#endif
 
 /*
  * "what" == AL_SET: Redefine the argument list to 'str'.
@@ -3567,13 +3678,11 @@ source_all_matches(char_u *pat)
     }
 }
 
-/* used for "cookie" of add_pack_plugin() */
-static int APP_ADD_DIR;
-static int APP_LOAD;
-static int APP_BOTH;
-
-    static void
-add_pack_plugin(char_u *fname, void *cookie)
+/*
+ * Add the package directory to 'runtimepath'.
+ */
+    static int
+add_pack_dir_to_rtp(char_u *fname)
 {
     char_u  *p4, *p3, *p2, *p1, *p;
     char_u  *insp;
@@ -3582,125 +3691,154 @@ add_pack_plugin(char_u *fname, void *cookie)
     int	    keep;
     size_t  oldlen;
     size_t  addlen;
-    char_u  *afterdir;
+    char_u  *afterdir = NULL;
     size_t  afterlen = 0;
-    char_u  *ffname = fix_fname(fname);
+    char_u  *ffname = NULL;
     size_t  fname_len;
     char_u  *buf = NULL;
     char_u  *rtp_ffname;
     int	    match;
+    int	    retval = FAIL;
 
+    p4 = p3 = p2 = p1 = get_past_head(fname);
+    for (p = p1; *p; MB_PTR_ADV(p))
+	if (vim_ispathsep_nocolon(*p))
+	{
+	    p4 = p3; p3 = p2; p2 = p1; p1 = p;
+	}
+
+    /* now we have:
+     * rtp/pack/name/start/name
+     *    p4   p3   p2    p1
+     *
+     * find the part up to "pack" in 'runtimepath' */
+    c = *++p4; /* append pathsep in order to expand symlink */
+    *p4 = NUL;
+    ffname = fix_fname(fname);
+    *p4 = c;
     if (ffname == NULL)
-	return;
-    if (cookie != &APP_LOAD && strstr((char *)p_rtp, (char *)ffname) == NULL)
+	return FAIL;
+
+    /* Find "ffname" in "p_rtp", ignoring '/' vs '\' differences. */
+    fname_len = STRLEN(ffname);
+    insp = p_rtp;
+    buf = alloc(MAXPATHL);
+    if (buf == NULL)
+	goto theend;
+    while (*insp != NUL)
     {
-	/* directory is not yet in 'runtimepath', add it */
-	p4 = p3 = p2 = p1 = get_past_head(ffname);
-	for (p = p1; *p; MB_PTR_ADV(p))
-	    if (vim_ispathsep_nocolon(*p))
-	    {
-		p4 = p3; p3 = p2; p2 = p1; p1 = p;
-	    }
-
-	/* now we have:
-	 * rtp/pack/name/start/name
-	 *    p4   p3   p2    p1
-	 *
-	 * find the part up to "pack" in 'runtimepath' */
-	c = *p4;
-	*p4 = NUL;
-
-	/* Find "ffname" in "p_rtp", ignoring '/' vs '\' differences. */
-	fname_len = STRLEN(ffname);
-	insp = p_rtp;
-	buf = alloc(MAXPATHL);
-	if (buf == NULL)
+	copy_option_part(&insp, buf, MAXPATHL, ",");
+	add_pathsep(buf);
+	rtp_ffname = fix_fname(buf);
+	if (rtp_ffname == NULL)
 	    goto theend;
-	while (*insp != NUL)
-	{
-	    copy_option_part(&insp, buf, MAXPATHL, ",");
-	    add_pathsep(buf);
-	    rtp_ffname = fix_fname(buf);
-	    if (rtp_ffname == NULL)
-		goto theend;
-	    match = vim_fnamencmp(rtp_ffname, ffname, fname_len) == 0;
-	    vim_free(rtp_ffname);
-	    if (match)
-		break;
-	}
-
-	if (*insp == NUL)
-	    /* not found, append at the end */
-	    insp = p_rtp + STRLEN(p_rtp);
-	else
-	    /* append after the matching directory. */
-	    --insp;
-	*p4 = c;
-
-	/* check if rtp/pack/name/start/name/after exists */
-	afterdir = concat_fnames(ffname, (char_u *)"after", TRUE);
-	if (afterdir != NULL && mch_isdir(afterdir))
-	    afterlen = STRLEN(afterdir) + 1; /* add one for comma */
-
-	oldlen = STRLEN(p_rtp);
-	addlen = STRLEN(ffname) + 1; /* add one for comma */
-	new_rtp = alloc((int)(oldlen + addlen + afterlen + 1));
-							  /* add one for NUL */
-	if (new_rtp == NULL)
-	    goto theend;
-	keep = (int)(insp - p_rtp);
-	mch_memmove(new_rtp, p_rtp, keep);
-	new_rtp[keep] = ',';
-	mch_memmove(new_rtp + keep + 1, ffname, addlen);
-	if (p_rtp[keep] != NUL)
-	    mch_memmove(new_rtp + keep + addlen, p_rtp + keep,
-							   oldlen - keep + 1);
-	if (afterlen > 0)
-	{
-	    STRCAT(new_rtp, ",");
-	    STRCAT(new_rtp, afterdir);
-	}
-	set_option_value((char_u *)"rtp", 0L, new_rtp, 0);
-	vim_free(new_rtp);
-	vim_free(afterdir);
+	match = vim_fnamencmp(rtp_ffname, ffname, fname_len) == 0;
+	vim_free(rtp_ffname);
+	if (match)
+	    break;
     }
 
-    if (cookie != &APP_ADD_DIR)
+    if (*insp == NUL)
+	/* not found, append at the end */
+	insp = p_rtp + STRLEN(p_rtp);
+    else
+	/* append after the matching directory. */
+	--insp;
+
+    /* check if rtp/pack/name/start/name/after exists */
+    afterdir = concat_fnames(fname, (char_u *)"after", TRUE);
+    if (afterdir != NULL && mch_isdir(afterdir))
+	afterlen = STRLEN(afterdir) + 1; /* add one for comma */
+
+    oldlen = STRLEN(p_rtp);
+    addlen = STRLEN(fname) + 1; /* add one for comma */
+    new_rtp = alloc((int)(oldlen + addlen + afterlen + 1));
+    /* add one for NUL */
+    if (new_rtp == NULL)
+	goto theend;
+    keep = (int)(insp - p_rtp);
+    mch_memmove(new_rtp, p_rtp, keep);
+    new_rtp[keep] = ',';
+    mch_memmove(new_rtp + keep + 1, fname, addlen);
+    if (p_rtp[keep] != NUL)
+	mch_memmove(new_rtp + keep + addlen, p_rtp + keep, oldlen - keep + 1);
+    if (afterlen > 0)
     {
-	static char *plugpat = "%s/plugin/**/*.vim";
-	static char *ftpat = "%s/ftdetect/*.vim";
-	int	    len;
-	char_u	    *pat;
-
-	len = (int)STRLEN(ffname) + (int)STRLEN(ftpat);
-	pat = alloc(len);
-	if (pat == NULL)
-	    goto theend;
-	vim_snprintf((char *)pat, len, plugpat, ffname);
-	source_all_matches(pat);
-
-#ifdef FEAT_AUTOCMD
-	{
-	    char_u *cmd = vim_strsave((char_u *)"g:did_load_filetypes");
-
-	    /* If runtime/filetype.vim wasn't loaded yet, the scripts will be
-	     * found when it loads. */
-	    if (cmd != NULL && eval_to_number(cmd) > 0)
-	    {
-		do_cmdline_cmd((char_u *)"augroup filetypedetect");
-		vim_snprintf((char *)pat, len, ftpat, ffname);
-		source_all_matches(pat);
-		do_cmdline_cmd((char_u *)"augroup END");
-	    }
-	    vim_free(cmd);
-	}
-#endif
-	vim_free(pat);
+	STRCAT(new_rtp, ",");
+	STRCAT(new_rtp, afterdir);
     }
+    set_option_value((char_u *)"rtp", 0L, new_rtp, 0);
+    vim_free(new_rtp);
+    retval = OK;
 
 theend:
     vim_free(buf);
     vim_free(ffname);
+    vim_free(afterdir);
+    return retval;
+}
+
+/*
+ * Load scripts in "plugin" and "ftdetect" directories of the package.
+ */
+    static int
+load_pack_plugin(char_u *fname)
+{
+    static char *plugpat = "%s/plugin/**/*.vim";
+    static char *ftpat = "%s/ftdetect/*.vim";
+    int		len;
+    char_u	*ffname = fix_fname(fname);
+    char_u	*pat = NULL;
+    int		retval = FAIL;
+
+    if (ffname == NULL)
+	return FAIL;
+    len = (int)STRLEN(ffname) + (int)STRLEN(ftpat);
+    pat = alloc(len);
+    if (pat == NULL)
+	goto theend;
+    vim_snprintf((char *)pat, len, plugpat, ffname);
+    source_all_matches(pat);
+
+#ifdef FEAT_AUTOCMD
+    {
+	char_u *cmd = vim_strsave((char_u *)"g:did_load_filetypes");
+
+	/* If runtime/filetype.vim wasn't loaded yet, the scripts will be
+	 * found when it loads. */
+	if (cmd != NULL && eval_to_number(cmd) > 0)
+	{
+	    do_cmdline_cmd((char_u *)"augroup filetypedetect");
+	    vim_snprintf((char *)pat, len, ftpat, ffname);
+	    source_all_matches(pat);
+	    do_cmdline_cmd((char_u *)"augroup END");
+	}
+	vim_free(cmd);
+    }
+#endif
+    vim_free(pat);
+    retval = OK;
+
+theend:
+    vim_free(ffname);
+    return retval;
+}
+
+/* used for "cookie" of add_pack_plugin() */
+static int APP_ADD_DIR;
+static int APP_LOAD;
+static int APP_BOTH;
+
+    static void
+add_pack_plugin(char_u *fname, void *cookie)
+{
+    if (cookie != &APP_LOAD && strstr((char *)p_rtp, (char *)fname) == NULL)
+	/* directory is not yet in 'runtimepath', add it */
+	if (add_pack_dir_to_rtp(fname) == FAIL)
+	    return;
+
+    if (cookie != &APP_ADD_DIR)
+	load_pack_plugin(fname);
 }
 
 /*
@@ -5462,8 +5600,7 @@ free_locales(void)
     {
 	for (i = 0; locales[i] != NULL; i++)
 	    vim_free(locales[i]);
-	vim_free(locales);
-	locales = NULL;
+	VIM_CLEAR(locales);
     }
 }
 #  endif

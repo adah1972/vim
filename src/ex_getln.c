@@ -164,8 +164,7 @@ trigger_cmd_autocmd(int typechar, int evt)
     static void
 abandon_cmdline(void)
 {
-    vim_free(ccline.cmdbuff);
-    ccline.cmdbuff = NULL;
+    VIM_CLEAR(ccline.cmdbuff);
     if (msg_scrolled == 0)
 	compute_cmdrow();
     MSG("");
@@ -500,10 +499,7 @@ getcmdline(
 		&& c != K_KPAGEDOWN && c != K_KPAGEUP
 		&& c != K_LEFT && c != K_RIGHT
 		&& (xpc.xp_numfiles > 0 || (c != Ctrl_P && c != Ctrl_N)))
-	{
-	    vim_free(lookfor);
-	    lookfor = NULL;
-	}
+	    VIM_CLEAR(lookfor);
 #endif
 
 	/*
@@ -1096,8 +1092,7 @@ getcmdline(
 			    )
 			goto cmdline_not_changed;
 
-		    vim_free(ccline.cmdbuff);	/* no commandline to return */
-		    ccline.cmdbuff = NULL;
+		    VIM_CLEAR(ccline.cmdbuff);	/* no commandline to return */
 		    if (!cmd_silent)
 		    {
 #ifdef FEAT_RIGHTLEFT
@@ -1951,6 +1946,11 @@ cmdline_not_changed:
 #endif
 
 cmdline_changed:
+#ifdef FEAT_AUTOCMD
+	/* Trigger CmdlineChanged autocommands. */
+	trigger_cmd_autocmd(cmdline_type, EVENT_CMDLINECHANGED);
+#endif
+
 #ifdef FEAT_SEARCH_EXTRA
 	/*
 	 * 'incsearch' highlighting.
@@ -3678,10 +3678,7 @@ nextwild(
 			     || ccline.cmdbuff[i + j] == '?')
 			 break;
 		if ((int)STRLEN(p2) < j)
-		{
-		    vim_free(p2);
-		    p2 = NULL;
-		}
+		    VIM_CLEAR(p2);
 	    }
 	}
     }
@@ -3827,8 +3824,7 @@ ExpandOne(
     {
 	FreeWild(xp->xp_numfiles, xp->xp_files);
 	xp->xp_numfiles = -1;
-	vim_free(orig_save);
-	orig_save = NULL;
+	VIM_CLEAR(orig_save);
     }
     findex = 0;
 
@@ -5319,8 +5315,9 @@ ExpandUserDefined(
     char_u	*retstr;
     char_u	*s;
     char_u	*e;
-    char_u      keep;
+    int		keep;
     garray_T	ga;
+    int		skip;
 
     retstr = call_user_expand_func(call_func_retstr, xp, num_file, file);
     if (retstr == NULL)
@@ -5333,23 +5330,19 @@ ExpandUserDefined(
 	if (e == NULL)
 	    e = s + STRLEN(s);
 	keep = *e;
-	*e = 0;
+	*e = NUL;
 
-	if (xp->xp_pattern[0] && vim_regexec(regmatch, s, (colnr_T)0) == 0)
+	skip = xp->xp_pattern[0] && vim_regexec(regmatch, s, (colnr_T)0) == 0;
+	*e = keep;
+
+	if (!skip)
 	{
-	    *e = keep;
-	    if (*e != NUL)
-		++e;
-	    continue;
+	    if (ga_grow(&ga, 1) == FAIL)
+		break;
+	    ((char_u **)ga.ga_data)[ga.ga_len] = vim_strnsave(s, (int)(e - s));
+	    ++ga.ga_len;
 	}
 
-	if (ga_grow(&ga, 1) == FAIL)
-	    break;
-
-	((char_u **)ga.ga_data)[ga.ga_len] = vim_strnsave(s, (int)(e - s));
-	++ga.ga_len;
-
-	*e = keep;
 	if (*e != NUL)
 	    ++e;
     }
@@ -6732,8 +6725,7 @@ finish_viminfo_history(vir_T *virp)
 	else
 	    concat_history(type);
 
-	vim_free(viminfo_history[type]);
-	viminfo_history[type] = NULL;
+	VIM_CLEAR(viminfo_history[type]);
 	viminfo_hisidx[type] = 0;
     }
 }
@@ -6857,8 +6849,7 @@ write_viminfo_history(FILE *fp, int merge)
 	for (i = 0; i < viminfo_hisidx[type]; ++i)
 	    if (viminfo_history[type] != NULL)
 		vim_free(viminfo_history[type][i].hisstr);
-	vim_free(viminfo_history[type]);
-	viminfo_history[type] = NULL;
+	VIM_CLEAR(viminfo_history[type]);
 	viminfo_hisidx[type] = 0;
     }
 }

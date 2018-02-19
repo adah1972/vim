@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.0.  Last change: 2017 Dec 21
+*options.txt*	For Vim version 8.0.  Last change: 2018 Feb 03
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -5955,6 +5955,16 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Insert mode completion.  When zero as much space as available is used.
 	|ins-completion-menu|.
 
+						*'pumwidth'* *'pw'*
+'pumwidth' 'pw'		number	(default 0)
+			global
+			{not available when compiled without the
+			|+insert_expand| feature}
+			{not in Vi}
+	Determines the minium width to use for the popup menu for Insert mode
+	completion.  When zero the default of 15 screen cells is used.
+	|ins-completion-menu|.
+
 						*'pythondll'*
 'pythondll'		string	(default depends on the build)
 			global
@@ -5967,6 +5977,20 @@ A jump table for the options with a short description can be found at |Q_op|.
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
+						*'pythonhome'*
+'pythonhome'		string	(default "")
+			global
+			{not in Vi}
+			{only available when compiled with the |+python/dyn|
+			feature}
+	Specifies the name of the Python 2.x home directory. When 'pythonhome'
+	and the PYTHONHOME environment variable are not set, PYTHON_HOME,
+	which was specified at compile time, will be used for the Python 2.x
+	home directory.
+	Environment variables are expanded |:set_env|.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
+
 						*'pythonthreedll'*
 'pythonthreedll'	string	(default depends on the build)
 			global
@@ -5975,6 +5999,20 @@ A jump table for the options with a short description can be found at |Q_op|.
 			feature}
 	Specifies the name of the Python 3 shared library. The default is
 	DYNAMIC_PYTHON3_DLL, which was specified at compile time.
+	Environment variables are expanded |:set_env|.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
+
+						*'pythonthreehome'*
+'pythonthreehome'	string	(default "")
+			global
+			{not in Vi}
+			{only available when compiled with the |+python3/dyn|
+			feature}
+	Specifies the name of the Python 3 home directory. When
+	'pythonthreehome' and the PYTHONHOME environment variable are not set,
+	PYTHON3_HOME, which was specified at compile time, will be used for
+	the Python 3 home directory.
 	Environment variables are expanded |:set_env|.
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
@@ -6122,7 +6160,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		  geom	    pixelGeometry	int	0 - 2 (see below)
 		  renmode   renderingMode	int	0 - 6 (see below)
 		  taamode   textAntialiasMode	int	0 - 3 (see below)
-		  scrlines  Scroll Lines	int	>= 0  (see below)
+		  scrlines  Scroll Lines	int	(deprecated)
 
 		See this URL for detail (except for scrlines):
 		  https://msdn.microsoft.com/en-us/library/dd368190.aspx
@@ -6156,23 +6194,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 		See this URL for detail:
 		  https://msdn.microsoft.com/en-us/library/dd368170.aspx
 
-		For scrlines: threshold for lines to be scrolled.
-		    0 - Always use scrolling. (default)
-		    1 - Use full page redrawing.
-		  > 1 - If the lines to be scrolled is grater or equal to the
-			specified value, use redrawing.  Otherwise use
-			scrolling.
-
-		If you feel scrolling a page (CTRL-F) is too slow with DirectX
-		renderer, try this "scrlines" option.
-		When set it "1", Vim uses full page redrawing instead of
-		scrolling.  Redrawing a page is faster than scrolling a
-		page in some environments.
-		After that, when you feel scrolling lines (CTRL-Y) becomes
-		slow, please try "2" or greater value for this option.
-		It works threshold line number to switch scrolling to
-		redrawing.  Scrolling a few lines might be faster than
-		redrawing a page in some environments.
+		For scrlines:
+		This was used for optimizing scrolling behavior, however this
+		is now deprecated.  If specified, it is simply ignored.
 
 		Example: >
 		  set encoding=utf-8
@@ -6616,14 +6640,21 @@ A jump table for the options with a short description can be found at |Q_op|.
 	It is allowed to give an argument to the command, e.g.  "csh -f".
 	See |option-backslash| about including spaces and backslashes.
 	Environment variables are expanded |:set_env|.
+
 	If the name of the shell contains a space, you might need to enclose
-	it in quotes.  Example: >
+	it in quotes or escape the space.  Example with quotes: >
 		:set shell=\"c:\program\ files\unix\sh.exe\"\ -f
 <	Note the backslash before each quote (to avoid starting a comment) and
 	each space (to avoid ending the option value).  Also note that the
 	"-f" is not inside the quotes, because it is not part of the command
-	name.  And Vim automagically recognizes the backslashes that are path
+	name.  Vim automagically recognizes the backslashes that are path
 	separators.
+	Example with escaped space (Vim will do this when initializing the
+	option from $SHELL): >
+		:set shell=/bin/with\\\ space/sh
+<	The resulting value of 'shell' is  "/bin/with\ space/sh", two
+	backslashes are consumed by `:set`.
+
 	Under MS-Windows, when the executable ends in ".com" it must be
 	included.  Thus setting the shell to "command.com" or "4dos.com"
 	works, but "command" and "4dos" do not work for all commands (e.g.,

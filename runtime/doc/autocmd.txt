@@ -1,4 +1,4 @@
-*autocmd.txt*   For Vim version 8.0.  Last change: 2017 Dec 17
+*autocmd.txt*   For Vim version 8.0.  Last change: 2018 Feb 10
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -33,7 +33,7 @@ files matching *.c.  You can also use autocommands to implement advanced
 features, such as editing compressed files (see |gzip-example|).  The usual
 place to put autocommands is in your .vimrc or .exrc file.
 
-					*E203* *E204* *E143* *E855* *E937*
+				*E203* *E204* *E143* *E855* *E937* *E952*
 WARNING: Using autocommands is very powerful, and may lead to unexpected side
 effects.  Be careful not to destroy your text.
 - It's a good idea to do some testing on an expendable copy of a file first.
@@ -295,6 +295,8 @@ Name			triggered by ~
 |FileChangedShellPost|	After handling a file changed since editing started
 |FileChangedRO|		before making the first change to a read-only file
 
+|DirChanged|		after the working directory has changed
+
 |ShellCmdPost|		after executing a shell command
 |ShellFilterPost|	after filtering with a shell command
 
@@ -330,6 +332,9 @@ Name			triggered by ~
 
 |TextChanged|		after a change was made to the text in Normal mode
 |TextChangedI|		after a change was made to the text in Insert mode
+			when popup menu is not visible
+|TextChangedP|		after a change was made to the text in Insert mode
+			when popup menu visible
 |TextYankPost|		after text is yanked or deleted
 
 |ColorScheme|		after loading a color scheme
@@ -500,6 +505,13 @@ CmdUndefined			When a user command is used but it isn't
 				command is defined.  An alternative is to
 				always define the user command and have it
 				invoke an autoloaded function.  See |autoload|.
+							*CmdlineChanged*
+CmdlineChanged			After a change was made to the text inside
+				command line.  Be careful not to mess up the
+				command line, it may cause Vim to lock up.
+				<afile> is set to a single character,
+				indicating the type of command-line.
+				|cmdwin-char|
 							*CmdlineEnter*
 CmdlineEnter			After moving the cursor to the command line,
 				where the user can type a command or search
@@ -626,6 +638,16 @@ FileChangedRO			Before making the first change to a read-only
 							*E881*
 				If the number of lines changes saving for undo
 				may fail and the change will be aborted.
+							*DirChanged*
+DirChanged			The working directory has changed in response
+				to the |:cd| or |:lcd| commands, or as a
+				result of the 'autochdir' option.
+				The pattern can be:
+					"window" to trigger on `:lcd
+					"global" to trigger on `:cd`
+					"auto"   to trigger on 'autochdir'.
+					"drop"	 to trigger on editing a file
+				<afile> is set to the new directory name.
 							*FileChangedShell*
 FileChangedShell		When Vim notices that the modification time of
 				a file has changed since editing started.
@@ -957,6 +979,11 @@ TextChangedI			After a change was made to the text in the
 				current buffer in Insert mode.
 				Not triggered when the popup menu is visible.
 				Otherwise the same as TextChanged.
+							*TextChangedP*
+TextChangedP			After a change was made to the text in the
+				current buffer in Insert mode, only when the
+				popup menu is visible.  Otherwise the same as
+				TextChanged.
 							*TextYankPost*
 TextYankPost			After text has been yanked or deleted in the
 				current buffer.  The following values of

@@ -2457,7 +2457,7 @@ del_chars(long count, int fixpos)
  * If "fixpos" is TRUE, don't leave the cursor on the NUL after the line.
  * Caller must have prepared for undo.
  *
- * return FAIL for failure, OK otherwise
+ * Return FAIL for failure, OK otherwise.
  */
     int
 del_bytes(
@@ -2476,11 +2476,20 @@ del_bytes(
     oldp = ml_get(lnum);
     oldlen = (int)STRLEN(oldp);
 
-    /*
-     * Can't do anything when the cursor is on the NUL after the line.
-     */
+    /* Can't do anything when the cursor is on the NUL after the line. */
     if (col >= oldlen)
 	return FAIL;
+
+    /* If "count" is zero there is nothing to do. */
+    if (count == 0)
+	return OK;
+
+    /* If "count" is negative the caller must be doing something wrong. */
+    if (count < 1)
+    {
+	IEMSGN("E950: Invalid count for del_bytes(): %ld", count);
+	return FAIL;
+    }
 
 #ifdef FEAT_MBYTE
     /* If 'delcombine' is set and deleting (less than) one character, only
@@ -3679,6 +3688,10 @@ beep_flush(void)
 vim_beep(
     unsigned val) /* one of the BO_ values, e.g., BO_OPER */
 {
+#ifdef FEAT_EVAL
+    called_vim_beep = TRUE;
+#endif
+
     if (emsg_silent == 0)
     {
 	if (!((bo_flags & val) || (bo_flags & BO_ALL)))
@@ -3709,8 +3722,9 @@ vim_beep(
 #endif
 	}
 
-	/* When 'verbose' is set and we are sourcing a script or executing a
-	 * function give the user a hint where the beep comes from. */
+	/* When 'debug' contains "beep" produce a message.  If we are sourcing
+	 * a script or executing a function give the user a hint where the beep
+	 * comes from. */
 	if (vim_strchr(p_debug, 'e') != NULL)
 	{
 	    msg_source(HL_ATTR(HLF_W));
@@ -3736,8 +3750,7 @@ init_homedir(void)
     char_u  *var;
 
     /* In case we are called a second time (when 'encoding' changes). */
-    vim_free(homedir);
-    homedir = NULL;
+    VIM_CLEAR(homedir);
 
 #ifdef VMS
     var = mch_getenv((char_u *)"SYS$LOGIN");
@@ -4349,10 +4362,7 @@ vim_getenv(char_u *name, int *mustfree)
 		p = vim_strnsave(p, (int)(pend - p));
 
 	    if (p != NULL && !mch_isdir(p))
-	    {
-		vim_free(p);
-		p = NULL;
-	    }
+		VIM_CLEAR(p);
 	    else
 	    {
 #ifdef USE_EXE_NAME
@@ -9766,8 +9776,7 @@ expand_wildcards(
 	/* If the number of matches is now zero, we fail. */
 	if (*num_files == 0)
 	{
-	    vim_free(*files);
-	    *files = NULL;
+	    VIM_CLEAR(*files);
 	    return FAIL;
 	}
     }
@@ -10022,10 +10031,7 @@ dos_expandpath(
 	    hFind = FindFirstFileW(wn, &wfb);
 	    if (hFind == INVALID_HANDLE_VALUE
 			      && GetLastError() == ERROR_CALL_NOT_IMPLEMENTED)
-	    {
-		vim_free(wn);
-		wn = NULL;
-	    }
+		VIM_CLEAR(wn);
 	}
     }
 
@@ -10113,8 +10119,7 @@ dos_expandpath(
 # endif
 		hFind = FindFirstFile((LPCSTR)buf, &fb);
 	    ok = (hFind != INVALID_HANDLE_VALUE);
-	    vim_free(matchname);
-	    matchname = NULL;
+	    VIM_CLEAR(matchname);
 	}
     }
 
@@ -10761,6 +10766,7 @@ expand_in_path(
     char_u	*curdir;
     garray_T	path_ga;
     char_u	*paths = NULL;
+    int		glob_flags = 0;
 
     if ((curdir = alloc((unsigned)MAXPATHL)) == NULL)
 	return 0;
@@ -10777,7 +10783,11 @@ expand_in_path(
     if (paths == NULL)
 	return 0;
 
-    globpath(paths, pattern, gap, (flags & EW_ICASE) ? WILD_ICASE : 0);
+    if (flags & EW_ICASE)
+	glob_flags |= WILD_ICASE;
+    if (flags & EW_ADDSLASH)
+	glob_flags |= WILD_ADD_SLASH;
+    globpath(paths, pattern, gap, glob_flags);
     vim_free(paths);
 
     return gap->ga_len;
@@ -11242,8 +11252,7 @@ get_cmd_output(
     if (i != len)
     {
 	EMSG2(_(e_notread), tempname);
-	vim_free(buffer);
-	buffer = NULL;
+	VIM_CLEAR(buffer);
     }
     else if (ret_len == NULL)
     {
