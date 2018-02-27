@@ -699,6 +699,13 @@ static char *(features[]) =
 #else
 	"-vreplace",
 #endif
+#ifdef WIN3264
+# ifdef FEAT_VTP
+	"+vtp",
+# else
+	"-vtp",
+# endif
+#endif
 #ifdef FEAT_WILDIGN
 	"+wildignore",
 #else
@@ -771,6 +778,44 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    1542,
+/**/
+    1541,
+/**/
+    1540,
+/**/
+    1539,
+/**/
+    1538,
+/**/
+    1537,
+/**/
+    1536,
+/**/
+    1535,
+/**/
+    1534,
+/**/
+    1533,
+/**/
+    1532,
+/**/
+    1531,
+/**/
+    1530,
+/**/
+    1529,
+/**/
+    1528,
+/**/
+    1527,
+/**/
+    1526,
+/**/
+    1525,
+/**/
+    1524,
 /**/
     1523,
 /**/

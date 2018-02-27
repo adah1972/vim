@@ -145,30 +145,32 @@ static char *(spo_name_tab[SPO_COUNT]) =
  *
  * A character offset can be given for the matched text (_m_start and _m_end)
  * and for the actually highlighted text (_h_start and _h_end).
+ *
+ * Note that ordering of members is optimized to reduce padding.
  */
 typedef struct syn_pattern
 {
     char	 sp_type;		/* see SPTYPE_ defines below */
     char	 sp_syncing;		/* this item used for syncing */
+    short	 sp_syn_match_id;	/* highlight group ID of pattern */
+    short	 sp_off_flags;		/* see below */
+    int		 sp_offsets[SPO_COUNT];	/* offsets */
     int		 sp_flags;		/* see HL_ defines below */
 #ifdef FEAT_CONCEAL
     int		 sp_cchar;		/* conceal substitute character */
 #endif
+    int		 sp_ic;			/* ignore-case flag for sp_prog */
+    int		 sp_sync_idx;		/* sync item index (syncing only) */
+    int		 sp_line_id;		/* ID of last line where tried */
+    int		 sp_startcol;		/* next match in sp_line_id line */
+    short	*sp_cont_list;		/* cont. group IDs, if non-zero */
+    short	*sp_next_list;		/* next group IDs, if non-zero */
     struct sp_syn sp_syn;		/* struct passed to in_id_list() */
-    short	 sp_syn_match_id;	/* highlight group ID of pattern */
     char_u	*sp_pattern;		/* regexp to match, pattern */
     regprog_T	*sp_prog;		/* regexp to match, program */
 #ifdef FEAT_PROFILE
     syn_time_T	 sp_time;
 #endif
-    int		 sp_ic;			/* ignore-case flag for sp_prog */
-    short	 sp_off_flags;		/* see below */
-    int		 sp_offsets[SPO_COUNT];	/* offsets */
-    short	*sp_cont_list;		/* cont. group IDs, if non-zero */
-    short	*sp_next_list;		/* next group IDs, if non-zero */
-    int		 sp_sync_idx;		/* sync item index (syncing only) */
-    int		 sp_line_id;		/* ID of last line where tried */
-    int		 sp_startcol;		/* next match in sp_line_id line */
 } synpat_T;
 
 /* The sp_off_flags are computed like this:
@@ -6814,7 +6816,6 @@ syntime_report(void)
     MSG_PUTS("\n");
     for (idx = 0; idx < ga.ga_len && !got_int; ++idx)
     {
-	spp = &(SYN_ITEMS(curwin->w_s)[idx]);
 	p = ((time_entry_T *)ga.ga_data) + idx;
 
 	MSG_PUTS(profile_msg(&p->total));
@@ -8928,6 +8929,10 @@ get_cterm_attr_idx(int attr, int fg, int bg)
     attrentry_T		at_en;
 
     vim_memset(&at_en, 0, sizeof(attrentry_T));
+#ifdef FEAT_TERMGUICOLORS
+    at_en.ae_u.cterm.fg_rgb = INVALCOLOR;
+    at_en.ae_u.cterm.bg_rgb = INVALCOLOR;
+#endif
     at_en.ae_attr = attr;
     at_en.ae_u.cterm.fg_color = fg;
     at_en.ae_u.cterm.bg_color = bg;
@@ -9567,6 +9572,23 @@ set_hl_attr(
 	at_en.ae_u.cterm.fg_color = sgp->sg_cterm_fg;
 	at_en.ae_u.cterm.bg_color = sgp->sg_cterm_bg;
 # ifdef FEAT_TERMGUICOLORS
+#  ifdef WIN3264
+	{
+	    int id;
+	    guicolor_T fg, bg;
+
+	    id = syn_name2id((char_u *)"Normal");
+	    if (id > 0)
+	    {
+		syn_id2colors(id, &fg, &bg);
+		if (sgp->sg_gui_fg == INVALCOLOR)
+		    sgp->sg_gui_fg = fg;
+		if (sgp->sg_gui_bg == INVALCOLOR)
+		    sgp->sg_gui_bg = bg;
+	    }
+
+	}
+#  endif
 	at_en.ae_u.cterm.fg_rgb = GUI_MCH_GET_RGB2(sgp->sg_gui_fg);
 	at_en.ae_u.cterm.bg_rgb = GUI_MCH_GET_RGB2(sgp->sg_gui_bg);
 # endif

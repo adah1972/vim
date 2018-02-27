@@ -2177,6 +2177,25 @@ win_update(win_T *wp)
      * End of loop over all window lines.
      */
 
+#ifdef FEAT_VTP
+    /* Rewrite the character at the end of the screen line. */
+    if (use_vtp())
+    {
+	int i;
+
+	for (i = 0; i < Rows; ++i)
+# ifdef FEAT_MBYTE
+	    if (enc_utf8)
+		if ((*mb_off2cells)(LineOffset[i] + Columns - 2,
+					   LineOffset[i] + screen_Columns) > 1)
+		    screen_draw_rectangle(i, Columns - 2, 1, 2, FALSE);
+		else
+		    screen_draw_rectangle(i, Columns - 1, 1, 1, FALSE);
+	    else
+# endif
+		screen_char(LineOffset[i] + Columns - 1, i, Columns - 1);
+    }
+#endif
 
     if (idx > wp->w_lines_valid)
 	wp->w_lines_valid = idx;
@@ -10182,7 +10201,7 @@ screen_del_lines(
 }
 
 /*
- * show the current mode and ruler
+ * Show the current mode and ruler.
  *
  * If clear_cmdline is TRUE, clear the rest of the cmdline.
  * If clear_cmdline is FALSE there may be a message there that needs to be
@@ -10291,7 +10310,6 @@ showmode(void)
 			msg_puts_attr(edit_submode_extra, sub_attr);
 		    }
 		}
-		length = 0;
 	    }
 	    else
 #endif
