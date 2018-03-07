@@ -1123,7 +1123,7 @@ GetRegProp(
  * This procedure is invoked by the various X event loops throughout Vims when
  * a property changes on the communication window.  This procedure reads the
  * property and enqueues command requests and responses. If immediate is true,
- * it runs the event immediatly instead of enqueuing it. Immediate can cause
+ * it runs the event immediately instead of enqueuing it. Immediate can cause
  * unintended behavior and should only be used for code that blocks for a
  * response.
  */
@@ -1480,14 +1480,12 @@ server_parse_message(
 		ga_concat(&(r->strings), str);
 		ga_append(&(r->strings), NUL);
 	    }
-#ifdef FEAT_AUTOCMD
 	    {
 		char_u	winstr[30];
 
 		sprintf((char *)winstr, "0x%x", (unsigned int)win);
 		apply_autocmds(EVENT_REMOTEREPLY, winstr, str, TRUE, curbuf);
 	    }
-#endif
 	    vim_free(tofree);
 	}
 	else

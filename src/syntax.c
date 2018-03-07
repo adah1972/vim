@@ -2470,7 +2470,8 @@ syn_current_attr(
 
     /* nextgroup ends at end of line, unless "skipnl" or "skipempty" present */
     if (current_next_list != NULL
-	    && syn_getcurline()[current_col + 1] == NUL
+	    && (line = syn_getcurline())[current_col] != NUL
+	    && line[current_col + 1] == NUL
 	    && !(current_next_flags & (HL_SKIPNL | HL_SKIPEMPTY)))
 	current_next_list = NULL;
 
@@ -6419,11 +6420,9 @@ ex_ownsyntax(exarg_T *eap)
     if (old_value != NULL)
 	old_value = vim_strsave(old_value);
 
-#ifdef FEAT_AUTOCMD
     /* Apply the "syntax" autocommand event, this finds and loads the syntax
      * file. */
     apply_autocmds(EVENT_SYNTAX, eap->arg, curbuf->b_fname, TRUE, curbuf);
-#endif
 
     /* move value of b:current_syntax to w:current_syntax */
     new_value = get_var_value((char_u *)"b:current_syntax");
@@ -6994,10 +6993,8 @@ static char *(highlight_init_light[]) = {
     CENT("Conceal ctermbg=DarkGrey ctermfg=LightGrey",
 	 "Conceal ctermbg=DarkGrey ctermfg=LightGrey guibg=DarkGrey guifg=LightGrey"),
 #endif
-#ifdef FEAT_AUTOCMD
     CENT("MatchParen term=reverse ctermbg=Cyan",
 	 "MatchParen term=reverse ctermbg=Cyan guibg=Cyan"),
-#endif
 #ifdef FEAT_GUI
     "Normal gui=NONE",
 #endif
@@ -7088,10 +7085,8 @@ static char *(highlight_init_dark[]) = {
     CENT("ColorColumn term=reverse ctermbg=DarkRed",
 	 "ColorColumn term=reverse ctermbg=DarkRed guibg=DarkRed"),
 #endif
-#ifdef FEAT_AUTOCMD
     CENT("MatchParen term=reverse ctermbg=DarkCyan",
 	 "MatchParen term=reverse ctermbg=DarkCyan guibg=DarkCyan"),
-#endif
 #ifdef FEAT_CONCEAL
     CENT("Conceal ctermbg=DarkGrey ctermfg=LightGrey",
 	 "Conceal ctermbg=DarkGrey ctermfg=LightGrey guibg=DarkGrey guifg=LightGrey"),
@@ -7232,9 +7227,7 @@ load_colors(char_u *name)
 	sprintf((char *)buf, "colors/%s.vim", name);
 	retval = source_runtime(buf, DIP_START + DIP_OPT);
 	vim_free(buf);
-#ifdef FEAT_AUTOCMD
 	apply_autocmds(EVENT_COLORSCHEME, name, curbuf->b_fname, FALSE, curbuf);
-#endif
     }
     recursive = FALSE;
 
@@ -8411,10 +8404,10 @@ highlight_clear(int idx)
     void
 set_normal_colors(void)
 {
-#ifdef FEAT_GUI
-# ifdef FEAT_TERMGUICOLORS
+# ifdef FEAT_GUI
+#  ifdef FEAT_TERMGUICOLORS
     if (gui.in_use)
-# endif
+#  endif
     {
 	if (set_group_colors((char_u *)"Normal",
 				 &gui.norm_pixel, &gui.back_pixel,
@@ -8423,27 +8416,27 @@ set_normal_colors(void)
 	    gui_mch_new_colors();
 	    must_redraw = CLEAR;
 	}
-# ifdef FEAT_GUI_X11
+#  ifdef FEAT_GUI_X11
 	if (set_group_colors((char_u *)"Menu",
 			     &gui.menu_fg_pixel, &gui.menu_bg_pixel,
 			     TRUE, FALSE, FALSE))
 	{
-#  ifdef FEAT_MENU
+#   ifdef FEAT_MENU
 	    gui_mch_new_menu_colors();
-#  endif
+#   endif
 	    must_redraw = CLEAR;
 	}
-#  ifdef FEAT_BEVAL_GUI
+#   ifdef FEAT_BEVAL_GUI
 	if (set_group_colors((char_u *)"Tooltip",
 			     &gui.tooltip_fg_pixel, &gui.tooltip_bg_pixel,
 			     FALSE, FALSE, TRUE))
 	{
-#   ifdef FEAT_TOOLBAR
+#    ifdef FEAT_TOOLBAR
 	    gui_mch_new_tooltip_colors();
-#   endif
+#    endif
 	    must_redraw = CLEAR;
 	}
-#  endif
+#   endif
 	if (set_group_colors((char_u *)"Scrollbar",
 			&gui.scroll_fg_pixel, &gui.scroll_bg_pixel,
 			FALSE, FALSE, FALSE))
@@ -8451,13 +8444,13 @@ set_normal_colors(void)
 	    gui_new_scrollbar_colors();
 	    must_redraw = CLEAR;
 	}
-# endif
+#  endif
     }
-#endif
-#ifdef FEAT_TERMGUICOLORS
-# ifdef FEAT_GUI
-    else
 # endif
+# ifdef FEAT_TERMGUICOLORS
+#  ifdef FEAT_GUI
+    else
+#  endif
     {
 	int		idx;
 
@@ -8466,19 +8459,20 @@ set_normal_colors(void)
 	{
 	    gui_do_one_color(idx, FALSE, FALSE);
 
-	    if (HL_TABLE()[idx].sg_gui_fg != INVALCOLOR)
+	    /* If the normal fg or bg color changed a complete redraw is
+	     * required. */
+	    if (cterm_normal_fg_gui_color != HL_TABLE()[idx].sg_gui_fg
+		    || cterm_normal_bg_gui_color != HL_TABLE()[idx].sg_gui_bg)
 	    {
+		/* if the GUI color is INVALCOLOR then we use the default cterm
+		 * color */
 		cterm_normal_fg_gui_color = HL_TABLE()[idx].sg_gui_fg;
-		must_redraw = CLEAR;
-	    }
-	    if (HL_TABLE()[idx].sg_gui_bg != INVALCOLOR)
-	    {
 		cterm_normal_bg_gui_color = HL_TABLE()[idx].sg_gui_bg;
 		must_redraw = CLEAR;
 	    }
 	}
     }
-#endif
+# endif
 }
 #endif
 
@@ -8951,8 +8945,18 @@ get_tgc_attr_idx(int attr, guicolor_T fg, guicolor_T bg)
 
     vim_memset(&at_en, 0, sizeof(attrentry_T));
     at_en.ae_attr = attr;
-    at_en.ae_u.cterm.fg_rgb = fg;
-    at_en.ae_u.cterm.bg_rgb = bg;
+    if (fg == INVALCOLOR && bg == INVALCOLOR)
+    {
+	/* If both GUI colors are not set fall back to the cterm colors.  Helps
+	 * if the GUI only has an attribute, such as undercurl. */
+	at_en.ae_u.cterm.fg_rgb = CTERMCOLOR;
+	at_en.ae_u.cterm.bg_rgb = CTERMCOLOR;
+    }
+    else
+    {
+	at_en.ae_u.cterm.fg_rgb = fg;
+	at_en.ae_u.cterm.bg_rgb = bg;
+    }
     return get_attr_entry(&cterm_attr_table, &at_en);
 }
 #endif
@@ -9093,10 +9097,23 @@ hl_combine_attr(int char_attr, int prim_attr)
 		if (spell_aep->ae_u.cterm.bg_color > 0)
 		    new_en.ae_u.cterm.bg_color = spell_aep->ae_u.cterm.bg_color;
 #ifdef FEAT_TERMGUICOLORS
-		if (spell_aep->ae_u.cterm.fg_rgb != INVALCOLOR)
-		    new_en.ae_u.cterm.fg_rgb = spell_aep->ae_u.cterm.fg_rgb;
-		if (spell_aep->ae_u.cterm.bg_rgb != INVALCOLOR)
-		    new_en.ae_u.cterm.bg_rgb = spell_aep->ae_u.cterm.bg_rgb;
+		/* If both fg and bg are not set fall back to cterm colors.
+		 * Helps for SpellBad which uses undercurl in the GUI. */
+		if (COLOR_INVALID(spell_aep->ae_u.cterm.fg_rgb)
+			&& COLOR_INVALID(spell_aep->ae_u.cterm.bg_rgb))
+		{
+		    if (spell_aep->ae_u.cterm.fg_color > 0)
+			new_en.ae_u.cterm.fg_rgb = CTERMCOLOR;
+		    if (spell_aep->ae_u.cterm.bg_color > 0)
+			new_en.ae_u.cterm.bg_rgb = CTERMCOLOR;
+		}
+		else
+		{
+		    if (spell_aep->ae_u.cterm.fg_rgb != INVALCOLOR)
+			new_en.ae_u.cterm.fg_rgb = spell_aep->ae_u.cterm.fg_rgb;
+		    if (spell_aep->ae_u.cterm.bg_rgb != INVALCOLOR)
+			new_en.ae_u.cterm.bg_rgb = spell_aep->ae_u.cterm.bg_rgb;
+		}
 #endif
 	    }
 	}
@@ -9591,6 +9608,14 @@ set_hl_attr(
 #  endif
 	at_en.ae_u.cterm.fg_rgb = GUI_MCH_GET_RGB2(sgp->sg_gui_fg);
 	at_en.ae_u.cterm.bg_rgb = GUI_MCH_GET_RGB2(sgp->sg_gui_bg);
+	if (at_en.ae_u.cterm.fg_rgb == INVALCOLOR
+		&& at_en.ae_u.cterm.bg_rgb == INVALCOLOR)
+	{
+	    /* If both fg and bg are invalid fall back to the cterm colors.
+	     * Helps when the GUI only uses an attribute, e.g. undercurl. */
+	    at_en.ae_u.cterm.fg_rgb = CTERMCOLOR;
+	    at_en.ae_u.cterm.bg_rgb = CTERMCOLOR;
+	}
 # endif
 	sgp->sg_cterm_attr = get_attr_entry(&cterm_attr_table, &at_en);
     }
@@ -9867,9 +9892,10 @@ syn_get_final_id(int hl_id)
     return hl_id;
 }
 
-#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS) || defined(PROTO)
 /*
  * Call this function just after the GUI has started.
+ * Also called when 'termguicolors' was set, gui.in_use will be FALSE then.
  * It finds the font and color handles for the highlighting groups.
  */
     void
@@ -9878,12 +9904,8 @@ highlight_gui_started(void)
     int	    idx;
 
     /* First get the colors from the "Normal" and "Menu" group, if set */
-# if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
-#  ifdef FEAT_TERMGUICOLORS
     if (USE_24BIT)
-#  endif
 	set_normal_colors();
-# endif
 
     for (idx = 0; idx < highlight_ga.ga_len; ++idx)
 	gui_do_one_color(idx, FALSE, FALSE);

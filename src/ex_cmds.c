@@ -28,9 +28,7 @@ static int read_viminfo_up_to_marks(vir_T *virp, int forceit, int writing);
 #endif
 
 static int check_readonly(int *forceit, buf_T *buf);
-#ifdef FEAT_AUTOCMD
 static void delbuf_msg(char_u *name);
-#endif
 static int
 #ifdef __BORLANDC__
     _RTLENTRYF
@@ -49,6 +47,9 @@ do_ascii(exarg_T *eap UNUSED)
     char	buf1[20];
     char	buf2[20];
     char_u	buf3[7];
+#ifdef FEAT_DIGRAPHS
+    char_u      *dig;
+#endif
 #ifdef FEAT_MBYTE
     int		cc[MAX_MCO];
     int		ci = 0;
@@ -94,7 +95,15 @@ do_ascii(exarg_T *eap UNUSED)
 	else
 #endif
 	    buf2[0] = NUL;
-	vim_snprintf((char *)IObuff, IOSIZE,
+#ifdef FEAT_DIGRAPHS
+	dig = get_digraph_for_char(cval);
+	if (dig != NULL)
+	    vim_snprintf((char *)IObuff, IOSIZE,
+		_("<%s>%s%s  %d,  Hex %02x,  Oct %03o, Digr %s"),
+			      transchar(c), buf1, buf2, cval, cval, cval, dig);
+	else
+#endif
+	    vim_snprintf((char *)IObuff, IOSIZE,
 		_("<%s>%s%s  %d,  Hex %02x,  Octal %03o"),
 				  transchar(c), buf1, buf2, cval, cval, cval);
 #ifdef FEAT_MBYTE
@@ -121,9 +130,19 @@ do_ascii(exarg_T *eap UNUSED)
 		)
 	    IObuff[len++] = ' '; /* draw composing char on top of a space */
 	len += (*mb_char2bytes)(c, IObuff + len);
-	vim_snprintf((char *)IObuff + len, IOSIZE - len,
-			c < 0x10000 ? _("> %d, Hex %04x, Octal %o")
-				    : _("> %d, Hex %08x, Octal %o"), c, c, c);
+#ifdef FEAT_DIGRAPHS
+	dig = get_digraph_for_char(c);
+	if (dig != NULL)
+	    vim_snprintf((char *)IObuff + len, IOSIZE - len,
+			c < 0x10000 ? _("> %d, Hex %04x, Oct %o, Digr %s")
+				    : _("> %d, Hex %08x, Oct %o, Digr %s"),
+					c, c, c, dig);
+	else
+#endif
+	    vim_snprintf((char *)IObuff + len, IOSIZE - len,
+			 c < 0x10000 ? _("> %d, Hex %04x, Octal %o")
+				     : _("> %d, Hex %08x, Octal %o"),
+				     c, c, c);
 	if (ci == MAX_MCO)
 	    break;
 	if (enc_utf8)
@@ -1127,9 +1146,7 @@ do_bang(
 	/* Careful: This may recursively call do_bang() again! (because of
 	 * autocommands) */
 	do_filter(line1, line2, eap, newcmd, do_in, do_out);
-#ifdef FEAT_AUTOCMD
 	apply_autocmds(EVENT_SHELLFILTERPOST, NULL, NULL, FALSE, curbuf);
-#endif
     }
     if (free_newcmd)
 	vim_free(newcmd);
@@ -1165,9 +1182,7 @@ do_filter(
     linenr_T	read_linecount;
     pos_T	cursor_save;
     char_u	*cmd_buf;
-#ifdef FEAT_AUTOCMD
     buf_T	*old_curbuf = curbuf;
-#endif
     int		shell_flags = 0;
 
     if (*cmd == NUL)	    /* no filter command */
@@ -1238,16 +1253,14 @@ do_filter(
     {
 	msg_putchar('\n');		/* keep message from buf_write() */
 	--no_wait_return;
-#if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
 	if (!aborting())
 #endif
 	    (void)EMSG2(_(e_notcreate), itmp);	/* will call wait_return */
 	goto filterend;
     }
-#ifdef FEAT_AUTOCMD
     if (curbuf != old_curbuf)
 	goto filterend;
-#endif
 
     if (!do_out)
 	msg_putchar('\n');
@@ -1313,7 +1326,7 @@ do_filter(
 	    if (readfile(otmp, NULL, line2, (linenr_T)0, (linenr_T)MAXLNUM,
 						    eap, READ_FILTER) != OK)
 	    {
-#if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
 		if (!aborting())
 #endif
 		{
@@ -1322,10 +1335,8 @@ do_filter(
 		}
 		goto error;
 	    }
-#ifdef FEAT_AUTOCMD
 	    if (curbuf != old_curbuf)
 		goto filterend;
-#endif
 	}
 
 	read_linecount = curbuf->b_ml.ml_line_count - read_linecount;
@@ -1405,13 +1416,11 @@ error:
 
 filterend:
 
-#ifdef FEAT_AUTOCMD
     if (curbuf != old_curbuf)
     {
 	--no_wait_return;
 	EMSG(_("E135: *Filter* Autocommands must not change current buffer"));
     }
-#endif
     if (itmp != NULL)
 	mch_remove(itmp);
     if (otmp != NULL)
@@ -1461,9 +1470,7 @@ do_shell(
      * avoid having to type return below.
      */
     msg_putchar('\r');			/* put cursor at start of line */
-#ifdef FEAT_AUTOCMD
     if (!autocmd_busy)
-#endif
     {
 #ifdef MSWIN
 	if (!winstart)
@@ -1476,11 +1483,7 @@ do_shell(
 	msg_putchar('\n');		/* may shift screen one line up */
 
     /* warning message before calling the shell */
-    if (p_warn
-#ifdef FEAT_AUTOCMD
-		&& !autocmd_busy
-#endif
-		&& msg_silent == 0)
+    if (p_warn && !autocmd_busy && msg_silent == 0)
 	FOR_ALL_BUFFERS(buf)
 	    if (bufIsChangedNotTerm(buf))
 	    {
@@ -1515,14 +1518,12 @@ do_shell(
 	msg_col = 0;
     }
 
-#ifdef FEAT_AUTOCMD
     if (autocmd_busy)
     {
 	if (msg_silent == 0)
 	    redraw_later_clear();
     }
     else
-#endif
     {
 	/*
 	 * For ":sh" there is no need to call wait_return(), just redraw.
@@ -1591,9 +1592,7 @@ do_shell(
     /* display any error messages now */
     display_errors();
 
-#ifdef FEAT_AUTOCMD
     apply_autocmds(EVENT_SHELLCMDPOST, NULL, NULL, FALSE, curbuf);
-#endif
 }
 
 /*
@@ -2958,16 +2957,14 @@ rename_buffer(char_u *new_fname)
     char_u	*fname, *sfname, *xfname;
     buf_T	*buf;
 
-#ifdef FEAT_AUTOCMD
     buf = curbuf;
     apply_autocmds(EVENT_BUFFILEPRE, NULL, NULL, FALSE, curbuf);
     /* buffer changed, don't change name now */
     if (buf != curbuf)
 	return FAIL;
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
     if (aborting())	    /* autocmds may abort script processing */
 	return FAIL;
-# endif
 #endif
     /*
      * The name of the current buffer will be changed.
@@ -2996,9 +2993,8 @@ rename_buffer(char_u *new_fname)
     }
     vim_free(fname);
     vim_free(sfname);
-#ifdef FEAT_AUTOCMD
     apply_autocmds(EVENT_BUFFILEPOST, NULL, NULL, FALSE, curbuf);
-#endif
+
     /* Change directories when the 'acd' option is set. */
     DO_AUTOCHDIR
     return OK;
@@ -3177,22 +3173,20 @@ do_write(exarg_T *eap)
     {
 	if (eap->cmdidx == CMD_saveas && alt_buf != NULL)
 	{
-#ifdef FEAT_AUTOCMD
 	    buf_T	*was_curbuf = curbuf;
 
 	    apply_autocmds(EVENT_BUFFILEPRE, NULL, NULL, FALSE, curbuf);
 	    apply_autocmds(EVENT_BUFFILEPRE, NULL, NULL, FALSE, alt_buf);
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 	    if (curbuf != was_curbuf || aborting())
-# else
+#else
 	    if (curbuf != was_curbuf)
-# endif
+#endif
 	    {
 		/* buffer changed, don't change name now */
 		retval = FAIL;
 		goto theend;
 	    }
-#endif
 	    /* Exchange the file names for the current and the alternate
 	     * buffer.  This makes it look like we are now editing the buffer
 	     * under the new name.  Must be done before buf_write(), because
@@ -3208,7 +3202,7 @@ do_write(exarg_T *eap)
 	    alt_buf->b_sfname = curbuf->b_sfname;
 	    curbuf->b_sfname = fname;
 	    buf_name_changed(curbuf);
-#ifdef FEAT_AUTOCMD
+
 	    apply_autocmds(EVENT_BUFFILEPOST, NULL, NULL, FALSE, curbuf);
 	    apply_autocmds(EVENT_BUFFILEPOST, NULL, NULL, FALSE, alt_buf);
 	    if (!alt_buf->b_p_bl)
@@ -3216,11 +3210,11 @@ do_write(exarg_T *eap)
 		alt_buf->b_p_bl = TRUE;
 		apply_autocmds(EVENT_BUFADD, NULL, NULL, FALSE, alt_buf);
 	    }
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 	    if (curbuf != was_curbuf || aborting())
-# else
+#else
 	    if (curbuf != was_curbuf)
-# endif
+#endif
 	    {
 		/* buffer changed, don't write the file */
 		retval = FAIL;
@@ -3239,7 +3233,6 @@ do_write(exarg_T *eap)
 	    /* Autocommands may have changed buffer names, esp. when
 	     * 'autochdir' is set. */
 	    fname = curbuf->b_sfname;
-#endif
 	}
 
 	name_was_missing = curbuf->b_ffname == NULL;
@@ -3468,18 +3461,14 @@ do_wqall(exarg_T *eap)
 	    }
 	    else
 	    {
-#ifdef FEAT_AUTOCMD
 		bufref_T bufref;
 
 		set_bufref(&bufref, buf);
-#endif
 		if (buf_write_all(buf, eap->forceit) == FAIL)
 		    ++error;
-#ifdef FEAT_AUTOCMD
 		/* an autocommand may have deleted the buffer */
 		if (!bufref_valid(&bufref))
 		    buf = firstbuf;
-#endif
 	    }
 	    eap->forceit = save_forceit;    /* check_overwrite() may set it */
 	}
@@ -3583,10 +3572,8 @@ getfile(
 
     if (text_locked())
 	return GETFILE_ERROR;
-#ifdef FEAT_AUTOCMD
     if (curbuf_locked())
 	return GETFILE_ERROR;
-#endif
 
     if (fnum == 0)
     {
@@ -3681,17 +3668,15 @@ do_ecmd(
 {
     int		other_file;		/* TRUE if editing another file */
     int		oldbuf;			/* TRUE if using existing buffer */
-#ifdef FEAT_AUTOCMD
     int		auto_buf = FALSE;	/* TRUE if autocommands brought us
 					   into the buffer unexpectedly */
     char_u	*new_name = NULL;
+#if defined(FEAT_EVAL)
     int		did_set_swapcommand = FALSE;
 #endif
     buf_T	*buf;
     bufref_T	bufref;
-#if defined(FEAT_AUTOCMD) || defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
     bufref_T	old_curbuf;
-#endif
     char_u	*free_fname = NULL;
 #ifdef FEAT_BROWSE
     char_u	*browse_file = NULL;
@@ -3715,9 +3700,7 @@ do_ecmd(
 
     if (eap != NULL)
 	command = eap->do_ecmd_cmd;
-#if defined(FEAT_AUTOCMD) || defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
     set_bufref(&old_curbuf, curbuf);
-#endif
 
     if (fnum != 0)
     {
@@ -3730,11 +3713,10 @@ do_ecmd(
 #ifdef FEAT_BROWSE
 	if (cmdmod.browse)
 	{
-# ifdef FEAT_AUTOCMD
 	    if (
-#  ifdef FEAT_GUI
+# ifdef FEAT_GUI
 		!gui.in_use &&
-#  endif
+# endif
 		    au_has_group((char_u *)"FileExplorer"))
 	    {
 		/* No browsing supported but we do have the file explorer:
@@ -3743,7 +3725,6 @@ do_ecmd(
 		    ffname = (char_u *)".";
 	    }
 	    else
-# endif
 	    {
 		browse_file = do_browse(0, (char_u *)_("Edit File"), ffname,
 						    NULL, NULL, NULL, curbuf);
@@ -3817,7 +3798,7 @@ do_ecmd(
      */
     reset_VIsual();
 
-#ifdef FEAT_AUTOCMD
+#if defined(FEAT_EVAL)
     if ((command != NULL || newlnum > (linenr_T)0)
 	    && *get_vim_var_str(VV_SWAPCOMMAND) == NUL)
     {
@@ -3880,12 +3861,11 @@ do_ecmd(
 #endif
 	    buf = buflist_new(ffname, sfname, 0L,
 		    BLN_CURBUF | ((flags & ECMD_SET_HELP) ? 0 : BLN_LISTED));
-#ifdef FEAT_AUTOCMD
+
 	    /* autocommands may change curwin and curbuf */
 	    if (oldwin != NULL)
 		oldwin = curwin;
 	    set_bufref(&old_curbuf, curbuf);
-#endif
 	}
 	if (buf == NULL)
 	    goto theend;
@@ -3900,11 +3880,7 @@ do_ecmd(
 	    (void)buf_check_timestamp(buf, FALSE);
 	    /* Check if autocommands made the buffer invalid or changed the
 	     * current buffer. */
-	    if (!bufref_valid(&bufref)
-#ifdef FEAT_AUTOCMD
-		    || curbuf != old_curbuf.br_buf
-#endif
-		    )
+	    if (!bufref_valid(&bufref) || curbuf != old_curbuf.br_buf)
 		goto theend;
 #ifdef FEAT_EVAL
 	    if (aborting())	    /* autocmds may abort script processing */
@@ -3929,7 +3905,6 @@ do_ecmd(
 	 */
 	if (buf != curbuf)
 	{
-#ifdef FEAT_AUTOCMD
 	    /*
 	     * Be careful: The autocommands may delete any buffer and change
 	     * the current buffer.
@@ -3950,13 +3925,13 @@ do_ecmd(
 		delbuf_msg(new_name);	/* frees new_name */
 		goto theend;
 	    }
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 	    if (aborting())	    /* autocmds may abort script processing */
 	    {
 		vim_free(new_name);
 		goto theend;
 	    }
-# endif
+#endif
 	    if (buf == curbuf)		/* already in new buffer */
 		auto_buf = TRUE;
 	    else
@@ -3969,7 +3944,6 @@ do_ecmd(
 		++buf->b_locked;
 
 		if (curbuf == old_curbuf.br_buf)
-#endif
 		    buf_copy_options(buf, BCO_ENTER);
 
 		/* Close the link to the current buffer. This will set
@@ -3978,18 +3952,17 @@ do_ecmd(
 		close_buffer(oldwin, curbuf,
 			       (flags & ECMD_HIDE) ? 0 : DOBUF_UNLOAD, FALSE);
 
-#ifdef FEAT_AUTOCMD
 		the_curwin->w_closing = FALSE;
 		--buf->b_locked;
 
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 		/* autocmds may abort script processing */
 		if (aborting() && curwin->w_buffer != NULL)
 		{
 		    vim_free(new_name);
 		    goto theend;
 		}
-# endif
+#endif
 		/* Be careful again, like above. */
 		if (!bufref_valid(&au_new_curbuf))
 		{
@@ -4000,7 +3973,6 @@ do_ecmd(
 		if (buf == curbuf)		/* already in new buffer */
 		    auto_buf = TRUE;
 		else
-#endif
 		{
 #ifdef FEAT_SYN_HL
 		    /*
@@ -4033,13 +4005,10 @@ do_ecmd(
 #ifdef FEAT_SPELL
 		did_get_winopts = TRUE;
 #endif
-
-#ifdef FEAT_AUTOCMD
 	    }
 	    vim_free(new_name);
 	    au_new_curbuf.br_buf = NULL;
 	    au_new_curbuf.br_buf_free_count = 0;
-#endif
 	}
 
 	curwin->w_pcmark.lnum = 1;
@@ -4062,9 +4031,7 @@ do_ecmd(
     ++RedrawingDisabled;
     did_inc_redrawing_disabled = TRUE;
 
-#ifdef FEAT_AUTOCMD
     buf = curbuf;
-#endif
     if ((flags & ECMD_SET_HELP) || keep_help_flag)
     {
 	prepare_help_buffer();
@@ -4077,21 +4044,19 @@ do_ecmd(
 	    set_buflisted(TRUE);
     }
 
-#ifdef FEAT_AUTOCMD
     /* If autocommands change buffers under our fingers, forget about
      * editing the file. */
     if (buf != curbuf)
 	goto theend;
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
     if (aborting())	    /* autocmds may abort script processing */
 	goto theend;
-# endif
+#endif
 
     /* Since we are starting to edit a file, consider the filetype to be
      * unset.  Helps for when an autocommand changes files and expects syntax
      * highlighting to work in the other file. */
     did_filetype = FALSE;
-#endif
 
 /*
  * other_file	oldbuf
@@ -4108,14 +4073,13 @@ do_ecmd(
 	    newlnum = curwin->w_cursor.lnum;
 	    solcol = curwin->w_cursor.col;
 	}
-#ifdef FEAT_AUTOCMD
 	buf = curbuf;
 	if (buf->b_fname != NULL)
 	    new_name = vim_strsave(buf->b_fname);
 	else
 	    new_name = NULL;
 	set_bufref(&bufref, buf);
-#endif
+
 	if (p_ur < 0 || curbuf->b_ml.ml_line_count <= p_ur)
 	{
 	    /* Save all the text, so that the reload can be undone.
@@ -4124,9 +4088,7 @@ do_ecmd(
 	    if (u_savecommon(0, curbuf->b_ml.ml_line_count + 1, 0, TRUE)
 								     == FAIL)
 	    {
-#ifdef FEAT_AUTOCMD
 		vim_free(new_name);
-#endif
 		goto theend;
 	    }
 	    u_unchanged(curbuf);
@@ -4137,7 +4099,7 @@ do_ecmd(
 	}
 	else
 	    buf_freeall(curbuf, 0);   /* free all things for buffer */
-#ifdef FEAT_AUTOCMD
+
 	/* If autocommands deleted the buffer we were going to re-edit, give
 	 * up and jump to the end. */
 	if (!bufref_valid(&bufref))
@@ -4152,10 +4114,9 @@ do_ecmd(
 	 * the autocommands changed the buffer... */
 	if (buf != curbuf)
 	    goto theend;
-# ifdef FEAT_EVAL
+#ifdef FEAT_EVAL
 	if (aborting())	    /* autocmds may abort script processing */
 	    goto theend;
-# endif
 #endif
 	buf_clear_file(curbuf);
 	curbuf->b_op_start.lnum = 0;	/* clear '[ and '] marks */
@@ -4173,9 +4134,7 @@ do_ecmd(
      */
     check_arg_idx(curwin);
 
-#ifdef FEAT_AUTOCMD
     if (!auto_buf)
-#endif
     {
 	/*
 	 * Set cursor and init window before reading the file and executing
@@ -4216,7 +4175,7 @@ do_ecmd(
 	    /*
 	     * Open the buffer and read the file.
 	     */
-#if defined(FEAT_AUTOCMD) && defined(FEAT_EVAL)
+#if defined(FEAT_EVAL)
 	    if (should_abort(open_buffer(FALSE, eap, readfile_flags)))
 		retval = FAIL;
 #else
@@ -4229,7 +4188,6 @@ do_ecmd(
 	    handle_swap_exists(&old_curbuf);
 #endif
 	}
-#ifdef FEAT_AUTOCMD
 	else
 	{
 	    /* Read the modelines, but only to set window-local options.  Any
@@ -4243,7 +4201,6 @@ do_ecmd(
 								    &retval);
 	}
 	check_arg_idx(curwin);
-#endif
 
 	/* If autocommands change the cursor position or topline, we should
 	 * keep it.  Also when it moves within a line. */
@@ -4321,11 +4278,7 @@ do_ecmd(
      * Did not read the file, need to show some info about the file.
      * Do this after setting the cursor.
      */
-    if (oldbuf
-#ifdef FEAT_AUTOCMD
-		&& !auto_buf
-#endif
-			    )
+    if (oldbuf && !auto_buf)
     {
 	int	msg_scroll_save = msg_scroll;
 
@@ -4365,9 +4318,7 @@ do_ecmd(
 	if (topline == 0 && command == NULL)
 	    p_so = 999;			/* force cursor halfway the window */
 	update_topline();
-#ifdef FEAT_SCROLLBIND
 	curwin->w_scbind_pos = curwin->w_topline;
-#endif
 	p_so = n;
 	redraw_curbuf_later(NOT_VALID);	/* redraw this buffer later */
     }
@@ -4409,7 +4360,7 @@ do_ecmd(
 theend:
     if (did_inc_redrawing_disabled)
 	--RedrawingDisabled;
-#ifdef FEAT_AUTOCMD
+#if defined(FEAT_EVAL)
     if (did_set_swapcommand)
 	set_vim_var_string(VV_SWAPCOMMAND, NULL, -1);
 #endif
@@ -4420,7 +4371,6 @@ theend:
     return retval;
 }
 
-#ifdef FEAT_AUTOCMD
     static void
 delbuf_msg(char_u *name)
 {
@@ -4430,7 +4380,6 @@ delbuf_msg(char_u *name)
     au_new_curbuf.br_buf = NULL;
     au_new_curbuf.br_buf_free_count = 0;
 }
-#endif
 
 static int append_indent = 0;	    /* autoindent for first line */
 
@@ -5135,7 +5084,7 @@ do_sub(exarg_T *eap)
      */
     line2 = eap->line2;
     for (lnum = eap->line1; lnum <= line2 && !(got_quit
-#if defined(FEAT_EVAL) && defined(FEAT_AUTOCMD)
+#if defined(FEAT_EVAL)
 		|| aborting()
 #endif
 		); ++lnum)
@@ -5319,10 +5268,8 @@ do_sub(exarg_T *eap)
 		    setmouse();		/* disable mouse in xterm */
 #endif
 		    curwin->w_cursor.col = regmatch.startpos[0].col;
-#ifdef FEAT_CURSORBIND
 		    if (curwin->w_p_crb)
 			do_check_cursorbind();
-#endif
 
 		    /* When 'cpoptions' contains "u" don't sync undo when
 		     * asking for confirmation. */
@@ -6849,7 +6796,6 @@ fix_help_buffer(void)
     char_u	*rt;
     int		mustfree;
 
-#ifdef FEAT_AUTOCMD
     /* Set filetype to "help" if still needed. */
     if (STRCMP(curbuf->b_p_ft, "help") != 0)
     {
@@ -6857,7 +6803,6 @@ fix_help_buffer(void)
 	set_option_value((char_u *)"ft", 0L, (char_u *)"help", OPT_LOCAL);
 	--curbuf_lock;
     }
-#endif
 
 #ifdef FEAT_SYN_HL
     if (!syntax_present(curwin))

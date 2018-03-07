@@ -143,6 +143,9 @@ static int rbm_status = STATUS_GET;
 
 /* Request cursor style report: */
 static int rcs_status = STATUS_GET;
+
+/* Request windos position report: */
+static int winpos_status = STATUS_GET;
 # endif
 
 /*
@@ -1985,7 +1988,6 @@ set_termname(char_u *term)
 	    scroll_region_reset();		/* In case Rows changed */
 	check_map_keycodes();	/* check mappings for terminal codes used */
 
-#ifdef FEAT_AUTOCMD
 	{
 	    bufref_T	old_curbuf;
 
@@ -2003,7 +2005,6 @@ set_termname(char_u *term)
 	    if (bufref_valid(&old_curbuf))
 		curbuf = old_curbuf.br_buf;
 	}
-#endif
     }
 
 #ifdef FEAT_TERMRESPONSE
@@ -2277,6 +2278,7 @@ add_termcap_entry(char_u *name, int force)
 	    if (termp->bt_string != NULL)	/* found it */
 	    {
 		key = TERMCAP2KEY(name[0], name[1]);
+		++termp;
 		while (termp->bt_entry != (int)KS_NAME)
 		{
 		    if ((int)termp->bt_entry == key)
@@ -2780,41 +2782,55 @@ can_get_termresponse()
 	    && p_ek;
 }
 
-static int winpos_x;
-static int winpos_y;
-static int waiting_for_winpos = FALSE;
+static int winpos_x = -1;
+static int winpos_y = -1;
+static int did_request_winpos = 0;
 
 /*
  * Try getting the Vim window position from the terminal.
  * Returns OK or FAIL.
  */
     int
-term_get_winpos(int *x, int *y)
+term_get_winpos(int *x, int *y, varnumber_T timeout)
 {
     int count = 0;
+    int prev_winpos_x = winpos_x;
+    int prev_winpos_y = winpos_y;
 
     if (*T_CGP == NUL || !can_get_termresponse())
 	return FAIL;
     winpos_x = -1;
     winpos_y = -1;
-    waiting_for_winpos = TRUE;
+    ++did_request_winpos;
+    winpos_status = STATUS_SENT;
     OUT_STR(T_CGP);
     out_flush();
 
-    /* Try reading the result for 100 msec. */
-    while (count++ < 10)
+    /* Try reading the result for "timeout" msec. */
+    while (count++ <= timeout / 10 && !got_int)
     {
 	(void)vpeekc_nomap();
 	if (winpos_x >= 0 && winpos_y >= 0)
 	{
 	    *x = winpos_x;
 	    *y = winpos_y;
-	    waiting_for_winpos = FALSE;
 	    return OK;
 	}
 	ui_delay(10, FALSE);
     }
-    waiting_for_winpos = FALSE;
+    /* Do not reset "did_request_winpos", if we timed out the response might
+     * still come later and we must consume it. */
+
+    winpos_x = prev_winpos_x;
+    winpos_y = prev_winpos_y;
+    if (timeout < 10 && prev_winpos_y >= 0 && prev_winpos_y >= 0)
+    {
+	/* Polling: return previous values if we have them. */
+	*x = winpos_x;
+	*y = winpos_y;
+	return OK;
+    }
+
     return FALSE;
 }
 # endif
@@ -3299,10 +3315,8 @@ set_shellsize(int width, int height, int mustset)
 	}
 	else
 	{
-#ifdef FEAT_SCROLLBIND
 	    if (curwin->w_p_scb)
 		do_check_scrollbind(TRUE);
-#endif
 	    if (State & CMDLINE)
 	    {
 		update_screen(NOT_VALID);
@@ -3369,7 +3383,8 @@ settmode(int tmode)
 #endif
 					 || rbg_status == STATUS_SENT
 					 || rbm_status == STATUS_SENT
-					 || rcs_status == STATUS_SENT))
+					 || rcs_status == STATUS_SENT
+					 || winpos_status == STATUS_SENT))
 		    (void)vpeekc_nomap();
 		check_for_codes_from_term();
 	    }
@@ -3443,7 +3458,8 @@ stoptermcap(void)
 # endif
 		    || rbg_status == STATUS_SENT
 		    || rbm_status == STATUS_SENT
-		    || rcs_status == STATUS_SENT)
+		    || rcs_status == STATUS_SENT
+		    || winpos_status == STATUS_SENT)
 	    {
 # ifdef UNIX
 		/* Give the terminal a chance to respond. */
@@ -4472,7 +4488,7 @@ check_termcode(
 	     */
 	    char_u *argp = tp[0] == ESC ? tp + 2 : tp + 1;
 
-	    if ((*T_CRV != NUL || *T_U7 != NUL || waiting_for_winpos)
+	    if ((*T_CRV != NUL || *T_U7 != NUL || did_request_winpos)
 			&& ((tp[0] == ESC && len >= 3 && tp[1] == '[')
 			    || (tp[0] == CSI && len >= 2))
 			&& (VIM_ISDIGIT(*argp) || *argp == '>' || *argp == '?'))
@@ -4515,9 +4531,7 @@ check_termcode(
 
 			LOG_TR("Received U7 status");
 			u7_status = STATUS_GOT;
-# ifdef FEAT_AUTOCMD
 			did_cursorhold = TRUE;
-# endif
 			if (col == 2)
 			    aw = "single";
 			else if (col == 3)
@@ -4560,9 +4574,7 @@ check_termcode(
 
 		    LOG_TR("Received CRV response");
 		    crv_status = STATUS_GOT;
-# ifdef FEAT_AUTOCMD
 		    did_cursorhold = TRUE;
-# endif
 
 		    /* If this code starts with CSI, you can bet that the
 		     * terminal uses 8-bit codes. */
@@ -4702,10 +4714,8 @@ check_termcode(
 # ifdef FEAT_EVAL
 		    set_vim_var_string(VV_TERMRESPONSE, tp, slen);
 # endif
-# ifdef FEAT_AUTOCMD
 		    apply_autocmds(EVENT_TERMRESPONSE,
 						   NULL, NULL, FALSE, curbuf);
-# endif
 		    key_name[0] = (int)KS_EXTRA;
 		    key_name[1] = (int)KE_IGNORE;
 		}
@@ -4740,7 +4750,7 @@ check_termcode(
 		 * Check for a window position response from the terminal:
 		 *       {lead}3;{x}:{y}t
 		 */
-		else if (waiting_for_winpos
+		else if (did_request_winpos
 			    && ((len >= 4 && tp[0] == ESC && tp[1] == '[')
 				|| (len >= 3 && tp[0] == CSI))
 			    && tp[(j = 1 + (tp[0] == ESC))] == '3'
@@ -4762,6 +4772,9 @@ check_termcode(
 			    key_name[0] = (int)KS_EXTRA;
 			    key_name[1] = (int)KE_IGNORE;
 			    slen = i + 1;
+
+			    if (--did_request_winpos <= 0)
+				winpos_status = STATUS_GOT;
 			}
 		    }
 		    if (i == len)
@@ -4866,7 +4879,7 @@ check_termcode(
 	     * {tail} can be Esc>\ or STERM
 	     *
 	     * Check for cursor shape response from xterm:
-	     * {lead}1$r<number> q{tail}
+	     * {lead}1$r<digit> q{tail}
 	     *
 	     * {lead} can be <Esc>P or DCS
 	     * {tail} can be Esc>\ or STERM
@@ -4897,35 +4910,46 @@ check_termcode(
 			break;
 		    }
 		  }
-		else if ((len >= j + 6 && isdigit(argp[3]))
-			&& argp[4] == ' '
-			&& argp[5] == 'q')
+		else
 		{
-		    /* cursor shape response */
-		    i = j + 6;
-		    if ((tp[i] == ESC && i + 1 < len && tp[i + 1] == '\\')
-			    || tp[i] == STERM)
+		    /* Probably the cursor shape response.  Make sure that "i"
+		     * is equal to "len" when there are not sufficient
+		     * characters. */
+		    for (i = j + 3; i < len; ++i)
 		    {
-			int number = argp[3] - '0';
+			if (i - j == 3 && !isdigit(tp[i]))
+			    break;
+			if (i - j == 4 && tp[i] != ' ')
+			    break;
+			if (i - j == 5 && tp[i] != 'q')
+			    break;
+			if (i - j == 6 && tp[i] != ESC && tp[i] != STERM)
+			    break;
+			if ((i - j == 6 && tp[i] == STERM)
+			 || (i - j == 7 && tp[i] == '\\'))
+			{
+			    int number = argp[3] - '0';
 
-			/* 0, 1 = block blink, 2 = block
-			 * 3 = underline blink, 4 = underline
-			 * 5 = vertical bar blink, 6 = vertical bar */
-			number = number == 0 ? 1 : number;
-			initial_cursor_shape = (number + 1) / 2;
-			/* The blink flag is actually inverted, compared to
-			 * the value set with T_SH. */
-			initial_cursor_shape_blink =
+			    /* 0, 1 = block blink, 2 = block
+			     * 3 = underline blink, 4 = underline
+			     * 5 = vertical bar blink, 6 = vertical bar */
+			    number = number == 0 ? 1 : number;
+			    initial_cursor_shape = (number + 1) / 2;
+			    /* The blink flag is actually inverted, compared to
+			     * the value set with T_SH. */
+			    initial_cursor_shape_blink =
 						   (number & 1) ? FALSE : TRUE;
-			rcs_status = STATUS_GOT;
-			LOG_TR("Received cursor shape response");
+			    rcs_status = STATUS_GOT;
+			    LOG_TR("Received cursor shape response");
 
-			key_name[0] = (int)KS_EXTRA;
-			key_name[1] = (int)KE_IGNORE;
-			slen = i + 1 + (tp[i] == ESC);
+			    key_name[0] = (int)KS_EXTRA;
+			    key_name[1] = (int)KE_IGNORE;
+			    slen = i + 1;
 # ifdef FEAT_EVAL
-			set_vim_var_string(VV_TERMSTYLERESP, tp, slen);
+			    set_vim_var_string(VV_TERMSTYLERESP, tp, slen);
 # endif
+			    break;
+			}
 		    }
 		}
 
