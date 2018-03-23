@@ -1260,21 +1260,22 @@ struct listwatch_S
 
 /*
  * Structure to hold info about a list.
+ * Order of members is optimized to reduce padding.
  */
 struct listvar_S
 {
     listitem_T	*lv_first;	/* first item, NULL if none */
     listitem_T	*lv_last;	/* last item, NULL if none */
-    int		lv_refcount;	/* reference count */
-    int		lv_len;		/* number of items */
     listwatch_T	*lv_watch;	/* first watcher, NULL if none */
-    int		lv_idx;		/* cached index of an item */
     listitem_T	*lv_idx_item;	/* when not NULL item at index "lv_idx" */
-    int		lv_copyID;	/* ID used by deepcopy() */
     list_T	*lv_copylist;	/* copied list used by deepcopy() */
-    char	lv_lock;	/* zero, VAR_LOCKED, VAR_FIXED */
     list_T	*lv_used_next;	/* next list in used lists list */
     list_T	*lv_used_prev;	/* previous list in used lists list */
+    int		lv_refcount;	/* reference count */
+    int		lv_len;		/* number of items */
+    int		lv_idx;		/* cached index of an item */
+    int		lv_copyID;	/* ID used by deepcopy() */
+    char	lv_lock;	/* zero, VAR_LOCKED, VAR_FIXED */
 };
 
 /*
@@ -1705,7 +1706,9 @@ struct channel_S {
 #define JO2_HIDDEN	    0x0400	/* "hidden" */
 #define JO2_TERM_OPENCMD    0x0800	/* "term_opencmd" */
 #define JO2_EOF_CHARS	    0x1000	/* "eof_chars" */
-#define JO2_ALL		    0x1FFF
+#define JO2_NORESTORE	    0x2000	/* "norestore" */
+#define JO2_TERM_KILL	    0x4000	/* "term_kill" */
+#define JO2_ALL		    0x7FFF
 
 #define JO_MODE_ALL	(JO_MODE + JO_IN_MODE + JO_OUT_MODE + JO_ERR_MODE)
 #define JO_CB_ALL \
@@ -1768,10 +1771,12 @@ typedef struct
     int		jo_vertical;
     int		jo_curwin;
     int		jo_hidden;
+    int		jo_term_norestore;
     char_u	*jo_term_name;
     char_u	*jo_term_opencmd;
     int		jo_term_finish;
     char_u	*jo_eof_chars;
+    char_u	*jo_term_kill;
 #endif
 } jobopt_T;
 

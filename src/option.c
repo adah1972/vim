@@ -2403,7 +2403,7 @@ static struct vimoption options[] =
     {"sessionoptions", "ssop", P_STRING|P_VI_DEF|P_ONECOMMA|P_NODUP,
 #ifdef FEAT_SESSION
 			    (char_u *)&p_ssop, PV_NONE,
-	 {(char_u *)"blank,buffers,curdir,folds,help,options,tabpages,winsize",
+	 {(char_u *)"blank,buffers,curdir,folds,help,options,tabpages,winsize,terminal",
 							       (char_u *)0L}
 #else
 			    (char_u *)NULL, PV_NONE,
@@ -8190,8 +8190,8 @@ set_bool_option(
     {
 # ifdef FEAT_TERMINAL
 	/* Cannot set 'modifiable' when in Terminal mode. */
-	if (term_in_normal_mode()
-			 || (bt_terminal(curbuf) && !term_is_finished(curbuf)))
+	if (curbuf->b_p_ma && (term_in_normal_mode() || (bt_terminal(curbuf)
+		      && curbuf->b_term != NULL && !term_is_finished(curbuf))))
 	{
 	    curbuf->b_p_ma = FALSE;
 	    return (char_u *)N_("E946: Cannot make a terminal with running job modifiable");
