@@ -72,6 +72,7 @@ See |CTRL-W| for more commands.
 
 Special in the terminal window:			*CTRL-W_.*  *CTRL-W_N* 
 	CTRL-W .	send a CTRL-W to the job in the terminal
+	CTRL-W CTRL-\	send a CTRL-\ to the job in the terminal
 	CTRL-W N	go to Terminal-Normal mode, see |Terminal-mode|
 	CTRL-\ CTRL-N   go to Terminal-Normal mode, see |Terminal-mode|
 	CTRL-W " {reg}  paste register {reg}		*CTRL-W_quote*
@@ -136,6 +137,16 @@ terminal window will start with a white or black background.
 To use a different color the Terminal highlight group can be used, for
 example: >
     hi Terminal ctermbg=lightgrey ctermfg=blue guibg=lightgrey guifg=blue
+<
+							*g:terminal_ansi_colors*
+In GUI mode or with |termguicolors|, the 16 ANSI colors used by default in new
+terminal windows may be configured using the variable
+`g:terminal_ansi_colors`, which should be a list of 16 color names or
+hexadecimal color codes, similar to those accepted by |highlight-guifg|.  When
+not using GUI colors, the terminal window always uses the 16 ANSI colors of
+the underlying terminal.
+The |term_setansicolors()| function can be used to change the colors, and
+|term_getansicolors()| to get the currently used colors.
 
 
 Syntax ~

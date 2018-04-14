@@ -844,6 +844,7 @@ qf_parse_line(
     /* Always ignore case when looking for a matching error. */
     regmatch.rm_ic = TRUE;
 
+restofline:
     /* If there was no %> item start at the first pattern */
     if (fmt_start == NULL)
 	fmt_ptr = fmt_first;
@@ -858,7 +859,6 @@ qf_parse_line(
      * match or no match.
      */
     fields->valid = TRUE;
-restofline:
     for ( ; fmt_ptr != NULL; fmt_ptr = fmt_ptr->next)
     {
 	int r;
@@ -4556,7 +4556,10 @@ ex_vimgrep(exarg_T *eap)
 	/* Check whether the quickfix list is still valid. When loading a
 	 * buffer above, autocommands might have changed the quickfix list. */
 	if (!vgr_qflist_valid(wp, qi, save_qfid, *eap->cmdlinep))
+	{
+	    FreeWild(fcount, fnames);
 	    goto theend;
+	}
 	save_qfid = qi->qf_lists[qi->qf_curlist].qf_id;
 
 	if (buf == NULL)

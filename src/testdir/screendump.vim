@@ -60,8 +60,8 @@ func RunVimInTerminal(arguments, options)
   call assert_equal([rows, cols], term_getsize(buf))
 
   " Wait for "All" of the ruler in the status line to be shown.
-  " This can be quite slow (e.g. when using valgrind), wait up to 4 seconds.
-  call WaitFor({-> len(term_getline(buf, rows)) >= cols - 1}, 4000)
+  " This can be quite slow (e.g. when using valgrind).
+  call WaitFor({-> len(term_getline(buf, rows)) >= cols - 1})
 
   return buf
 endfunc

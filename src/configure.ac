@@ -1157,7 +1157,7 @@ if test "$enable_pythoninterp" = "yes" -o "$enable_pythoninterp" = "dynamic"; th
 
       AC_ARG_WITH(python-config-dir,
 	[  --with-python-config-dir=PATH  Python's config directory],
-	[ vi_cv_path_python_conf="${withval}" ] )
+	[ vi_cv_path_python_conf="${withval}"; have_python_config_dir=1 ] )
 
       AC_CACHE_CHECK(Python's configuration directory,vi_cv_path_python_conf,
       [
@@ -1211,11 +1211,7 @@ eof
 		  vi_cv_path_python_plibs="-F${python_PYTHONFRAMEWORKPREFIX} -framework Python"
 	      fi
 	    else
-	      if test "${vi_cv_var_python_version}" = "1.4"; then
-		  vi_cv_path_python_plibs="${PYTHON_CONFDIR}/libModules.a ${PYTHON_CONFDIR}/libPython.a ${PYTHON_CONFDIR}/libObjects.a ${PYTHON_CONFDIR}/libParser.a"
-	      else
-		  vi_cv_path_python_plibs="-L${PYTHON_CONFDIR} -lpython${vi_cv_var_python_version}"
-	      fi
+	      vi_cv_path_python_plibs="-L${PYTHON_CONFDIR} -lpython${vi_cv_var_python_version}"
 	      dnl -- Check if the path contained in python_LINKFORSHARED is
 	      dnl    usable for vim build. If not, make and try other
 	      dnl    candidates.
@@ -1251,16 +1247,17 @@ eof
 
 	PYTHON_LIBS="${vi_cv_path_python_plibs}"
 	if test "${vi_cv_path_python_pfx}" = "${vi_cv_path_python_epfx}"; then
-	  PYTHON_CFLAGS="-I${vi_cv_path_python_pfx}/include/python${vi_cv_var_python_version} -DPYTHON_HOME='\"${vi_cv_path_python_pfx}\"'"
+	  PYTHON_CFLAGS="-I${vi_cv_path_python_pfx}/include/python${vi_cv_var_python_version}"
 	else
-	  PYTHON_CFLAGS="-I${vi_cv_path_python_pfx}/include/python${vi_cv_var_python_version} -I${vi_cv_path_python_epfx}/include/python${vi_cv_var_python_version} -DPYTHON_HOME='\"${vi_cv_path_python_pfx}\"'"
+	  PYTHON_CFLAGS="-I${vi_cv_path_python_pfx}/include/python${vi_cv_var_python_version} -I${vi_cv_path_python_epfx}/include/python${vi_cv_var_python_version}"
+	fi
+	if test "X$have_python_config_dir" = "X1" -a "$enable_pythoninterp" = "dynamic"; then
+	  dnl Define PYTHON_HOME if --with-python-config-dir was used
+	  PYTHON_CFLAGS="${PYTHON_CFLAGS} -DPYTHON_HOME='\"${vi_cv_path_python_pfx}\"'"
+
 	fi
 	PYTHON_SRC="if_python.c"
 	PYTHON_OBJ="objects/if_python.o"
-	if test "${vi_cv_var_python_version}" = "1.4"; then
-	   PYTHON_OBJ="$PYTHON_OBJ objects/py_getpath.o"
-	fi
-    PYTHON_GETPATH_CFLAGS="-DPYTHONPATH='\"${vi_cv_path_pythonpath}\"' -DPREFIX='\"${vi_cv_path_python_pfx}\"' -DEXEC_PREFIX='\"${vi_cv_path_python_epfx}\"'"
 
 	dnl On FreeBSD linking with "-pthread" is required to use threads.
 	dnl _THREAD_SAFE must be used for compiling then.
@@ -1329,9 +1326,7 @@ eof
   fi
 fi
 
-AC_SUBST(PYTHON_CONFDIR)
 AC_SUBST(PYTHON_LIBS)
-AC_SUBST(PYTHON_GETPATH_CFLAGS)
 AC_SUBST(PYTHON_CFLAGS)
 AC_SUBST(PYTHON_SRC)
 AC_SUBST(PYTHON_OBJ)
@@ -1399,7 +1394,7 @@ if test "$enable_python3interp" = "yes" -o "$enable_python3interp" = "dynamic"; 
   
       AC_ARG_WITH(python3-config-dir,
        [  --with-python3-config-dir=PATH  Python's config directory],
-       [ vi_cv_path_python3_conf="${withval}" ] )
+       [ vi_cv_path_python3_conf="${withval}"; have_python3_config_dir=1 ] )
   
       AC_CACHE_CHECK(Python's configuration directory,vi_cv_path_python3_conf,
       [
@@ -1460,10 +1455,14 @@ eof
 
         PYTHON3_LIBS="${vi_cv_path_python3_plibs}"
         if test "${vi_cv_path_python3_pfx}" = "${vi_cv_path_python3_epfx}"; then
-          PYTHON3_CFLAGS="-I${vi_cv_path_python3_pfx}/include/python${vi_cv_var_python3_version}${vi_cv_var_python3_abiflags} -DPYTHON3_HOME='L\"${vi_cv_path_python3_pfx}\"'"
+          PYTHON3_CFLAGS="-I${vi_cv_path_python3_pfx}/include/python${vi_cv_var_python3_version}${vi_cv_var_python3_abiflags}"
         else
-          PYTHON3_CFLAGS="-I${vi_cv_path_python3_pfx}/include/python${vi_cv_var_python3_version}${vi_cv_var_python3_abiflags} -I${vi_cv_path_python3_epfx}/include/python${vi_cv_var_python3_version}${vi_cv_var_python3_abiflags} -DPYTHON3_HOME='L\"${vi_cv_path_python3_pfx}\"'"
+          PYTHON3_CFLAGS="-I${vi_cv_path_python3_pfx}/include/python${vi_cv_var_python3_version}${vi_cv_var_python3_abiflags} -I${vi_cv_path_python3_epfx}/include/python${vi_cv_var_python3_version}${vi_cv_var_python3_abiflags}"
         fi
+	if test "X$have_python3_config_dir" = "X1" -a "$enable_python3interp" = "dynamic"; then
+	  dnl Define PYTHON3_HOME if --with-python-config-dir was used
+	  PYTHON3_CFLAGS="${PYTHON3_CFLAGS}  -DPYTHON3_HOME='L\"${vi_cv_path_python3_pfx}\"'"
+	fi
         PYTHON3_SRC="if_python3.c"
         PYTHON3_OBJ="objects/if_python3.o"
   
@@ -1533,7 +1532,6 @@ eof
   fi
 fi
 
-AC_SUBST(PYTHON3_CONFDIR)
 AC_SUBST(PYTHON3_LIBS)
 AC_SUBST(PYTHON3_CFLAGS)
 AC_SUBST(PYTHON3_SRC)
@@ -4373,7 +4371,7 @@ dnl (e.g. ino_t and off_t), all of Vim's modules must be compiled with a
 dnl consistent value.  It's therefore safest to force the use of the define
 dnl if it's present in any of the *_CFLAGS variables.
 AC_MSG_CHECKING(whether we need to force -D_FILE_OFFSET_BITS=64)
-if echo "$CFLAGS $LUA_CFLAGS $MZSCHEME_CFLAGS $PERL_CFLAGS $PYTHON_GETPATH_CFLAGS $PYTHON_CFLAGS $PYTHON3_CFLAGS $TCL_CFLAGS $RUBY_CFLAGS $GTK_CFLAGS" | grep -q D_FILE_OFFSET_BITS 2>/dev/null; then
+if echo "$CFLAGS $LUA_CFLAGS $MZSCHEME_CFLAGS $PERL_CFLAGS $PYTHON_CFLAGS $PYTHON3_CFLAGS $TCL_CFLAGS $RUBY_CFLAGS $GTK_CFLAGS" | grep -q D_FILE_OFFSET_BITS 2>/dev/null; then
   AC_MSG_RESULT(yes)
   AC_DEFINE(_FILE_OFFSET_BITS, 64)
 else
