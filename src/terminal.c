@@ -40,30 +40,25 @@
  * TODO:
  * - Win32: Make terminal used for :!cmd in the GUI work better.  Allow for
  *   redirection.  Probably in call to channel_set_pipes().
- * - implement term_setsize()
- * - add an optional limit for the scrollback size.  When reaching it remove
- *   10% at the start.
+ * - Win32: Redirecting output does not work, Test_terminal_redir_file()
+ *   is disabled.
+ * - When starting terminal window with shell in terminal, then using :gui to
+ *   switch to GUI, shell stops working. Scrollback seems wrong, command
+ *   running in shell is still running.
+ * - GUI: when using tabs, focus in terminal, click on tab does not work.
+ * - handle_moverect() scrolls one line at a time.  Postpone scrolling, count
+ *   the number of lines, until a redraw happens.  Then if scrolling many lines
+ *   a redraw is faster.
  * - Copy text in the vterm to the Vim buffer once in a while, so that
  *   completion works.
- * - in GUI vertical split causes problems.  Cursor is flickering. (Hirohito
- *   Higashi, 2017 Sep 19)
- * - after resizing windows overlap. (Boris Staletic, #2164)
- * - Redirecting output does not work on MS-Windows, Test_terminal_redir_file()
- *   is disabled.
- * - cursor blinks in terminal on widows with a timer. (xtal8, #2142)
- * - Termdebug does not work when Vim build with mzscheme.  gdb hangs.
- * - MS-Windows GUI: WinBar has  tearoff item
- * - MS-Windows GUI: still need to type a key after shell exits?  #1924
- * - After executing a shell command the status line isn't redraw.
- * - add test for giving error for invalid 'termsize' value.
- * - support minimal size when 'termsize' is "rows*cols".
- * - support minimal size when 'termsize' is empty?
- * - GUI: when using tabs, focus in terminal, click on tab does not work.
  * - Redrawing is slow with Athena and Motif.  Also other GUI? (Ramel Eshed)
  * - For the GUI fill termios with default values, perhaps like pangoterm:
  *   http://bazaar.launchpad.net/~leonerd/pangoterm/trunk/view/head:/main.c#L134
- * - when 'encoding' is not utf-8, or the job is using another encoding, setup
+ * - When 'encoding' is not utf-8, or the job is using another encoding, setup
  *   conversions.
+ * - Termdebug does not work when Vim build with mzscheme: gdb hangs just after
+ *   "run".  Everything else works, including communication channel.  Not
+ *   initializing mzscheme avoid the problem, thus it's not some #ifdef.
  */
 
 #include "vim.h"
@@ -135,9 +130,6 @@ struct terminal_S {
     /* last known vterm size */
     int		tl_rows;
     int		tl_cols;
-    /* vterm size does not follow window size */
-    int		tl_rows_fixed;
-    int		tl_cols_fixed;
 
     char_u	*tl_title; /* NULL or allocated */
     char_u	*tl_status_text; /* NULL or allocated */
@@ -210,8 +202,37 @@ static int	desired_cursor_blink = -1;
  */
 
 /*
+ * Parse 'termsize' and set "rows" and "cols" for the terminal size in the
+ * current window.
+ * Sets "rows" and/or "cols" to zero when it should follow the window size.
+ * Return TRUE if the size is the minimum size: "24*80".
+ */
+    static int
+parse_termsize(win_T *wp, int *rows, int *cols)
+{
+    int	minsize = FALSE;
+
+    *rows = 0;
+    *cols = 0;
+
+    if (*wp->w_p_tms != NUL)
+    {
+	char_u *p = vim_strchr(wp->w_p_tms, 'x');
+
+	/* Syntax of value was already checked when it's set. */
+	if (p == NULL)
+	{
+	    minsize = TRUE;
+	    p = vim_strchr(wp->w_p_tms, '*');
+	}
+	*rows = atoi((char *)wp->w_p_tms);
+	*cols = atoi((char *)p + 1);
+    }
+    return minsize;
+}
+
+/*
  * Determine the terminal size from 'termsize' and the current window.
- * Assumes term->tl_rows and term->tl_cols are zero.
  */
     static void
 set_term_and_win_size(term_T *term)
@@ -226,27 +247,21 @@ set_term_and_win_size(term_T *term)
 	return;
     }
 #endif
-    if (*curwin->w_p_tms != NUL)
+    if (parse_termsize(curwin, &term->tl_rows, &term->tl_cols))
     {
-	char_u *p = vim_strchr(curwin->w_p_tms, 'x') + 1;
-
-	term->tl_rows = atoi((char *)curwin->w_p_tms);
-	term->tl_cols = atoi((char *)p);
+	if (term->tl_rows != 0)
+	    term->tl_rows = MAX(term->tl_rows, curwin->w_height);
+	if (term->tl_cols != 0)
+	    term->tl_cols = MAX(term->tl_cols, curwin->w_width);
     }
     if (term->tl_rows == 0)
 	term->tl_rows = curwin->w_height;
     else
-    {
 	win_setheight_win(term->tl_rows, curwin);
-	term->tl_rows_fixed = TRUE;
-    }
     if (term->tl_cols == 0)
 	term->tl_cols = curwin->w_width;
     else
-    {
 	win_setwidth_win(term->tl_cols, curwin);
-	term->tl_cols_fixed = TRUE;
-    }
 }
 
 /*
@@ -1226,17 +1241,32 @@ term_convert_key(term_T *term, int c, char *buf)
 
 /*
  * Return TRUE if the job for "term" is still running.
+ * If "check_job_status" is TRUE update the job status.
+ */
+    static int
+term_job_running_check(term_T *term, int check_job_status)
+{
+    /* Also consider the job finished when the channel is closed, to avoid a
+     * race condition when updating the title. */
+    if (term != NULL
+	&& term->tl_job != NULL
+	&& channel_is_open(term->tl_job->jv_channel))
+    {
+	if (check_job_status)
+	    job_status(term->tl_job);
+	return (term->tl_job->jv_status == JOB_STARTED
+		|| term->tl_job->jv_channel->ch_keep_open);
+    }
+    return FALSE;
+}
+
+/*
+ * Return TRUE if the job for "term" is still running.
  */
     int
 term_job_running(term_T *term)
 {
-    /* Also consider the job finished when the channel is closed, to avoid a
-     * race condition when updating the title. */
-    return term != NULL
-	&& term->tl_job != NULL
-	&& channel_is_open(term->tl_job->jv_channel)
-	&& (term->tl_job->jv_status == JOB_STARTED
-		|| term->tl_job->jv_channel->ch_keep_open);
+    return term_job_running_check(term, FALSE);
 }
 
 /*
@@ -1895,6 +1925,32 @@ prepare_restore_cursor_props(void)
 }
 
 /*
+ * Returns TRUE if the current window contains a terminal and we are sending
+ * keys to the job.
+ * If "check_job_status" is TRUE update the job status.
+ */
+    static int
+term_use_loop_check(int check_job_status)
+{
+    term_T *term = curbuf->b_term;
+
+    return term != NULL
+	&& !term->tl_normal_mode
+	&& term->tl_vterm != NULL
+	&& term_job_running_check(term, check_job_status);
+}
+
+/*
+ * Returns TRUE if the current window contains a terminal and we are sending
+ * keys to the job.
+ */
+    int
+term_use_loop(void)
+{
+    return term_use_loop_check(FALSE);
+}
+
+/*
  * Called when entering a window with the mouse.  If this is a terminal window
  * we may want to change state.
  */
@@ -1905,7 +1961,7 @@ term_win_entered()
 
     if (term != NULL)
     {
-	if (term_use_loop())
+	if (term_use_loop_check(TRUE))
 	{
 	    reset_VIsual_and_resel();
 	    if (State & INSERT)
@@ -1915,21 +1971,6 @@ term_win_entered()
 	enter_mouse_col = mouse_col;
 	enter_mouse_row = mouse_row;
     }
-}
-
-/*
- * Returns TRUE if the current window contains a terminal and we are sending
- * keys to the job.
- */
-    int
-term_use_loop(void)
-{
-    term_T *term = curbuf->b_term;
-
-    return term != NULL
-	&& !term->tl_normal_mode
-	&& term->tl_vterm != NULL
-	&& term_job_running(term);
 }
 
 /*
@@ -1979,7 +2020,7 @@ terminal_loop(int blocking)
 	restore_cursor = TRUE;
 
 	c = term_vgetc();
-	if (!term_use_loop())
+	if (!term_use_loop_check(TRUE))
 	{
 	    /* Job finished while waiting for a character.  Push back the
 	     * received character. */
@@ -2030,7 +2071,7 @@ terminal_loop(int blocking)
 #ifdef FEAT_CMDL_INFO
 	    clear_showcmd();
 #endif
-	    if (!term_use_loop())
+	    if (!term_use_loop_check(TRUE))
 		/* job finished while waiting for a character */
 		break;
 
@@ -2519,7 +2560,27 @@ handle_pushline(int cols, const VTermScreenCell *cells, void *user)
 {
     term_T	*term = (term_T *)user;
 
-    /* TODO: Limit the number of lines that are stored. */
+    /* If the number of lines that are stored goes over 'termscrollback' then
+     * delete the first 10%. */
+    if (term->tl_scrollback.ga_len >= p_tlsl)
+    {
+	int	todo = p_tlsl / 10;
+	int	i;
+
+	curbuf = term->tl_buffer;
+	for (i = 0; i < todo; ++i)
+	{
+	    vim_free(((sb_line_T *)term->tl_scrollback.ga_data + i)->sb_cells);
+	    ml_delete(1, FALSE);
+	}
+	curbuf = curwin->w_buffer;
+
+	term->tl_scrollback.ga_len -= todo;
+	mch_memmove(term->tl_scrollback.ga_data,
+	    (sb_line_T *)term->tl_scrollback.ga_data + todo,
+	    sizeof(sb_line_T) * term->tl_scrollback.ga_len);
+    }
+
     if (ga_grow(&term->tl_scrollback, 1) == OK)
     {
 	cellattr_T	*p = NULL;
@@ -2809,6 +2870,10 @@ term_update_window(win_T *wp)
     VTermScreen *screen;
     VTermState	*state;
     VTermPos	pos;
+    int		rows, cols;
+    int		newrows, newcols;
+    int		minsize;
+    win_T	*twp;
 
     if (term == NULL || term->tl_vterm == NULL || term->tl_normal_mode)
 	return FAIL;
@@ -2827,31 +2892,32 @@ term_update_window(win_T *wp)
      * If the window was resized a redraw will be triggered and we get here.
      * Adjust the size of the vterm unless 'termsize' specifies a fixed size.
      */
-    if ((!term->tl_rows_fixed && term->tl_rows != wp->w_height)
-	    || (!term->tl_cols_fixed && term->tl_cols != wp->w_width))
-    {
-	int	rows = term->tl_rows_fixed ? term->tl_rows : wp->w_height;
-	int	cols = term->tl_cols_fixed ? term->tl_cols : wp->w_width;
-	win_T	*twp;
+    minsize = parse_termsize(wp, &rows, &cols);
 
-	FOR_ALL_WINDOWS(twp)
+    newrows = 99999;
+    newcols = 99999;
+    FOR_ALL_WINDOWS(twp)
+    {
+	/* When more than one window shows the same terminal, use the
+	 * smallest size. */
+	if (twp->w_buffer == term->tl_buffer)
 	{
-	    /* When more than one window shows the same terminal, use the
-	     * smallest size. */
-	    if (twp->w_buffer == term->tl_buffer)
-	    {
-		if (!term->tl_rows_fixed && rows > twp->w_height)
-		    rows = twp->w_height;
-		if (!term->tl_cols_fixed && cols > twp->w_width)
-		    cols = twp->w_width;
-	    }
+	    newrows = MIN(newrows, twp->w_height);
+	    newcols = MIN(newcols, twp->w_width);
 	}
+    }
+    newrows = rows == 0 ? newrows : minsize ? MAX(rows, newrows) : rows;
+    newcols = cols == 0 ? newcols : minsize ? MAX(cols, newcols) : cols;
+
+    if (term->tl_rows != newrows || term->tl_cols != newcols)
+    {
+
 
 	term->tl_vterm_size_changed = TRUE;
-	vterm_set_size(vterm, rows, cols);
+	vterm_set_size(vterm, newrows, newcols);
 	ch_log(term->tl_job->jv_channel, "Resizing terminal to %d lines",
-									 rows);
-	term_report_winsize(term, rows, cols);
+								      newrows);
+	term_report_winsize(term, newrows, newcols);
     }
 
     /* The cursor may have been moved when resizing. */
@@ -3370,6 +3436,10 @@ parse_osc(const char *command, size_t cmdlen, void *user)
 	{
 	    char_u	*cmd = get_tv_string(&item->li_tv);
 
+	    /* Make sure an invoked command doesn't delete the buffer (and the
+	     * terminal) under our fingers. */
+	    ++term->tl_buffer->b_locked;
+
 	    item = item->li_next;
 	    if (item == NULL)
 		ch_log(channel, "Missing argument for %s", cmd);
@@ -3379,6 +3449,7 @@ parse_osc(const char *command, size_t cmdlen, void *user)
 		handle_call_command(term, channel, item);
 	    else
 		ch_log(channel, "Invalid command received: %s", cmd);
+	    --term->tl_buffer->b_locked;
 	}
     }
     else
@@ -4603,6 +4674,36 @@ f_term_getsize(typval_T *argvars, typval_T *rettv)
 }
 
 /*
+ * "term_setsize(buf, rows, cols)" function
+ */
+    void
+f_term_setsize(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    buf_T	*buf = term_get_buf(argvars, "term_setsize()");
+    term_T	*term;
+    varnumber_T rows, cols;
+
+    if (buf == NULL)
+    {
+	EMSG(_("E955: Not a terminal buffer"));
+	return;
+    }
+    if (buf->b_term->tl_vterm == NULL)
+	return;
+    term = buf->b_term;
+    rows = get_tv_number(&argvars[1]);
+    rows = rows <= 0 ? term->tl_rows : rows;
+    cols = get_tv_number(&argvars[2]);
+    cols = cols <= 0 ? term->tl_cols : cols;
+    vterm_set_size(term->tl_vterm, rows, cols);
+    /* handle_resize() will resize the windows */
+
+    /* Get and remember the size we ended up with.  Update the pty. */
+    vterm_get_size(term->tl_vterm, &term->tl_rows, &term->tl_cols);
+    term_report_winsize(term, term->tl_rows, term->tl_cols);
+}
+
+/*
  * "term_getstatus(buf)" function
  */
     void
@@ -5432,7 +5533,7 @@ term_free_vterm(term_T *term)
 }
 
 /*
- * Request size to terminal.
+ * Report the size to the terminal.
  */
     static void
 term_report_winsize(term_T *term, int rows, int cols)
@@ -5514,7 +5615,7 @@ term_free_vterm(term_T *term)
 }
 
 /*
- * Request size to terminal.
+ * Report the size to the terminal.
  */
     static void
 term_report_winsize(term_T *term, int rows, int cols)

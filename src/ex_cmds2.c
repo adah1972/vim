@@ -2751,17 +2751,18 @@ ex_args(exarg_T *eap)
 	 */
 	if (ARGCOUNT > 0)
 	{
-	    /* Overwrite the command, for a short list there is no scrolling
-	     * required and no wait_return(). */
-	    gotocmdline(TRUE);
-	    for (i = 0; i < ARGCOUNT; ++i)
+	    char_u **items = (char_u **)alloc(sizeof(char_u *) * ARGCOUNT);
+
+	    if (items != NULL)
 	    {
-		if (i == curwin->w_arg_idx)
-		    msg_putchar('[');
-		msg_outtrans(alist_name(&ARGLIST[i]));
-		if (i == curwin->w_arg_idx)
-		    msg_putchar(']');
-		msg_putchar(' ');
+		/* Overwrite the command, for a short list there is no
+		 * scrolling required and no wait_return(). */
+		gotocmdline(TRUE);
+
+		for (i = 0; i < ARGCOUNT; ++i)
+		    items[i] = alist_name(&ARGLIST[i]);
+		list_in_columns(items, ARGCOUNT, curwin->w_arg_idx);
+		vim_free(items);
 	    }
 	}
     }
@@ -3821,10 +3822,30 @@ static int APP_BOTH;
     static void
 add_pack_plugin(char_u *fname, void *cookie)
 {
-    if (cookie != &APP_LOAD && strstr((char *)p_rtp, (char *)fname) == NULL)
-	/* directory is not yet in 'runtimepath', add it */
-	if (add_pack_dir_to_rtp(fname) == FAIL)
+    if (cookie != &APP_LOAD)
+    {
+	char_u	*buf = alloc(MAXPATHL);
+	char_u	*p;
+	int	found = FALSE;
+
+	if (buf == NULL)
 	    return;
+	p = p_rtp;
+	while (*p != NUL)
+	{
+	    copy_option_part(&p, buf, MAXPATHL, ",");
+	    if (pathcmp((char *)buf, (char *)fname, -1) == 0)
+	    {
+		found = TRUE;
+		break;
+	    }
+	}
+	vim_free(buf);
+	if (!found)
+	    /* directory is not yet in 'runtimepath', add it */
+	    if (add_pack_dir_to_rtp(fname) == FAIL)
+		return;
+    }
 
     if (cookie != &APP_ADD_DIR)
 	load_pack_plugin(fname);

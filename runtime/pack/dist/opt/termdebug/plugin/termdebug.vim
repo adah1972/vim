@@ -25,7 +25,8 @@ endif
 
 " The command that starts debugging, e.g. ":Termdebug vim".
 " To end type "quit" in the gdb window.
-command -nargs=* -complete=file Termdebug call s:StartDebug(<q-args>)
+command -nargs=* -complete=file -bang Termdebug call s:StartDebug(<bang>0, <f-args>)
+command -nargs=+ -complete=file -bang TermdebugCommand call s:StartDebugCommand(<bang>0, <f-args>)
 
 " Name of the gdb command, defaults to "gdb".
 if !exists('termdebugger')
@@ -43,7 +44,22 @@ else
 endif
 hi default debugBreakpoint term=reverse ctermbg=red guibg=red
 
-func s:StartDebug(cmd)
+func s:StartDebug(bang, ...)
+  " First argument is the command to debug, second core file or process ID.
+  call s:StartDebug_internal({'gdb_args': a:000, 'bang': a:bang})
+endfunc
+
+func s:StartDebugCommand(bang, ...)
+  " First argument is the command to debug, rest are run arguments.
+  call s:StartDebug_internal({'gdb_args': [a:1], 'proc_args': a:000[1:], 'bang': a:bang})
+endfunc
+
+func s:StartDebug_internal(dict)
+  if exists('s:gdbwin')
+    echoerr 'Terminal debugger already running'
+    return
+  endif
+
   let s:startwin = win_getid(winnr())
   let s:startsigncolumn = &signcolumn
 
@@ -90,7 +106,10 @@ func s:StartDebug(cmd)
 
   " Open a terminal window to run the debugger.
   " Add -quiet to avoid the intro message causing a hit-enter prompt.
-  let cmd = [g:termdebugger, '-quiet', '-tty', pty, a:cmd]
+  let gdb_args = get(a:dict, 'gdb_args', [])
+  let proc_args = get(a:dict, 'proc_args', [])
+
+  let cmd = [g:termdebugger, '-quiet', '-tty', pty] + gdb_args
   echomsg 'executing "' . join(cmd) . '"'
   let s:gdbbuf = term_start(cmd, {
 	\ 'exit_cb': function('s:EndDebug'),
@@ -104,6 +123,11 @@ func s:StartDebug(cmd)
   endif
   let s:gdbwin = win_getid(winnr())
 
+  " Set arguments to be run
+  if len(proc_args)
+    call term_sendkeys(s:gdbbuf, 'set args ' . join(proc_args) . "\r")
+  endif
+
   " Connect gdb to the communication pty, using the GDB/MI interface
   call term_sendkeys(s:gdbbuf, 'new-ui mi ' . commpty . "\r")
 
@@ -112,7 +136,7 @@ func s:StartDebug(cmd)
   let try_count = 0
   while 1
     let response = ''
-    for lnum in range(1,20)
+    for lnum in range(1,200)
       if term_getline(s:gdbbuf, lnum) =~ 'new-ui mi '
 	let response = term_getline(s:gdbbuf, lnum + 1)
 	if response =~ 'Undefined command'
@@ -177,11 +201,20 @@ func s:StartDebug(cmd)
     au BufRead * call s:BufRead()
     au BufUnload * call s:BufUnloaded()
   augroup END
+
+  " Run the command if the bang attribute was given
+  " and got to the window
+  if get(a:dict, 'bang', 0)
+    call s:SendCommand('-exec-run')
+    call win_gotoid(s:ptywin)
+  endif
+
 endfunc
 
 func s:EndDebug(job, status)
   exe 'bwipe! ' . s:ptybuf
   exe 'bwipe! ' . s:commbuf
+  unlet s:gdbwin
 
   let curwinid = win_getid(winnr())
 
@@ -295,6 +328,7 @@ func s:DeleteCommands()
   delcommand Evaluate
   delcommand Gdb
   delcommand Program
+  delcommand Source
   delcommand Winbar
 
   nunmap K

@@ -11,7 +11,7 @@ AC_DEFINE(UNIX)
 AC_PROG_MAKE_SET
 
 dnl Checks for programs.
-AC_PROG_CC		dnl required by almost everything
+AC_PROG_CC_C99		dnl required by almost everything
 AC_PROG_CPP		dnl required by header file checks
 AC_PROGRAM_EGREP	dnl required by AC_EGREP_CPP
 AC_PROG_FGREP		dnl finds working grep -F
@@ -28,6 +28,39 @@ dnl Check for standard headers.  We don't use this in Vim but other stuff
 dnl in autoconf needs it, where it uses STDC_HEADERS.
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
+
+dnl Check that the C99 features that Vim uses are supported:
+if test x"$ac_cv_prog_cc_c99" != xno; then
+  dnl If the compiler doesn't explicitly support C99, then check
+  dnl for the specific features Vim uses
+
+  AC_TYPE_LONG_LONG_INT
+  if test "$ac_cv_type_long_long_int" = no; then
+    AC_MSG_FAILURE([Compiler does not support long long int])
+  fi
+
+  AC_MSG_CHECKING([if the compiler supports trailing commas])
+  trailing_commas=no
+  AC_TRY_COMPILE([], [
+    enum {
+      one,
+    };],
+    [AC_MSG_RESULT(yes); trailing_commas=yes],
+    [AC_MSG_RESULT(no)])
+  if test "$trailing_commas" = no; then
+    AC_MSG_FAILURE([Compiler does not support trailing comma in enum])
+  fi
+
+  AC_MSG_CHECKING([if the compiler supports C++ comments])
+  slash_comments=no
+  AC_TRY_COMPILE([],
+    [// C++ comments?],
+    [AC_MSG_RESULT(yes); slash_comments=yes],
+    [AC_MSG_RESULT(no)])
+  if test "$slash_comments" = no; then
+    AC_MSG_FAILURE([Compiler does not support C++ comments])
+  fi
+fi
 
 dnl Check for the flag that fails if stuff are missing.
 
@@ -135,7 +168,7 @@ AC_MSG_CHECKING([for Darwin (Mac OS X)])
 if test "`(uname) 2>/dev/null`" = Darwin; then
   AC_MSG_RESULT(yes)
   MACOS_X=yes
-  CPPFLAGS="$CPPFLAGS -DMACOS_X"
+  CPPFLAGS="$CPPFLAGS -D_DARWIN_C_SOURCE -DMACOS_X"
 
   AC_MSG_CHECKING(--disable-darwin argument)
   AC_ARG_ENABLE(darwin,
@@ -1117,7 +1150,15 @@ if test "$enable_pythoninterp" = "yes" -o "$enable_pythoninterp" = "dynamic"; th
   fi
 
   dnl -- find the python executable
-  AC_PATH_PROGS(vi_cv_path_python, python2 python)
+  AC_MSG_CHECKING(--with-python-command argument)
+  AC_SUBST(vi_cv_path_python)
+  AC_ARG_WITH(python-command, [  --with-python-command=NAME  name of the Python 2 command (default: python2 or python)],
+	vi_cv_path_python="$withval"; AC_MSG_RESULT($vi_cv_path_python),
+	AC_MSG_RESULT(no))
+
+  if test "X$vi_cv_path_python" = "X"; then
+    AC_PATH_PROGS(vi_cv_path_python, python2 python)
+  fi
   if test "X$vi_cv_path_python" != "X"; then
 
     dnl -- get its version number
@@ -1156,7 +1197,7 @@ if test "$enable_pythoninterp" = "yes" -o "$enable_pythoninterp" = "dynamic"; th
       dnl -- where the Python implementation library archives are
 
       AC_ARG_WITH(python-config-dir,
-	[  --with-python-config-dir=PATH  Python's config directory],
+	[  --with-python-config-dir=PATH  Python's config directory (deprecated)],
 	[ vi_cv_path_python_conf="${withval}"; have_python_config_dir=1 ] )
 
       AC_CACHE_CHECK(Python's configuration directory,vi_cv_path_python_conf,
@@ -1343,7 +1384,15 @@ if test "$enable_python3interp" = "yes" -o "$enable_python3interp" = "dynamic"; 
   fi
 
   dnl -- find the python3 executable
-  AC_PATH_PROGS(vi_cv_path_python3, python3 python)
+  AC_MSG_CHECKING(--with-python3-command argument)
+  AC_SUBST(vi_cv_path_python3)
+  AC_ARG_WITH(python3-command, [  --with-python3-command=NAME  name of the Python 3 command (default: python3 or python)],
+	vi_cv_path_python3="$withval"; AC_MSG_RESULT($vi_cv_path_python3),
+	AC_MSG_RESULT(no))
+
+  if test "X$vi_cv_path_python3" = "X"; then
+    AC_PATH_PROGS(vi_cv_path_python3, python3 python)
+  fi
   if test "X$vi_cv_path_python3" != "X"; then
 
     dnl -- get its version number
@@ -1393,7 +1442,7 @@ if test "$enable_python3interp" = "yes" -o "$enable_python3interp" = "dynamic"; 
       dnl -- where the Python implementation library archives are
   
       AC_ARG_WITH(python3-config-dir,
-       [  --with-python3-config-dir=PATH  Python's config directory],
+       [  --with-python3-config-dir=PATH  Python's config directory (deprecated)],
        [ vi_cv_path_python3_conf="${withval}"; have_python3_config_dir=1 ] )
   
       AC_CACHE_CHECK(Python's configuration directory,vi_cv_path_python3_conf,
