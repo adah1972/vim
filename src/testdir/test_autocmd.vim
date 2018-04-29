@@ -837,6 +837,8 @@ func Test_Cmdline()
   au! CmdlineEnter
   au! CmdlineLeave
 
+  let save_shellslash = &shellslash
+  set noshellslash
   au! CmdlineEnter / let g:entered = expand('<afile>')
   au! CmdlineLeave / let g:left = expand('<afile>')
   let g:entered = 0
@@ -849,6 +851,7 @@ func Test_Cmdline()
   bwipe!
   au! CmdlineEnter
   au! CmdlineLeave
+  let &shellslash = save_shellslash
 endfunc
 
 " Test for BufWritePre autocommand that deletes or unloads the buffer.
@@ -1319,11 +1322,11 @@ func Test_Changed_FirstTime()
   let buf = term_start([GetVimProg(), '--clean', '-c', 'set noswapfile'], {'term_rows': 3})
   call assert_equal('running', term_getstatus(buf))
   " Wait for the ruler (in the status line) to be shown.
-  call WaitFor({-> term_getline(buf, 3) =~# '\<All$'})
+  call WaitForAssert({-> assert_match('\<All$', term_getline(buf, 3))})
   " It's only adding autocmd, so that no event occurs.
   call term_sendkeys(buf, ":au! TextChanged <buffer> call writefile(['No'], 'Xchanged.txt')\<cr>")
   call term_sendkeys(buf, "\<C-\\>\<C-N>:qa!\<cr>")
-  call WaitFor({-> term_getstatus(buf) == 'finished'})
+  call WaitForAssert({-> assert_equal('finished', term_getstatus(buf))})
   call assert_equal([''], readfile('Xchanged.txt'))
 
   " clean up

@@ -1420,7 +1420,7 @@ check_due_timer(void)
 	    if (balloonEval != NULL)
 		general_beval_cb(balloonEval, 0);
 	}
-	else if (this_due > 0 && (next_due == -1 || next_due > this_due))
+	else if (next_due == -1 || next_due > this_due)
 	    next_due = this_due;
     }
 #endif
@@ -2941,6 +2941,8 @@ ex_next(exarg_T *eap)
 ex_argedit(exarg_T *eap)
 {
     int i = eap->addr_count ? (int)eap->line2 : curwin->w_arg_idx + 1;
+    // Whether curbuf will be reused, curbuf->b_ffname will be set.
+    int curbuf_is_reusable = curbuf_reusable();
 
     if (do_arglist(eap->arg, AL_ADD, i) == FAIL)
 	return;
@@ -2948,8 +2950,9 @@ ex_argedit(exarg_T *eap)
     maketitle();
 #endif
 
-    if (curwin->w_arg_idx == 0 && (curbuf->b_ml.ml_flags & ML_EMPTY)
-	    && curbuf->b_ffname == NULL)
+    if (curwin->w_arg_idx == 0
+	    && (curbuf->b_ml.ml_flags & ML_EMPTY)
+	    && (curbuf->b_ffname == NULL || curbuf_is_reusable))
 	i = 0;
     /* Edit the argument. */
     if (i < ARGCOUNT)
@@ -3281,7 +3284,8 @@ alist_add_list(
 	for (i = 0; i < count; ++i)
 	{
 	    ARGLIST[after + i].ae_fname = files[i];
-	    ARGLIST[after + i].ae_fnum = buflist_add(files[i], BLN_LISTED);
+	    ARGLIST[after + i].ae_fnum =
+				buflist_add(files[i], BLN_LISTED | BLN_CURBUF);
 	}
 	ALIST(curwin)->al_ga.ga_len += count;
 	if (old_argcount > 0 && curwin->w_arg_idx >= after)
@@ -4136,7 +4140,8 @@ ex_source(exarg_T *eap)
 	char_u *fname = NULL;
 
 	fname = do_browse(0, (char_u *)_("Source Vim script"), eap->arg,
-				      NULL, NULL, BROWSE_FILTER_MACROS, NULL);
+				      NULL, NULL,
+				      (char_u *)_(BROWSE_FILTER_MACROS), NULL);
 	if (fname != NULL)
 	{
 	    cmd_source(fname, eap);

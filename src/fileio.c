@@ -1209,28 +1209,42 @@ retry:
 	 * The amount is limited by the fact that read() only can read
 	 * upto max_unsigned characters (and other things).
 	 */
+	if (!skip_read)
+	{
+#if VIM_SIZEOF_INT > 2
+# if defined(SSIZE_MAX) && (SSIZE_MAX < 0x10000L)
+		size = SSIZE_MAX;		    /* use max I/O size, 52K */
+# else
+		/* Use buffer >= 64K.  Add linerest to double the size if the
+		 * line gets very long, to avoid a lot of copying. But don't
+		 * read more than 1 Mbyte at a time, so we can be interrupted.
+		 */
+		size = 0x10000L + linerest;
+		if (size > 0x100000L)
+		    size = 0x100000L;
+# endif
+#else
+		size = 0x7ff0L - linerest;	    /* limit buffer to 32K */
+#endif
+	}
+
+	/* Protect against the argument of lalloc() going negative. */
+	if (
 #if VIM_SIZEOF_INT <= 2
-	if (linerest >= 0x7ff0)
+	    linerest >= 0x7ff0
+#else
+	    size < 0 || size + linerest + 1 < 0 || linerest >= MAXCOL
+#endif
+	   )
 	{
 	    ++split;
 	    *ptr = NL;		    /* split line by inserting a NL */
 	    size = 1;
 	}
 	else
-#endif
 	{
 	    if (!skip_read)
 	    {
-#if VIM_SIZEOF_INT > 2
-# if defined(SSIZE_MAX) && (SSIZE_MAX < 0x10000L)
-		size = SSIZE_MAX;		    /* use max I/O size, 52K */
-# else
-		size = 0x10000L;		    /* use buffer >= 64K */
-# endif
-#else
-		size = 0x7ff0L - linerest;	    /* limit buffer to 32K */
-#endif
-
 		for ( ; size >= 10; size = (long)((long_u)size >> 1))
 		{
 		    if ((new_buffer = lalloc((long_u)(size + linerest + 1),
@@ -1392,7 +1406,7 @@ retry:
 
 			/* If the crypt layer is buffering, not producing
 			 * anything yet, need to read more. */
-			if (size > 0 && decrypted_size == 0)
+			if (decrypted_size == 0)
 			    continue;
 
 			if (linerest == 0)
@@ -9524,6 +9538,12 @@ apply_autocmds_group(
 	 * ColorScheme, QuickFixCmd* or DirChanged */
 	if (event == EVENT_FILETYPE
 		|| event == EVENT_SYNTAX
+		|| event == EVENT_CMDLINECHANGED
+		|| event == EVENT_CMDLINEENTER
+		|| event == EVENT_CMDLINELEAVE
+		|| event == EVENT_CMDWINENTER
+		|| event == EVENT_CMDWINLEAVE
+		|| event == EVENT_CMDUNDEFINED
 		|| event == EVENT_FUNCUNDEFINED
 		|| event == EVENT_REMOTEREPLY
 		|| event == EVENT_SPELLFILEMISSING
@@ -9532,7 +9552,10 @@ apply_autocmds_group(
 		|| event == EVENT_OPTIONSET
 		|| event == EVENT_QUICKFIXCMDPOST
 		|| event == EVENT_DIRCHANGED)
+	{
 	    fname = vim_strsave(fname);
+	    autocmd_fname_full = TRUE; /* don't expand it later */
+	}
 	else
 	    fname = FullName_save(fname, FALSE);
     }

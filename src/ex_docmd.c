@@ -9619,7 +9619,8 @@ ex_redir(exarg_T *eap)
 
 		browseFile = do_browse(BROWSE_SAVE,
 			(char_u *)_("Save Redirection"),
-			fname, NULL, NULL, BROWSE_FILTER_ALL_FILES, curbuf);
+			fname, NULL, NULL,
+			(char_u *)_(BROWSE_FILTER_ALL_FILES), curbuf);
 		if (browseFile == NULL)
 		    return;		/* operation cancelled */
 		vim_free(fname);
@@ -9845,7 +9846,8 @@ ex_mkrc(
 		eap->cmdidx == CMD_mksession ? (char_u *)_("Save Session") :
 # endif
 		(char_u *)_("Save Setup"),
-		fname, (char_u *)"vim", NULL, BROWSE_FILTER_MACROS, NULL);
+		fname, (char_u *)"vim", NULL,
+		(char_u *)_(BROWSE_FILTER_MACROS), NULL);
 	if (browseFile == NULL)
 	    goto theend;
 	fname = browseFile;
@@ -12193,14 +12195,23 @@ ex_set(exarg_T *eap)
 	(void)do_set(eap->arg, flags);
 }
 
-#ifdef FEAT_SEARCH_EXTRA
+#if defined(FEAT_SEARCH_EXTRA) || defined(PROTO)
+    void
+set_no_hlsearch(int flag)
+{
+    no_hlsearch = flag;
+# ifdef FEAT_EVAL
+    set_vim_var_nr(VV_HLSEARCH, !no_hlsearch && p_hls);
+# endif
+}
+
 /*
  * ":nohlsearch"
  */
     static void
 ex_nohlsearch(exarg_T *eap UNUSED)
 {
-    SET_NO_HLSEARCH(TRUE);
+    set_no_hlsearch(TRUE);
     redraw_all_later(SOME_VALID);
 }
 

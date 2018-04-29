@@ -345,6 +345,15 @@ channel_still_useful(channel_T *channel)
 }
 
 /*
+ * Return TRUE if "channel" is closeable (i.e. all readable fds are closed).
+ */
+    static int
+channel_can_close(channel_T *channel)
+{
+    return channel->ch_to_be_closed == 0;
+}
+
+/*
  * Close a channel and free all its resources.
  */
     static void
@@ -892,7 +901,7 @@ channel_open(
     channel->ch_nb_close_cb = nb_close_cb;
     channel->ch_hostname = (char *)vim_strsave((char_u *)hostname);
     channel->ch_port = port_in;
-    channel->ch_to_be_closed |= (1 << PART_SOCK);
+    channel->ch_to_be_closed |= (1U << PART_SOCK);
 
 #ifdef FEAT_GUI
     channel_gui_register_one(channel, PART_SOCK);
@@ -988,7 +997,8 @@ ch_close_part(channel_T *channel, ch_part_T part)
 	}
 	*fd = INVALID_FD;
 
-	channel->ch_to_be_closed &= ~(1 << part);
+	/* channel is closed, may want to end the job if it was the last */
+	channel->ch_to_be_closed &= ~(1U << part);
     }
 }
 
@@ -999,6 +1009,12 @@ channel_set_pipes(channel_T *channel, sock_T in, sock_T out, sock_T err)
     {
 	ch_close_part(channel, PART_IN);
 	channel->CH_IN_FD = in;
+# if defined(UNIX)
+	/* Do not end the job when all output channels are closed, wait until
+	 * the job ended. */
+	if (isatty(in))
+	    channel->ch_to_be_closed |= (1U << PART_IN);
+# endif
     }
     if (out != INVALID_FD)
     {
@@ -1007,7 +1023,7 @@ channel_set_pipes(channel_T *channel, sock_T in, sock_T out, sock_T err)
 # endif
 	ch_close_part(channel, PART_OUT);
 	channel->CH_OUT_FD = out;
-	channel->ch_to_be_closed |= (1 << PART_OUT);
+	channel->ch_to_be_closed |= (1U << PART_OUT);
 # if defined(FEAT_GUI)
 	channel_gui_register_one(channel, PART_OUT);
 # endif
@@ -1019,7 +1035,7 @@ channel_set_pipes(channel_T *channel, sock_T in, sock_T out, sock_T err)
 # endif
 	ch_close_part(channel, PART_ERR);
 	channel->CH_ERR_FD = err;
-	channel->ch_to_be_closed |= (1 << PART_ERR);
+	channel->ch_to_be_closed |= (1U << PART_ERR);
 # if defined(FEAT_GUI)
 	channel_gui_register_one(channel, PART_ERR);
 # endif
@@ -4200,9 +4216,9 @@ channel_parse_messages(void)
     }
     while (channel != NULL)
     {
-	if (channel->ch_to_be_closed == 0)
+	if (channel_can_close(channel))
 	{
-	    channel->ch_to_be_closed = (1 << PART_COUNT);
+	    channel->ch_to_be_closed = (1U << PART_COUNT);
 	    channel_close_now(channel);
 	    /* channel may have been freed, start over */
 	    channel = first_channel;
@@ -5002,6 +5018,8 @@ static job_T *first_job = NULL;
     static void
 job_free_contents(job_T *job)
 {
+    int		i;
+
     ch_log(job->jv_channel, "Freeing job");
     if (job->jv_channel != NULL)
     {
@@ -5019,6 +5037,12 @@ job_free_contents(job_T *job)
     vim_free(job->jv_tty_out);
     vim_free(job->jv_stoponexit);
     free_callback(job->jv_exit_cb, job->jv_exit_partial);
+    if (job->jv_argv != NULL)
+    {
+	for (i = 0; job->jv_argv[i] != NULL; i++)
+	    vim_free(job->jv_argv[i]);
+	vim_free(job->jv_argv);
+    }
 }
 
     static void
@@ -5069,6 +5093,15 @@ job_need_end_check(job_T *job)
 job_channel_still_useful(job_T *job)
 {
     return job->jv_channel != NULL && channel_still_useful(job->jv_channel);
+}
+
+/*
+ * Return TRUE if the channel of "job" is closeable.
+ */
+    static int
+job_channel_can_close(job_T *job)
+{
+    return job->jv_channel != NULL && channel_can_close(job->jv_channel);
 }
 
 /*
@@ -5200,6 +5233,10 @@ job_cleanup(job_T *job)
 
     /* Ready to cleanup the job. */
     job->jv_status = JOB_FINISHED;
+
+    /* When only channel-in is kept open, close explicitly. */
+    if (job->jv_channel != NULL)
+	ch_close_part(job->jv_channel, PART_IN);
 
     if (job->jv_exit_cb != NULL)
     {
@@ -5405,8 +5442,9 @@ has_pending_job(void)
     for (job = first_job; job != NULL; job = job->jv_next)
 	/* Only should check if the channel has been closed, if the channel is
 	 * open the job won't exit. */
-	if (job->jv_status == JOB_STARTED && job->jv_exit_cb != NULL
-					    && !job_channel_still_useful(job))
+	if ((job->jv_status == JOB_STARTED && !job_channel_still_useful(job))
+		    || (job->jv_status == JOB_FINISHED
+					      && job_channel_can_close(job)))
 	    return TRUE;
     return FALSE;
 }
@@ -5454,15 +5492,16 @@ job_start(typval_T *argvars, char **argv_arg, jobopt_T *opt_arg)
 {
     job_T	*job;
     char_u	*cmd = NULL;
-#if defined(UNIX)
-# define USE_ARGV
     char	**argv = NULL;
     int		argc = 0;
+#if defined(UNIX)
+# define USE_ARGV
 #else
     garray_T	ga;
 #endif
     jobopt_T	opt;
     ch_part_T	part;
+    int		i;
 
     job = job_alloc();
     if (job == NULL)
@@ -5540,7 +5579,15 @@ job_start(typval_T *argvars, char **argv_arg, jobopt_T *opt_arg)
 #ifdef USE_ARGV
     if (argv_arg != NULL)
     {
-	argv = argv_arg;
+	/* Make a copy of argv_arg for job->jv_argv. */
+	for (i = 0; argv_arg[i] != NULL; i++)
+	    argc++;
+	argv = (char **)alloc(sizeof(char_u *) * (argc + 1));
+	if (argv == NULL)
+	    goto theend;
+	for (i = 0; i < argc; i++)
+	    argv[i] = (char *)vim_strsave((char_u *)argv_arg[i]);
+	argv[argc] = NULL;
     }
     else
 #endif
@@ -5553,12 +5600,9 @@ job_start(typval_T *argvars, char **argv_arg, jobopt_T *opt_arg)
 	    EMSG(_(e_invarg));
 	    goto theend;
 	}
-#ifdef USE_ARGV
-	/* This will modify "cmd". */
-	if (mch_parse_cmd(cmd, FALSE, &argv, &argc) == FAIL)
+
+	if (build_argv_from_string(cmd, &argv, &argc) == FAIL)
 	    goto theend;
-	argv[argc] = NULL;
-#endif
     }
     else if (argvars[0].v_type != VAR_LIST
 	    || argvars[0].vval.v_list == NULL
@@ -5569,35 +5613,24 @@ job_start(typval_T *argvars, char **argv_arg, jobopt_T *opt_arg)
     }
     else
     {
-	list_T	    *l = argvars[0].vval.v_list;
-#ifdef USE_ARGV
-	listitem_T  *li;
-	char_u	    *s;
+	list_T *l = argvars[0].vval.v_list;
 
-	/* Pass argv[] to mch_call_shell(). */
-	argv = (char **)alloc(sizeof(char *) * (l->lv_len + 1));
-	if (argv == NULL)
+	if (build_argv_from_list(l, &argv, &argc) == FAIL)
 	    goto theend;
-	for (li = l->lv_first; li != NULL; li = li->li_next)
-	{
-	    s = get_tv_string_chk(&li->li_tv);
-	    if (s == NULL)
-		goto theend;
-	    argv[argc++] = (char *)s;
-	}
-	argv[argc] = NULL;
-#else
+#ifndef USE_ARGV
 	if (win32_build_cmd(l, &ga) == FAIL)
 	    goto theend;
 	cmd = ga.ga_data;
 #endif
     }
 
+    /* Save the command used to start the job. */
+    job->jv_argv = (char_u **)argv;
+
 #ifdef USE_ARGV
     if (ch_log_active())
     {
 	garray_T    ga;
-	int	    i;
 
 	ga_init2(&ga, (int)sizeof(char), 200);
 	for (i = 0; i < argc; ++i)
@@ -5620,12 +5653,11 @@ job_start(typval_T *argvars, char **argv_arg, jobopt_T *opt_arg)
 	channel_write_in(job->jv_channel);
 
 theend:
-#ifdef USE_ARGV
-    if (argv != argv_arg)
-	vim_free(argv);
-#else
+#ifndef USE_ARGV
     vim_free(ga.ga_data);
 #endif
+    if ((char_u **)argv != job->jv_argv)
+	vim_free(argv);
     free_job_options(&opt);
     return job;
 }
@@ -5661,6 +5693,8 @@ job_info(job_T *job, dict_T *dict)
 {
     dictitem_T	*item;
     varnumber_T	nr;
+    list_T	*l;
+    int		i;
 
     dict_add_nr_str(dict, "status", 0L, (char_u *)job_status(job));
 
@@ -5689,6 +5723,34 @@ job_info(job_T *job, dict_T *dict)
     dict_add_nr_str(dict, "exitval", job->jv_exitval, NULL);
     dict_add_nr_str(dict, "exit_cb", 0L, job->jv_exit_cb);
     dict_add_nr_str(dict, "stoponexit", 0L, job->jv_stoponexit);
+
+    l = list_alloc();
+    if (l != NULL)
+    {
+	dict_add_list(dict, "cmd", l);
+	if (job->jv_argv != NULL)
+	    for (i = 0; job->jv_argv[i] != NULL; i++)
+		list_append_string(l, job->jv_argv[i], -1);
+    }
+}
+
+/*
+ * Implementation of job_info() to return info for all jobs.
+ */
+    void
+job_info_all(list_T *l)
+{
+    job_T	*job;
+    typval_T	tv;
+
+    for (job = first_job; job != NULL; job = job->jv_next)
+    {
+	tv.v_type = VAR_JOB;
+	tv.vval.v_job = job;
+
+	if (list_append_tv(l, &tv) != OK)
+	    return;
+    }
 }
 
 /*
