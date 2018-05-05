@@ -1,4 +1,4 @@
-*autocmd.txt*   For Vim version 8.0.  Last change: 2018 Apr 19
+*autocmd.txt*   For Vim version 8.0.  Last change: 2018 Apr 30
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -347,6 +347,7 @@ Name			triggered by ~
 			when popup menu visible
 |TextYankPost|		after text is yanked or deleted
 
+|ColorSchemePre|	before loading a color scheme
 |ColorScheme|		after loading a color scheme
 
 |RemoteReply|		a reply from a server Vim was received
@@ -468,6 +469,9 @@ BufWinEnter			After a buffer is displayed in a window.  This
 				existing buffer.  But it does happen for a
 				":split" with the name of the current buffer,
 				since it reloads that buffer.
+				Does not happen for a terminal window, because
+				it starts in Terminal-Job mode and Normal mode
+				commands won't work. Use |TerminalOpen| instead.
 							*BufWinLeave*
 BufWinLeave			Before a buffer is removed from a window.
 				Not when it's still visible in another window.
@@ -562,6 +566,10 @@ ColorScheme			After loading a color scheme. |:colorscheme|
 				set, and <amatch> for the new colorscheme
 				name.
 
+							*ColorSchemePre*
+ColorSchemePre			Before loading a color scheme. |:colorscheme|
+				Useful to setup removing things added by a
+				color scheme, before another one is loaded.
 
 							*CompleteDone*
 CompleteDone			After Insert mode completion is done.  Either

@@ -76,4 +76,5 @@ void update_tcap(int attr);
 void swap_tcap(void);
 guicolor_T gui_get_color_cmn(char_u *name);
 guicolor_T gui_get_rgb_color_cmn(int r, int g, int b);
+void cterm_color2rgb(int nr, char_u *r, char_u *g, char_u *b, char_u *ansi_idx);
 /* vim: set ft=c : */
