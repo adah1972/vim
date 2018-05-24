@@ -231,6 +231,15 @@ func Test_getcompletion()
   let l = getcompletion('not', 'mapclear')
   call assert_equal([], l)
 
+  let l = getcompletion('.', 'shellcmd')
+  call assert_equal(['./', '../'], l[0:1])
+  call assert_equal(-1, match(l[2:], '^\.\.\?/$'))
+  let root = has('win32') ? 'C:\\' : '/'
+  let l = getcompletion(root, 'shellcmd')
+  let expected = map(filter(glob(root . '*', 0, 1),
+        \ 'isdirectory(v:val) || executable(v:val)'), 'isdirectory(v:val) ? v:val . ''/'' : v:val')
+  call assert_equal(expected, l)
+
   if has('cscope')
     let l = getcompletion('', 'cscope')
     let cmds = ['add', 'find', 'help', 'kill', 'reset', 'show']
@@ -258,8 +267,7 @@ func Test_getcompletion()
   endif
 
   " For others test if the name is recognized.
-  let names = ['buffer', 'environment', 'file_in_path',
-	\ 'mapping', 'shellcmd', 'tag', 'tag_listfiles', 'user']
+  let names = ['buffer', 'environment', 'file_in_path', 'mapping', 'tag', 'tag_listfiles', 'user']
   if has('cmdline_hist')
     call add(names, 'history')
   endif
@@ -468,6 +476,27 @@ func Test_verbosefile()
   let log = readfile('Xlog')
   call assert_match("foo\nbar", join(log, "\n"))
   call delete('Xlog')
+endfunc
+
+func Test_setcmdpos()
+  func InsertTextAtPos(text, pos)
+    call assert_equal(0, setcmdpos(a:pos))
+    return a:text
+  endfunc
+
+  " setcmdpos() with position in the middle of the command line.
+  call feedkeys(":\"12\<C-R>=InsertTextAtPos('a', 3)\<CR>b\<CR>", 'xt')
+  call assert_equal('"1ab2', @:)
+
+  call feedkeys(":\"12\<C-R>\<C-R>=InsertTextAtPos('a', 3)\<CR>b\<CR>", 'xt')
+  call assert_equal('"1b2a', @:)
+
+  " setcmdpos() with position beyond the end of the command line.
+  call feedkeys(":\"12\<C-B>\<C-R>=InsertTextAtPos('a', 10)\<CR>b\<CR>", 'xt')
+  call assert_equal('"12ab', @:)
+
+  " setcmdpos() returns 1 when not editing the command line.
+  call assert_equal(1, setcmdpos(3))
 endfunc
 
 set cpo&

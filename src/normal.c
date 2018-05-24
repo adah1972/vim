@@ -871,8 +871,8 @@ getcount:
 		|| (nv_cmds[idx].cmd_flags & NV_NCH_ALW) == NV_NCH_ALW
 		|| (ca.cmdchar == 'q'
 		    && oap->op_type == OP_NOP
-		    && !Recording
-		    && !Exec_reg)
+		    && reg_recording == 0
+		    && reg_executing == 0)
 		|| ((ca.cmdchar == 'a' || ca.cmdchar == 'i')
 		    && (oap->op_type != OP_NOP || VIsual_active))))
     {
@@ -7797,7 +7797,7 @@ n_start_visual_mode(int c)
 {
 #ifdef FEAT_CONCEAL
     /* Check for redraw before changing the state. */
-    conceal_check_cursur_line();
+    conceal_check_cursor_line();
 #endif
 
     VIsual_mode = c;
@@ -7824,7 +7824,7 @@ n_start_visual_mode(int c)
 #endif
 #ifdef FEAT_CONCEAL
     /* Check for redraw after changing the state. */
-    conceal_check_cursur_line();
+    conceal_check_cursor_line();
 #endif
 
     if (p_smd && msg_silent == 0)
@@ -9324,7 +9324,7 @@ nv_record(cmdarg_T *cap)
 #endif
 	    /* (stop) recording into a named register, unless executing a
 	     * register */
-	    if (!Exec_reg && do_record(cap->nchar) == FAIL)
+	    if (reg_executing == 0 && do_record(cap->nchar) == FAIL)
 		clearopbeep(cap->oap);
     }
 }

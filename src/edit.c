@@ -431,7 +431,7 @@ edit(
 #ifdef FEAT_CONCEAL
     /* Check if the cursor line needs redrawing before changing State.  If
      * 'concealcursor' is "n" it needs to be redrawn without concealing. */
-    conceal_check_cursur_line();
+    conceal_check_cursor_line();
 #endif
 
 #ifdef FEAT_MOUSE
@@ -6185,6 +6185,8 @@ insertchar(
      * 'paste' is set)..
      * Don't do this when there an InsertCharPre autocommand is defined,
      * because we need to fire the event for every character.
+     * Do the check for InsertCharPre before the call to vpeekc() because the
+     * InsertCharPre autocommand could change the input buffer.
      */
 #ifdef USE_ON_FLY_SCROLL
     dont_scroll = FALSE;		/* allow scrolling here */
@@ -6194,6 +6196,7 @@ insertchar(
 #ifdef FEAT_MBYTE
 	    && (!has_mbyte || (*mb_char2len)(c) == 1)
 #endif
+	    && !has_insertcharpre()
 	    && vpeekc() != NUL
 	    && !(State & REPLACE_FLAG)
 #ifdef FEAT_CINDENT
@@ -6202,7 +6205,7 @@ insertchar(
 #ifdef FEAT_RIGHTLEFT
 	    && !p_ri
 #endif
-	    && !has_insertcharpre())
+	   )
     {
 #define INPUT_BUFLEN 100
 	char_u		buf[INPUT_BUFLEN + 1];
@@ -8695,7 +8698,7 @@ ins_esc(
      * When recording or for CTRL-O, need to display the new mode.
      * Otherwise remove the mode message.
      */
-    if (Recording || restart_edit != NUL)
+    if (reg_recording != 0 || restart_edit != NUL)
 	showmode();
     else if (p_smd)
 	MSG("");

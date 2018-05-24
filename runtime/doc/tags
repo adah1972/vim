@@ -1408,6 +1408,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 --ttyfail	starting.txt	/*--ttyfail*
 --version	starting.txt	/*--version*
 --windowid	starting.txt	/*--windowid*
+-?	starting.txt	/*-?*
 -A	starting.txt	/*-A*
 -C	starting.txt	/*-C*
 -D	starting.txt	/*-D*
@@ -3200,6 +3201,8 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 :unhide	windows.txt	/*:unhide*
 :unl	eval.txt	/*:unl*
 :unlet	eval.txt	/*:unlet*
+:unlet-$	eval.txt	/*:unlet-$*
+:unlet-environment	eval.txt	/*:unlet-environment*
 :unlo	eval.txt	/*:unlo*
 :unlockvar	eval.txt	/*:unlockvar*
 :unm	map.txt	/*:unm*
@@ -4746,6 +4749,7 @@ PEP8	filetype.txt	/*PEP8*
 PHP_BracesAtCodeLevel	indent.txt	/*PHP_BracesAtCodeLevel*
 PHP_autoformatcomment	indent.txt	/*PHP_autoformatcomment*
 PHP_default_indenting	indent.txt	/*PHP_default_indenting*
+PHP_noArrowMatching	indent.txt	/*PHP_noArrowMatching*
 PHP_outdentSLComments	indent.txt	/*PHP_outdentSLComments*
 PHP_outdentphpescape	indent.txt	/*PHP_outdentphpescape*
 PHP_removeCRwhenUnix	indent.txt	/*PHP_removeCRwhenUnix*
@@ -5081,6 +5085,7 @@ added-7.1	version7.txt	/*added-7.1*
 added-7.2	version7.txt	/*added-7.2*
 added-7.3	version7.txt	/*added-7.3*
 added-7.4	version7.txt	/*added-7.4*
+added-8.1	version8.txt	/*added-8.1*
 added-BeOS	version5.txt	/*added-BeOS*
 added-Mac	version5.txt	/*added-Mac*
 added-VMS	version5.txt	/*added-VMS*
@@ -5285,6 +5290,7 @@ c_<C-Left>	cmdline.txt	/*c_<C-Left>*
 c_<C-R>	cmdline.txt	/*c_<C-R>*
 c_<C-R>_<C-A>	cmdline.txt	/*c_<C-R>_<C-A>*
 c_<C-R>_<C-F>	cmdline.txt	/*c_<C-R>_<C-F>*
+c_<C-R>_<C-L>	cmdline.txt	/*c_<C-R>_<C-L>*
 c_<C-R>_<C-O>	cmdline.txt	/*c_<C-R>_<C-O>*
 c_<C-R>_<C-P>	cmdline.txt	/*c_<C-R>_<C-P>*
 c_<C-R>_<C-R>	cmdline.txt	/*c_<C-R>_<C-R>*
@@ -5333,6 +5339,7 @@ c_CTRL-R	cmdline.txt	/*c_CTRL-R*
 c_CTRL-R_=	cmdline.txt	/*c_CTRL-R_=*
 c_CTRL-R_CTRL-A	cmdline.txt	/*c_CTRL-R_CTRL-A*
 c_CTRL-R_CTRL-F	cmdline.txt	/*c_CTRL-R_CTRL-F*
+c_CTRL-R_CTRL-L	cmdline.txt	/*c_CTRL-R_CTRL-L*
 c_CTRL-R_CTRL-O	cmdline.txt	/*c_CTRL-R_CTRL-O*
 c_CTRL-R_CTRL-P	cmdline.txt	/*c_CTRL-R_CTRL-P*
 c_CTRL-R_CTRL-R	cmdline.txt	/*c_CTRL-R_CTRL-R*
@@ -5426,6 +5433,7 @@ changed-7.1	version7.txt	/*changed-7.1*
 changed-7.2	version7.txt	/*changed-7.2*
 changed-7.3	version7.txt	/*changed-7.3*
 changed-7.4	version7.txt	/*changed-7.4*
+changed-8.1	version8.txt	/*changed-8.1*
 changelist	motion.txt	/*changelist*
 changelog.vim	syntax.txt	/*changelog.vim*
 changenr()	eval.txt	/*changenr()*
@@ -6134,6 +6142,7 @@ fork	os_unix.txt	/*fork*
 form.vim	syntax.txt	/*form.vim*
 format-bullet-list	tips.txt	/*format-bullet-list*
 format-comments	change.txt	/*format-comments*
+format-formatexpr	change.txt	/*format-formatexpr*
 formatting	change.txt	/*formatting*
 formfeed	intro.txt	/*formfeed*
 fortran.vim	syntax.txt	/*fortran.vim*
@@ -7817,6 +7826,7 @@ new-session-files	version5.txt	/*new-session-files*
 new-spell	version7.txt	/*new-spell*
 new-style-testing	eval.txt	/*new-style-testing*
 new-tab-pages	version7.txt	/*new-tab-pages*
+new-terminal-window	version8.txt	/*new-terminal-window*
 new-undo-branches	version7.txt	/*new-undo-branches*
 new-unlisted-buffers	version6.txt	/*new-unlisted-buffers*
 new-user-defined	version5.txt	/*new-user-defined*
@@ -7930,6 +7940,7 @@ papp.vim	syntax.txt	/*papp.vim*
 paragraph	motion.txt	/*paragraph*
 pascal.vim	syntax.txt	/*pascal.vim*
 patches-8	version8.txt	/*patches-8*
+patches-8.1	version8.txt	/*patches-8.1*
 pathshorten()	eval.txt	/*pathshorten()*
 pattern	pattern.txt	/*pattern*
 pattern-atoms	pattern.txt	/*pattern-atoms*
@@ -8188,6 +8199,8 @@ redo-register	undo.txt	/*redo-register*
 ref	intro.txt	/*ref*
 reference	intro.txt	/*reference*
 reference_toc	help.txt	/*reference_toc*
+reg_executing()	eval.txt	/*reg_executing()*
+reg_recording()	eval.txt	/*reg_recording()*
 regexp	pattern.txt	/*regexp*
 regexp-changes-5.4	version5.txt	/*regexp-changes-5.4*
 register	sponsor.txt	/*register*
@@ -8989,6 +9002,7 @@ terminal-colors	os_unix.txt	/*terminal-colors*
 terminal-communication	terminal.txt	/*terminal-communication*
 terminal-cursor-style	terminal.txt	/*terminal-cursor-style*
 terminal-debug	terminal.txt	/*terminal-debug*
+terminal-debugger	terminal.txt	/*terminal-debugger*
 terminal-diff	terminal.txt	/*terminal-diff*
 terminal-diffscreendump	terminal.txt	/*terminal-diffscreendump*
 terminal-dumptest	terminal.txt	/*terminal-dumptest*
@@ -9008,6 +9022,7 @@ terminal-to-job	terminal.txt	/*terminal-to-job*
 terminal-typing	terminal.txt	/*terminal-typing*
 terminal-unix	terminal.txt	/*terminal-unix*
 terminal-use	terminal.txt	/*terminal-use*
+terminal-window	terminal.txt	/*terminal-window*
 terminal.txt	terminal.txt	/*terminal.txt*
 terminfo	term.txt	/*terminfo*
 termresponse-variable	eval.txt	/*termresponse-variable*
@@ -9400,6 +9415,7 @@ version-7.2	version7.txt	/*version-7.2*
 version-7.3	version7.txt	/*version-7.3*
 version-7.4	version7.txt	/*version-7.4*
 version-8.0	version8.txt	/*version-8.0*
+version-8.1	version8.txt	/*version-8.1*
 version-variable	eval.txt	/*version-variable*
 version4.txt	version4.txt	/*version4.txt*
 version5.txt	version5.txt	/*version5.txt*
@@ -9411,6 +9427,7 @@ version7.3	version7.txt	/*version7.3*
 version7.4	version7.txt	/*version7.4*
 version7.txt	version7.txt	/*version7.txt*
 version8.0	version8.txt	/*version8.0*
+version8.1	version8.txt	/*version8.1*
 version8.txt	version8.txt	/*version8.txt*
 vi	intro.txt	/*vi*
 vi-differences	vi_diff.txt	/*vi-differences*
@@ -9423,6 +9440,7 @@ view-file	starting.txt	/*view-file*
 views-sessions	starting.txt	/*views-sessions*
 vim-7.4	version7.txt	/*vim-7.4*
 vim-8	version8.txt	/*vim-8*
+vim-8.1	version8.txt	/*vim-8.1*
 vim-additions	vi_diff.txt	/*vim-additions*
 vim-announce	intro.txt	/*vim-announce*
 vim-arguments	starting.txt	/*vim-arguments*

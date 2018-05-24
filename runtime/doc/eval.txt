@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.0.  Last change: 2018 Apr 28
+*eval.txt*	For Vim version 8.1.  Last change: 2018 May 17
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -2288,8 +2288,6 @@ mode([expr])			String	current editing mode
 mzeval({expr})			any	evaluate |MzScheme| expression
 nextnonblank({lnum})		Number	line nr of non-blank line >= {lnum}
 nr2char({expr} [, {utf8}])	String	single char with ASCII/UTF8 value {expr}
-option_restore({list})		none	restore options saved by option_save()
-option_save({list})		List	save options values
 or({expr}, {expr})		Number	bitwise OR
 pathshorten({expr})		String	shorten directory names in a path
 perleval({expr})		any	evaluate |Perl| expression
@@ -2304,6 +2302,8 @@ range({expr} [, {max} [, {stride}]])
 				List	items from {expr} to {max}
 readfile({fname} [, {binary} [, {max}]])
 				List	get list of lines from file {fname}
+reg_executing()			Number	get the executing register name
+reg_recording()			String	get the recording register name
 reltime([{start} [, {end}]])	List	get time value
 reltimefloat({time})		Float	turn the time value into a Float
 reltimestr({time})		String	turn time value into a String
@@ -5822,7 +5822,8 @@ maparg({name} [, {mode} [, {abbr} [, {dict}]]])			*maparg()*
 		listing.
 
 		When there is no mapping for {name}, an empty String is
-		returned.
+		returned.  When the mapping for {name} is empty, then "<Nop>"
+		is returned.
 
 		The {name} can have special key names, like in the ":map"
 		command.
@@ -5889,9 +5890,10 @@ mapcheck({name} [, {mode} [, {abbr}]])			*mapcheck()*
 		mapping that matches with {name}, while maparg() only finds a
 		mapping for {name} exactly.
 		When there is no mapping that starts with {name}, an empty
-		String is returned.  If there is one, the rhs of that mapping
+		String is returned.  If there is one, the RHS of that mapping
 		is returned.  If there are several mappings that start with
-		{name}, the rhs of one of them is returned.
+		{name}, the RHS of one of them is returned.  This will be
+		"<Nop>" if the RHS is empty.
 		The mappings local to the current buffer are checked first,
 		then the global mappings.
 		This function can be used to check if a mapping can be added
@@ -6559,6 +6561,15 @@ readfile({fname} [, {binary} [, {max}]])
 		When the file can't be opened an error message is given and
 		the result is an empty list.
 		Also see |writefile()|.
+
+reg_executing()						*reg_executing()*
+		Returns the single letter name of the register being executed.
+		Returns an empty string when no register is being executed.
+		See |@|.
+
+reg_recording()						*reg_recording()*
+		Returns the single letter name of the register being recorded.
+		Returns an empty string string when not recording.  See |q|.
 
 reltime([{start} [, {end}]])				*reltime()*
 		Return an item that represents a time value.  The format of
@@ -9123,22 +9134,16 @@ There are four types of features:
     Example: >
 	:if has("gui_running")
 <							*has-patch*
-3.  Included patches.  The "patch123" feature means that patch 123 has been
-    included.  Note that this form does not check the version of Vim, you need
-    to inspect |v:version| for that.
-    Example (checking version 6.2.148 or later): >
-	:if v:version > 602 || v:version == 602 && has("patch148")
-<    Note that it's possible for patch 147 to be omitted even though 148 is
-    included.
-
-4.  Beyond a certain version or at a certain version and including a specific
-    patch.  The "patch-7.4.237" feature means that the Vim version is 7.5 or
-    later, or it is version 7.4 and patch 237 was included.
-    Note that this only works for patch 7.4.237 and later, before that you
-    need to use the example above that checks v:version.  Example: >
+3.  Beyond a certain version or at a certain version and including a specific
+    patch.  The "patch-7.4.248" feature means that the Vim version is 7.5 or
+    later, or it is version 7.4 and patch 248 was included.  Example: >
 	:if has("patch-7.4.248")
-<    Note that it's possible for patch 147 to be omitted even though 148 is
-    included.
+<    Note that it's possible for patch 248 to be omitted even though 249 is
+    included.  Only happens when cherry-picking patches.
+    Note that this form only works for patch 7.4.237 and later, before that
+    you need to check for the patch and the  v:version.  Example (checking
+    version 6.2.148 or later): >
+	:if v:version > 602 || (v:version == 602 && has("patch148"))
 
 Hint: To find out if Vim supports backslashes in a file name (MS-Windows),
 use: `if exists('+shellslash')`
@@ -9938,6 +9943,14 @@ This does NOT work: >
 			deleted when the script ends).  Function-local
 			variables are automatically deleted when the function
 			ends.
+
+:unl[et] ${env-name} ...			*:unlet-environment* *:unlet-$*
+			Remove environment variable {env-name}.
+			Can mix {name} and ${env-name} in one :unlet command.
+			No error message is given for a non-existing
+			variable, also without !.
+			If the system does not support deleting an environment
+			variable, it is made emtpy.
 
 :lockv[ar][!] [depth] {name} ...			*:lockvar* *:lockv*
 			Lock the internal variable {name}.  Locking means that

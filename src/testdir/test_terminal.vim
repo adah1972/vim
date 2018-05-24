@@ -675,18 +675,15 @@ func Test_terminal_wrong_options()
 endfunc
 
 func Test_terminal_redir_file()
-  " TODO: this should work on MS-Window
-  if has('unix')
-    let cmd = Get_cat_123_cmd()
-    let buf = term_start(cmd, {'out_io': 'file', 'out_name': 'Xfile'})
-    call term_wait(buf)
-    call WaitForAssert({-> assert_notequal(0, len(readfile("Xfile")))})
-    call assert_match('123', readfile('Xfile')[0])
-    let g:job = term_getjob(buf)
-    call WaitForAssert({-> assert_equal("dead", job_status(g:job))})
-    call delete('Xfile')
-    bwipe
-  endif
+  let cmd = Get_cat_123_cmd()
+  let buf = term_start(cmd, {'out_io': 'file', 'out_name': 'Xfile'})
+  call term_wait(buf)
+  call WaitForAssert({-> assert_notequal(0, len(readfile("Xfile")))})
+  call assert_match('123', readfile('Xfile')[0])
+  let g:job = term_getjob(buf)
+  call WaitForAssert({-> assert_equal("dead", job_status(g:job))})
+  call delete('Xfile')
+  bwipe
 
   if has('unix')
     call writefile(['one line'], 'Xfile')
@@ -1486,4 +1483,54 @@ func Test_terminal_termwinkey()
   let job = term_getjob(buf)
   call feedkeys("\<C-L>\<C-C>", 'tx')
   call WaitForAssert({-> assert_equal("dead", job_status(job))})
+endfunc
+
+func Test_terminal_out_err()
+  if !has('unix')
+    return
+  endif
+  call writefile([
+	\ '#!/bin/sh',
+	\ 'echo "this is standard error" >&2',
+	\ 'echo "this is standard out" >&1',
+	\ ], 'Xechoerrout.sh')
+  call setfperm('Xechoerrout.sh', 'rwxrwx---')
+
+  let outfile = 'Xtermstdout'
+  let buf = term_start(['./Xechoerrout.sh'], {'out_io': 'file', 'out_name': outfile})
+  call WaitForAssert({-> assert_inrange(1, 2, len(readfile(outfile)))})
+  call assert_equal("this is standard out", readfile(outfile)[0])
+  call assert_equal('this is standard error', term_getline(buf, 1))
+
+  call WaitForAssert({-> assert_equal('dead', job_status(term_getjob(buf)))})
+  exe buf . 'bwipe'
+  call delete('Xechoerrout.sh')
+  call delete(outfile)
+endfunc
+
+func Test_terminwinscroll()
+  if !has('unix')
+    return
+  endif
+
+  " Let the terminal output more than 'termwinscroll' lines, some at the start
+  " will be dropped.
+  exe 'set termwinscroll=' . &lines
+  let buf = term_start('/bin/sh')
+  for i in range(1, &lines)
+    call feedkeys("echo " . i . "\<CR>", 'xt')
+    call WaitForAssert({-> assert_match(string(i), term_getline(buf, term_getcursor(buf)[0] - 1))})
+  endfor
+  " Go to Terminal-Normal mode to update the buffer.
+  call feedkeys("\<C-W>N", 'xt')
+  call assert_inrange(&lines, &lines * 110 / 100 + winheight(0), line('$'))
+
+  " Every "echo nr" must only appear once
+  let lines = getline(1, line('$'))
+  for i in range(&lines - len(lines) / 2 + 2, &lines)
+    let filtered = filter(copy(lines), {idx, val -> val =~ 'echo ' . i . '\>'})
+    call assert_equal(1, len(filtered), 'for "echo ' . i . '"')
+  endfor
+
+  exe buf . 'bwipe!'
 endfunc
