@@ -2108,6 +2108,7 @@ cscope_connection([{num}, {dbpath} [, {prepend}]])
 cursor({lnum}, {col} [, {off}])
 				Number	move cursor to {lnum}, {col}, {off}
 cursor({list})			Number	move cursor to position in {list}
+debugbreak({pid})		Number  interrupt process being debugged
 deepcopy({expr} [, {noref}])	any	make a full copy of {expr}
 delete({fname} [, {flags}])	Number	delete the file or directory {fname}
 deletebufline({expr}, {first}[, {last}])
@@ -3480,6 +3481,11 @@ cursor({list})
 		position within a <Tab> or after the last character.
 		Returns 0 when the position could be set, -1 otherwise.
 
+debugbreak({pid})					*debugbreak()*
+		Specifically used to interrupt a program being debugged.  It
+		will cause process {pid} to get a SIGTRAP.  Behavior for other
+		processes is undefined. See |terminal-debugger|.
+		{only available on MS-Windows}
 
 deepcopy({expr} [, {noref}])				*deepcopy()* *E698*
 		Make a copy of {expr}.  For Numbers and Strings this isn't
@@ -5488,6 +5494,20 @@ job_start({command} [, {options}])			*job_start()*
 		The returned Job object can be used to get the status with
 		|job_status()| and stop the job with |job_stop()|.
 
+		Note that the job object will be deleted if there are no
+		references to it.  This closes the stdin and stderr, which may
+		cause the job to fail with an error.  To avoid this keep a
+		reference to the job.  Thus instead of: >
+	call job_start('my-command')
+<		use: >
+	let myjob = job_start('my-command')
+<		and unlet "myjob" once the job is not needed or is past the
+		point where it would fail (e.g. when it prints a message on
+		startup).  Keep in mind that variables local to a function
+		will cease to exist if the function returns.  Use a
+		script-local variable if needed: >
+	let s:myjob = job_start('my-command')
+<
 		{options} must be a Dictionary.  It can contain many optional
 		items, see |job-options|.
 
@@ -7033,6 +7053,7 @@ searchpair({start}, {middle}, {end} [, {flags} [, {skip}
 		When evaluating {skip} causes an error the search is aborted
 		and -1 returned.
 		{skip} can be a string, a lambda, a funcref or a partial.
+		Anything else makes the function fail.
 
 		For {stopline} and {timeout} see |search()|.
 
@@ -8674,6 +8695,8 @@ test_override({name}, {val})				*test_override()*
 		redraw       disable the redrawing() function
 		char_avail   disable the char_avail() function
 		starting     reset the "starting" variable, see below
+		nfa_fail     makes the NFA regexp engine fail to force a
+			     fallback to the old engine
 		ALL	     clear all overrides ({val} is not used)
 
 		"starting" is to be used when a test should behave like

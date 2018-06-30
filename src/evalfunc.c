@@ -123,6 +123,9 @@ static void f_cosh(typval_T *argvars, typval_T *rettv);
 static void f_count(typval_T *argvars, typval_T *rettv);
 static void f_cscope_connection(typval_T *argvars, typval_T *rettv);
 static void f_cursor(typval_T *argsvars, typval_T *rettv);
+#ifdef WIN3264
+static void f_debugbreak(typval_T *argvars, typval_T *rettv);
+#endif
 static void f_deepcopy(typval_T *argvars, typval_T *rettv);
 static void f_delete(typval_T *argvars, typval_T *rettv);
 static void f_deletebufline(typval_T *argvars, typval_T *rettv);
@@ -577,6 +580,9 @@ static struct fst
     {"count",		2, 4, f_count},
     {"cscope_connection",0,3, f_cscope_connection},
     {"cursor",		1, 3, f_cursor},
+#ifdef WIN3264
+    {"debugbreak",	1, 1, f_debugbreak},
+#endif
     {"deepcopy",	1, 2, f_deepcopy},
     {"delete",		1, 2, f_delete},
     {"deletebufline",	2, 3, f_deletebufline},
@@ -2760,6 +2766,33 @@ f_cursor(typval_T *argvars, typval_T *rettv)
     curwin->w_set_curswant = set_curswant;
     rettv->vval.v_number = 0;
 }
+
+#ifdef WIN3264
+/*
+ * "debugbreak()" function
+ */
+    static void
+f_debugbreak(typval_T *argvars, typval_T *rettv)
+{
+    int		pid;
+
+    rettv->vval.v_number = FAIL;
+    pid = (int)get_tv_number(&argvars[0]);
+    if (pid == 0)
+	EMSG(_(e_invarg));
+    else
+    {
+	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, 0, pid);
+
+	if (hProcess != NULL)
+	{
+	    DebugBreakProcess(hProcess);
+	    CloseHandle(hProcess);
+	    rettv->vval.v_number = OK;
+	}
+    }
+}
+#endif
 
 /*
  * "deepcopy()" function
@@ -6403,6 +6436,9 @@ f_has(typval_T *argvars, typval_T *rettv)
 	"user-commands",    /* was accidentally included in 5.4 */
 	"user_commands",
 #endif
+#ifdef FEAT_VARTABS
+	"vartabs",
+#endif
 #ifdef FEAT_VIMINFO
 	"viminfo",
 #endif
@@ -6573,7 +6609,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #endif
 #ifdef FEAT_VTP
 	else if (STRICMP(name, "vcon") == 0)
-	    n = has_vtp_working();
+	    n = is_term_win32() && has_vtp_working();
 #endif
 #ifdef FEAT_NETBEANS_INTG
 	else if (STRICMP(name, "netbeans_enabled") == 0)
@@ -10116,7 +10152,8 @@ searchpair_cmn(typval_T *argvars, pos_T *match_pos)
     long	lnum_stop = 0;
     long	time_limit = 0;
 
-    /* Get the three pattern arguments: start, middle, end. */
+    /* Get the three pattern arguments: start, middle, end. Will result in an
+     * error if not a valid argument. */
     spat = get_tv_string_chk(&argvars[0]);
     mpat = get_tv_string_buf_chk(&argvars[1], nbuf1);
     epat = get_tv_string_buf_chk(&argvars[2], nbuf2);
@@ -10153,19 +10190,26 @@ searchpair_cmn(typval_T *argvars, pos_T *match_pos)
 	    && skip->v_type != VAR_STRING)
 	{
 	    /* Type error */
+	    EMSG2(_(e_invarg2), get_tv_string(&argvars[4]));
 	    goto theend;
 	}
 	if (argvars[5].v_type != VAR_UNKNOWN)
 	{
 	    lnum_stop = (long)get_tv_number_chk(&argvars[5], NULL);
 	    if (lnum_stop < 0)
+	    {
+		EMSG2(_(e_invarg2), get_tv_string(&argvars[5]));
 		goto theend;
+	    }
 #ifdef FEAT_RELTIME
 	    if (argvars[6].v_type != VAR_UNKNOWN)
 	    {
 		time_limit = (long)get_tv_number_chk(&argvars[6], NULL);
 		if (time_limit < 0)
+		{
+		    EMSG2(_(e_invarg2), get_tv_string(&argvars[6]));
 		    goto theend;
+		}
 	    }
 #endif
 	}
@@ -13057,10 +13101,13 @@ f_test_override(typval_T *argvars, typval_T *rettv UNUSED)
 		save_starting = -1;
 	    }
 	}
+	else if (STRCMP(name, (char_u *)"nfa_fail") == 0)
+	    nfa_fail_for_testing = val;
 	else if (STRCMP(name, (char_u *)"ALL") == 0)
 	{
 	    disable_char_avail_for_testing = FALSE;
 	    disable_redraw_for_testing = FALSE;
+	    nfa_fail_for_testing = FALSE;
 	    if (save_starting >= 0)
 	    {
 		starting = save_starting;
