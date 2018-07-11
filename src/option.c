@@ -2997,7 +2997,8 @@ static struct vimoption options[] =
 			    {(char_u *)0L, (char_u *)0L}
 #endif
 			    SCRIPTID_INIT},
-    {"viminfofile", "vif",  P_STRING|P_ONECOMMA|P_NODUP|P_SECURE|P_VI_DEF,
+    {"viminfofile", "vif",  P_STRING|P_EXPAND|P_ONECOMMA|P_NODUP
+							    |P_SECURE|P_VI_DEF,
 #ifdef FEAT_VIMINFO
 			    (char_u *)&p_viminfofile, PV_NONE,
 			    {(char_u *)"", (char_u *)0L}
@@ -13016,7 +13017,7 @@ get_sw_value(buf_T *buf)
 
 /*
  * Return the effective softtabstop value for the current buffer, using the
- * 'tabstop' value when 'softtabstop' is negative.
+ * 'shiftwidth' value when 'softtabstop' is negative.
  */
     long
 get_sts_value(void)
@@ -13222,11 +13223,11 @@ get_winbuf_options(int bufopt)
 	    if (varp != NULL)
 	    {
 		if (opt->flags & P_STRING)
-		    dict_add_nr_str(d, opt->fullname, 0L, *(char_u **)varp);
+		    dict_add_string(d, opt->fullname, *(char_u **)varp);
 		else if (opt->flags & P_NUM)
-		    dict_add_nr_str(d, opt->fullname, *(long *)varp, NULL);
+		    dict_add_number(d, opt->fullname, *(long *)varp);
 		else
-		    dict_add_nr_str(d, opt->fullname, *(int *)varp, NULL);
+		    dict_add_number(d, opt->fullname, *(int *)varp);
 	    }
 	}
     }
