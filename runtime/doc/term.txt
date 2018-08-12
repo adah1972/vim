@@ -352,6 +352,10 @@ Added by Vim (there are no standard codes for these):
 	t_SH	set cursor shape				*t_SH* *'t_SH'*
 	t_RC	request terminal cursor blinking		*t_RC* *'t_RC'*
 	t_RS	request terminal cursor style			*t_RS* *'t_RS'*
+	t_ST	save window title to stack			*t_ST* *'t_ST'*
+	t_RT	restore window title from stack			*t_RT* *'t_RT'*
+	t_Si	save icon text to stack				*t_Si* *'t_Si'*
+	t_Ri	restore icon text from stack			*t_Ri* *'t_Ri'*
 
 Some codes have a start, middle and end part.  The start and end are defined
 by the termcap option, the middle part is text.
@@ -977,4 +981,4 @@ To swap the meaning of the left and right mouse buttons: >
 	:noremap!	<RightDrag>	<LeftDrag>
 	:noremap!	<RightRelease>	<LeftRelease>
 <
- vim:tw=78:ts=8:ft=help:norl:
+ vim:tw=78:ts=8:noet:ft=help:norl:

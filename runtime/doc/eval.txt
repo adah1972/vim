@@ -2111,7 +2111,7 @@ cursor({list})			Number	move cursor to position in {list}
 debugbreak({pid})		Number  interrupt process being debugged
 deepcopy({expr} [, {noref}])	any	make a full copy of {expr}
 delete({fname} [, {flags}])	Number	delete the file or directory {fname}
-deletebufline({expr}, {first}[, {last}])
+deletebufline({expr}, {first} [, {last}])
 				Number	delete lines from buffer {expr}
 did_filetype()			Number	|TRUE| if FileType autocmd event used
 diff_filler({lnum})		Number	diff filler lines about {lnum}
@@ -2477,7 +2477,7 @@ tolower({expr})			String	the String {expr} switched to lowercase
 toupper({expr})			String	the String {expr} switched to uppercase
 tr({src}, {fromstr}, {tostr})	String	translate chars of {src} in {fromstr}
 					to chars in {tostr}
-trim({text}[, {mask}])		String	trim characters in {mask} from {text}
+trim({text} [, {mask}])		String	trim characters in {mask} from {text}
 trunc({expr})			Float	truncate Float {expr}
 type({name})			Number	type of variable {name}
 undofile({name})		String	undo file name for {name}
@@ -3529,7 +3529,7 @@ delete({fname} [, {flags}])					*delete()*
 		To delete a line from the buffer use |:delete| or
 		|deletebufline()|.
 
-deletebufline({expr}, {first}[, {last}])		*deletebufline()*
+deletebufline({expr}, {first} [, {last}])		*deletebufline()*
 		Delete lines {first} to {last} (inclusive) from buffer {expr}.
 		If {last} is omitted then delete line {first} only.
 		On success 0 is returned, on failure 1 is returned.
@@ -4307,7 +4307,7 @@ getbufinfo([{dict}])
 			endfor
 <
 		To get buffer-local options use: >
-			getbufvar({bufnr}, '&')
+			getbufvar({bufnr}, '&option_name')
 
 <
 							*getbufline()*
@@ -6224,32 +6224,38 @@ mode([expr])	Return a string that indicates the current mode.
 		a non-empty String (|non-zero-arg|), then the full mode is
 		returned, otherwise only the first letter is returned.
 
-			n	Normal, Terminal-Normal
-			no	Operator-pending
-			v	Visual by character
-			V	Visual by line
-			CTRL-V	Visual blockwise
-			s	Select by character
-			S	Select by line
-			CTRL-S	Select blockwise
-			i	Insert
-			ic	Insert mode completion |compl-generic|
-			ix	Insert mode |i_CTRL-X| completion
-			R	Replace |R|
-			Rc	Replace mode completion |compl-generic|
-			Rv	Virtual Replace |gR|
-			Rx	Replace mode |i_CTRL-X| completion
-			c	Command-line editing
-			cv	Vim Ex mode |gQ|
-			ce	Normal Ex mode |Q|
-			r	Hit-enter prompt
-			rm	The -- more -- prompt
-			r?	A |:confirm| query of some sort
-			!	Shell or external command is executing
-			t	Terminal-Job mode: keys go to the job
+		   n	    Normal, Terminal-Normal
+		   no	    Operator-pending
+		   niI	    Normal using |i_CTRL-O| in |Insert-mode|
+		   niR	    Normal using |i_CTRL-O| in |Replace-mode|
+		   niV	    Normal using |i_CTRL-O| in |Virtual-Replace-mode|
+		   v	    Visual by character
+		   V	    Visual by line
+		   CTRL-V   Visual blockwise
+		   s	    Select by character
+		   S	    Select by line
+		   CTRL-S   Select blockwise
+		   i	    Insert
+		   ic	    Insert mode completion |compl-generic|
+		   ix	    Insert mode |i_CTRL-X| completion
+		   R	    Replace |R|
+		   Rc	    Replace mode completion |compl-generic|
+		   Rv	    Virtual Replace |gR|
+		   Rx	    Replace mode |i_CTRL-X| completion
+		   c	    Command-line editing
+		   cv	    Vim Ex mode |gQ|
+		   ce	    Normal Ex mode |Q|
+		   r	    Hit-enter prompt
+		   rm	    The -- more -- prompt
+		   r?	    A |:confirm| query of some sort
+		   !	    Shell or external command is executing
+		   t	    Terminal-Job mode: keys go to the job
 		This is useful in the 'statusline' option or when used
 		with |remote_expr()| In most other places it always returns
 		"c" or "n".
+		Note that in the future more modes and more specific modes may
+		be added. It's better not to compare the whole string but only
+		the leading character(s).
 		Also see |visualmode()|.
 
 mzeval({expr})							*mzeval()*
@@ -8585,9 +8591,8 @@ term_start({cmd}, {options})				*term_start()*
 		|job-options|.  However, not all options can be used.  These
 		are supported:
 		   all timeout options
-		   "stoponexit"
-		   "callback", "out_cb", "err_cb"
-		   "exit_cb", "close_cb"
+		   "stoponexit", "cwd", "env"
+		   "callback", "out_cb", "err_cb", "exit_cb", "close_cb"
 		   "in_io", "in_top", "in_bot", "in_name", "in_buf"
 		   "out_io", "out_name", "out_buf", "out_modifiable", "out_msg"
 		   "err_io", "err_name", "err_buf", "err_modifiable", "err_msg"
@@ -8831,7 +8836,7 @@ tr({src}, {fromstr}, {tostr})				*tr()*
 			echo tr("<blob>", "<>", "{}")
 <		returns "{blob}"
 
-trim({text}[, {mask}])						*trim()*
+trim({text} [, {mask}])						*trim()*
 		Return {text} as a String where any character in {mask} is
 		removed from the beginning and  end of {text}.
 		If {mask} is not given, {mask} is all characters up to 0x20,
@@ -9265,6 +9270,7 @@ amiga			Amiga version of Vim.
 arabic			Compiled with Arabic support |Arabic|.
 arp			Compiled with ARP support (Amiga).
 autocmd			Compiled with autocommand support. |autocommand|
+autochdir		Compiled with support for 'autochdir'
 autoservername		Automatically enable |clientserver|
 balloon_eval		Compiled with |balloon-eval| support.
 balloon_multiline	GUI supports multiline balloons.
@@ -11647,4 +11653,4 @@ without the |+eval| feature.
 Find more information in the file src/testdir/README.txt.
 
 
- vim:tw=78:ts=8:ft=help:norl:
+ vim:tw=78:ts=8:noet:ft=help:norl:

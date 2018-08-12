@@ -5088,63 +5088,22 @@ f_getftype(typval_T *argvars, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     if (mch_lstat((char *)fname, &st) >= 0)
     {
-#ifdef S_ISREG
 	if (S_ISREG(st.st_mode))
 	    t = "file";
 	else if (S_ISDIR(st.st_mode))
 	    t = "dir";
-# ifdef S_ISLNK
 	else if (S_ISLNK(st.st_mode))
 	    t = "link";
-# endif
-# ifdef S_ISBLK
 	else if (S_ISBLK(st.st_mode))
 	    t = "bdev";
-# endif
-# ifdef S_ISCHR
 	else if (S_ISCHR(st.st_mode))
 	    t = "cdev";
-# endif
-# ifdef S_ISFIFO
 	else if (S_ISFIFO(st.st_mode))
 	    t = "fifo";
-# endif
-# ifdef S_ISSOCK
 	else if (S_ISSOCK(st.st_mode))
-	    t = "fifo";
-# endif
+	    t = "socket";
 	else
 	    t = "other";
-#else
-# ifdef S_IFMT
-	switch (st.st_mode & S_IFMT)
-	{
-	    case S_IFREG: t = "file"; break;
-	    case S_IFDIR: t = "dir"; break;
-#  ifdef S_IFLNK
-	    case S_IFLNK: t = "link"; break;
-#  endif
-#  ifdef S_IFBLK
-	    case S_IFBLK: t = "bdev"; break;
-#  endif
-#  ifdef S_IFCHR
-	    case S_IFCHR: t = "cdev"; break;
-#  endif
-#  ifdef S_IFIFO
-	    case S_IFIFO: t = "fifo"; break;
-#  endif
-#  ifdef S_IFSOCK
-	    case S_IFSOCK: t = "socket"; break;
-#  endif
-	    default: t = "other";
-	}
-# else
-	if (mch_isdir(fname))
-	    t = "dir";
-	else
-	    t = "file";
-# endif
-#endif
 	type = vim_strsave((char_u *)t);
     }
     rettv->vval.v_string = type;
@@ -6450,9 +6409,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #ifdef FEAT_VISUALEXTRA
 	"visualextra",
 #endif
-#ifdef FEAT_VREPLACE
 	"vreplace",
-#endif
 #ifdef FEAT_VTP
 	"vtp",
 #endif
@@ -8366,10 +8323,9 @@ f_mkdir(typval_T *argvars, typval_T *rettv)
     static void
 f_mode(typval_T *argvars, typval_T *rettv)
 {
-    char_u	buf[3];
+    char_u	buf[4];
 
-    buf[1] = NUL;
-    buf[2] = NUL;
+    vim_memset(buf, 0, sizeof(buf));
 
     if (time_for_testing == 93784)
     {
@@ -8401,14 +8357,12 @@ f_mode(typval_T *argvars, typval_T *rettv)
 	buf[0] = '!';
     else if (State & INSERT)
     {
-#ifdef FEAT_VREPLACE
 	if (State & VREPLACE_FLAG)
 	{
 	    buf[0] = 'R';
 	    buf[1] = 'v';
 	}
 	else
-#endif
 	{
 	    if (State & REPLACE_FLAG)
 		buf[0] = 'R';
@@ -8435,6 +8389,12 @@ f_mode(typval_T *argvars, typval_T *rettv)
 	buf[0] = 'n';
 	if (finish_op)
 	    buf[1] = 'o';
+	else if (restart_edit == 'I' || restart_edit == 'R'
+							|| restart_edit == 'V')
+	{
+	    buf[1] = 'i';
+	    buf[2] = restart_edit;
+	}
     }
 
     /* Clear out the minor mode when the argument is not a non-zero number or
