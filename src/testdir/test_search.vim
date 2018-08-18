@@ -351,7 +351,7 @@ func Cmdline3_prep()
   set incsearch
 endfunc
 
-func Cmdline3_cleanup()
+func Incsearch_cleanup()
   set noincsearch
   call test_override("char_avail", 0)
   bw!
@@ -367,7 +367,7 @@ func Test_search_cmdline3()
   call feedkeys("/the\<c-l>\<cr>", 'tx')
   call assert_equal('  2 the~e', getline('.'))
 
-  call Cmdline3_cleanup()
+  call Incsearch_cleanup()
 endfunc
 
 func Test_search_cmdline3s()
@@ -384,8 +384,16 @@ func Test_search_cmdline3s()
   undo
   call feedkeys(":%substitute/the\<c-l>/xxx\<cr>", 'tx')
   call assert_equal('  2 xxxe', getline('.'))
+  undo
+  call feedkeys(":%smagic/the.e/xxx\<cr>", 'tx')
+  call assert_equal('  2 xxx', getline('.'))
+  undo
+  call assert_fails(":%snomagic/the.e/xxx\<cr>", 'E486')
+  "
+  call feedkeys(":%snomagic/the\\.e/xxx\<cr>", 'tx')
+  call assert_equal('  2 xxx', getline('.'))
 
-  call Cmdline3_cleanup()
+  call Incsearch_cleanup()
 endfunc
 
 func Test_search_cmdline3g()
@@ -399,8 +407,16 @@ func Test_search_cmdline3g()
   undo
   call feedkeys(":global/the\<c-l>/d\<cr>", 'tx')
   call assert_equal('  3 the theother', getline(2))
+  undo
+  call feedkeys(":g!/the\<c-l>/d\<cr>", 'tx')
+  call assert_equal(1, line('$'))
+  call assert_equal('  2 the~e', getline(1))
+  undo
+  call feedkeys(":global!/the\<c-l>/d\<cr>", 'tx')
+  call assert_equal(1, line('$'))
+  call assert_equal('  2 the~e', getline(1))
 
-  call Cmdline3_cleanup()
+  call Incsearch_cleanup()
 endfunc
 
 func Test_search_cmdline3v()
@@ -417,7 +433,7 @@ func Test_search_cmdline3v()
   call assert_equal(1, line('$'))
   call assert_equal('  2 the~e', getline(1))
 
-  call Cmdline3_cleanup()
+  call Incsearch_cleanup()
 endfunc
 
 func Test_search_cmdline4()
@@ -795,6 +811,110 @@ func Test_incsearch_scrolling()
   call term_sendkeys(buf, "\<Esc>")
   call StopVimInTerminal(buf)
   call delete('Xscript')
+endfunc
+
+func Test_incsearch_substitute()
+  if !exists('+incsearch')
+    return
+  endif
+  call test_override("char_avail", 1)
+  new
+  set incsearch
+  for n in range(1, 10)
+    call setline(n, 'foo ' . n)
+  endfor
+  4
+  call feedkeys(":.,.+2s/foo\<BS>o\<BS>o/xxx\<cr>", 'tx')
+  call assert_equal('foo 3', getline(3))
+  call assert_equal('xxx 4', getline(4))
+  call assert_equal('xxx 5', getline(5))
+  call assert_equal('xxx 6', getline(6))
+  call assert_equal('foo 7', getline(7))
+
+  call Incsearch_cleanup()
+endfunc
+
+" Similar to Test_incsearch_substitute() but with a screendump halfway.
+func Test_incsearch_substitute_dump()
+  if !exists('+incsearch')
+    return
+  endif
+  if !CanRunVimInTerminal()
+    return
+  endif
+  call writefile([
+	\ 'set incsearch hlsearch scrolloff=0',
+	\ 'for n in range(1, 10)',
+	\ '  call setline(n, "foo " . n)',
+	\ 'endfor',
+	\ 'call setline(11, "bar 11")',
+	\ '3',
+	\ ], 'Xis_subst_script')
+  let buf = RunVimInTerminal('-S Xis_subst_script', {'rows': 9, 'cols': 70})
+  " Give Vim a chance to redraw to get rid of the spaces in line 2 caused by
+  " the 'ambiwidth' check.
+  sleep 100m
+
+  " Need to send one key at a time to force a redraw.
+  " Select three lines at the cursor with typed pattern.
+  call term_sendkeys(buf, ':.,.+2s/')
+  sleep 100m
+  call term_sendkeys(buf, 'f')
+  sleep 100m
+  call term_sendkeys(buf, 'o')
+  sleep 100m
+  call term_sendkeys(buf, 'o')
+  sleep 100m
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_01', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  " Select three lines at the cursor using previous pattern.
+  call term_sendkeys(buf, "/foo\<CR>")
+  sleep 100m
+  call term_sendkeys(buf, ':.,.+2s//')
+  sleep 100m
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_02', {})
+
+  " Deleting last slash should remove the match.
+  call term_sendkeys(buf, "\<BS>")
+  sleep 100m
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_03', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  " Reverse range is accepted
+  call term_sendkeys(buf, ':5,2s/foo')
+  sleep 100m
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_04', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  " White space after the command is skipped
+  call term_sendkeys(buf, ':2,3sub  /fo')
+  sleep 100m
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_05', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  " Command modifiers are skipped
+  call term_sendkeys(buf, ':above below browse botr confirm keepmar keepalt keeppat keepjum filter xxx hide lockm leftabove noau noswap rightbel sandbox silent silent! $tab top unsil vert verbose 4,5s/fo.')
+  sleep 100m
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_06', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  " Cursorline highlighting at match
+  call term_sendkeys(buf, ":set cursorline\<CR>")
+  call term_sendkeys(buf, 'G9G')
+  call term_sendkeys(buf, ':9,11s/bar')
+  sleep 100m
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_07', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  " Cursorline highlighting at cursor when no match
+  call term_sendkeys(buf, ':9,10s/bar')
+  sleep 100m
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_08', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  call StopVimInTerminal(buf)
+  call delete('Xis_subst_script')
 endfunc
 
 func Test_search_undefined_behaviour()
