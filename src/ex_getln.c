@@ -271,6 +271,7 @@ set_search_match(pos_T *t)
 /*
  * Return TRUE when 'incsearch' highlighting is to be done.
  * Sets search_first_line and search_last_line to the address range.
+ * May change the last search pattern.
  */
     static int
 do_incsearch_highlighting(int firstc, incsearch_state_T *is_state,
@@ -436,12 +437,18 @@ finish_incsearch_highlighting(
 	}
 	restore_viewstate(&is_state->old_viewstate);
 	highlight_match = FALSE;
+
+	// by default search all lines
+	search_first_line = 0;
+	search_last_line = MAXLNUM;
+
+	p_magic = is_state->magic_save;
+
 	validate_cursor();	/* needed for TAB */
 	if (call_update_screen)
 	    update_screen(SOME_VALID);
 	else
 	    redraw_all_later(SOME_VALID);
-	p_magic = is_state->magic_save;
     }
 }
 
@@ -464,8 +471,12 @@ may_do_incsearch_highlighting(
     int		next_char;
     int		use_last_pat;
 
+    // Parsing range may already set the last search pattern.
+    save_last_search_pattern();
+
     if (!do_incsearch_highlighting(firstc, is_state, &skiplen, &patlen))
     {
+	restore_last_search_pattern();
 	finish_incsearch_highlighting(FALSE, is_state, TRUE);
 	return;
     }
@@ -473,6 +484,7 @@ may_do_incsearch_highlighting(
     // If there is a character waiting, search and redraw later.
     if (char_avail())
     {
+	restore_last_search_pattern();
 	is_state->incsearch_postponed = TRUE;
 	return;
     }
@@ -487,7 +499,6 @@ may_do_incsearch_highlighting(
 	curwin->w_cursor.lnum = search_first_line;
 	curwin->w_cursor.col = 0;
     }
-    save_last_search_pattern();
 
     // Use the previous pattern for ":s//".
     next_char = ccline.cmdbuff[skiplen + patlen];
@@ -621,10 +632,19 @@ may_adjust_incsearch_highlighting(
     int	    i;
     int	    save;
 
+    // Parsing range may already set the last search pattern.
+    save_last_search_pattern();
+
     if (!do_incsearch_highlighting(firstc, is_state, &skiplen, &patlen))
+    {
+	restore_last_search_pattern();
 	return OK;
+    }
     if (patlen == 0 && ccline.cmdbuff[skiplen] == NUL)
+    {
+	restore_last_search_pattern();
 	return FAIL;
+    }
 
     if (firstc == ccline.cmdbuff[skiplen])
     {
@@ -635,7 +655,6 @@ may_adjust_incsearch_highlighting(
     else
 	pat = ccline.cmdbuff + skiplen;
 
-    save_last_search_pattern();
     cursor_off();
     out_flush();
     if (c == Ctrl_G)
@@ -715,8 +734,14 @@ may_add_char_to_search(int firstc, int *c, incsearch_state_T *is_state)
 {
     int		skiplen, patlen;
 
+    // Parsing range may already set the last search pattern.
+    save_last_search_pattern();
+
     if (!do_incsearch_highlighting(firstc, is_state, &skiplen, &patlen))
+    {
+	restore_last_search_pattern();
 	return FAIL;
+    }
 
     // Add a character from under the cursor for 'incsearch'.
     if (is_state->did_incsearch)

@@ -417,10 +417,14 @@ mch_inchar(
 	    handle_resize();
 
 #ifdef MESSAGE_QUEUE
-	parse_queued_messages();
-	/* If input was put directly in typeahead buffer bail out here. */
-	if (typebuf_changed(tb_change_cnt))
-	    return 0;
+	// Only process messages when waiting.
+	if (wtime != 0)
+	{
+	    parse_queued_messages();
+	    // If input was put directly in typeahead buffer bail out here.
+	    if (typebuf_changed(tb_change_cnt))
+		return 0;
+	}
 #endif
 	if (wtime < 0 && did_start_blocking)
 	    /* blocking and already waited for p_ut */
@@ -3663,6 +3667,13 @@ mch_setmouse(int on)
     static int	bevalterm_ison = FALSE;
 # endif
     int		xterm_mouse_vers;
+
+# if defined(FEAT_X11) && defined(FEAT_XCLIPBOARD)
+    if (!on)
+	// Make sure not tracing mouse movements.  Important when a button-down
+	// was received but no release yet.
+	stop_xterm_trace();
+# endif
 
     if (on == mouse_ison
 # ifdef FEAT_BEVAL_TERM

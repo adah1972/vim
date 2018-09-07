@@ -956,6 +956,15 @@ func Test_incsearch_substitute_dump()
   call VerifyScreenDump(buf, 'Test_incsearch_substitute_09', {})
   call term_sendkeys(buf, "\<Esc>")
 
+  call term_sendkeys(buf, ":set nocursorline\<CR>")
+
+  " All matches are highlighted for 'hlsearch' after the incsearch canceled
+  call term_sendkeys(buf, "1G*")
+  call term_sendkeys(buf, ":2,5s/foo")
+  sleep 100m
+  call term_sendkeys(buf, "\<Esc>")
+  call VerifyScreenDump(buf, 'Test_incsearch_substitute_10', {})
+
   call StopVimInTerminal(buf)
   call delete('Xis_subst_script')
 endfunc
@@ -1032,6 +1041,23 @@ func Test_incsearch_vimgrep_dump()
 
   call StopVimInTerminal(buf)
   call delete('Xis_vimgrep_script')
+endfunc
+
+func Test_keep_last_search_pattern()
+  if !exists('+incsearch')
+    return
+  endif
+  new
+  call setline(1, ['foo', 'foo', 'foo'])
+  set incsearch
+  call test_override("char_avail", 1)
+  let @/ = 'bar'
+  call feedkeys(":/foo/s//\<Esc>", 'ntx')
+  call assert_equal('bar', @/)
+
+  bwipe!
+  call test_override("ALL", 0)
+  set noincsearch
 endfunc
 
 func Test_search_undefined_behaviour()

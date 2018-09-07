@@ -2039,12 +2039,15 @@ do_one_cmd(
 	    errormsg = (char_u *)_(get_text_locked_msg());
 	    goto doend;
 	}
+
 	/* Disallow editing another buffer when "curbuf_lock" is set.
-	 * Do allow ":edit" (check for argument later).
-	 * Do allow ":checktime" (it's postponed). */
+	 * Do allow ":checktime" (it is postponed).
+	 * Do allow ":edit" (check for an argument later).
+	 * Do allow ":file" with no arguments (check for an argument later). */
 	if (!(ea.argt & CMDWIN)
-		&& ea.cmdidx != CMD_edit
 		&& ea.cmdidx != CMD_checktime
+		&& ea.cmdidx != CMD_edit
+		&& ea.cmdidx != CMD_file
 		&& !IS_USER_CMDIDX(ea.cmdidx)
 		&& curbuf_locked())
 	    goto doend;
@@ -2129,6 +2132,10 @@ do_one_cmd(
 	ea.arg = p;
     else
 	ea.arg = skipwhite(p);
+
+    // ":file" cannot be run with an argument when "curbuf_lock" is set
+    if (ea.cmdidx == CMD_file && *ea.arg != NUL && curbuf_locked())
+	goto doend;
 
     /*
      * Check for "++opt=val" argument.
@@ -2904,6 +2911,7 @@ free_cmdmod(void)
 
 /*
  * Parse the address range, if any, in "eap".
+ * May set the last search pattern.
  * Return FAIL and set "errormsg" or return OK.
  */
     int
@@ -4429,10 +4437,11 @@ skip_range(
 }
 
 /*
- * get a single EX address
+ * Get a single EX address.
  *
  * Set ptr to the next character after the part that was interpreted.
  * Set ptr to NULL when an error is encountered.
+ * This may set the last used search pattern.
  *
  * Return MAXLNUM when no Ex address was found.
  */
@@ -11706,6 +11715,18 @@ ses_do_win(win_T *wp)
     return TRUE;
 }
 
+    static int
+put_view_curpos(FILE *fd, win_T *wp, char *spaces)
+{
+    int r;
+
+    if (wp->w_curswant == MAXCOL)
+	r = fprintf(fd, "%snormal! $", spaces);
+    else
+	r = fprintf(fd, "%snormal! 0%d|", spaces, wp->w_virtcol + 1);
+    return r < 0 || put_eol(fd) == FAIL ? FALSE : OK;
+}
+
 /*
  * Write commands to "fd" to restore the view of a window.
  * Caller must make sure 'scrolloff' is zero.
@@ -11897,17 +11918,12 @@ put_view(
 			    (long)wp->w_virtcol + 1) < 0
 			|| put_eol(fd) == FAIL
 			|| put_line(fd, "else") == FAIL
-			|| fprintf(fd, "  normal! 0%d|", wp->w_virtcol + 1) < 0
-			|| put_eol(fd) == FAIL
+			|| put_view_curpos(fd, wp, "  ") == FAIL
 			|| put_line(fd, "endif") == FAIL)
 		    return FAIL;
 	    }
-	    else
-	    {
-		if (fprintf(fd, "normal! 0%d|", wp->w_virtcol + 1) < 0
-			|| put_eol(fd) == FAIL)
-		    return FAIL;
-	    }
+	    else if (put_view_curpos(fd, wp, "") == FAIL)
+		return FAIL;
 	}
     }
 
