@@ -325,8 +325,8 @@ EXTERN int	may_garbage_collect INIT(= FALSE);
 EXTERN int	want_garbage_collect INIT(= FALSE);
 EXTERN int	garbage_collect_at_exit INIT(= FALSE);
 
-/* ID of script being sourced or was sourced to define the current function. */
-EXTERN scid_T	current_SID INIT(= 0);
+// Script CTX being sourced or was sourced to define the current function.
+EXTERN sctx_T	current_sctx INIT(= {0 COMMA 0});
 #endif
 
 EXTERN int	did_source_packages INIT(= FALSE);
@@ -1621,8 +1621,8 @@ EXTERN FILE *time_fd INIT(= NULL);  /* where to write startup timing */
  * can't do anything useful with the value.  Assign to this variable to avoid
  * the warning.
  */
-EXTERN int ignored;
-EXTERN char *ignoredp;
+EXTERN int vim_ignored;
+EXTERN char *vim_ignoredp;
 
 #ifdef FEAT_EVAL
 /* set by alloc_fail(): ID */

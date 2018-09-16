@@ -3,6 +3,7 @@
 
 source test_assign.vim
 source test_backup.vim
+source test_behave.vim
 source test_bufline.vim
 source test_cd.vim
 source test_changedtick.vim
@@ -14,6 +15,7 @@ source test_ex_z.vim
 source test_execute_func.vim
 source test_expand.vim
 source test_expand_dllpath.vim
+source test_expand_func.vim
 source test_expr.vim
 source test_feedkeys.vim
 source test_file_perm.vim

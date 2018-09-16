@@ -6128,7 +6128,7 @@ replace_termcodes(
 	     */
 	    if (STRNICMP(src, "<SID>", 5) == 0)
 	    {
-		if (current_SID <= 0)
+		if (current_sctx.sc_sid <= 0)
 		    EMSG(_(e_usingsid));
 		else
 		{
@@ -6136,7 +6136,8 @@ replace_termcodes(
 		    result[dlen++] = K_SPECIAL;
 		    result[dlen++] = (int)KS_EXTRA;
 		    result[dlen++] = (int)KE_SNR;
-		    sprintf((char *)result + dlen, "%ld", (long)current_SID);
+		    sprintf((char *)result + dlen, "%ld",
+						    (long)current_sctx.sc_sid);
 		    dlen += (int)STRLEN(result + dlen);
 		    result[dlen++] = '_';
 		    continue;
@@ -7012,7 +7013,7 @@ gui_get_color_cmn(char_u *name)
 		size_t	len;
 		int	pos;
 
-		ignoredp = fgets(line, LINE_LEN, fd);
+		vim_ignoredp = fgets(line, LINE_LEN, fd);
 		len = strlen(line);
 
 		if (len <= 1 || line[len - 1] != '\n')

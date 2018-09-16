@@ -2,7 +2,8 @@
 # Common Makefile, defines the list of tests to run.
 #
 
-# Individual tests, including the ones part of test_alot
+# Individual tests, including the ones part of test_alot.
+# Please keep sorted up to test_alot.
 NEW_TESTS = \
 	test_arglist \
 	test_arabic \
@@ -13,6 +14,7 @@ NEW_TESTS = \
 	test_autoload \
 	test_backspace_opt \
 	test_backup \
+	test_behave \
 	test_blockedit \
 	test_breakindent \
 	test_bufline \
@@ -52,6 +54,7 @@ NEW_TESTS = \
 	test_exists_autocmd \
 	test_expand \
 	test_expand_dllpath \
+	test_expand_func \
 	test_expr \
 	test_expr_utf8 \
 	test_farsi \

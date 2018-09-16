@@ -415,6 +415,7 @@ static void f_tempname(typval_T *argvars, typval_T *rettv);
 static void f_test_alloc_fail(typval_T *argvars, typval_T *rettv);
 static void f_test_autochdir(typval_T *argvars, typval_T *rettv);
 static void f_test_feedinput(typval_T *argvars, typval_T *rettv);
+static void f_test_option_not_set(typval_T *argvars, typval_T *rettv);
 static void f_test_override(typval_T *argvars, typval_T *rettv);
 static void f_test_garbagecollect_now(typval_T *argvars, typval_T *rettv);
 static void f_test_ignore_error(typval_T *argvars, typval_T *rettv);
@@ -428,6 +429,9 @@ static void f_test_null_job(typval_T *argvars, typval_T *rettv);
 static void f_test_null_list(typval_T *argvars, typval_T *rettv);
 static void f_test_null_partial(typval_T *argvars, typval_T *rettv);
 static void f_test_null_string(typval_T *argvars, typval_T *rettv);
+#ifdef FEAT_GUI
+static void f_test_scrollbar(typval_T *argvars, typval_T *rettv);
+#endif
 static void f_test_settime(typval_T *argvars, typval_T *rettv);
 #ifdef FEAT_FLOAT
 static void f_tan(typval_T *argvars, typval_T *rettv);
@@ -922,7 +926,11 @@ static struct fst
     {"test_null_list",	0, 0, f_test_null_list},
     {"test_null_partial", 0, 0, f_test_null_partial},
     {"test_null_string", 0, 0, f_test_null_string},
+    {"test_option_not_set", 1, 1, f_test_option_not_set},
     {"test_override",    2, 2, f_test_override},
+#ifdef FEAT_GUI
+    {"test_scrollbar",	3, 3, f_test_scrollbar},
+#endif
     {"test_settime",	1, 1, f_test_settime},
 #ifdef FEAT_TIMERS
     {"timer_info",	0, 1, f_timer_info},
@@ -4061,7 +4069,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 	     * also be called from another script. Using trans_function_name()
 	     * would also work, but some plugins depend on the name being
 	     * printable text. */
-	    sprintf(sid_buf, "<SNR>%ld_", (long)current_SID);
+	    sprintf(sid_buf, "<SNR>%ld_", (long)current_sctx.sc_sid);
 	    name = alloc((int)(STRLEN(sid_buf) + STRLEN(s + off) + 1));
 	    if (name != NULL)
 	    {
@@ -4679,6 +4687,13 @@ f_getchar(typval_T *argvars, typval_T *rettv)
 {
     varnumber_T		n;
     int			error = FALSE;
+
+#ifdef MESSAGE_QUEUE
+    // vpeekc() used to check for messages, but that caused problems, invoking
+    // a callback where it was not expected.  Some plugins use getchar(1) in a
+    // loop to await a message, therefore make sure we check for messages here.
+    parse_queued_messages();
+#endif
 
     /* Position the cursor.  Needed after a message that ends in a space. */
     windgoto(msg_row, msg_col);
@@ -7618,7 +7633,8 @@ get_maparg(typval_T *argvars, typval_T *rettv, int exact)
 	dict_add_number(dict, "noremap", mp->m_noremap ? 1L : 0L);
 	dict_add_number(dict, "expr", mp->m_expr ? 1L : 0L);
 	dict_add_number(dict, "silent", mp->m_silent ? 1L : 0L);
-	dict_add_number(dict, "sid", (long)mp->m_script_ID);
+	dict_add_number(dict, "sid", (long)mp->m_script_ctx.sc_sid);
+	dict_add_number(dict, "lnum", (long)mp->m_script_ctx.sc_lnum);
 	dict_add_number(dict, "buffer", (long)buffer_local);
 	dict_add_number(dict, "nowait", mp->m_nowait ? 1L : 0L);
 	dict_add_string(dict, "mode", mapmode);
@@ -13054,7 +13070,25 @@ f_test_feedinput(typval_T *argvars, typval_T *rettv UNUSED)
 }
 
 /*
- * "test_disable({name}, {val})" function
+ * "test_option_not_set({name})" function
+ */
+    static void
+f_test_option_not_set(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    char_u *name = (char_u *)"";
+
+    if (argvars[0].v_type != VAR_STRING)
+	EMSG(_(e_invarg));
+    else
+    {
+	name = get_tv_string(&argvars[0]);
+	if (reset_option_was_set(name) == FAIL)
+	    EMSG2(_(e_invarg2), name);
+    }
+}
+
+/*
+ * "test_override({name}, {val})" function
  */
     static void
 f_test_override(typval_T *argvars, typval_T *rettv UNUSED)
@@ -13173,6 +13207,41 @@ f_test_null_string(typval_T *argvars UNUSED, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 }
+
+#ifdef FEAT_GUI
+    static void
+f_test_scrollbar(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    char_u	*which;
+    long	value;
+    int		dragging;
+    scrollbar_T *sb = NULL;
+
+    if (argvars[0].v_type != VAR_STRING
+	    || (argvars[1].v_type) != VAR_NUMBER
+	    || (argvars[2].v_type) != VAR_NUMBER)
+    {
+	EMSG(_(e_invarg));
+	return;
+    }
+    which = get_tv_string(&argvars[0]);
+    value = get_tv_number(&argvars[1]);
+    dragging = get_tv_number(&argvars[2]);
+
+    if (STRCMP(which, "left") == 0)
+	sb = &curwin->w_scrollbars[SBAR_LEFT];
+    else if (STRCMP(which, "right") == 0)
+	sb = &curwin->w_scrollbars[SBAR_RIGHT];
+    else if (STRCMP(which, "hor") == 0)
+	sb = &gui.bottom_sbar;
+    if (sb == NULL)
+    {
+	EMSG2(_(e_invarg2), which);
+	return;
+    }
+    gui_drag_scrollbar(sb, value, dragging);
+}
+#endif
 
     static void
 f_test_settime(typval_T *argvars, typval_T *rettv UNUSED)
@@ -14008,7 +14077,7 @@ f_writefile(typval_T *argvars, typval_T *rettv)
 	else if (do_fsync)
 	    /* Ignore the error, the user wouldn't know what to do about it.
 	     * May happen for a device. */
-	    ignored = fsync(fileno(fd));
+	    vim_ignored = fsync(fileno(fd));
 #endif
 	fclose(fd);
     }
