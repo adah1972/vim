@@ -94,6 +94,7 @@ func Test_argadd_empty_curbuf()
   call assert_equal('Xargadd', bufname('%'))
   call assert_equal(2, line('$'))
 
+  call delete('Xargadd')
   %argd
   bwipe!
 endfunc
@@ -410,4 +411,11 @@ func Test_arg_all_expand()
   next notexist Xx\ x runtest.vim
   call assert_equal('notexist Xx\ x runtest.vim', expand('##'))
   call delete('Xx x')
+endfunc
+
+func Test_large_arg()
+  " Argument longer or equal to the number of columns used to cause
+  " access to invalid memory.
+  exe 'argadd ' .repeat('x', &columns)
+  args
 endfunc

@@ -21,7 +21,8 @@
 
 #if defined(FEAT_DIFF) || defined(PROTO)
 
-static int	diff_busy = FALSE;	/* ex_diffgetput() is busy */
+static int diff_busy = FALSE;	    // using diff structs, don't change them
+static int diff_need_update = FALSE; // ex_diffupdate needs to be called
 
 /* flags obtained from the 'diffopt' option */
 #define DIFF_FILLER	0x001	// display filler lines
@@ -291,6 +292,16 @@ diff_mark_adjust_tp(
     linenr_T	last;
     linenr_T	lnum_deleted = line1;	/* lnum of remaining deletion */
     int		check_unchanged;
+
+    if (diff_internal())
+    {
+	// Will update diffs before redrawing.  Set _invalid to update the
+	// diffs themselves, set _update to also update folds properly just
+	// before redrawing.
+	tp->tp_diff_invalid = TRUE;
+	tp->tp_diff_update = TRUE;
+	return;
+    }
 
     if (line2 == MAXLNUM)
     {
@@ -640,7 +651,7 @@ diff_check_sanity(tabpage_T *tp, diff_T *dp)
  */
     static void
 diff_redraw(
-    int		dofold)	    /* also recompute the folds */
+    int		dofold)	    // also recompute the folds
 {
     win_T	*wp;
     int		n;
@@ -702,7 +713,7 @@ diff_write_buffer(buf_T *buf, diffin_T *din)
 
     // xdiff requires one big block of memory with all the text.
     for (lnum = 1; lnum <= buf->b_ml.ml_line_count; ++lnum)
-	len += STRLEN(ml_get_buf(buf, lnum, FALSE)) + 1;
+	len += (long)STRLEN(ml_get_buf(buf, lnum, FALSE)) + 1;
     ptr = lalloc(len, TRUE);
     if (ptr == NULL)
     {
@@ -863,7 +874,7 @@ theend:
  * Note that if the internal diff failed for one of the buffers, the external
  * diff will be used anyway.
  */
-    static int
+    int
 diff_internal(void)
 {
     return (diff_flags & DIFF_INTERNAL) != 0 && *p_dex == NUL;
@@ -887,9 +898,9 @@ diff_internal_failed(void)
 
 /*
  * Completely update the diffs for the buffers involved.
- * This uses the ordinary "diff" command.
- * The buffers are written to a file, also for unmodified buffers (the file
- * could have been produced by autocommands, e.g. the netrw plugin).
+ * When using the external "diff" command the buffers are written to a file,
+ * also for unmodified buffers (the file could have been produced by
+ * autocommands, e.g. the netrw plugin).
  */
     void
 ex_diffupdate(exarg_T *eap)	// "eap" can be NULL
@@ -897,6 +908,13 @@ ex_diffupdate(exarg_T *eap)	// "eap" can be NULL
     int		idx_orig;
     int		idx_new;
     diffio_T	diffio;
+    int		had_diffs = curtab->tp_first_diff != NULL;
+
+    if (diff_busy)
+    {
+	diff_need_update = TRUE;
+	return;
+    }
 
     // Delete all diffblocks.
     diff_clear(curtab);
@@ -907,14 +925,14 @@ ex_diffupdate(exarg_T *eap)	// "eap" can be NULL
 	if (curtab->tp_diffbuf[idx_orig] != NULL)
 	    break;
     if (idx_orig == DB_COUNT)
-	return;
+	goto theend;
 
     // Only need to do something when there is another buffer.
     for (idx_new = idx_orig + 1; idx_new < DB_COUNT; ++idx_new)
 	if (curtab->tp_diffbuf[idx_new] != NULL)
 	    break;
     if (idx_new == DB_COUNT)
-	return;
+	goto theend;
 
     // Only use the internal method if it did not fail for one of the buffers.
     vim_memset(&diffio, 0, sizeof(diffio));
@@ -931,7 +949,14 @@ ex_diffupdate(exarg_T *eap)	// "eap" can be NULL
     // force updating cursor position on screen
     curwin->w_valid_cursor.lnum = 0;
 
-    diff_redraw(TRUE);
+theend:
+    // A redraw is needed if there were diffs and they were cleared, or there
+    // are diffs now, which means they got updated.
+    if (had_diffs || curtab->tp_first_diff != NULL)
+    {
+	diff_redraw(TRUE);
+	apply_autocmds(EVENT_DIFFUPDATED, NULL, NULL, FALSE, curbuf);
+    }
 }
 
 /*
@@ -2253,7 +2278,8 @@ diffopt_changed(void)
     if ((diff_flags_new & DIFF_HORIZONTAL) && (diff_flags_new & DIFF_VERTICAL))
 	return FAIL;
 
-    /* If "icase" or "iwhite" was added or removed, need to update the diff. */
+    // If flags were added or removed, or the algorithm was changed, need to
+    // update the diff.
     if (diff_flags != diff_flags_new || diff_algorithm != diff_algorithm_new)
 	FOR_ALL_TABPAGES(tp)
 	    tp->tp_diff_invalid = TRUE;
@@ -2648,7 +2674,7 @@ ex_diffgetput(exarg_T *eap)
 	if (diff_buf_idx(curbuf) != idx_to)
 	{
 	    EMSG(_("E787: Buffer changed unexpectedly"));
-	    return;
+	    goto theend;
 	}
     }
 
@@ -2819,15 +2845,25 @@ ex_diffgetput(exarg_T *eap)
 	aucmd_restbuf(&aco);
     }
 
+theend:
     diff_busy = FALSE;
+    if (diff_need_update)
+    {
+	diff_need_update = FALSE;
+	ex_diffupdate(NULL);
+    }
+    else
+    {
+	// Check that the cursor is on a valid character and update it's
+	// position.  When there were filler lines the topline has become
+	// invalid.
+	check_cursor();
+	changed_line_abv_curs();
 
-    /* Check that the cursor is on a valid character and update it's position.
-     * When there were filler lines the topline has become invalid. */
-    check_cursor();
-    changed_line_abv_curs();
-
-    /* Also need to redraw the other buffers. */
-    diff_redraw(FALSE);
+	// Also need to redraw the other buffers.
+	diff_redraw(FALSE);
+	apply_autocmds(EVENT_DIFFUPDATED, NULL, NULL, FALSE, curbuf);
+    }
 }
 
 #ifdef FEAT_FOLDING
