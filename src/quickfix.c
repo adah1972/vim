@@ -148,7 +148,6 @@ static win_T	*qf_find_win(qf_info_T *qi);
 static buf_T	*qf_find_buf(qf_info_T *qi);
 static void	qf_update_buffer(qf_info_T *qi, qfline_T *old_last);
 static void	qf_fill_buffer(qf_info_T *qi, buf_T *buf, qfline_T *old_last);
-static char_u	*get_mef_name(void);
 static buf_T	*load_dummy_buffer(char_u *fname, char_u *dirname_start, char_u *resulting_dir);
 static void	wipe_dummy_buffer(buf_T *buf, char_u *dirname_start);
 static void	unload_dummy_buffer(buf_T *buf, char_u *dirname_start);
@@ -2044,122 +2043,136 @@ ll_get_or_alloc_list(win_T *wp)
 }
 
 /*
- * Copy the location list from window "from" to window "to".
+ * Copy location list entries from 'from_qfl' to 'to_qfl'.
+ */
+    static int
+copy_loclist_entries(qf_list_T *from_qfl, qf_list_T *to_qfl, qf_info_T *to_qi)
+{
+    int		i;
+    qfline_T    *from_qfp;
+    qfline_T    *prevp;
+
+    // copy all the location entries in this list
+    for (i = 0, from_qfp = from_qfl->qf_start;
+	    i < from_qfl->qf_count && from_qfp != NULL;
+	    ++i, from_qfp = from_qfp->qf_next)
+    {
+	if (qf_add_entry(to_qi,
+		    to_qi->qf_curlist,
+		    NULL,
+		    NULL,
+		    from_qfp->qf_module,
+		    0,
+		    from_qfp->qf_text,
+		    from_qfp->qf_lnum,
+		    from_qfp->qf_col,
+		    from_qfp->qf_viscol,
+		    from_qfp->qf_pattern,
+		    from_qfp->qf_nr,
+		    0,
+		    from_qfp->qf_valid) == FAIL)
+	    return FAIL;
+
+	// qf_add_entry() will not set the qf_num field, as the
+	// directory and file names are not supplied. So the qf_fnum
+	// field is copied here.
+	prevp = to_qfl->qf_last;
+	prevp->qf_fnum = from_qfp->qf_fnum;	// file number
+	prevp->qf_type = from_qfp->qf_type;	// error type
+	if (from_qfl->qf_ptr == from_qfp)
+	    to_qfl->qf_ptr = prevp;		// current location
+    }
+
+    return OK;
+}
+
+/*
+ * Copy the specified location list 'from_qfl' to 'to_qfl'.
+ */
+    static int
+copy_loclist(qf_list_T *from_qfl, qf_list_T *to_qfl, qf_info_T *to_qi)
+{
+    // Some of the fields are populated by qf_add_entry()
+    to_qfl->qf_nonevalid = from_qfl->qf_nonevalid;
+    to_qfl->qf_count = 0;
+    to_qfl->qf_index = 0;
+    to_qfl->qf_start = NULL;
+    to_qfl->qf_last = NULL;
+    to_qfl->qf_ptr = NULL;
+    if (from_qfl->qf_title != NULL)
+	to_qfl->qf_title = vim_strsave(from_qfl->qf_title);
+    else
+	to_qfl->qf_title = NULL;
+    if (from_qfl->qf_ctx != NULL)
+    {
+	to_qfl->qf_ctx = alloc_tv();
+	if (to_qfl->qf_ctx != NULL)
+	    copy_tv(from_qfl->qf_ctx, to_qfl->qf_ctx);
+    }
+    else
+	to_qfl->qf_ctx = NULL;
+
+    if (from_qfl->qf_count)
+	if (copy_loclist_entries(from_qfl, to_qfl, to_qi) == FAIL)
+	    return FAIL;
+
+    to_qfl->qf_index = from_qfl->qf_index;	// current index in the list
+
+    // Assign a new ID for the location list
+    to_qfl->qf_id = ++last_qf_id;
+    to_qfl->qf_changedtick = 0L;
+
+    // When no valid entries are present in the list, qf_ptr points to
+    // the first item in the list
+    if (to_qfl->qf_nonevalid)
+    {
+	to_qfl->qf_ptr = to_qfl->qf_start;
+	to_qfl->qf_index = 1;
+    }
+
+    return OK;
+}
+
+/*
+ * Copy the location list stack 'from' window to 'to' window.
  */
     void
-copy_loclist(win_T *from, win_T *to)
+copy_loclist_stack(win_T *from, win_T *to)
 {
     qf_info_T	*qi;
     int		idx;
-    int		i;
 
-    /*
-     * When copying from a location list window, copy the referenced
-     * location list. For other windows, copy the location list for
-     * that window.
-     */
+    // When copying from a location list window, copy the referenced
+    // location list. For other windows, copy the location list for
+    // that window.
     if (IS_LL_WINDOW(from))
 	qi = from->w_llist_ref;
     else
 	qi = from->w_llist;
 
-    if (qi == NULL)		    /* no location list to copy */
+    if (qi == NULL)		    // no location list to copy
 	return;
 
-    /* allocate a new location list */
+    // allocate a new location list
     if ((to->w_llist = ll_new_list()) == NULL)
 	return;
 
     to->w_llist->qf_listcount = qi->qf_listcount;
 
-    /* Copy the location lists one at a time */
+    // Copy the location lists one at a time
     for (idx = 0; idx < qi->qf_listcount; ++idx)
     {
-	qf_list_T   *from_qfl;
-	qf_list_T   *to_qfl;
-
 	to->w_llist->qf_curlist = idx;
 
-	from_qfl = &qi->qf_lists[idx];
-	to_qfl = &to->w_llist->qf_lists[idx];
-
-	/* Some of the fields are populated by qf_add_entry() */
-	to_qfl->qf_nonevalid = from_qfl->qf_nonevalid;
-	to_qfl->qf_count = 0;
-	to_qfl->qf_index = 0;
-	to_qfl->qf_start = NULL;
-	to_qfl->qf_last = NULL;
-	to_qfl->qf_ptr = NULL;
-	if (from_qfl->qf_title != NULL)
-	    to_qfl->qf_title = vim_strsave(from_qfl->qf_title);
-	else
-	    to_qfl->qf_title = NULL;
-	if (from_qfl->qf_ctx != NULL)
+	if (copy_loclist(&qi->qf_lists[idx],
+			&to->w_llist->qf_lists[idx], to->w_llist) == FAIL)
 	{
-	    to_qfl->qf_ctx = alloc_tv();
-	    if (to_qfl->qf_ctx != NULL)
-		copy_tv(from_qfl->qf_ctx, to_qfl->qf_ctx);
-	}
-	else
-	    to_qfl->qf_ctx = NULL;
-
-	if (from_qfl->qf_count)
-	{
-	    qfline_T    *from_qfp;
-	    qfline_T    *prevp;
-
-	    /* copy all the location entries in this list */
-	    for (i = 0, from_qfp = from_qfl->qf_start;
-		    i < from_qfl->qf_count && from_qfp != NULL;
-		    ++i, from_qfp = from_qfp->qf_next)
-	    {
-		if (qf_add_entry(to->w_llist,
-				 to->w_llist->qf_curlist,
-				 NULL,
-				 NULL,
-				 from_qfp->qf_module,
-				 0,
-				 from_qfp->qf_text,
-				 from_qfp->qf_lnum,
-				 from_qfp->qf_col,
-				 from_qfp->qf_viscol,
-				 from_qfp->qf_pattern,
-				 from_qfp->qf_nr,
-				 0,
-				 from_qfp->qf_valid) == FAIL)
-		{
-		    qf_free_all(to);
-		    return;
-		}
-		/*
-		 * qf_add_entry() will not set the qf_num field, as the
-		 * directory and file names are not supplied. So the qf_fnum
-		 * field is copied here.
-		 */
-		prevp = to->w_llist->qf_lists[to->w_llist->qf_curlist].qf_last;
-		prevp->qf_fnum = from_qfp->qf_fnum; /* file number */
-		prevp->qf_type = from_qfp->qf_type; /* error type */
-		if (from_qfl->qf_ptr == from_qfp)
-		    to_qfl->qf_ptr = prevp;	    /* current location */
-	    }
-	}
-
-	to_qfl->qf_index = from_qfl->qf_index;	/* current index in the list */
-
-	/* Assign a new ID for the location list */
-	to_qfl->qf_id = ++last_qf_id;
-	to_qfl->qf_changedtick = 0L;
-
-	/* When no valid entries are present in the list, qf_ptr points to
-	 * the first item in the list */
-	if (to_qfl->qf_nonevalid)
-	{
-	    to_qfl->qf_ptr = to_qfl->qf_start;
-	    to_qfl->qf_index = 1;
+	    qf_free_all(to);
+	    return;
 	}
     }
 
-    to->w_llist->qf_curlist = qi->qf_curlist;	/* current list */
+    to->w_llist->qf_curlist = qi->qf_curlist;	// current list
 }
 
 /*
@@ -4466,119 +4479,21 @@ grep_internal(cmdidx_T cmdidx)
 }
 
 /*
- * Used for ":make", ":lmake", ":grep", ":lgrep", ":grepadd", and ":lgrepadd"
+ * Return the make/grep autocmd name.
  */
-    void
-ex_make(exarg_T *eap)
+    static char_u *
+make_get_auname(cmdidx_T cmdidx)
 {
-    char_u	*fname;
-    char_u	*cmd;
-    char_u	*enc = NULL;
-    unsigned	len;
-    win_T	*wp = NULL;
-    qf_info_T	*qi = &ql_info;
-    int		res;
-    char_u	*au_name = NULL;
-    int_u	save_qfid;
-
-    /* Redirect ":grep" to ":vimgrep" if 'grepprg' is "internal". */
-    if (grep_internal(eap->cmdidx))
+    switch (cmdidx)
     {
-	ex_vimgrep(eap);
-	return;
+	case CMD_make:	    return (char_u *)"make";
+	case CMD_lmake:	    return (char_u *)"lmake";
+	case CMD_grep:	    return (char_u *)"grep";
+	case CMD_lgrep:	    return (char_u *)"lgrep";
+	case CMD_grepadd:   return (char_u *)"grepadd";
+	case CMD_lgrepadd:  return (char_u *)"lgrepadd";
+	default: return NULL;
     }
-
-    switch (eap->cmdidx)
-    {
-	case CMD_make:	    au_name = (char_u *)"make"; break;
-	case CMD_lmake:	    au_name = (char_u *)"lmake"; break;
-	case CMD_grep:	    au_name = (char_u *)"grep"; break;
-	case CMD_lgrep:	    au_name = (char_u *)"lgrep"; break;
-	case CMD_grepadd:   au_name = (char_u *)"grepadd"; break;
-	case CMD_lgrepadd:  au_name = (char_u *)"lgrepadd"; break;
-	default: break;
-    }
-    if (au_name != NULL && apply_autocmds(EVENT_QUICKFIXCMDPRE, au_name,
-					       curbuf->b_fname, TRUE, curbuf))
-    {
-#ifdef FEAT_EVAL
-	if (aborting())
-	    return;
-#endif
-    }
-#ifdef FEAT_MBYTE
-    enc = (*curbuf->b_p_menc != NUL) ? curbuf->b_p_menc : p_menc;
-#endif
-
-    if (is_loclist_cmd(eap->cmdidx))
-	wp = curwin;
-
-    autowrite_all();
-    fname = get_mef_name();
-    if (fname == NULL)
-	return;
-    mch_remove(fname);	    /* in case it's not unique */
-
-    /*
-     * If 'shellpipe' empty: don't redirect to 'errorfile'.
-     */
-    len = (unsigned)STRLEN(p_shq) * 2 + (unsigned)STRLEN(eap->arg) + 1;
-    if (*p_sp != NUL)
-	len += (unsigned)STRLEN(p_sp) + (unsigned)STRLEN(fname) + 3;
-    cmd = alloc(len);
-    if (cmd == NULL)
-	return;
-    sprintf((char *)cmd, "%s%s%s", (char *)p_shq, (char *)eap->arg,
-							       (char *)p_shq);
-    if (*p_sp != NUL)
-	append_redir(cmd, len, p_sp, fname);
-    /*
-     * Output a newline if there's something else than the :make command that
-     * was typed (in which case the cursor is in column 0).
-     */
-    if (msg_col == 0)
-	msg_didout = FALSE;
-    msg_start();
-    MSG_PUTS(":!");
-    msg_outtrans(cmd);		/* show what we are doing */
-
-    /* let the shell know if we are redirecting output or not */
-    do_shell(cmd, *p_sp != NUL ? SHELL_DOOUT : 0);
-
-#ifdef AMIGA
-    out_flush();
-		/* read window status report and redraw before message */
-    (void)char_avail();
-#endif
-
-    res = qf_init(wp, fname, (eap->cmdidx != CMD_make
-			    && eap->cmdidx != CMD_lmake) ? p_gefm : p_efm,
-					   (eap->cmdidx != CMD_grepadd
-					    && eap->cmdidx != CMD_lgrepadd),
-					   qf_cmdtitle(*eap->cmdlinep), enc);
-    if (wp != NULL)
-    {
-	qi = GET_LOC_LIST(wp);
-	if (qi == NULL)
-	    goto cleanup;
-    }
-    if (res >= 0)
-	qf_list_changed(qi, qi->qf_curlist);
-
-    // Remember the current quickfix list identifier, so that we can
-    // check for autocommands changing the current quickfix list.
-    save_qfid = qi->qf_lists[qi->qf_curlist].qf_id;
-    if (au_name != NULL)
-	apply_autocmds(EVENT_QUICKFIXCMDPOST, au_name,
-					       curbuf->b_fname, TRUE, curbuf);
-    if (res > 0 && !eap->forceit && qflist_valid(wp, save_qfid))
-	// display the first error
-	qf_jump_first(qi, save_qfid, FALSE);
-
-cleanup:
-    mch_remove(fname);
-    vim_free(fname);
-    vim_free(cmd);
 }
 
 /*
@@ -4612,7 +4527,7 @@ get_mef_name(void)
     if (*p == NUL)
 	return vim_strsave(p_mef);
 
-    /* Keep trying until the name doesn't exist yet. */
+    // Keep trying until the name doesn't exist yet.
     for (;;)
     {
 	if (start == -1)
@@ -4628,7 +4543,7 @@ get_mef_name(void)
 	STRCAT(name, p + 2);
 	if (mch_getperm(name) < 0
 #ifdef HAVE_LSTAT
-		    /* Don't accept a symbolic link, it's a security risk. */
+		    // Don't accept a symbolic link, it's a security risk.
 		    && mch_lstat((char *)name, &sb) < 0
 #endif
 		)
@@ -4636,6 +4551,128 @@ get_mef_name(void)
 	vim_free(name);
     }
     return name;
+}
+
+/*
+ * Form the complete command line to invoke 'make'/'grep'. Quote the command
+ * using 'shellquote' and append 'shellpipe'. Echo the fully formed command.
+ */
+    static char_u *
+make_get_fullcmd(char_u *makecmd, char_u *fname)
+{
+    char_u	*cmd;
+    unsigned	len;
+
+    len = (unsigned)STRLEN(p_shq) * 2 + (unsigned)STRLEN(makecmd) + 1;
+    if (*p_sp != NUL)
+	len += (unsigned)STRLEN(p_sp) + (unsigned)STRLEN(fname) + 3;
+    cmd = alloc(len);
+    if (cmd == NULL)
+	return NULL;
+    sprintf((char *)cmd, "%s%s%s", (char *)p_shq, (char *)makecmd,
+							       (char *)p_shq);
+
+    // If 'shellpipe' empty: don't redirect to 'errorfile'.
+    if (*p_sp != NUL)
+	append_redir(cmd, len, p_sp, fname);
+
+    // Display the fully formed command.  Output a newline if there's something
+    // else than the :make command that was typed (in which case the cursor is
+    // in column 0).
+    if (msg_col == 0)
+	msg_didout = FALSE;
+    msg_start();
+    MSG_PUTS(":!");
+    msg_outtrans(cmd);		// show what we are doing
+
+    return cmd;
+}
+
+/*
+ * Used for ":make", ":lmake", ":grep", ":lgrep", ":grepadd", and ":lgrepadd"
+ */
+    void
+ex_make(exarg_T *eap)
+{
+    char_u	*fname;
+    char_u	*cmd;
+    char_u	*enc = NULL;
+    win_T	*wp = NULL;
+    qf_info_T	*qi = &ql_info;
+    int		res;
+    char_u	*au_name = NULL;
+    int_u	save_qfid;
+
+    // Redirect ":grep" to ":vimgrep" if 'grepprg' is "internal".
+    if (grep_internal(eap->cmdidx))
+    {
+	ex_vimgrep(eap);
+	return;
+    }
+
+    au_name = make_get_auname(eap->cmdidx);
+    if (au_name != NULL && apply_autocmds(EVENT_QUICKFIXCMDPRE, au_name,
+					       curbuf->b_fname, TRUE, curbuf))
+    {
+#ifdef FEAT_EVAL
+	if (aborting())
+	    return;
+#endif
+    }
+#ifdef FEAT_MBYTE
+    enc = (*curbuf->b_p_menc != NUL) ? curbuf->b_p_menc : p_menc;
+#endif
+
+    if (is_loclist_cmd(eap->cmdidx))
+	wp = curwin;
+
+    autowrite_all();
+    fname = get_mef_name();
+    if (fname == NULL)
+	return;
+    mch_remove(fname);	    // in case it's not unique
+
+    cmd = make_get_fullcmd(eap->arg, fname);
+    if (cmd == NULL)
+	return;
+
+    // let the shell know if we are redirecting output or not
+    do_shell(cmd, *p_sp != NUL ? SHELL_DOOUT : 0);
+
+#ifdef AMIGA
+    out_flush();
+		// read window status report and redraw before message
+    (void)char_avail();
+#endif
+
+    res = qf_init(wp, fname, (eap->cmdidx != CMD_make
+			    && eap->cmdidx != CMD_lmake) ? p_gefm : p_efm,
+					   (eap->cmdidx != CMD_grepadd
+					    && eap->cmdidx != CMD_lgrepadd),
+					   qf_cmdtitle(*eap->cmdlinep), enc);
+    if (wp != NULL)
+    {
+	qi = GET_LOC_LIST(wp);
+	if (qi == NULL)
+	    goto cleanup;
+    }
+    if (res >= 0)
+	qf_list_changed(qi, qi->qf_curlist);
+
+    // Remember the current quickfix list identifier, so that we can
+    // check for autocommands changing the current quickfix list.
+    save_qfid = qi->qf_lists[qi->qf_curlist].qf_id;
+    if (au_name != NULL)
+	apply_autocmds(EVENT_QUICKFIXCMDPOST, au_name,
+					       curbuf->b_fname, TRUE, curbuf);
+    if (res > 0 && !eap->forceit && qflist_valid(wp, save_qfid))
+	// display the first error
+	qf_jump_first(qi, save_qfid, FALSE);
+
+cleanup:
+    mch_remove(fname);
+    vim_free(fname);
+    vim_free(cmd);
 }
 
 /*
