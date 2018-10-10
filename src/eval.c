@@ -232,7 +232,6 @@ static int eval5(char_u **arg, typval_T *rettv, int evaluate);
 static int eval6(char_u **arg, typval_T *rettv, int evaluate, int want_string);
 static int eval7(char_u **arg, typval_T *rettv, int evaluate, int want_string);
 
-static int eval_index(char_u **arg, typval_T *rettv, int evaluate, int verbose);
 static int get_string_tv(char_u **arg, typval_T *rettv, int evaluate);
 static int get_lit_string_tv(char_u **arg, typval_T *rettv, int evaluate);
 static int free_unref_items(int copyID);
@@ -3049,8 +3048,6 @@ del_menutrans_vars(void)
  * with its prefix. Allocated in cat_prefix_varname(), freed later in
  * get_user_var_name().
  */
-
-static char_u *cat_prefix_varname(int prefix, char_u *name);
 
 static char_u	*varnamebuf = NULL;
 static int	varnamebuflen = 0;
@@ -7957,6 +7954,7 @@ get_user_input(
 	if (defstr != NULL)
 	{
 	    int save_ex_normal_busy = ex_normal_busy;
+
 	    ex_normal_busy = 0;
 	    rettv->vval.v_string =
 		getcmdline_prompt(secret ? NUL : '@', p, echo_attr,
@@ -8507,8 +8505,6 @@ typedef enum
     VAR_FLAVOUR_VIMINFO		/* all uppercase */
 } var_flavour_T;
 
-static var_flavour_T var_flavour(char_u *varname);
-
     static var_flavour_T
 var_flavour(char_u *varname)
 {
@@ -9045,6 +9041,8 @@ assert_fails(typval_T *argvars)
     char_u	*cmd = get_tv_string_chk(&argvars[0]);
     garray_T	ga;
     int		ret = 0;
+    char_u	numbuf[NUMBUFLEN];
+    char_u	*tofree;
 
     called_emsg = FALSE;
     suppress_errthrow = TRUE;
@@ -9054,7 +9052,14 @@ assert_fails(typval_T *argvars)
     {
 	prepare_assert_error(&ga);
 	ga_concat(&ga, (char_u *)"command did not fail: ");
-	ga_concat(&ga, cmd);
+	if (argvars[1].v_type != VAR_UNKNOWN
+					   && argvars[2].v_type != VAR_UNKNOWN)
+	{
+	    ga_concat(&ga, echo_string(&argvars[2], &tofree, numbuf, 0));
+	    vim_free(tofree);
+	}
+	else
+	    ga_concat(&ga, cmd);
 	assert_error(&ga);
 	ga_clear(&ga);
 	ret = 1;
@@ -9431,9 +9436,6 @@ var_exists(char_u *var)
 /*
  * Functions for ":8" filename modifier: get 8.3 version of a filename.
  */
-static int get_short_pathname(char_u **fnamep, char_u **bufp, int *fnamelen);
-static int shortpath_for_invalid_fname(char_u **fname, char_u **bufp, int *fnamelen);
-static int shortpath_for_partial(char_u **fnamep, char_u **bufp, int *fnamelen);
 
 /*
  * Get the short path (8.3) for the filename in "fnamep".
