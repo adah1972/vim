@@ -1354,7 +1354,7 @@ typedef struct
     int		uf_cleared;	/* func_clear() was already called */
     garray_T	uf_args;	/* arguments */
     garray_T	uf_lines;	/* function lines */
-#ifdef FEAT_PROFILE
+# ifdef FEAT_PROFILE
     int		uf_profiling;	/* TRUE when func is being profiled */
     int		uf_prof_initialized;
     /* profiling the function as a whole */
@@ -1371,7 +1371,7 @@ typedef struct
     proftime_T	uf_tml_wait;	/* start wait time for current line */
     int		uf_tml_idx;	/* index of line being timed; -1 if none */
     int		uf_tml_execed;	/* line being timed was executed */
-#endif
+# endif
     sctx_T	uf_script_ctx;	/* SCTX where function was defined,
 				   used for s: variables */
     int		uf_refcount;	/* reference count, see func_name_refcount() */
@@ -1429,6 +1429,12 @@ typedef struct
     dictitem_T	*fd_di;		/* Dictionary item used */
 } funcdict_T;
 
+typedef struct funccal_entry funccal_entry_T;
+struct funccal_entry {
+    void	    *top_funccal;
+    funccal_entry_T *next;
+};
+
 #else
 /* dummy typedefs for function prototypes */
 typedef struct
@@ -1439,6 +1445,10 @@ typedef struct
 {
     int	    dummy;
 } funcdict_T;
+typedef struct
+{
+    int	    dummy;
+} funccal_entry_T;
 #endif
 
 struct partial_S
@@ -3091,8 +3101,9 @@ typedef struct cursor_entry
 #define MENU_INDEX_OP_PENDING	3
 #define MENU_INDEX_INSERT	4
 #define MENU_INDEX_CMDLINE	5
-#define MENU_INDEX_TIP		6
-#define MENU_MODES		7
+#define MENU_INDEX_TERMINAL	6
+#define MENU_INDEX_TIP		7
+#define MENU_MODES		8
 
 /* Menu modes */
 #define MENU_NORMAL_MODE	(1 << MENU_INDEX_NORMAL)
@@ -3101,6 +3112,7 @@ typedef struct cursor_entry
 #define MENU_OP_PENDING_MODE	(1 << MENU_INDEX_OP_PENDING)
 #define MENU_INSERT_MODE	(1 << MENU_INDEX_INSERT)
 #define MENU_CMDLINE_MODE	(1 << MENU_INDEX_CMDLINE)
+#define MENU_TERMINAL_MODE	(1 << MENU_INDEX_TERMINAL)
 #define MENU_TIP_MODE		(1 << MENU_INDEX_TIP)
 #define MENU_ALL_MODES		((1 << MENU_INDEX_TIP) - 1)
 /*note MENU_INDEX_TIP is not a 'real' mode*/
