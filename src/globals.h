@@ -1524,6 +1524,8 @@ EXTERN char_u e_readonlysbx[]	INIT(= N_("E794: Cannot set variable in the sandbo
 EXTERN char_u e_emptykey[]	INIT(= N_("E713: Cannot use empty key for Dictionary"));
 EXTERN char_u e_dictreq[]	INIT(= N_("E715: Dictionary required"));
 EXTERN char_u e_listidx[]	INIT(= N_("E684: list index out of range: %ld"));
+EXTERN char_u e_blobidx[]	INIT(= N_("E979: Blob index out of range: %ld"));
+EXTERN char_u e_invalblob[]	INIT(= N_("E978: Invalid operation for Blob"));
 EXTERN char_u e_toomanyarg[]	INIT(= N_("E118: Too many arguments for function: %s"));
 EXTERN char_u e_dictkey[]	INIT(= N_("E716: Key not present in Dictionary: %s"));
 EXTERN char_u e_listreq[]	INIT(= N_("E714: List required"));
@@ -1583,6 +1585,9 @@ EXTERN char_u e_invalidreg[]    INIT(= N_("E850: Invalid register name"));
 #endif
 EXTERN char_u e_dirnotf[]	INIT(= N_("E919: Directory not found in '%s': \"%s\""));
 EXTERN char_u e_au_recursive[]	INIT(= N_("E952: Autocommand caused recursive behavior"));
+#ifdef FEAT_MENU
+EXTERN char_u e_menuothermode[] INIT(= N_("E328: Menu only exists in another mode"));
+#endif
 
 #ifdef FEAT_GUI_MAC
 EXTERN short disallow_gui	INIT(= FALSE);

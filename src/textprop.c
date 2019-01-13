@@ -357,12 +357,12 @@ get_text_props(buf_T *buf, linenr_T lnum, char_u **props, int will_change)
     static void
 set_text_props(linenr_T lnum, char_u *props, int len)
 {
-    char_u *text;
-    char_u *newtext;
-    size_t textlen;
+    char_u  *text;
+    char_u  *newtext;
+    int	    textlen;
 
     text = ml_get(lnum);
-    textlen = STRLEN(text) + 1;
+    textlen = (int)STRLEN(text) + 1;
     newtext = alloc(textlen + len);
     if (newtext == NULL)
 	return;
@@ -979,7 +979,9 @@ adjust_prop_columns(
 	pt = text_prop_type_by_id(curbuf, tmp_prop.tp_type);
 
 	if (bytes_added > 0
-		? (tmp_prop.tp_col >= col + (pt != NULL && (pt->pt_flags & PT_FLAG_INS_START_INCL) ? 2 : 1))
+		? (tmp_prop.tp_col >= col
+		       + (pt != NULL && (pt->pt_flags & PT_FLAG_INS_START_INCL)
+								      ? 2 : 1))
 		: (tmp_prop.tp_col > col + 1))
 	{
 	    tmp_prop.tp_col += bytes_added;
@@ -987,7 +989,7 @@ adjust_prop_columns(
 	}
 	else if (tmp_prop.tp_len > 0
 		&& tmp_prop.tp_col + tmp_prop.tp_len > col
-			+ ((pt != NULL && (pt->pt_flags & PT_FLAG_INS_END_INCL))
+		       + ((pt != NULL && (pt->pt_flags & PT_FLAG_INS_END_INCL))
 								      ? 0 : 1))
 	{
 	    tmp_prop.tp_len += bytes_added;
@@ -1001,8 +1003,13 @@ adjust_prop_columns(
     }
     if (dirty)
     {
+	colnr_T newlen = (int)textlen + wi * (colnr_T)sizeof(textprop_T);
+
+	if ((curbuf->b_ml.ml_flags & ML_LINE_DIRTY) == 0)
+	    curbuf->b_ml.ml_line_ptr =
+				 vim_memsave(curbuf->b_ml.ml_line_ptr, newlen);
 	curbuf->b_ml.ml_flags |= ML_LINE_DIRTY;
-	curbuf->b_ml.ml_line_len = (int)textlen + wi * sizeof(textprop_T);
+	curbuf->b_ml.ml_line_len = newlen;
     }
 }
 
