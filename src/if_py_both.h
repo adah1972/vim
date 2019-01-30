@@ -24,11 +24,7 @@ static char_u e_py_systemexit[]	= "E880: Can't handle SystemExit of %s exception
 typedef int Py_ssize_t;  /* Python 2.4 and earlier don't have this type. */
 #endif
 
-#ifdef FEAT_MBYTE
-# define ENC_OPT ((char *)p_enc)
-#else
-# define ENC_OPT "latin1"
-#endif
+#define ENC_OPT ((char *)p_enc)
 #define DOPY_FUNC "_vim_pydo"
 
 static const char *vim_special_path = "_vim_path_";
@@ -536,7 +532,7 @@ PythonIO_Init_io(void)
 
     if (PyErr_Occurred())
     {
-	EMSG(_("E264: Python: Error initialising I/O objects"));
+	emsg(_("E264: Python: Error initialising I/O objects"));
 	return -1;
     }
 
@@ -634,7 +630,7 @@ VimTryEnd(void)
     else if (msg_list != NULL && *msg_list != NULL)
     {
 	int	should_free;
-	char_u	*msg;
+	char	*msg;
 
 	msg = get_exception_string(*msg_list, ET_ERROR, NULL, &should_free);
 
@@ -644,7 +640,7 @@ VimTryEnd(void)
 	    return -1;
 	}
 
-	PyErr_SetVim((char *) msg);
+	PyErr_SetVim(msg);
 
 	free_global_msglist();
 
@@ -985,11 +981,7 @@ VimStrwidth(PyObject *self UNUSED, PyObject *string)
     if (!(str = StringToChars(string, &todecref)))
 	return NULL;
 
-#ifdef FEAT_MBYTE
     len = mb_string2cells(str, (int)STRLEN(str));
-#else
-    len = STRLEN(str);
-#endif
 
     Py_XDECREF(todecref);
 
@@ -3483,13 +3475,13 @@ OptionsIter(OptionsObject *self)
     static int
 set_option_value_err(char_u *key, int numval, char_u *stringval, int opt_flags)
 {
-    char_u	*errmsg;
+    char	*errmsg;
 
     if ((errmsg = set_option_value(key, numval, stringval, opt_flags)))
     {
 	if (VimTryEnd())
 	    return FAIL;
-	PyErr_SetVim((char *)errmsg);
+	PyErr_SetVim(errmsg);
 	return FAIL;
     }
     return OK;
@@ -4041,9 +4033,7 @@ WindowSetattr(WindowObject *self, char *name, PyObject *valObject)
 	self->win->w_cursor.lnum = lnum;
 	self->win->w_cursor.col = col;
 	self->win->w_set_curswant = TRUE;
-#ifdef FEAT_VIRTUALEDIT
 	self->win->w_cursor.coladd = 0;
-#endif
 	/* When column is out of range silently correct it. */
 	check_cursor_col_win(self->win);
 
@@ -5664,7 +5654,7 @@ run_cmd(const char *cmd, void *arg UNUSED
     }
     else if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_SystemExit))
     {
-	EMSG2(_(e_py_systemexit), "python");
+	semsg(_(e_py_systemexit), "python");
 	PyErr_Clear();
     }
     else
@@ -5691,7 +5681,7 @@ run_do(const char *cmd, void *arg UNUSED
 
     if (u_save((linenr_T)RangeStart - 1, (linenr_T)RangeEnd + 1) != OK)
     {
-	EMSG(_("cannot save undo information"));
+	emsg(_("cannot save undo information"));
 	return;
     }
 
@@ -5709,7 +5699,7 @@ run_do(const char *cmd, void *arg UNUSED
     else if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_SystemExit))
     {
 	PyMem_Free(code);
-	EMSG2(_(e_py_systemexit), "python");
+	semsg(_(e_py_systemexit), "python");
 	PyErr_Clear();
 	return;
     }
@@ -5720,7 +5710,7 @@ run_do(const char *cmd, void *arg UNUSED
 
     if (status)
     {
-	EMSG(_("failed to run the code"));
+	emsg(_("failed to run the code"));
 	return;
     }
 
@@ -5810,20 +5800,20 @@ run_eval(const char *cmd, typval_T *rettv
     {
 	if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_SystemExit))
 	{
-	    EMSG2(_(e_py_systemexit), "python");
+	    semsg(_(e_py_systemexit), "python");
 	    PyErr_Clear();
 	}
 	else
 	{
 	    if (PyErr_Occurred() && !msg_silent)
 		PyErr_PrintEx(0);
-	    EMSG(_("E858: Eval did not return a valid python object"));
+	    emsg(_("E858: Eval did not return a valid python object"));
 	}
     }
     else
     {
 	if (ConvertFromPyObject(run_ret, rettv) == -1)
-	    EMSG(_("E859: Failed to convert returned python object to vim value"));
+	    emsg(_("E859: Failed to convert returned python object to vim value"));
 	Py_DECREF(run_ret);
     }
     PyErr_Clear();
@@ -6727,7 +6717,7 @@ init_sys_path(void)
     else
     {
 	VimTryStart();
-	EMSG(_("Failed to set path hook: sys.path_hooks is not a list\n"
+	emsg(_("Failed to set path hook: sys.path_hooks is not a list\n"
 	       "You should now do the following:\n"
 	       "- append vim.path_hook to sys.path_hooks\n"
 	       "- append vim.VIM_SPECIAL_PATH to sys.path\n"));
@@ -6757,7 +6747,7 @@ init_sys_path(void)
     else
     {
 	VimTryStart();
-	EMSG(_("Failed to set path: sys.path is not a list\n"
+	emsg(_("Failed to set path: sys.path is not a list\n"
 	       "You should now append vim.VIM_SPECIAL_PATH to sys.path"));
 	VimTryEnd(); /* Discard the error */
     }

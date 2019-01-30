@@ -239,17 +239,14 @@ efmpat_to_regpat(
 	char_u	*regpat,
 	efm_T	*efminfo,
 	int	idx,
-	int	round,
-	char_u	*errmsg)
+	int	round)
 {
     char_u	*srcptr;
 
     if (efminfo->addr[idx])
     {
 	// Each errorformat pattern can occur only once
-	sprintf((char *)errmsg,
-		_("E372: Too many %%%c in format string"), *efmpat);
-	EMSG(errmsg);
+	semsg(_("E372: Too many %%%c in format string"), *efmpat);
 	return NULL;
     }
     if ((idx && idx < 6
@@ -257,9 +254,7 @@ efmpat_to_regpat(
 	    || (idx == 6
 		&& vim_strchr((char_u *)"OPQ", efminfo->prefix) == NULL))
     {
-	sprintf((char *)errmsg,
-		_("E373: Unexpected %%%c in format string"), *efmpat);
-	EMSG(errmsg);
+	semsg(_("E373: Unexpected %%%c in format string"), *efmpat);
 	return NULL;
     }
     efminfo->addr[idx] = (char_u)++round;
@@ -316,8 +311,7 @@ scanf_fmt_to_regpat(
 	char_u	**pefmp,
 	char_u	*efm,
 	int	len,
-	char_u	*regpat,
-	char_u	*errmsg)
+	char_u	*regpat)
 {
     char_u	*efmp = *pefmp;
 
@@ -335,7 +329,7 @@ scanf_fmt_to_regpat(
 		    // skip ;
 		if (efmp == efm + len)
 		{
-		    EMSG(_("E374: Missing ] in format string"));
+		    emsg(_("E374: Missing ] in format string"));
 		    return NULL;
 		}
 	    }
@@ -348,9 +342,7 @@ scanf_fmt_to_regpat(
     else
     {
 	// TODO: scanf()-like: %*ud, %*3c, %*f, ... ?
-	sprintf((char *)errmsg,
-		_("E375: Unsupported %%%c in format string"), *efmp);
-	EMSG(errmsg);
+	semsg(_("E375: Unsupported %%%c in format string"), *efmp);
 	return NULL;
     }
 
@@ -363,7 +355,7 @@ scanf_fmt_to_regpat(
  * Analyze/parse an errorformat prefix.
  */
     static char_u *
-efm_analyze_prefix(char_u *efmp, efm_T *efminfo, char_u *errmsg)
+efm_analyze_prefix(char_u *efmp, efm_T *efminfo)
 {
     if (vim_strchr((char_u *)"+-", *efmp) != NULL)
 	efminfo->flags = *efmp++;
@@ -371,9 +363,7 @@ efm_analyze_prefix(char_u *efmp, efm_T *efminfo, char_u *errmsg)
 	efminfo->prefix = *efmp;
     else
     {
-	sprintf((char *)errmsg,
-		_("E376: Invalid %%%c in format string prefix"), *efmp);
-	EMSG(errmsg);
+	semsg(_("E376: Invalid %%%c in format string prefix"), *efmp);
 	return NULL;
     }
 
@@ -391,8 +381,7 @@ efm_to_regpat(
 	char_u	*efm,
 	int	len,
 	efm_T	*fmt_ptr,
-	char_u	*regpat,
-	char_u	*errmsg)
+	char_u	*regpat)
 {
     char_u	*ptr;
     char_u	*efmp;
@@ -413,8 +402,7 @@ efm_to_regpat(
 		    break;
 	    if (idx < FMT_PATTERNS)
 	    {
-		ptr = efmpat_to_regpat(efmp, ptr, fmt_ptr, idx, round,
-								errmsg);
+		ptr = efmpat_to_regpat(efmp, ptr, fmt_ptr, idx, round);
 		if (ptr == NULL)
 		    return FAIL;
 		round++;
@@ -422,7 +410,7 @@ efm_to_regpat(
 	    else if (*efmp == '*')
 	    {
 		++efmp;
-		ptr = scanf_fmt_to_regpat(&efmp, efm, len, ptr, errmsg);
+		ptr = scanf_fmt_to_regpat(&efmp, efm, len, ptr);
 		if (ptr == NULL)
 		    return FAIL;
 	    }
@@ -436,15 +424,13 @@ efm_to_regpat(
 	    {
 		// prefix is allowed only at the beginning of the errorformat
 		// option part
-		efmp = efm_analyze_prefix(efmp, fmt_ptr, errmsg);
+		efmp = efm_analyze_prefix(efmp, fmt_ptr);
 		if (efmp == NULL)
 		    return FAIL;
 	    }
 	    else
 	    {
-		sprintf((char *)errmsg,
-			_("E377: Invalid %%%c in format string"), *efmp);
-		EMSG(errmsg);
+		semsg(_("E377: Invalid %%%c in format string"), *efmp);
 		return FAIL;
 	    }
 	}
@@ -526,19 +512,12 @@ efm_option_part_len(char_u *efm)
     static efm_T *
 parse_efm_option(char_u *efm)
 {
-    char_u	*errmsg = NULL;
-    int		errmsglen;
     efm_T	*fmt_ptr = NULL;
     efm_T	*fmt_first = NULL;
     efm_T	*fmt_last = NULL;
     char_u	*fmtstr = NULL;
     int		len;
     int		sz;
-
-    errmsglen = CMDBUFFSIZE + 1;
-    errmsg = alloc_id(errmsglen, aid_qf_errmsg);
-    if (errmsg == NULL)
-	goto parse_efm_end;
 
     // Each part of the format string is copied and modified from errorformat
     // to regex prog.  Only a few % characters are allowed.
@@ -563,7 +542,7 @@ parse_efm_option(char_u *efm)
 	// Isolate one part in the 'errorformat' option
 	len = efm_option_part_len(efm);
 
-	if (efm_to_regpat(efm, len, fmt_ptr, fmtstr, errmsg) == FAIL)
+	if (efm_to_regpat(efm, len, fmt_ptr, fmtstr) == FAIL)
 	    goto parse_efm_error;
 	if ((fmt_ptr->prog = vim_regcomp(fmtstr, RE_MAGIC + RE_STRING)) == NULL)
 	    goto parse_efm_error;
@@ -572,7 +551,7 @@ parse_efm_option(char_u *efm)
     }
 
     if (fmt_first == NULL)	// nothing found
-	EMSG(_("E378: 'errorformat' contains no pattern"));
+	emsg(_("E378: 'errorformat' contains no pattern"));
 
     goto parse_efm_end;
 
@@ -581,7 +560,6 @@ parse_efm_error:
 
 parse_efm_end:
     vim_free(fmtstr);
-    vim_free(errmsg);
 
     return fmt_first;
 }
@@ -826,7 +804,6 @@ qf_get_next_file_line(qfstate_T *state)
     else
 	state->linebuf = IObuff;
 
-#ifdef FEAT_MBYTE
     // Convert a line if it contains a non-ASCII character.
     if (state->vc.vc_type != CONV_NONE && has_non_ascii(state->linebuf))
     {
@@ -849,7 +826,6 @@ qf_get_next_file_line(qfstate_T *state)
 	    }
 	}
     }
-#endif
 
     return QF_OK;
 }
@@ -894,9 +870,7 @@ qf_get_nextline(qfstate_T *state)
 #endif
     }
 
-#ifdef FEAT_MBYTE
     remove_bom(state->linebuf);
-#endif
 
     return QF_OK;
 }
@@ -1271,7 +1245,7 @@ qf_parse_dir_pfx(int idx, qffields_T *fields, qf_list_T *qfl)
     {
 	if (*fields->namebuf == NUL)
 	{
-	    EMSG(_("E379: Missing or empty directory name"));
+	    emsg(_("E379: Missing or empty directory name"));
 	    return QF_FAIL;
 	}
 	qfl->qf_directory =
@@ -1560,15 +1534,13 @@ qf_setup_state(
 	linenr_T	lnumfirst,
 	linenr_T	lnumlast)
 {
-#ifdef FEAT_MBYTE
     pstate->vc.vc_type = CONV_NONE;
     if (enc != NULL && *enc != NUL)
 	convert_setup(&pstate->vc, enc, p_enc);
-#endif
 
     if (efile != NULL && (pstate->fd = mch_fopen((char *)efile, "r")) == NULL)
     {
-	EMSG2(_(e_openerrf), efile);
+	semsg(_(e_openerrf), efile);
 	return FAIL;
     }
 
@@ -1598,10 +1570,8 @@ qf_cleanup_state(qfstate_T *pstate)
 	fclose(pstate->fd);
 
     vim_free(pstate->growbuf);
-#ifdef FEAT_MBYTE
     if (pstate->vc.vc_type != CONV_NONE)
 	convert_setup(&pstate->vc, NULL, NULL);
-#endif
 }
 
 /*
@@ -1751,7 +1721,7 @@ qf_init_ext(
 	retval = qfl->qf_count;
 	goto qf_init_end;
     }
-    EMSG(_(e_readerrf));
+    emsg(_(e_readerrf));
 error2:
     if (!adding)
     {
@@ -1968,7 +1938,7 @@ decr_quickfix_busy(void)
 #ifdef ABORT_ON_INTERNAL_ERROR
     if (quickfix_busy < 0)
     {
-	EMSG("quickfix_busy has become negative");
+	emsg("quickfix_busy has become negative");
 	abort();
     }
 #endif
@@ -1980,7 +1950,7 @@ check_quickfix_busy(void)
 {
     if (quickfix_busy != 0)
     {
-	EMSGN("quickfix_busy not zero on exit: %ld", (long)quickfix_busy);
+	semsg("quickfix_busy not zero on exit: %ld", (long)quickfix_busy);
 # ifdef ABORT_ON_INTERNAL_ERROR
 	abort();
 # endif
@@ -2635,7 +2605,7 @@ get_nth_valid_entry(
 	    qf_idx = prev_index;
 	    if (err != NULL)
 	    {
-		EMSG(_(err));
+		emsg(_(err));
 		return NULL;
 	    }
 	    break;
@@ -3041,14 +3011,14 @@ qf_jump_edit_buffer(
     // present.
     if (qfl_type == QFLT_LOCATION && !win_valid_any_tab(oldwin))
     {
-	EMSG(_("E924: Current window was closed"));
+	emsg(_("E924: Current window was closed"));
 	*opened_window = FALSE;
 	return NOTDONE;
     }
 
     if (qfl_type == QFLT_QUICKFIX && !qflist_valid(NULL, save_qfid))
     {
-	EMSG(_("E925: Current quickfix was changed"));
+	emsg(_("E925: Current quickfix was changed"));
 	return NOTDONE;
     }
 
@@ -3056,9 +3026,9 @@ qf_jump_edit_buffer(
 	    || !is_qf_entry_present(qfl, qf_ptr))
     {
 	if (qfl_type == QFLT_QUICKFIX)
-	    EMSG(_("E925: Current quickfix was changed"));
+	    emsg(_("E925: Current quickfix was changed"));
 	else
-	    EMSG(_(e_loc_list_changed));
+	    emsg(_(e_loc_list_changed));
 	return NOTDONE;
     }
 
@@ -3094,9 +3064,7 @@ qf_jump_goto_line(
 	if (qf_col > 0)
 	{
 	    curwin->w_cursor.col = qf_col - 1;
-#ifdef FEAT_VIRTUALEDIT
 	    curwin->w_cursor.coladd = 0;
-#endif
 	    if (qf_viscol == TRUE)
 	    {
 		// Check each character from the beginning of the error
@@ -3171,7 +3139,7 @@ qf_jump_print_msg(
 	msg_scroll = TRUE;
     else if (!msg_scrolled && shortmess(SHM_OVERALL))
 	msg_scroll = FALSE;
-    msg_attr_keep(IObuff, 0, TRUE);
+    msg_attr_keep((char *)IObuff, 0, TRUE);
     msg_scroll = i;
 }
 
@@ -3315,7 +3283,7 @@ qf_jump_newwin(qf_info_T	*qi,
 
     if (qf_stack_empty(qi) || qf_list_empty(qi, qi->qf_curlist))
     {
-	EMSG(_(e_quickfix));
+	emsg(_(e_quickfix));
 	return;
     }
 
@@ -3444,7 +3412,7 @@ qf_list_entry(qfline_T *qfp, int qf_idx, int cursel)
     msg_outtrans_attr(IObuff, cursel ? HL_ATTR(HLF_QFL) : qfFileAttr);
 
     if (qfp->qf_lnum != 0)
-	msg_puts_attr((char_u *)":", qfSepAttr);
+	msg_puts_attr(":", qfSepAttr);
     if (qfp->qf_lnum == 0)
 	IObuff[0] = NUL;
     else if (qfp->qf_col == 0)
@@ -3454,15 +3422,15 @@ qf_list_entry(qfline_T *qfp, int qf_idx, int cursel)
 		qfp->qf_lnum, qfp->qf_col);
     sprintf((char *)IObuff + STRLEN(IObuff), "%s",
 	    (char *)qf_types(qfp->qf_type, qfp->qf_nr));
-    msg_puts_attr(IObuff, qfLineAttr);
-    msg_puts_attr((char_u *)":", qfSepAttr);
+    msg_puts_attr((char *)IObuff, qfLineAttr);
+    msg_puts_attr(":", qfSepAttr);
     if (qfp->qf_pattern != NULL)
     {
 	qf_fmt_text(qfp->qf_pattern, IObuff, IOSIZE);
-	msg_puts(IObuff);
-	msg_puts_attr((char_u *)":", qfSepAttr);
+	msg_puts((char *)IObuff);
+	msg_puts_attr(":", qfSepAttr);
     }
-    msg_puts((char_u *)" ");
+    msg_puts(" ");
 
     // Remove newlines and leading whitespace from the text.  For an
     // unrecognized line keep the indent, the compiler may mark a word
@@ -3497,14 +3465,14 @@ qf_list(exarg_T *eap)
 	qi = GET_LOC_LIST(curwin);
 	if (qi == NULL)
 	{
-	    EMSG(_(e_loclist));
+	    emsg(_(e_loclist));
 	    return;
 	}
     }
 
     if (qf_stack_empty(qi) || qf_list_empty(qi, qi->qf_curlist))
     {
-	EMSG(_(e_quickfix));
+	emsg(_(e_quickfix));
 	return;
     }
     if (*arg == '+')
@@ -3514,7 +3482,7 @@ qf_list(exarg_T *eap)
     }
     if (!get_list_range(&arg, &idx1, &idx2) || *arg != NUL)
     {
-	EMSG(_(e_trailing));
+	emsg(_(e_trailing));
 	return;
     }
     qfl = &qi->qf_lists[qi->qf_curlist];
@@ -3623,7 +3591,7 @@ qf_msg(qf_info_T *qi, int which, char *lead)
 	vim_strcat(buf, (char_u *)title, IOSIZE);
     }
     trunc_string(buf, buf, Columns - 1, IOSIZE);
-    msg(buf);
+    msg((char *)buf);
 }
 
 /*
@@ -3643,7 +3611,7 @@ qf_age(exarg_T *eap)
 	qi = GET_LOC_LIST(curwin);
 	if (qi == NULL)
 	{
-	    EMSG(_(e_loclist));
+	    emsg(_(e_loclist));
 	    return;
 	}
     }
@@ -3658,7 +3626,7 @@ qf_age(exarg_T *eap)
 	{
 	    if (qi->qf_curlist == 0)
 	    {
-		EMSG(_("E380: At bottom of quickfix stack"));
+		emsg(_("E380: At bottom of quickfix stack"));
 		break;
 	    }
 	    --qi->qf_curlist;
@@ -3667,7 +3635,7 @@ qf_age(exarg_T *eap)
 	{
 	    if (qi->qf_curlist >= qi->qf_listcount - 1)
 	    {
-		EMSG(_("E381: At top of quickfix stack"));
+		emsg(_("E381: At top of quickfix stack"));
 		break;
 	    }
 	    ++qi->qf_curlist;
@@ -3689,7 +3657,7 @@ qf_history(exarg_T *eap)
     if (is_loclist_cmd(eap->cmdidx))
 	qi = GET_LOC_LIST(curwin);
     if (qf_stack_empty(qi))
-	MSG(_("No entries"));
+	msg(_("No entries"));
     else
 	for (i = 0; i < qi->qf_listcount; ++i)
 	    qf_msg(qi, i, i == qi->qf_curlist ? "> " : "  ");
@@ -3870,7 +3838,7 @@ qf_view_result(int split)
 
     if (qf_list_empty(qi, qi->qf_curlist))
     {
-	EMSG(_(e_quickfix));
+	emsg(_(e_quickfix));
 	return;
     }
 
@@ -4081,7 +4049,7 @@ ex_copen(exarg_T *eap)
 	qi = GET_LOC_LIST(curwin);
 	if (qi == NULL)
 	{
-	    EMSG(_(e_loclist));
+	    emsg(_(e_loclist));
 	    return;
 	}
     }
@@ -4138,9 +4106,7 @@ qf_win_goto(win_T *win, linenr_T lnum)
     curbuf = win->w_buffer;
     curwin->w_cursor.lnum = lnum;
     curwin->w_cursor.col = 0;
-#ifdef FEAT_VIRTUALEDIT
     curwin->w_cursor.coladd = 0;
-#endif
     curwin->w_curswant = 0;
     update_topline();		// scroll to show the line
     redraw_later(VALID);
@@ -4163,7 +4129,7 @@ ex_cbottom(exarg_T *eap)
 	qi = GET_LOC_LIST(curwin);
 	if (qi == NULL)
 	{
-	    EMSG(_(e_loclist));
+	    emsg(_(e_loclist));
 	    return;
 	}
     }
@@ -4609,7 +4575,7 @@ get_mef_name(void)
     {
 	name = vim_tempname('e', FALSE);
 	if (name == NULL)
-	    EMSG(_(e_notmp));
+	    emsg(_(e_notmp));
 	return name;
     }
 
@@ -4675,7 +4641,7 @@ make_get_fullcmd(char_u *makecmd, char_u *fname)
     if (msg_col == 0)
 	msg_didout = FALSE;
     msg_start();
-    MSG_PUTS(":!");
+    msg_puts(":!");
     msg_outtrans(cmd);		// show what we are doing
 
     return cmd;
@@ -4712,9 +4678,7 @@ ex_make(exarg_T *eap)
 	    return;
 #endif
     }
-#ifdef FEAT_MBYTE
     enc = (*curbuf->b_p_menc != NUL) ? curbuf->b_p_menc : p_menc;
-#endif
 
     if (is_loclist_cmd(eap->cmdidx))
 	wp = curwin;
@@ -4941,7 +4905,7 @@ ex_cc(exarg_T *eap)
 	qi = GET_LOC_LIST(curwin);
 	if (qi == NULL)
 	{
-	    EMSG(_(e_loclist));
+	    emsg(_(e_loclist));
 	    return;
 	}
     }
@@ -4992,7 +4956,7 @@ ex_cnext(exarg_T *eap)
 	qi = GET_LOC_LIST(curwin);
 	if (qi == NULL)
 	{
-	    EMSG(_(e_loclist));
+	    emsg(_(e_loclist));
 	    return;
 	}
     }
@@ -5054,9 +5018,7 @@ ex_cfile(exarg_T *eap)
     }
     if (au_name != NULL)
 	apply_autocmds(EVENT_QUICKFIXCMDPRE, au_name, NULL, FALSE, curbuf);
-#ifdef FEAT_MBYTE
     enc = (*curbuf->b_p_menc != NUL) ? curbuf->b_p_menc : p_menc;
-#endif
 #ifdef FEAT_BROWSE
     if (cmdmod.browse)
     {
@@ -5148,7 +5110,7 @@ vgr_init_regmatch(regmmatch_T *regmatch, char_u *s)
 	// Pattern is empty, use last search pattern.
 	if (last_search_pat() == NULL)
 	{
-	    EMSG(_(e_noprevre));
+	    emsg(_(e_noprevre));
 	    return;
 	}
 	regmatch->regprog = vim_regcomp(last_search_pat(), RE_MAGIC);
@@ -5238,7 +5200,7 @@ vgr_qflist_valid(
 	if (wp != NULL)
 	{
 	    // An autocmd has freed the location list.
-	    EMSG(_(e_loc_list_changed));
+	    emsg(_(e_loc_list_changed));
 	    return FALSE;
 	}
 	else
@@ -5417,7 +5379,7 @@ ex_vimgrep(exarg_T *eap)
     p = skip_vimgrep_pat(eap->arg, &s, &flags);
     if (p == NULL)
     {
-	EMSG(_(e_invalpat));
+	emsg(_(e_invalpat));
 	goto theend;
     }
 
@@ -5428,7 +5390,7 @@ ex_vimgrep(exarg_T *eap)
     p = skipwhite(p);
     if (*p == NUL)
     {
-	EMSG(_("E683: File name missing or invalid pattern"));
+	emsg(_("E683: File name missing or invalid pattern"));
 	goto theend;
     }
 
@@ -5444,7 +5406,7 @@ ex_vimgrep(exarg_T *eap)
 	goto theend;
     if (fcount == 0)
     {
-	EMSG(_(e_nomatch));
+	emsg(_(e_nomatch));
 	goto theend;
     }
 
@@ -5505,7 +5467,7 @@ ex_vimgrep(exarg_T *eap)
 	if (buf == NULL)
 	{
 	    if (!got_int)
-		smsg((char_u *)_("Cannot open file \"%s\""), fname);
+		smsg(_("Cannot open file \"%s\""), fname);
 	}
 	else
 	{
@@ -5608,7 +5570,7 @@ ex_vimgrep(exarg_T *eap)
 		    first_match_buf, target_dir);
     }
     else
-	EMSG2(_(e_nomatch2), s);
+	semsg(_(e_nomatch2), s);
 
     decr_quickfix_busy();
 
@@ -6285,7 +6247,7 @@ qf_add_entry_from_dict(
 	if (!did_bufnr_emsg)
 	{
 	    did_bufnr_emsg = TRUE;
-	    EMSGN(_("E92: Buffer %ld not found"), bufnum);
+	    semsg(_("E92: Buffer %d not found"), bufnum);
 	}
 	valid = FALSE;
 	bufnum = 0;
@@ -6864,9 +6826,9 @@ ex_cbuffer(exarg_T *eap)
     else if (*skipwhite(skipdigits(eap->arg)) == NUL)
 	buf = buflist_findnr(atoi((char *)eap->arg));
     if (buf == NULL)
-	EMSG(_(e_invarg));
+	emsg(_(e_invarg));
     else if (buf->b_ml.ml_mfp == NULL)
-	EMSG(_("E681: Buffer is not loaded"));
+	emsg(_("E681: Buffer is not loaded"));
     else
     {
 	if (eap->addr_count == 0)
@@ -6876,7 +6838,7 @@ ex_cbuffer(exarg_T *eap)
 	}
 	if (eap->line1 < 1 || eap->line1 > buf->b_ml.ml_line_count
 		|| eap->line2 < 1 || eap->line2 > buf->b_ml.ml_line_count)
-	    EMSG(_(e_invrange));
+	    emsg(_(e_invrange));
 	else
 	{
 	    char_u *qf_title = qf_cmdtitle(*eap->cmdlinep);
@@ -7011,7 +6973,7 @@ ex_cexpr(exarg_T *eap)
 	    decr_quickfix_busy();
 	}
 	else
-	    EMSG(_("E777: String or List expected"));
+	    emsg(_("E777: String or List expected"));
 cleanup:
 	free_tv(tv);
     }
@@ -7057,9 +7019,7 @@ hgr_get_ll(int *new_ll)
 hgr_search_file(
 	qf_info_T *qi,
 	char_u *fname,
-#ifdef FEAT_MBYTE
 	vimconv_T *p_vc,
-#endif
 	regmatch_T *p_regmatch)
 {
     FILE	*fd;
@@ -7073,7 +7033,7 @@ hgr_search_file(
     while (!vim_fgets(IObuff, IOSIZE, fd) && !got_int)
     {
 	char_u    *line = IObuff;
-#ifdef FEAT_MBYTE
+
 	// Convert a line if 'encoding' is not utf-8 and
 	// the line contains a non-ASCII character.
 	if (p_vc->vc_type != CONV_NONE
@@ -7083,7 +7043,6 @@ hgr_search_file(
 	    if (line == NULL)
 		line = IObuff;
 	}
-#endif
 
 	if (vim_regexec(p_regmatch, line, (colnr_T)0))
 	{
@@ -7111,17 +7070,13 @@ hgr_search_file(
 			) == FAIL)
 	    {
 		got_int = TRUE;
-#ifdef FEAT_MBYTE
 		if (line != IObuff)
 		    vim_free(line);
-#endif
 		break;
 	    }
 	}
-#ifdef FEAT_MBYTE
 	if (line != IObuff)
 	    vim_free(line);
-#endif
 	++lnum;
 	line_breakcheck();
     }
@@ -7136,10 +7091,8 @@ hgr_search_file(
 hgr_search_files_in_dir(
 	qf_info_T *qi,
 	char_u *dirname,
-	regmatch_T *p_regmatch
-#ifdef FEAT_MBYTE
-	, vimconv_T *p_vc
-#endif
+	regmatch_T *p_regmatch,
+	vimconv_T *p_vc
 #ifdef FEAT_MULTI_LANG
 	, char_u *lang
 #endif
@@ -7169,11 +7122,7 @@ hgr_search_files_in_dir(
 		continue;
 #endif
 
-	    hgr_search_file(qi, fnames[fi],
-#ifdef FEAT_MBYTE
-		    p_vc,
-#endif
-		    p_regmatch);
+	    hgr_search_file(qi, fnames[fi], p_vc, p_regmatch);
 	}
 	FreeWild(fcount, fnames);
     }
@@ -7190,7 +7139,6 @@ hgr_search_in_rtp(qf_info_T *qi, regmatch_T *p_regmatch, char_u *lang)
 {
     char_u	*p;
 
-#ifdef FEAT_MBYTE
     vimconv_T	vc;
 
     // Help files are in utf-8 or latin1, convert lines when 'encoding'
@@ -7198,7 +7146,6 @@ hgr_search_in_rtp(qf_info_T *qi, regmatch_T *p_regmatch, char_u *lang)
     vc.vc_type = CONV_NONE;
     if (!enc_utf8)
 	convert_setup(&vc, (char_u *)"utf-8", p_enc);
-#endif
 
     // Go through all the directories in 'runtimepath'
     p = p_rtp;
@@ -7206,20 +7153,15 @@ hgr_search_in_rtp(qf_info_T *qi, regmatch_T *p_regmatch, char_u *lang)
     {
 	copy_option_part(&p, NameBuff, MAXPATHL, ",");
 
-	hgr_search_files_in_dir(qi, NameBuff, p_regmatch
-#ifdef FEAT_MBYTE
-		, &vc
-#endif
+	hgr_search_files_in_dir(qi, NameBuff, p_regmatch, &vc
 #ifdef FEAT_MULTI_LANG
 		, lang
 #endif
 		);
     }
 
-#ifdef FEAT_MBYTE
     if (vc.vc_type != CONV_NONE)
 	convert_setup(&vc, NULL, NULL);
-#endif
 }
 
 /*
@@ -7310,7 +7252,7 @@ ex_helpgrep(exarg_T *eap)
     if (!qf_list_empty(qi, qi->qf_curlist))
 	qf_jump(qi, 0, 0, FALSE);
     else
-	EMSG2(_(e_nomatch2), eap->arg);
+	semsg(_(e_nomatch2), eap->arg);
 
     decr_quickfix_busy();
 

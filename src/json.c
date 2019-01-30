@@ -54,6 +54,7 @@ json_encode(typval_T *val, int options)
     return ga.ga_data;
 }
 
+#if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
 /*
  * Encode ["nr", "val"] into a JSON format string in allocated memory.
  * "options" can contain JSON_JS, JSON_NO_NONE and JSON_NL.
@@ -83,6 +84,7 @@ json_encode_nr_expr(int nr, typval_T *val, int options)
     list_unref(listtv.vval.v_list);
     return ga.ga_data;
 }
+#endif
 
     static void
 write_string(garray_T *gap, char_u *str)
@@ -94,7 +96,7 @@ write_string(garray_T *gap, char_u *str)
 	ga_concat(gap, (char_u *)"\"\"");
     else
     {
-#if defined(FEAT_MBYTE) && defined(USE_ICONV)
+#if defined(USE_ICONV)
 	vimconv_T   conv;
 	char_u	    *converted = NULL;
 
@@ -113,12 +115,8 @@ write_string(garray_T *gap, char_u *str)
 	while (*res != NUL)
 	{
 	    int c;
-#ifdef FEAT_MBYTE
 	    /* always use utf-8 encoding, ignore 'encoding' */
 	    c = utf_ptr2char(res);
-#else
-	    c = *res;
-#endif
 
 	    switch (c)
 	    {
@@ -140,12 +138,7 @@ write_string(garray_T *gap, char_u *str)
 		default:
 		    if (c >= 0x20)
 		    {
-#ifdef FEAT_MBYTE
 			numbuf[utf_char2bytes(c, numbuf)] = NUL;
-#else
-			numbuf[0] = c;
-			numbuf[1] = NUL;
-#endif
 			ga_concat(gap, numbuf);
 		    }
 		    else
@@ -155,14 +148,10 @@ write_string(garray_T *gap, char_u *str)
 			ga_concat(gap, numbuf);
 		    }
 	    }
-#ifdef FEAT_MBYTE
 	    res += utf_ptr2len(res);
-#else
-	    ++res;
-#endif
 	}
 	ga_append(gap, '"');
-#if defined(FEAT_MBYTE) && defined(USE_ICONV)
+#if defined(USE_ICONV)
 	vim_free(converted);
 #endif
     }
@@ -218,7 +207,7 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
 
 	case VAR_NUMBER:
 	    vim_snprintf((char *)numbuf, NUMBUFLEN, "%lld",
-						(long long)val->vval.v_number);
+						(long_long_T)val->vval.v_number);
 	    ga_concat(gap, numbuf);
 	    break;
 
@@ -232,7 +221,7 @@ json_encode_item(garray_T *gap, typval_T *val, int copyID, int options)
 	case VAR_JOB:
 	case VAR_CHANNEL:
 	    /* no JSON equivalent TODO: better error */
-	    EMSG(_(e_invarg));
+	    emsg(_(e_invarg));
 	    return FAIL;
 
 	case VAR_BLOB:
@@ -419,11 +408,7 @@ json_decode_string(js_read_T *reader, typval_T *res, int quote)
     {
 	/* The JSON is always expected to be utf-8, thus use utf functions
 	 * here. The string is converted below if needed. */
-	if (*p == NUL || p[1] == NUL
-#ifdef FEAT_MBYTE
-		|| utf_ptr2len(p) < utf_byte2len(*p)
-#endif
-		)
+	if (*p == NUL || p[1] == NUL || utf_ptr2len(p) < utf_byte2len(*p))
 	{
 	    /* Not enough bytes to make a character or end of the string. Get
 	     * more if possible. */
@@ -486,13 +471,9 @@ json_decode_string(js_read_T *reader, typval_T *res, int quote)
 		    }
 		    if (res != NULL)
 		    {
-#ifdef FEAT_MBYTE
 			char_u	buf[NUMBUFLEN];
 			buf[utf_char2bytes((int)nr, buf)] = NUL;
 			ga_concat(&ga, buf);
-#else
-			ga_append(&ga, (int)nr);
-#endif
 		    }
 		    break;
 		default:
@@ -509,11 +490,7 @@ json_decode_string(js_read_T *reader, typval_T *res, int quote)
 	}
 	else
 	{
-#ifdef FEAT_MBYTE
 	    len = utf_ptr2len(p);
-#else
-	    len = 1;
-#endif
 	    if (res != NULL)
 	    {
 		if (ga_grow(&ga, len) == FAIL)
@@ -536,7 +513,7 @@ json_decode_string(js_read_T *reader, typval_T *res, int quote)
 	{
 	    ga_append(&ga, NUL);
 	    res->v_type = VAR_STRING;
-#if defined(FEAT_MBYTE) && defined(USE_ICONV)
+#if defined(USE_ICONV)
 	    if (!enc_utf8)
 	    {
 		vimconv_T   conv;
@@ -739,7 +716,7 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 			retval = json_decode_string(reader, cur_item, *p);
 		    else
 		    {
-			EMSG(_(e_invarg));
+			emsg(_(e_invarg));
 			retval = FAIL;
 		    }
 		    break;
@@ -747,7 +724,7 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 		case ',': /* comma: empty item */
 		    if ((options & JSON_JS) == 0)
 		    {
-			EMSG(_(e_invarg));
+			emsg(_(e_invarg));
 			retval = FAIL;
 			break;
 		    }
@@ -777,7 +754,7 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 			    }
 			    if (!VIM_ISDIGIT(*sp))
 			    {
-				EMSG(_(e_invarg));
+				emsg(_(e_invarg));
 				retval = FAIL;
 				break;
 			    }
@@ -915,7 +892,7 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 		if (top_item->jd_key == NULL)
 		{
 		    clear_tv(cur_item);
-		    EMSG(_(e_invarg));
+		    emsg(_(e_invarg));
 		    retval = FAIL;
 		    goto theend;
 		}
@@ -953,7 +930,7 @@ item_end:
 			retval = MAYBE;
 		    else
 		    {
-			EMSG(_(e_invarg));
+			emsg(_(e_invarg));
 			retval = FAIL;
 		    }
 		    goto theend;
@@ -971,7 +948,7 @@ item_end:
 			retval = MAYBE;
 		    else
 		    {
-			EMSG(_(e_invarg));
+			emsg(_(e_invarg));
 			retval = FAIL;
 		    }
 		    goto theend;
@@ -988,7 +965,7 @@ item_end:
 			&& dict_find(top_item->jd_tv.vval.v_dict,
 						 top_item->jd_key, -1) != NULL)
 		{
-		    EMSG2(_("E938: Duplicate key in JSON: \"%s\""),
+		    semsg(_("E938: Duplicate key in JSON: \"%s\""),
 							     top_item->jd_key);
 		    clear_tv(&top_item->jd_key_tv);
 		    clear_tv(cur_item);
@@ -1027,7 +1004,7 @@ item_end:
 			retval = MAYBE;
 		    else
 		    {
-			EMSG(_(e_invarg));
+			emsg(_(e_invarg));
 			retval = FAIL;
 		    }
 		    goto theend;
@@ -1046,7 +1023,7 @@ item_end:
 	res->v_type = VAR_SPECIAL;
 	res->vval.v_number = VVAL_NONE;
     }
-    EMSG(_(e_invarg));
+    emsg(_(e_invarg));
 
 theend:
     ga_clear(&stack);
@@ -1070,18 +1047,19 @@ json_decode_all(js_read_T *reader, typval_T *res, int options)
     if (ret != OK)
     {
 	if (ret == MAYBE)
-	    EMSG(_(e_invarg));
+	    emsg(_(e_invarg));
 	return FAIL;
     }
     json_skip_white(reader);
     if (reader->js_buf[reader->js_used] != NUL)
     {
-	EMSG(_(e_trailing));
+	emsg(_(e_trailing));
 	return FAIL;
     }
     return OK;
 }
 
+#if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
 /*
  * Decode the JSON from "reader" and store the result in "res".
  * "options" can be JSON_JS or zero;
@@ -1102,6 +1080,7 @@ json_decode(js_read_T *reader, typval_T *res, int options)
 
     return ret;
 }
+#endif
 
 /*
  * Decode the JSON from "reader" to find the end of the message.
