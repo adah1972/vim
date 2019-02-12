@@ -1,4 +1,4 @@
-" Test for the quickfix commands.
+" Test for the quickfix feature.
 
 if !has('quickfix')
   finish
@@ -1419,7 +1419,7 @@ func XquickfixSetListWithAct(cchar)
           \    {'filename': 'fnameD', 'text': 'D'},
           \    {'filename': 'fnameE', 'text': 'E'}]
 
-  " {action} is unspecified.  Same as specifing ' '.
+  " {action} is unspecified.  Same as specifying ' '.
   new | only
   silent! Xnewer 99
   call g:Xsetlist(list1)
@@ -2348,7 +2348,7 @@ func Test_cwindow_jump()
   " Open a new window and create a location list
   " Open the location list window and close the other window
   " Jump to an entry.
-  " Should create a new window and jump to the entry. The scrtach buffer
+  " Should create a new window and jump to the entry. The scratch buffer
   " should not be used.
   enew | only
   set buftype=nofile
@@ -3831,7 +3831,7 @@ func Test_splitview()
   new | only
 
   " When split opening files from a helpgrep location list window, a new help
-  " window should be opend with a copy of the location list.
+  " window should be opened with a copy of the location list.
   lhelpgrep window
   let locid = getloclist(0, {'id' : 0}).id
   lwindow
@@ -3842,4 +3842,151 @@ func Test_splitview()
 
   call delete('Xtestfile1')
   call delete('Xtestfile2')
+endfunc
+
+" Test for parsing entries using visual screen column
+func Test_viscol()
+  enew
+  call writefile(["Col1\tCol2\tCol3"], 'Xfile1')
+  edit Xfile1
+
+  " Use byte offset for column number
+  set efm&
+  cexpr "Xfile1:1:5:XX\nXfile1:1:9:YY\nXfile1:1:20:ZZ"
+  call assert_equal([5, 8], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([9, 12], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([14, 20], [col('.'), virtcol('.')])
+
+  " Use screen column offset for column number
+  set efm=%f:%l:%v:%m
+  cexpr "Xfile1:1:8:XX\nXfile1:1:12:YY\nXfile1:1:20:ZZ"
+  call assert_equal([5, 8], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([9, 12], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([14, 20], [col('.'), virtcol('.')])
+  cexpr "Xfile1:1:6:XX\nXfile1:1:15:YY\nXfile1:1:24:ZZ"
+  call assert_equal([5, 8], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([10, 16], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([14, 20], [col('.'), virtcol('.')])
+
+  enew
+  call writefile(["Col1\täü\töß\tCol4"], 'Xfile1')
+
+  " Use byte offset for column number
+  set efm&
+  cexpr "Xfile1:1:8:XX\nXfile1:1:11:YY\nXfile1:1:16:ZZ"
+  call assert_equal([8, 10], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([11, 17], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([16, 25], [col('.'), virtcol('.')])
+
+  " Use screen column offset for column number
+  set efm=%f:%l:%v:%m
+  cexpr "Xfile1:1:10:XX\nXfile1:1:17:YY\nXfile1:1:25:ZZ"
+  call assert_equal([8, 10], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([11, 17], [col('.'), virtcol('.')])
+  cnext
+  call assert_equal([16, 25], [col('.'), virtcol('.')])
+
+  enew | only
+  set efm&
+  call delete('Xfile1')
+endfunc
+
+" Test for the quickfix window buffer
+func Xqfbuf_test(cchar)
+  call s:setup_commands(a:cchar)
+
+  " Quickfix buffer should be reused across closing and opening a quickfix
+  " window
+  Xexpr "F1:10:Line10"
+  Xopen
+  let qfbnum = bufnr('')
+  Xclose
+  " Even after the quickfix window is closed, the buffer should be loaded
+  call assert_true(bufloaded(qfbnum))
+  Xopen
+  " Buffer should be reused when opening the window again
+  call assert_equal(qfbnum, bufnr(''))
+  Xclose
+
+  if a:cchar == 'l'
+    %bwipe
+    " For a location list, when both the file window and the location list
+    " window for the list are closed, then the buffer should be freed.
+    new | only
+    lexpr "F1:10:Line10"
+    let wid = win_getid()
+    lopen
+    let qfbnum = bufnr('')
+    call assert_match(qfbnum . ' %a-  "\[Location List]"', execute('ls'))
+    close
+    " When the location list window is closed, the buffer name should not
+    " change to 'Quickfix List'
+    call assert_match(qfbnum . '  h-  "\[Location List]"', execute('ls'))
+    call assert_true(bufloaded(qfbnum))
+
+    " When the location list is cleared for the window, the buffer should be
+    " removed
+    call setloclist(0, [], 'f')
+    call assert_false(bufexists(qfbnum))
+
+    " When the location list is freed with the location list window open, the
+    " location list buffer should not be lost. It should be reused when the
+    " location list is again populated.
+    lexpr "F1:10:Line10"
+    lopen
+    let wid = win_getid()
+    let qfbnum = bufnr('')
+    wincmd p
+    call setloclist(0, [], 'f')
+    lexpr "F1:10:Line10"
+    lopen
+    call assert_equal(wid, win_getid())
+    call assert_equal(qfbnum, bufnr(''))
+    lclose
+
+    " When the window with the location list is closed, the buffer should be
+    " removed
+    new | only
+    call assert_false(bufexists(qfbnum))
+  endif
+endfunc
+
+func Test_qfbuf()
+  call Xqfbuf_test('c')
+  call Xqfbuf_test('l')
+endfunc
+
+" If there is an autocmd to use only one window, then opening the location
+" list window used to crash Vim.
+func Test_winonly_autocmd()
+  call s:create_test_file('Xtest1')
+  " Autocmd to show only one Vim window at a time
+  autocmd WinEnter * only
+  new
+  " Load the location list
+  lexpr "Xtest1:5:Line5\nXtest1:10:Line10\nXtest1:15:Line15"
+  let loclistid = getloclist(0, {'id' : 0}).id
+  " Open the location list window. Only this window will be shown and the file
+  " window is closed.
+  lopen
+  call assert_equal(loclistid, getloclist(0, {'id' : 0}).id)
+  " Jump to an entry in the location list and make sure that the cursor is
+  " positioned correctly.
+  ll 3
+  call assert_equal(loclistid, getloclist(0, {'id' : 0}).id)
+  call assert_equal('Xtest1', bufname(''))
+  call assert_equal(15, line('.'))
+  " Cleanup
+  autocmd! WinEnter
+  new | only
+  call delete('Xtest1')
 endfunc

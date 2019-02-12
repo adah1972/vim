@@ -2098,7 +2098,7 @@ write_viminfo(char_u *file, int forceit)
 			fp_out = NULL;
 # ifdef EEXIST
 			/* Avoid trying lots of names while the problem is lack
-			 * of premission, only retry if the file already
+			 * of permission, only retry if the file already
 			 * exists. */
 			if (errno != EEXIST)
 			    break;
@@ -3784,6 +3784,7 @@ do_ecmd(
 #endif
     int		readfile_flags = 0;
     int		did_inc_redrawing_disabled = FALSE;
+    long        *so_ptr = curwin->w_p_so >= 0 ? &curwin->w_p_so : &p_so;
 
     if (eap != NULL)
 	command = eap->do_ecmd_cmd;
@@ -4389,12 +4390,12 @@ do_ecmd(
     did_inc_redrawing_disabled = FALSE;
     if (!skip_redraw)
     {
-	n = p_so;
+	n = *so_ptr;
 	if (topline == 0 && command == NULL)
-	    p_so = 999;			/* force cursor halfway the window */
+	    *so_ptr = 9999;		// force cursor halfway the window
 	update_topline();
 	curwin->w_scbind_pos = curwin->w_topline;
-	p_so = n;
+	*so_ptr = n;
 	redraw_curbuf_later(NOT_VALID);	/* redraw this buffer later */
     }
 
@@ -4774,7 +4775,7 @@ check_restricted(void)
 {
     if (restricted)
     {
-	emsg(_("E145: Shell commands not allowed in rvim"));
+	emsg(_("E145: Shell commands and some functionality not allowed in rvim"));
 	return TRUE;
     }
     return FALSE;
@@ -5039,6 +5040,7 @@ do_sub(exarg_T *eap)
 	}
 	subflags.do_error = TRUE;
 	subflags.do_print = FALSE;
+	subflags.do_list = FALSE;
 	subflags.do_count = FALSE;
 	subflags.do_number = FALSE;
 	subflags.do_ic = 0;

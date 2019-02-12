@@ -4594,6 +4594,10 @@ win_alloc(win_T *after UNUSED, int hidden UNUSED)
     new_wp->w_cursor.lnum = 1;
     new_wp->w_scbind_pos = 1;
 
+    // use global option value for global-local options
+    new_wp->w_p_so = -1;
+    new_wp->w_p_siso = -1;
+
     /* We won't calculate w_fraction until resizing the window */
     new_wp->w_fraction = 0;
     new_wp->w_prev_fraction_row = -1;
@@ -5871,7 +5875,7 @@ scroll_to_fraction(win_T *wp, int prev_height)
 
     if (wp == curwin)
     {
-	if (p_so)
+	if (get_scrolloff_value())
 	    update_topline();
 	curs_columns(FALSE);	/* validate w_wrow */
     }
@@ -7189,11 +7193,10 @@ win_id2tabwin(typval_T *argvars, list_T *list)
 }
 
     win_T *
-win_id2wp(typval_T *argvars)
+win_id2wp(int id)
 {
     win_T	*wp;
     tabpage_T   *tp;
-    int		id = tv_get_number(&argvars[0]);
 
     FOR_ALL_TAB_WINDOWS(tp, wp)
 	if (wp->w_id == id)

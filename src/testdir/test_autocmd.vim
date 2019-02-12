@@ -50,7 +50,7 @@ if has('timers')
     au CursorHoldI * let g:triggered += 1
     set updatetime=500
     call job_start(has('win32') ? 'cmd /c echo:' : 'echo',
-          \ {'exit_cb': {j, s -> timer_start(1000, 'ExitInsertMode')}})
+          \ {'exit_cb': {-> timer_start(1000, 'ExitInsertMode')}})
     call feedkeys('a', 'x!')
     call assert_equal(1, g:triggered)
     unlet g:triggered
@@ -1397,7 +1397,13 @@ func Test_Changed_FirstTime()
   let buf = term_start([GetVimProg(), '--clean', '-c', 'set noswapfile'], {'term_rows': 3})
   call assert_equal('running', term_getstatus(buf))
   " Wait for the ruler (in the status line) to be shown.
-  call WaitForAssert({-> assert_match('\<All$', term_getline(buf, 3))})
+  " In ConPTY, there is additional character which is drawn up to the width of
+  " the screen.
+  if has('conpty')
+    call WaitForAssert({-> assert_match('\<All.*$', term_getline(buf, 3))})
+  else
+    call WaitForAssert({-> assert_match('\<All$', term_getline(buf, 3))})
+  endif
   " It's only adding autocmd, so that no event occurs.
   call term_sendkeys(buf, ":au! TextChanged <buffer> call writefile(['No'], 'Xchanged.txt')\<cr>")
   call term_sendkeys(buf, "\<C-\\>\<C-N>:qa!\<cr>")

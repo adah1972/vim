@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.1.  Last change: 2019 Jan 29
+*eval.txt*	For Vim version 8.1.  Last change: 2019 Feb 03
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -696,7 +696,7 @@ similar to -1. >
 	:let otherblob = myblob[:]	" make a copy of the Blob
 
 If the first index is beyond the last byte of the Blob or the second index is
-before the first index, the result is an empty list.  There is no error
+before the first index, the result is an empty Blob.  There is no error
 message.
 
 If the second index is equal to or greater than the length of the list the
@@ -5745,6 +5745,16 @@ job_info([{job}])					*job_info()*
 		   "exit_cb"	function to be called on exit
 		   "stoponexit"	|job-stoponexit|
 
+		   Only in Unix:
+		   "termsig"	the signal which terminated the process
+				(See |job_stop()| for the values)
+				only valid when "status" is "dead"
+
+		   Only in MS-Windows:
+		   "tty_type"	Type of virtual console in use.
+				Values are "winpty" or "conpty".
+				See 'termwintype'.
+
 		Without any arguments, returns a List with all Job objects.
 
 job_setoptions({job}, {options})			*job_setoptions()*
@@ -7375,6 +7385,9 @@ repeat({expr}, {count})					*repeat()*
 resolve({filename})					*resolve()* *E655*
 		On MS-Windows, when {filename} is a shortcut (a .lnk file),
 		returns the path the shortcut points to in a simplified form.
+		When {filename} is a symbolic link or junction point, return
+		the full path to the target. If the target of junction is
+		removed, return {filename}.
 		On Unix, repeat resolving symbolic links in all path
 		components of {filename} and return the simplified result.
 		To cope with link cycles, resolving of symbolic links is
@@ -9464,6 +9477,8 @@ term_start({cmd}, {options})				*term_start()*
 		   "ansi_colors"     A list of 16 color names or hex codes
 				     defining the ANSI palette used in GUI
 				     color modes.  See |g:terminal_ansi_colors|.
+		   "tty_type"	     (MS-Windows only): Specify which pty to
+				     use.  See 'termwintype' for the values.
 
 		{only available when compiled with the |+terminal| feature}
 
@@ -10181,9 +10196,10 @@ cmdline_hist		Compiled with |cmdline-history| support.
 cmdline_info		Compiled with 'showcmd' and 'ruler' support.
 comments		Compiled with |'comments'| support.
 compatible		Compiled to be very Vi compatible.
+conpty			Platform where |ConPTY| can be used.
 cryptv			Compiled with encryption support |encryption|.
 cscope			Compiled with |cscope| support.
-cursorbind		Compiled with |cursorbind| (always true)
+cursorbind		Compiled with |'cursorbind'| (always true)
 debug			Compiled with "DEBUG" defined.
 dialog_con		Compiled with console dialog support.
 dialog_gui		Compiled with GUI dialog support.

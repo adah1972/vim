@@ -834,6 +834,9 @@ EXTERN char_u	*p_tenc;	/* 'termencoding' */
 #ifdef FEAT_TERMGUICOLORS
 EXTERN int	p_tgc;		/* 'termguicolors' */
 #endif
+#if defined(WIN3264) && defined(FEAT_TERMINAL)
+EXTERN char_u	*p_twt;		// 'termwintype'
+#endif
 EXTERN int	p_terse;	/* 'terse' */
 EXTERN int	p_ta;		/* 'textauto' */
 EXTERN int	p_to;		/* 'tildeop' */
@@ -1152,6 +1155,8 @@ enum
 #endif
     , WV_SCBIND
     , WV_SCROLL
+    , WV_SISO
+    , WV_SO
 #ifdef FEAT_SPELL
     , WV_SPELL
 #endif

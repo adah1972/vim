@@ -679,10 +679,10 @@ cleanup_function_call(funccall_T *fc)
 	{
 	    // We have made a lot of copies.  This can happen when
 	    // repetitively calling a function that creates a reference to
-	    // itself somehow.  Call the garbage collector here to avoid using
+	    // itself somehow.  Call the garbage collector soon to avoid using
 	    // too much memory.
 	    made_copy = 0;
-	    (void)garbage_collect(FALSE);
+	    want_garbage_collect = TRUE;
 	}
     }
 }
@@ -772,7 +772,7 @@ call_user_func(
 	v = &fc->fixvar[fixvar_idx++].var;
 	name = v->di_key;
 	STRCPY(name, "self");
-	v->di_flags = DI_FLAGS_RO + DI_FLAGS_FIX;
+	v->di_flags = DI_FLAGS_RO | DI_FLAGS_FIX;
 	hash_add(&fc->l_vars.dv_hashtab, DI2HIKEY(v));
 	v->di_tv.v_type = VAR_DICT;
 	v->di_tv.v_lock = 0;
@@ -788,6 +788,7 @@ call_user_func(
     init_var_dict(&fc->l_avars, &fc->l_avars_var, VAR_SCOPE);
     add_nr_var(&fc->l_avars, &fc->fixvar[fixvar_idx++].var, "0",
 				(varnumber_T)(argcount - fp->uf_args.ga_len));
+    fc->l_avars.dv_lock = VAR_FIXED;
     /* Use "name" to avoid a warning from some compiler that checks the
      * destination size. */
     v = &fc->fixvar[fixvar_idx++].var;
@@ -2393,11 +2394,11 @@ ex_function(exarg_T *eap)
 	if (fudi.fd_di == NULL)
 	{
 	    /* Can't add a function to a locked dictionary */
-	    if (tv_check_lock(fudi.fd_dict->dv_lock, eap->arg, FALSE))
+	    if (var_check_lock(fudi.fd_dict->dv_lock, eap->arg, FALSE))
 		goto erret;
 	}
 	    /* Can't change an existing function if it is locked */
-	else if (tv_check_lock(fudi.fd_di->di_tv.v_lock, eap->arg, FALSE))
+	else if (var_check_lock(fudi.fd_di->di_tv.v_lock, eap->arg, FALSE))
 	    goto erret;
 
 	/* Give the function a sequential number.  Can only be used with a

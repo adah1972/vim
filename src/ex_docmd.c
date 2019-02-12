@@ -2007,11 +2007,16 @@ do_one_cmd(
 #ifdef HAVE_SANDBOX
 	if (sandbox != 0 && !(ea.argt & SBOXOK))
 	{
-	    /* Command not allowed in sandbox. */
+	    // Command not allowed in sandbox.
 	    errormsg = _(e_sandbox);
 	    goto doend;
 	}
 #endif
+	if (restricted != 0 && (ea.argt & RESTRICT))
+	{
+	    errormsg = _("E981: Command not allowed in rvim");
+	    goto doend;
+	}
 	if (!curbuf->b_p_ma && (ea.argt & MODIFY))
 	{
 	    /* Command not allowed in non-'modifiable' buffer */
@@ -8923,7 +8928,7 @@ ex_syncbind(exarg_T *eap UNUSED)
 	{
 	    if (wp->w_p_scb && wp->w_buffer)
 	    {
-		y = wp->w_buffer->b_ml.ml_line_count - p_so;
+		y = wp->w_buffer->b_ml.ml_line_count - get_scrolloff_value();
 		if (topline > y)
 		    topline = y;
 	    }
