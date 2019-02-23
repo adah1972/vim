@@ -32,7 +32,7 @@
 #endif
 
 #ifndef PROTO
-# if defined(FEAT_TITLE) && !defined(FEAT_GUI_W32)
+# if defined(FEAT_TITLE) && !defined(FEAT_GUI_MSWIN)
 #  include <shellapi.h>
 # endif
 
@@ -675,6 +675,7 @@ mch_suspend(void)
 # undef display_errors
 #endif
 
+#ifdef FEAT_GUI
 /*
  * Display the saved error message(s).
  */
@@ -690,13 +691,9 @@ display_errors(void)
 	    if (!isspace(*p))
 	    {
 		(void)gui_mch_dialog(
-#ifdef FEAT_GUI
 				     gui.starting ? VIM_INFO :
-#endif
 					     VIM_ERROR,
-#ifdef FEAT_GUI
 				     gui.starting ? (char_u *)_("Message") :
-#endif
 					     (char_u *)_("Error"),
 				     (char_u *)p, (char_u *)_("&Ok"),
 					1, NULL, FALSE);
@@ -705,6 +702,13 @@ display_errors(void)
 	ga_clear(&error_ga);
     }
 }
+#else
+    void
+display_errors(void)
+{
+    FlushFileBuffers(GetStdHandle(STD_ERROR_HANDLE));
+}
+#endif
 #endif
 
 
@@ -1043,11 +1047,6 @@ extern HWND g_hWnd;	/* This is in os_win32.c. */
     static void
 GetConsoleHwnd(void)
 {
-# define MY_BUFSIZE 1024 // Buffer size for console window titles.
-
-    char pszNewWindowTitle[MY_BUFSIZE]; // Contains fabricated WindowTitle.
-    char pszOldWindowTitle[MY_BUFSIZE]; // Contains original WindowTitle.
-
     /* Skip if it's already set. */
     if (s_hwnd != 0)
 	return;
@@ -1061,17 +1060,7 @@ GetConsoleHwnd(void)
     }
 # endif
 
-    GetConsoleTitle(pszOldWindowTitle, MY_BUFSIZE);
-
-    wsprintf(pszNewWindowTitle, "%s/%d/%d",
-	    pszOldWindowTitle,
-	    GetTickCount(),
-	    GetCurrentProcessId());
-    SetConsoleTitle(pszNewWindowTitle);
-    Sleep(40);
-    s_hwnd = FindWindow(NULL, pszNewWindowTitle);
-
-    SetConsoleTitle(pszOldWindowTitle);
+    s_hwnd = GetConsoleWindow();
 }
 
 /*
@@ -3102,7 +3091,7 @@ get_logfont(
     }
     if (STRCMP(name, "*") == 0)
     {
-#if defined(FEAT_GUI_W32)
+#if defined(FEAT_GUI_MSWIN)
 	CHOOSEFONT	cf;
 	/* if name is "*", bring up std font dialog: */
 	vim_memset(&cf, 0, sizeof(cf));
