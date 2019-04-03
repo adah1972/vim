@@ -693,7 +693,7 @@ CFLAGS = $(CFLAGS) /Zl /MTd
 !include Make_all.mak
 !include testdir\Make_all.mak
 
-INCL =	vim.h alloc.h arabic.h ascii.h ex_cmds.h feature.h globals.h \
+INCL =	vim.h alloc.h ascii.h ex_cmds.h feature.h globals.h \
 	keymap.h macros.h option.h os_dos.h os_win32.h proto.h regexp.h \
 	spell.h structs.h term.h beval.h $(NBDEBUG_INCL)
 
@@ -725,6 +725,7 @@ OBJ = \
 	$(OUTDIR)\hardcopy.obj \
 	$(OUTDIR)\hashtab.obj \
 	$(OUTDIR)\indent.obj \
+	$(OUTDIR)\insexpand.obj \
 	$(OUTDIR)\json.obj \
 	$(OUTDIR)\list.obj \
 	$(OUTDIR)\main.obj \
@@ -1416,6 +1417,8 @@ $(OUTDIR)/hashtab.obj:	$(OUTDIR) hashtab.c  $(INCL)
 
 $(OUTDIR)/indent.obj:	$(OUTDIR) indent.c  $(INCL)
 
+$(OUTDIR)/insexpand.obj:	$(OUTDIR) insexpand.c  $(INCL)
+
 $(OUTDIR)/gui.obj:	$(OUTDIR) gui.c  $(INCL) $(GUI_INCL)
 
 $(OUTDIR)/gui_beval.obj:	$(OUTDIR) gui_beval.c $(INCL) $(GUI_INCL)
@@ -1648,6 +1651,7 @@ proto.h: \
 	proto/hardcopy.pro \
 	proto/hashtab.pro \
 	proto/indent.pro \
+	proto/insexpand.pro \
 	proto/json.pro \
 	proto/list.pro \
 	proto/main.pro \

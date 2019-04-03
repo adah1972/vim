@@ -214,7 +214,7 @@ static const struct nv_cmd
     {NL,	nv_down,	0,			FALSE},
     {Ctrl_K,	nv_error,	0,			0},
     {Ctrl_L,	nv_clear,	0,			0},
-    {Ctrl_M,	nv_down,	0,			TRUE},
+    {CAR,	nv_down,	0,			TRUE},
     {Ctrl_N,	nv_down,	NV_STS,			FALSE},
     {Ctrl_O,	nv_ctrlo,	0,			0},
     {Ctrl_P,	nv_up,		NV_STS,			FALSE},
@@ -811,9 +811,7 @@ getcount:
 	    }
 	    else if ((nv_cmds[idx].cmd_flags & NV_SSS)
 					       && (mod_mask & MOD_MASK_SHIFT))
-	    {
 		mod_mask &= ~MOD_MASK_SHIFT;
-	    }
 	}
     }
 
@@ -3507,9 +3505,7 @@ find_ident_at_pos(
 			&& col <= (int)startcol
 			&& find_is_eval_item(ptr + col, &col, &bn, FORWARD))
 		)
-	{
 	    ++col;
-	}
 
     return col;
 }
@@ -4263,7 +4259,6 @@ find_decl(
     CLEAR_POS(&found_pos);
     for (;;)
     {
-	valid = FALSE;
 	t = searchit(curwin, curbuf, &curwin->w_cursor, NULL, FORWARD,
 		       pat, 1L, searchflags, RE_LAST, (linenr_T)0, NULL, NULL);
 	if (curwin->w_cursor.lnum >= old_pos.lnum)
@@ -4330,9 +4325,7 @@ find_decl(
 	 * inside a comment, continue searching.  For K&R style function
 	 * declarations this skips the function header without types. */
 	if (!valid)
-	{
 	    CLEAR_POS(&found_pos);
-	}
 	else
 	    found_pos = curwin->w_cursor;
 	/* Remove SEARCH_START from flags to avoid getting stuck at one
@@ -8887,7 +8880,12 @@ nv_esc(cmdarg_T *cap)
 #endif
 		&& !VIsual_active
 		&& no_reason)
-	    msg(_("Type  :qa!  and press <Enter> to abandon all changes and exit Vim"));
+	{
+	    if (anyBufIsChanged())
+		msg(_("Type  :qa!  and press <Enter> to abandon all changes and exit Vim"));
+	    else
+		msg(_("Type  :qa  and press <Enter> to exit Vim"));
+	}
 
 	/* Don't reset "restart_edit" when 'insertmode' is set, it won't be
 	 * set again below when halfway a mapping. */
@@ -9445,9 +9443,7 @@ nv_open(cmdarg_T *cap)
 	v_swap_corners(cap->cmdchar);
 #ifdef FEAT_JOB_CHANNEL
     else if (bt_prompt(curbuf))
-    {
 	clearopbeep(cap->oap);
-    }
 #endif
     else
 	n_opencmd(cap);

@@ -1130,6 +1130,7 @@ free_all_mem(void)
     free_search_patterns();
     free_old_sub();
     free_last_insert();
+    free_insexpand_stuff();
     free_prev_shellcmd();
     free_regexp_stuff();
     free_tag_stuff();
@@ -2453,10 +2454,8 @@ static struct key_name_entry
 #ifdef FEAT_MOUSE_URXVT
     {K_URXVT_MOUSE,	(char_u *)"UrxvtMouse"},
 #endif
-#ifdef FEAT_MOUSE_SGR
     {K_SGR_MOUSE,	(char_u *)"SgrMouse"},
     {K_SGR_MOUSERELEASE, (char_u *)"SgrMouseRelelase"},
-#endif
     {K_LEFTMOUSE,	(char_u *)"LeftMouse"},
     {K_LEFTMOUSE_NM,	(char_u *)"LeftMouseNM"},
     {K_LEFTDRAG,	(char_u *)"LeftDrag"},
