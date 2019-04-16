@@ -56,7 +56,11 @@ func RunVimInTerminal(arguments, options)
 
   " Add -v to have gvim run in the terminal (if possible)
   let cmd .= ' -v ' . a:arguments
-  let buf = term_start(cmd, {'curwin': 1, 'term_rows': rows, 'term_cols': cols})
+  let buf = term_start(cmd, {
+	\ 'curwin': 1,
+	\ 'term_rows': rows,
+	\ 'term_cols': cols,
+	\ })
   if &termwinsize == ''
     " in the GUI we may end up with a different size, try to set it.
     if term_getsize(buf) != [rows, cols]
@@ -105,6 +109,10 @@ func VerifyScreenDump(buf, filename, options, ...)
   let reference = 'dumps/' . a:filename . '.dump'
   let testfile = 'failed/' . a:filename . '.dump'
 
+  " Redraw to execut the code that updates the screen.  Otherwise we get the
+  " text and attributes only from the internal buffer.
+  redraw
+
   let did_mkdir = 0
   if !isdirectory('failed')
     let did_mkdir = 1
@@ -118,7 +126,12 @@ func VerifyScreenDump(buf, filename, options, ...)
     call delete(testfile)
     call term_dumpwrite(a:buf, testfile, a:options)
     let testdump = readfile(testfile)
-    let refdump = readfile(reference)
+    if filereadable(reference)
+      let refdump = readfile(reference)
+    else
+      " Must be a new screendump, always fail
+      let refdump = []
+    endif
     if refdump == testdump
       call delete(testfile)
       if did_mkdir
@@ -127,13 +140,17 @@ func VerifyScreenDump(buf, filename, options, ...)
       break
     endif
     if i == 100
-      " Leave the test file around for inspection.
-      let msg = 'See dump file difference: call term_dumpdiff("' . testfile . '", "' . reference . '")'
-      if a:0 == 1
-        let msg = a:1 . ': ' . msg
-      endif
-      if len(testdump) != len(refdump)
-	let msg = msg . '; line count is ' . len(testdump) . ' instead of ' . len(refdump)
+      " Leave the failed dump around for inspection.
+      if filereadable(reference)
+	let msg = 'See dump file difference: call term_dumpdiff("' . testfile . '", "' . reference . '")'
+	if a:0 == 1
+	  let msg = a:1 . ': ' . msg
+	endif
+	if len(testdump) != len(refdump)
+	  let msg = msg . '; line count is ' . len(testdump) . ' instead of ' . len(refdump)
+	endif
+      else
+	let msg = 'See new dump file: call term_dumpload("' . testfile . '")'
       endif
       for i in range(len(refdump))
 	if i >= len(testdump)
