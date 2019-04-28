@@ -4022,7 +4022,7 @@ showmap(
 	msg_putchar(' ');
 
     /* Display the LHS.  Get length of what we write. */
-    len = msg_outtrans_special(mp->m_keys, TRUE);
+    len = msg_outtrans_special(mp->m_keys, TRUE, 0);
     do
     {
 	msg_putchar(' ');		/* padd with blanks */
@@ -4053,7 +4053,7 @@ showmap(
 	if (s != NULL)
 	{
 	    vim_unescape_csi(s);
-	    msg_outtrans_special(s, FALSE);
+	    msg_outtrans_special(s, FALSE, 0);
 	    vim_free(s);
 	}
     }
@@ -5269,7 +5269,7 @@ static struct initmap
 	{(char_u *)"\316\325 \"*y", VIS_SEL},	    /* CTRL-Insert is "*y */
 	{(char_u *)"\316\327 \"*d", VIS_SEL},	    /* SHIFT-Del is "*d */
 	{(char_u *)"\316\330 \"*d", VIS_SEL},	    /* CTRL-Del is "*d */
-	{(char_u *)"\030 \"-d", VIS_SEL},	    /* CTRL-X is "-d */
+	{(char_u *)"\030 \"*d", VIS_SEL},	    /* CTRL-X is "*d */
 #  else
 	{(char_u *)"\316\324 P", NORMAL},	    /* SHIFT-Insert is P */
 	{(char_u *)"\316\324 \"-dP", VIS_SEL},	    /* SHIFT-Insert is "-dP */

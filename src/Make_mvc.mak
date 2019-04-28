@@ -711,6 +711,7 @@ OBJ = \
 	$(OUTDIR)\charset.obj \
 	$(OUTDIR)\crypt.obj \
 	$(OUTDIR)\crypt_zip.obj \
+	$(OUTDIR)\debugger.obj \
 	$(OUTDIR)\dict.obj \
 	$(OUTDIR)\diff.obj \
 	$(OUTDIR)\digraph.obj \
@@ -764,6 +765,7 @@ OBJ = \
 	$(OUTDIR)\textprop.obj \
 	$(OUTDIR)\ui.obj \
 	$(OUTDIR)\undo.obj \
+	$(OUTDIR)\usercmd.obj \
 	$(OUTDIR)\userfunc.obj \
 	$(OUTDIR)\winclip.obj \
 	$(OUTDIR)\window.obj \
@@ -1367,6 +1369,8 @@ $(OUTDIR)/crypt.obj:	$(OUTDIR) crypt.c  $(INCL)
 
 $(OUTDIR)/crypt_zip.obj: $(OUTDIR) crypt_zip.c  $(INCL)
 
+$(OUTDIR)/debugger.obj:	$(OUTDIR) debugger.c  $(INCL)
+
 $(OUTDIR)/dict.obj:	$(OUTDIR) dict.c  $(INCL)
 
 $(OUTDIR)/diff.obj:	$(OUTDIR) diff.c  $(INCL)
@@ -1547,6 +1551,8 @@ $(OUTDIR)/ui.obj:	$(OUTDIR) ui.c  $(INCL)
 
 $(OUTDIR)/undo.obj:	$(OUTDIR) undo.c  $(INCL)
 
+$(OUTDIR)/usercmd.obj:	$(OUTDIR) usercmd.c  $(INCL)
+
 $(OUTDIR)/userfunc.obj:	$(OUTDIR) userfunc.c  $(INCL)
 
 $(OUTDIR)/window.obj:	$(OUTDIR) window.c  $(INCL)
@@ -1638,6 +1644,7 @@ proto.h: \
 	proto/charset.pro \
 	proto/crypt.pro \
 	proto/crypt_zip.pro \
+	proto/debugger.pro \
 	proto/dict.pro \
 	proto/diff.pro \
 	proto/digraph.pro \
@@ -1689,6 +1696,7 @@ proto.h: \
 	proto/textprop.pro \
 	proto/ui.pro \
 	proto/undo.pro \
+	proto/usercmd.pro \
 	proto/userfunc.pro \
 	proto/window.pro \
 	$(NETBEANS_PRO) \

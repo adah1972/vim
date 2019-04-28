@@ -703,6 +703,7 @@ OBJ = \
 	$(OUTDIR)/charset.o \
 	$(OUTDIR)/crypt.o \
 	$(OUTDIR)/crypt_zip.o \
+	$(OUTDIR)/debugger.o \
 	$(OUTDIR)/dict.o \
 	$(OUTDIR)/diff.o \
 	$(OUTDIR)/digraph.o \
@@ -756,6 +757,7 @@ OBJ = \
 	$(OUTDIR)/textprop.o \
 	$(OUTDIR)/ui.o \
 	$(OUTDIR)/undo.o \
+	$(OUTDIR)/usercmd.o \
 	$(OUTDIR)/userfunc.o \
 	$(OUTDIR)/version.o \
 	$(OUTDIR)/vimrc.o \

@@ -14,7 +14,6 @@ SCRIPTS_FIRST = \
 # Tests that run on all systems.
 SCRIPTS_ALL = \
 	test3.out \
-	test14.out \
 	test29.out \
 	test37.out \
 	test39.out \
@@ -28,13 +27,11 @@ SCRIPTS_ALL = \
 	test94.out \
 	test95.out \
 	test99.out \
-	test108.out \
 	test_eval.out
 
 
 # Tests that run on most systems, but not on Amiga.
 SCRIPTS_MORE1 = \
-	test11.out \
 	test52.out \
 	test86.out \
 	test87.out
@@ -97,6 +94,7 @@ NEW_TESTS = \
 	test_cscope \
 	test_cursor_func \
 	test_curswant \
+	test_debugger \
 	test_delete \
 	test_diffmode \
 	test_digraph \
@@ -312,6 +310,7 @@ NEW_TESTS_RES = \
 	test_crypt.res \
 	test_cscope.res \
 	test_curswant.res \
+	test_debugger.res \
 	test_diffmode.res \
 	test_digraph.res \
 	test_display.res \
