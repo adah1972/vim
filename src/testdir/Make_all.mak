@@ -44,7 +44,6 @@ SCRIPTS_MORE2 = \
 
 # Tests that run on most systems, but not on VMS
 SCRIPTS_MORE4 = \
-	test17.out \
 	test30.out \
 	test59.out \
 	test72.out \
@@ -82,6 +81,7 @@ NEW_TESTS = \
 	test_channel \
 	test_charsearch \
 	test_charsearch_utf8 \
+	test_checkpath \
 	test_cindent \
 	test_clientserver \
 	test_close_count \
@@ -219,6 +219,7 @@ NEW_TESTS = \
 	test_scroll_opt \
 	test_scrollbind \
 	test_search \
+	test_search_stat \
 	test_searchpos \
 	test_set \
 	test_sha256 \
@@ -244,6 +245,7 @@ NEW_TESTS = \
 	test_tabline \
 	test_tabpage \
 	test_tagcase \
+	test_tagfunc \
 	test_tagjump \
 	test_taglist \
 	test_tcl \
@@ -300,6 +302,7 @@ NEW_TESTS_RES = \
 	test_changelist.res \
 	test_channel.res \
 	test_charsearch.res \
+	test_checkpath.res \
 	test_cindent.res \
 	test_clientserver.res \
 	test_close_count.res \
@@ -387,6 +390,7 @@ NEW_TESTS_RES = \
 	test_scriptnames.res \
 	test_scrollbind.res \
 	test_search.res \
+	test_search_stat.res \
 	test_shortpathname.res \
 	test_signals.res \
 	test_signs.res \

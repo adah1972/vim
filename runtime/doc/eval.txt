@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.1.  Last change: 2019 Apr 27
+*eval.txt*	For Vim version 8.1.  Last change: 2019 May 05
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -32,8 +32,6 @@ done, the features in this document are not available.  See |+eval| and
 12. The sandbox			|eval-sandbox|
 13. Textlock			|textlock|
 14. Testing			|testing|
-
-{Vi does not have any of these commands}
 
 ==============================================================================
 1. Variables						*variables*
@@ -2700,6 +2698,7 @@ test_override({expr}, {val})	none	test with Vim internal overrides
 test_refcount({expr})		Number	get the reference count of {expr}
 test_scrollbar({which}, {value}, {dragging})
 				none	scroll in the GUI for testing
+test_setmouse({row}, {col})	none	set the mouse position for testing
 test_settime({expr})		none	set current time for testing
 timer_info([{id}])		List	information about timers
 timer_pause({id}, {pause})	none	pause or unpause a timer
@@ -7217,6 +7216,9 @@ prop_type_add({name}, {props})		*prop_type_add()* *E969* *E970*
 				properties the one with the highest priority
 				will be used; negative values can be used, the
 				default priority is zero
+		   combine	when TRUE combine the highlight with any
+				syntax highlight; when omitted of FALSE syntax
+				highlight will not be used
 		   start_incl	when TRUE inserts at the start position will
 				be included in the text property
 		   end_incl	when TRUE inserts at the end position will be
@@ -9805,6 +9807,8 @@ test_override({name}, {val})				*test_override()*
 		starting     reset the "starting" variable, see below
 		nfa_fail     makes the NFA regexp engine fail to force a
 			     fallback to the old engine
+		no_query_mouse  do not query the mouse position for "dec"
+				terminals
 		ALL	     clear all overrides ({val} is not used)
 
 		"starting" is to be used when a test should behave like
@@ -9838,6 +9842,13 @@ test_scrollbar({which}, {value}, {dragging})		*test_scrollbar()*
 		otherwise it's like clicking in the scrollbar.
 		Only works when the {which} scrollbar actually exists,
 		obviously only when using the GUI.
+
+test_setmouse({row}, {col})				*test_setmouse()*
+		Set the mouse position to be used for the next mouse action.
+		{row} and {col} are one based.
+		For example: >
+			call test_setmouse(4, 20)
+			call feedkeys("\<LeftMouse>", "xt")
 
 test_settime({expr})					*test_settime()*
 		Set the time Vim uses internally.  Currently only used for
@@ -10522,6 +10533,7 @@ modify_fname		Compiled with file name modifiers. |filename-modifiers|
 mouse			Compiled with support mouse.
 mouse_dec		Compiled with support for Dec terminal mouse.
 mouse_gpm		Compiled with support for gpm (Linux console mouse)
+mouse_gpm_enabled	GPM mouse is working
 mouse_netterm		Compiled with support for netterm mouse.
 mouse_pterm		Compiled with support for qnx pterm mouse.
 mouse_sysmouse		Compiled with support for sysmouse (*BSD console mouse)

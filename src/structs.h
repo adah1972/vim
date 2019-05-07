@@ -147,10 +147,11 @@ typedef struct xfilemark
  */
 typedef struct taggy
 {
-    char_u	*tagname;	/* tag name */
-    fmark_T	fmark;		/* cursor position BEFORE ":tag" */
-    int		cur_match;	/* match number */
-    int		cur_fnum;	/* buffer number used for cur_match */
+    char_u	*tagname;	// tag name
+    fmark_T	fmark;		// cursor position BEFORE ":tag"
+    int		cur_match;	// match number
+    int		cur_fnum;	// buffer number used for cur_match
+    char_u	*user_data;	// used with tagfunc
 } taggy_T;
 
 /*
@@ -726,6 +727,7 @@ typedef struct proptype_S
 
 #define PT_FLAG_INS_START_INCL	1	// insert at start included in property
 #define PT_FLAG_INS_END_INCL	2	// insert at end included in property
+#define PT_FLAG_COMBINE		4	// combine with syntax highlight
 
 // Sign group
 typedef struct signgroup_S
@@ -1885,6 +1887,16 @@ typedef struct list_stack_S
     struct list_stack_S	*prev;
 } list_stack_T;
 
+/*
+ * Structure used for iterating over dictionary items.
+ * Initialize with dict_iterate_start().
+ */
+typedef struct
+{
+    long_u	dit_todo;
+    hashitem_T	*dit_hi;
+} dict_iterator_T;
+
 /* values for b_syn_spell: what to do with toplevel text */
 #define SYNSPL_DEFAULT	0	/* spell check if @Spell not defined */
 #define SYNSPL_TOP	1	/* spell check toplevel text */
@@ -2244,6 +2256,9 @@ struct file_buffer
 #ifdef FEAT_COMPL_FUNC
     char_u	*b_p_cfu;	/* 'completefunc' */
     char_u	*b_p_ofu;	/* 'omnifunc' */
+#endif
+#ifdef FEAT_EVAL
+    char_u	*b_p_tfu;	/* 'tagfunc' */
 #endif
     int		b_p_eol;	/* 'endofline' */
     int		b_p_fixeol;	/* 'fixendofline' */

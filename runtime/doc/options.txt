@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.1.  Last change: 2019 Apr 28
+*options.txt*	For Vim version 8.1.  Last change: 2019 May 05
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1789,7 +1789,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	'scrolloff'	+ 0		no scroll offset
 	'shelltemp'	- {unchanged}	{set vim default only on resetting 'cp'}
 	'shiftround'	+ off		indent not rounded to shiftwidth
-	'shortmess'	& ""		no shortening of messages
+	'shortmess'	& "S"		no shortening of messages
 	'showcmd'	& off		command characters not shown
 	'showmode'	& off		current mode not shown
 	'sidescrolloff'	+ 0		cursor moves to edge of screen in scroll
@@ -6163,9 +6163,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	set to half the number of lines in the window when the window size
 	changes.  If you give a count to the CTRL-U or CTRL-D command it will
 	be used as the new value for 'scroll'.  Reset to half the window
-	height with ":set scroll=0".   {Vi is a bit different: 'scroll' gives
-	the number of screen lines instead of file lines, makes a difference
-	when lines wrap}
+	height with ":set scroll=0".
 
 			*'scrollbind'* *'scb'* *'noscrollbind'* *'noscb'*
 'scrollbind' 'scb'	boolean  (default off)
@@ -6563,8 +6561,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	function to get the effective shiftwidth value.
 
 						*'shortmess'* *'shm'*
-'shortmess' 'shm'	string	(Vim default "filnxtToO", Vi default: "",
-							POSIX default: "A")
+'shortmess' 'shm'	string	(Vim default "filnxtToOS", Vi default: "S",
+							POSIX default: "AS")
 			global
 	This option helps to avoid all the |hit-enter| prompts caused by file
 	messages, for example  with CTRL-G, and to avoid some other messages.
@@ -6604,6 +6602,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	  q	use "recording" instead of "recording @a"
 	  F	don't give the file info when editing a file, like `:silent`
 		was used for the command
+	  S     do not show search count message when searching, e.g.
+	        "[1/5]"
 
 	This gives you the opportunity to avoid that a change between buffers
 	requires you to hit <Enter>, but still gives as useful a message as
@@ -7458,6 +7458,16 @@ A jump table for the options with a short description can be found at |Q_op|.
 	NOTE: This option is set to the Vi default value when 'compatible' is
 	set and to the Vim default value when 'compatible' is reset.
 
+							*'tagfunc'* *'tfu'*
+'tagfunc' 'tfu'		string	(default: empty)
+			local to buffer
+			{not available when compiled without the |+eval|
+			feature}
+	This option specifies a function to be used to perform tag searches.
+	The function gets the tag pattern and should return a List of matching
+	tags.  See |tag-function| for an explanation of how to write the
+	function and an example.
+
 						*'taglength'* *'tl'*
 'taglength' 'tl'	number	(default 0)
 			global
@@ -7775,7 +7785,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'timeoutlen'* *'tm'*
 'timeoutlen' 'tm'	number	(default 1000)
 			global
-			{not in all versions of Vi}
+
 						*'ttimeoutlen'* *'ttm'*
 'ttimeoutlen' 'ttm'	number	(default -1, set to 100 in |defaults.vim|)
 			global
@@ -7978,9 +7988,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 			work.  See below for how Vim detects this
 			automatically.
 							*netterm-mouse*
-	   netterm	NetTerm mouse handling.  The mouse generates
+	   netterm	NetTerm mouse handling.  A left mouse click generates
 			"<Esc>}r,c<CR>", where "r,c" are two decimal numbers
-			for the row and column.
+			for the row and column.  No other mouse events are
+			supported.
 							*dec-mouse*
 	   dec		DEC terminal mouse handling.  The mouse generates a
 			rather complex sequence, starting with "<Esc>[".
@@ -8641,7 +8652,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	in a much smarter way, taking care of wrapping lines.
 	When resizing the Vim window, the value is smaller than 1 or more than
 	or equal to 'lines' it will be set to 'lines' minus 1.
-	{Vi also uses the option to specify the number of displayed lines}
 
 						*'winheight'* *'wh'* *E591*
 'winheight' 'wh'	number	(default 1)

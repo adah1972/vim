@@ -2337,7 +2337,8 @@ execute_menu(exarg_T *eap, vimmenu_T *menu, int mode_idx)
     if (idx == -1 || eap == NULL)
 	idx = MENU_INDEX_NORMAL;
 
-    if (idx != MENU_INDEX_INVALID && menu->strings[idx] != NULL)
+    if (idx != MENU_INDEX_INVALID && menu->strings[idx] != NULL
+						 && (menu->modes & (1 << idx)))
     {
 	/* When executing a script or function execute the commands right now.
 	 * Also for the window toolbar.
@@ -2488,7 +2489,7 @@ winbar_click(win_T *wp, int col)
 
 	if (col >= item->wb_startcol && col <= item->wb_endcol)
 	{
-	    win_T *save_curwin = NULL;
+	    win_T   *save_curwin = NULL;
 	    pos_T   save_visual = VIsual;
 	    int	    save_visual_active = VIsual_active;
 	    int	    save_visual_select = VIsual_select;
@@ -2506,9 +2507,10 @@ winbar_click(win_T *wp, int col)
 		check_cursor();
 	    }
 
+	    // Note: the command might close the current window.
 	    execute_menu(NULL, item->wb_menu, -1);
 
-	    if (save_curwin != NULL)
+	    if (save_curwin != NULL && win_valid(save_curwin))
 	    {
 		curwin = save_curwin;
 		curbuf = curwin->w_buffer;
@@ -2518,6 +2520,8 @@ winbar_click(win_T *wp, int col)
 		VIsual_reselect = save_visual_reselect;
 		VIsual_mode = save_visual_mode;
 	    }
+	    if (!win_valid(wp))
+		break;
 	}
     }
 }
