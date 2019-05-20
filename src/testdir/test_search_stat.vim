@@ -8,6 +8,7 @@ source shared.vim
 func! Test_search_stat()
   new
   set shortmess-=S
+  " Append 50 lines with text to search for, "foobar" appears 20 times
   call append(0, repeat(['foobar', 'foo', 'fooooobar', 'foba', 'foobar'], 10))
 
   " 1) match at second line
@@ -39,11 +40,19 @@ func! Test_search_stat()
   let g:a = execute(':unsilent :norm! n')
   let stat = '\[>99/>99\]'
   call assert_match(pat .. stat, g:a)
+  call cursor(line('$'), 1)
+  let g:a = execute(':unsilent :norm! n')
+  let stat = '\[1/>99\] W'
+  call assert_match(pat .. stat, g:a)
 
   " 5) Many matches
   call cursor(1, 1)
   let g:a = execute(':unsilent :norm! n')
   let stat = '\[2/>99\]'
+  call assert_match(pat .. stat, g:a)
+  call cursor(1, 1)
+  let g:a = execute(':unsilent :norm! N')
+  let stat = '\[>99/>99\] W'
   call assert_match(pat .. stat, g:a)
 
   " 6) right-left
@@ -104,6 +113,30 @@ func! Test_search_stat()
   catch
     call assert_false(1)
   endtry
+
+  " 11) normal, n comes from a mapping
+  "     Need to move over more than 64 lines to trigger char_avail(.
+  nnoremap n nzv
+  call cursor(1,1)
+  call append(50, repeat(['foobar', 'foo', 'fooooobar', 'foba', 'foobar'], 10))
+  call setline(2, 'find this')
+  call setline(70, 'find this')
+  let @/ = 'find this'
+  let pat = '/find this\s\+'
+  let g:a = execute(':unsilent :norm n')
+  " g:a will contain several lines
+  let g:b = split(g:a, "\n")[-1]
+  let stat = '\[1/2\]'
+  call assert_match(pat .. stat, g:b)
+  unmap n
+
+  " 11) normal, but silent
+  call cursor(1,1)
+  let @/ = 'find this'
+  let pat = '/find this\s\+'
+  let g:a = execute(':norm! n')
+  let stat = '\[1/2\]'
+  call assert_notmatch(pat .. stat, g:a)
 
   " close the window
   set shortmess+=S
