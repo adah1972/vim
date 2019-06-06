@@ -550,35 +550,41 @@ EXTERN int	clip_unnamed_saved INIT(= 0);
 #endif
 
 /*
- * All windows are linked in a list. firstwin points to the first entry,
- * lastwin to the last entry (can be the same as firstwin) and curwin to the
- * currently active window.
+ * All regular windows are linked in a list. "firstwin" points to the first
+ * entry, "lastwin" to the last entry (can be the same as firstwin) and
+ * "curwin" to the currently active window.
+ * When switching tabs these swapped with the pointers in "tabpage_T".
  */
 EXTERN win_T	*firstwin;		/* first window */
 EXTERN win_T	*lastwin;		/* last window */
 EXTERN win_T	*prevwin INIT(= NULL);	/* previous window */
-# define ONE_WINDOW (firstwin == lastwin)
-# define W_NEXT(wp) ((wp)->w_next)
-# define FOR_ALL_WINDOWS(wp) for (wp = firstwin; wp != NULL; wp = wp->w_next)
-# define FOR_ALL_FRAMES(frp, first_frame) \
+#define ONE_WINDOW (firstwin == lastwin)
+#define W_NEXT(wp) ((wp)->w_next)
+#define FOR_ALL_WINDOWS(wp) for (wp = firstwin; wp != NULL; wp = wp->w_next)
+#define FOR_ALL_FRAMES(frp, first_frame) \
     for (frp = first_frame; frp != NULL; frp = frp->fr_next)
-# define FOR_ALL_TABPAGES(tp) for (tp = first_tabpage; tp != NULL; tp = tp->tp_next)
-# define FOR_ALL_WINDOWS_IN_TAB(tp, wp) \
+#define FOR_ALL_TABPAGES(tp) for (tp = first_tabpage; tp != NULL; tp = tp->tp_next)
+#define FOR_ALL_WINDOWS_IN_TAB(tp, wp) \
     for ((wp) = ((tp) == NULL || (tp) == curtab) \
 	    ? firstwin : (tp)->tp_firstwin; (wp); (wp) = (wp)->w_next)
 /*
  * When using this macro "break" only breaks out of the inner loop. Use "goto"
  * to break out of the tabpage loop.
  */
-# define FOR_ALL_TAB_WINDOWS(tp, wp) \
+#define FOR_ALL_TAB_WINDOWS(tp, wp) \
     for ((tp) = first_tabpage; (tp) != NULL; (tp) = (tp)->tp_next) \
 	for ((wp) = ((tp) == curtab) \
 		? firstwin : (tp)->tp_firstwin; (wp); (wp) = (wp)->w_next)
+
 
 EXTERN win_T	*curwin;	/* currently active window */
 
 EXTERN win_T	*aucmd_win;	/* window used in aucmd_prepbuf() */
 EXTERN int	aucmd_win_used INIT(= FALSE);	/* aucmd_win is being used */
+
+#ifdef FEAT_TEXT_PROP
+EXTERN win_T    *first_popupwin;	// first global popup window
+#endif
 
 /*
  * The window layout is kept in a tree of frames.  topframe points to the top
@@ -1658,4 +1664,5 @@ EXTERN HINSTANCE g_hinst INIT(= NULL);
 
 #ifdef FEAT_TEXT_PROP
 EXTERN int text_prop_frozen INIT(= 0);
+EXTERN int popup_visible INIT(= FALSE);
 #endif

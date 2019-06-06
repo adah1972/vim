@@ -8,6 +8,7 @@ source shared.vim
 source screendump.vim
 
 let s:python = PythonProg()
+let $PROMPT_COMMAND=''
 
 " Open a terminal with a shell, assign the job to g:job and return the buffer
 " number.
@@ -1012,18 +1013,19 @@ endfunc
 " Run Vim, start a terminal in that Vim without the kill argument,
 " check that :qall does not exit, :qall! does.
 func Test_terminal_qall_exit()
-  let after = [
-	\ 'term',
-	\ 'let buf = bufnr("%")',
-	\ 'while term_getline(buf, 1) =~ "^\\s*$"',
-	\ '  sleep 10m',
-	\ 'endwhile',
-	\ 'set nomore',
-	\ 'au VimLeavePre * call writefile(["too early"], "Xdone")',
-	\ 'qall',
-	\ 'au! VimLeavePre * exe buf . "bwipe!" | call writefile(["done"], "Xdone")',
-	\ 'cquit',
-	\ ]
+  let after =<< trim [CODE]
+    term
+    let buf = bufnr("%")
+    while term_getline(buf, 1) =~ "^\\s*$"
+      sleep 10m
+    endwhile
+    set nomore
+    au VimLeavePre * call writefile(["too early"], "Xdone")
+    qall
+    au! VimLeavePre * exe buf . "bwipe!" | call writefile(["done"], "Xdone")
+    cquit
+  [CODE]
+
   if !RunVim([], after, '')
     return
   endif
@@ -1118,11 +1120,30 @@ endfunc
 
 " just testing basic functionality.
 func Test_terminal_dumpload()
+  let curbuf = winbufnr('')
   call assert_equal(1, winnr('$'))
-  call term_dumpload('dumps/Test_popup_command_01.dump')
+  let buf = term_dumpload('dumps/Test_popup_command_01.dump')
   call assert_equal(2, winnr('$'))
   call assert_equal(20, line('$'))
   call Check_dump01(0)
+
+  " Load another dump in the same window
+  let buf2 = term_dumpload('dumps/Test_diff_01.dump', {'bufnr': buf})
+  call assert_equal(buf, buf2)
+  call assert_notequal('one two three four five', trim(getline(1)))
+
+  " Load the first dump again in the same window
+  let buf2 = term_dumpload('dumps/Test_popup_command_01.dump', {'bufnr': buf})
+  call assert_equal(buf, buf2)
+  call Check_dump01(0)
+
+  call assert_fails("call term_dumpload('dumps/Test_popup_command_01.dump', {'bufnr': curbuf})", 'E475:')
+  call assert_fails("call term_dumpload('dumps/Test_popup_command_01.dump', {'bufnr': 9999})", 'E86:')
+  new
+  let closedbuf = winbufnr('')
+  quit
+  call assert_fails("call term_dumpload('dumps/Test_popup_command_01.dump', {'bufnr': closedbuf})", 'E475:')
+
   quit
 endfunc
 
