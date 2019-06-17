@@ -60,7 +60,9 @@ static char *e_auabort = N_("E855: Autocommands caused command to abort");
 /* Number of times free_buffer() was called. */
 static int	buf_free_count = 0;
 
-/* Read data from buffer for retrying. */
+/*
+ * Read data from buffer for retrying.
+ */
     static int
 read_buffer(
     int		read_stdin,	    /* read file from stdin, otherwise fifo */
@@ -104,7 +106,7 @@ read_buffer(
 	if (!readonlymode && !BUFEMPTY())
 	    changed();
 	else if (retval == OK)
-	    unchanged(curbuf, FALSE);
+	    unchanged(curbuf, FALSE, TRUE);
 
 	if (retval == OK)
 	{
@@ -275,7 +277,7 @@ open_buffer(
        )
 	changed();
     else if (retval == OK && !read_stdin && !read_fifo)
-	unchanged(curbuf, FALSE);
+	unchanged(curbuf, FALSE, TRUE);
     save_file_ff(curbuf);		/* keep this fileformat */
 
     /* Set last_changedtick to avoid triggering a TextChanged autocommand right
@@ -700,7 +702,7 @@ aucmd_abort:
 buf_clear_file(buf_T *buf)
 {
     buf->b_ml.ml_line_count = 1;
-    unchanged(buf, TRUE);
+    unchanged(buf, TRUE, TRUE);
     buf->b_shortname = FALSE;
     buf->b_p_eol = TRUE;
     buf->b_start_eol = TRUE;
@@ -5696,12 +5698,21 @@ bt_popup(buf_T *buf)
  * buffer.  This means the buffer name is not a file name.
  */
     int
-bt_nofile(buf_T *buf)
+bt_nofilename(buf_T *buf)
 {
     return buf != NULL && ((buf->b_p_bt[0] == 'n' && buf->b_p_bt[2] == 'f')
 	    || buf->b_p_bt[0] == 'a'
 	    || buf->b_p_bt[0] == 't'
 	    || buf->b_p_bt[0] == 'p');
+}
+
+/*
+ * Return TRUE if "buf" has 'buftype' set to "nofile".
+ */
+    int
+bt_nofile(buf_T *buf)
+{
+    return buf != NULL && buf->b_p_bt[0] == 'n' && buf->b_p_bt[2] == 'f';
 }
 
 /*
@@ -5770,7 +5781,7 @@ buf_spname(buf_T *buf)
 
     /* There is no _file_ when 'buftype' is "nofile", b_sfname
      * contains the name as specified by the user. */
-    if (bt_nofile(buf))
+    if (bt_nofilename(buf))
     {
 #ifdef FEAT_TERMINAL
 	if (buf->b_term != NULL)

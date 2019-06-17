@@ -1,8 +1,11 @@
 " Tests for decoding escape sequences sent by the terminal.
 
 " This only works for Unix in a terminal
-if has('gui_running') || !has('unix')
-  finish
+if has('gui_running')
+  throw 'Skipped: does not work in the GUI'
+endif
+if !has('unix')
+  throw 'Skipped: not on Unix'
 endif
 
 source shared.vim
@@ -717,4 +720,24 @@ func Test_get_termcode()
   set t_k1=
   set t_k1&
   call assert_equal(k1, &t_k1)
+
+  " use external termcap first
+  set nottybuiltin
+  set t_k1=
+  set t_k1&
+  " when using external termcap may get something else, but it must not be
+  " empty, since we would fallback to the builtin one.
+  call assert_notequal('', &t_k1)
+
+  if &term =~ 'xterm'
+    " use internal termcap first
+    let term_save = &term
+    let &term = 'builtin_' .. &term
+    set t_k1=
+    set t_k1&
+    call assert_equal(k1, &t_k1)
+    let &term = term_save
+  endif
+
+  set ttybuiltin
 endfunc

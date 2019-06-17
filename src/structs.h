@@ -1369,12 +1369,16 @@ struct dictitem_S
 };
 typedef struct dictitem_S dictitem_T;
 
-/* A dictitem with a 16 character key (plus NUL). */
+/*
+ * A dictitem with a 16 character key (plus NUL).  This is an efficient way to
+ * have a fixed-size dictitem.
+ */
+#define DICTITEM16_KEY_LEN 16
 struct dictitem16_S
 {
     typval_T	di_tv;		/* type and value of the variable */
     char_u	di_flags;	/* flags (only used for variable) */
-    char_u	di_key[17];	/* key */
+    char_u	di_key[DICTITEM16_KEY_LEN + 1];	/* key */
 };
 typedef struct dictitem16_S dictitem16_T;
 
@@ -1680,8 +1684,8 @@ typedef struct {
 
     readq_T	ch_head;	/* header for circular raw read queue */
     jsonq_T	ch_json_head;	/* header for circular json read queue */
-    int		ch_block_id;	/* ID that channel_read_json_block() is
-				   waiting for */
+    garray_T	ch_block_ids;	/* list of IDs that channel_read_json_block()
+				   is waiting for */
     /* When ch_wait_len is non-zero use ch_deadline to wait for incomplete
      * message to be complete. The value is the length of the incomplete
      * message when the deadline was set.  If it gets longer (something was
@@ -1991,6 +1995,11 @@ typedef enum {
     POPPOS_TOPRIGHT,
     POPPOS_CENTER
 } poppos_T;
+
+# define POPUPWIN_DEFAULT_ZINDEX	 50
+# define POPUPMENU_ZINDEX		100
+# define POPUPWIN_DIALOG_ZINDEX		200
+# define POPUPWIN_NOTIFICATION_ZINDEX   300
 #endif
 
 /*
@@ -2882,6 +2891,7 @@ struct window_S
     pos_save_T	w_save_cursor;	    /* backup of cursor pos and topline */
 #ifdef FEAT_TEXT_PROP
     int		w_popup_flags;	    // POPF_ values
+    char_u	*w_popup_title;
     poppos_T	w_popup_pos;
     int		w_popup_fixed;	    // do not shift popup to fit on screen
     int		w_zindex;
@@ -2891,6 +2901,7 @@ struct window_S
     int		w_maxwidth;	    // "maxwidth" for popup window
     int		w_wantline;	    // "line" for popup window
     int		w_wantcol;	    // "col" for popup window
+    int		w_firstline;	    // "firstline" for popup window
     int		w_popup_padding[4]; // popup padding top/right/bot/left
     int		w_popup_border[4];  // popup border top/right/bot/left
     char_u	*w_border_highlight[4];  // popup border highlight
@@ -2904,6 +2915,7 @@ struct window_S
     linenr_T	w_popup_lnum;	    // close popup if cursor not on this line
     colnr_T	w_popup_mincol;	    // close popup if cursor before this col
     colnr_T	w_popup_maxcol;	    // close popup if cursor after this col
+    int		w_popup_drag;	    // allow moving the popup with the mouse
 
 # if defined(FEAT_TIMERS)
     timer_T	*w_popup_timer;	    // timer for closing popup window
@@ -3623,3 +3635,10 @@ typedef enum {
     CDSCOPE_TABPAGE,	// :tcd
     CDSCOPE_WINDOW	// :lcd
 } cdscope_T;
+
+// argument for mouse_find_win()
+typedef enum {
+    IGNORE_POPUP,	// only check non-popup windows
+    FIND_POPUP,		// also find popup windows
+    FAIL_POPUP		// return NULL if mouse on popup window
+} mouse_find_T;

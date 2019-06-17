@@ -70,6 +70,22 @@ EXTERN schar_T	*ScreenLines2 INIT(= NULL);
  */
 EXTERN short	*TabPageIdxs INIT(= NULL);
 
+#ifdef FEAT_TEXT_PROP
+// Array with size Rows x Columns containing zindex of popups.
+EXTERN short	*popup_mask INIT(= NULL);
+EXTERN short	*popup_mask_next INIT(= NULL);
+
+// Flag set to TRUE when popup_mask needs to be updated.
+EXTERN int	popup_mask_refresh INIT(= TRUE);
+
+// Tab that was used to fill popup_mask.
+EXTERN tabpage_T *popup_mask_tab INIT(= NULL);
+
+// Zindex in for screen_char(): if lower than the value in "popup_mask"
+// drawing the character is skipped.
+EXTERN int	screen_zindex INIT(= 0);
+#endif
+
 EXTERN int	screen_Rows INIT(= 0);	    /* actual size of ScreenLines[] */
 EXTERN int	screen_Columns INIT(= 0);   /* actual size of ScreenLines[] */
 
@@ -529,11 +545,11 @@ EXTERN int	gui_win_y INIT(= -1);
 #endif
 
 #ifdef FEAT_CLIPBOARD
-EXTERN VimClipboard clip_star;	/* PRIMARY selection in X11 */
+EXTERN Clipboard_T clip_star;	// PRIMARY selection in X11
 # ifdef FEAT_X11
-EXTERN VimClipboard clip_plus;	/* CLIPBOARD selection in X11 */
+EXTERN Clipboard_T clip_plus;	// CLIPBOARD selection in X11
 # else
-#  define clip_plus clip_star	/* there is only one clipboard */
+#  define clip_plus clip_star	// there is only one clipboard
 #  define ONE_CLIPBOARD
 # endif
 
@@ -583,7 +599,8 @@ EXTERN win_T	*aucmd_win;	/* window used in aucmd_prepbuf() */
 EXTERN int	aucmd_win_used INIT(= FALSE);	/* aucmd_win is being used */
 
 #ifdef FEAT_TEXT_PROP
-EXTERN win_T    *first_popupwin;	// first global popup window
+EXTERN win_T    *first_popupwin;		// first global popup window
+EXTERN win_T	*popup_dragwin INIT(= NULL);	// popup window being dragged
 #endif
 
 /*
