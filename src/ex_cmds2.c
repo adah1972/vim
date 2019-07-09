@@ -367,10 +367,11 @@ check_due_timer(void)
 	    int save_vgetc_busy = vgetc_busy;
 	    int save_did_emsg = did_emsg;
 	    int save_called_emsg = called_emsg;
-	    int	save_must_redraw = must_redraw;
-	    int	save_trylevel = trylevel;
+	    int save_must_redraw = must_redraw;
+	    int save_trylevel = trylevel;
 	    int save_did_throw = did_throw;
 	    int save_ex_pressedreturn = get_pressedreturn();
+	    int save_may_garbage_collect = may_garbage_collect;
 	    except_T *save_current_exception = current_exception;
 	    vimvars_save_T vvsave;
 
@@ -385,7 +386,9 @@ check_due_timer(void)
 	    trylevel = 0;
 	    did_throw = FALSE;
 	    current_exception = NULL;
+	    may_garbage_collect = FALSE;
 	    save_vimvars(&vvsave);
+
 	    timer->tr_firing = TRUE;
 	    timer_callback(timer);
 	    timer->tr_firing = FALSE;
@@ -407,6 +410,7 @@ check_due_timer(void)
 	    must_redraw = must_redraw > save_must_redraw
 					      ? must_redraw : save_must_redraw;
 	    set_pressedreturn(save_ex_pressedreturn);
+	    may_garbage_collect = save_may_garbage_collect;
 
 	    /* Only fire the timer again if it repeats and stop_timer() wasn't
 	     * called while inside the callback (tr_id == -1). */
@@ -566,7 +570,7 @@ set_ref_in_timer(int copyID)
     timer_T	*timer;
     typval_T	tv;
 
-    for (timer = first_timer; timer != NULL; timer = timer->tr_next)
+    for (timer = first_timer; !abort && timer != NULL; timer = timer->tr_next)
     {
 	if (timer->tr_callback.cb_partial != NULL)
 	{
@@ -3265,20 +3269,21 @@ cmd_source(char_u *fname, exarg_T *eap)
  */
 struct source_cookie
 {
-    FILE	*fp;		/* opened file for sourcing */
-    char_u      *nextline;      /* if not NULL: line that was read ahead */
-    int		finished;	/* ":finish" used */
+    FILE	*fp;		// opened file for sourcing
+    char_u	*nextline;	// if not NULL: line that was read ahead
+    linenr_T	sourcing_lnum;	// line number of the source file
+    int		finished;	// ":finish" used
 #ifdef USE_CRNL
-    int		fileformat;	/* EOL_UNKNOWN, EOL_UNIX or EOL_DOS */
-    int		error;		/* TRUE if LF found after CR-LF */
+    int		fileformat;	// EOL_UNKNOWN, EOL_UNIX or EOL_DOS
+    int		error;		// TRUE if LF found after CR-LF
 #endif
 #ifdef FEAT_EVAL
-    linenr_T	breakpoint;	/* next line with breakpoint or zero */
-    char_u	*fname;		/* name of sourced file */
-    int		dbg_tick;	/* debug_tick when breakpoint was set */
-    int		level;		/* top nesting level of sourced file */
+    linenr_T	breakpoint;	// next line with breakpoint or zero
+    char_u	*fname;		// name of sourced file
+    int		dbg_tick;	// debug_tick when breakpoint was set
+    int		level;		// top nesting level of sourced file
 #endif
-    vimconv_T	conv;		/* type of conversion */
+    vimconv_T	conv;		// type of conversion
 };
 
 #ifdef FEAT_EVAL
@@ -3341,7 +3346,6 @@ fopen_noinh_readbin(char *filename)
     return fdopen(fd_tmp, READBIN);
 }
 #endif
-
 
 /*
  * do_source: Read the file "fname" and execute its lines as EX commands.
@@ -3491,6 +3495,7 @@ do_source(
 #endif
 
     cookie.nextline = NULL;
+    cookie.sourcing_lnum = 0;
     cookie.finished = FALSE;
 
 #ifdef FEAT_EVAL
@@ -3611,7 +3616,7 @@ do_source(
     cookie.conv.vc_type = CONV_NONE;		/* no conversion */
 
     /* Read the first line so we can check for a UTF-8 BOM. */
-    firstline = getsourceline(0, (void *)&cookie, 0);
+    firstline = getsourceline(0, (void *)&cookie, 0, TRUE);
     if (firstline != NULL && STRLEN(firstline) >= 3 && firstline[0] == 0xef
 			      && firstline[1] == 0xbb && firstline[2] == 0xbf)
     {
@@ -3786,6 +3791,14 @@ free_scriptnames(void)
 
 #endif
 
+    linenr_T
+get_sourced_lnum(char_u *(*fgetline)(int, void *, int, int), void *cookie)
+{
+    return fgetline == getsourceline
+			? ((struct source_cookie *)cookie)->sourcing_lnum
+			: sourcing_lnum;
+}
+
 /*
  * Get one full line from a sourced file.
  * Called by do_cmdline() when it's called from do_source().
@@ -3794,7 +3807,7 @@ free_scriptnames(void)
  * Return NULL for end-of-file or some error.
  */
     char_u *
-getsourceline(int c UNUSED, void *cookie, int indent UNUSED)
+getsourceline(int c UNUSED, void *cookie, int indent UNUSED, int do_concat)
 {
     struct source_cookie *sp = (struct source_cookie *)cookie;
     char_u		*line;
@@ -3812,6 +3825,10 @@ getsourceline(int c UNUSED, void *cookie, int indent UNUSED)
 	script_line_end();
 # endif
 #endif
+
+    // Set the current sourcing line number.
+    sourcing_lnum = sp->sourcing_lnum + 1;
+
     /*
      * Get current line.  If there is a read-ahead line, use it, otherwise get
      * one now.
@@ -3824,7 +3841,7 @@ getsourceline(int c UNUSED, void *cookie, int indent UNUSED)
     {
 	line = sp->nextline;
 	sp->nextline = NULL;
-	++sourcing_lnum;
+	++sp->sourcing_lnum;
     }
 #ifdef FEAT_PROFILE
     if (line != NULL && do_profiling == PROF_YES)
@@ -3833,10 +3850,10 @@ getsourceline(int c UNUSED, void *cookie, int indent UNUSED)
 
     /* Only concatenate lines starting with a \ when 'cpoptions' doesn't
      * contain the 'C' flag. */
-    if (line != NULL && (vim_strchr(p_cpo, CPO_CONCAT) == NULL))
+    if (line != NULL && do_concat && vim_strchr(p_cpo, CPO_CONCAT) == NULL)
     {
 	/* compensate for the one line read-ahead */
-	--sourcing_lnum;
+	--sp->sourcing_lnum;
 
 	// Get the next line and concatenate it when it starts with a
 	// backslash. We always need to read the next line, keep it in
@@ -3927,7 +3944,7 @@ get_one_sourceline(struct source_cookie *sp)
     /*
      * Loop until there is a finished line (or end-of-file).
      */
-    sourcing_lnum++;
+    ++sp->sourcing_lnum;
     for (;;)
     {
 	/* make room to read at least 120 (more) characters */
@@ -3997,7 +4014,7 @@ get_one_sourceline(struct source_cookie *sp)
 		;
 	    if ((len & 1) != (c & 1))	/* escaped NL, read more */
 	    {
-		sourcing_lnum++;
+		++sp->sourcing_lnum;
 		continue;
 	    }
 
@@ -4212,7 +4229,7 @@ do_finish(exarg_T *eap, int reanimate)
  */
     int
 source_finished(
-    char_u	*(*fgetline)(int, void *, int),
+    char_u	*(*fgetline)(int, void *, int, int),
     void	*cookie)
 {
     return (getline_equal(fgetline, cookie, getsourceline)

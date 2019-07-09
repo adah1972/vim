@@ -2329,6 +2329,9 @@ do_mouse(
 	    bevalexpr_due_set = TRUE;
 	}
 #endif
+#ifdef FEAT_TEXT_PROP
+	popup_handle_mouse_moved();
+#endif
 	return FALSE;
     }
 
@@ -4521,9 +4524,13 @@ nv_mousescroll(cmdarg_T *cap)
 	col = mouse_col;
 
 	/* find the window at the pointer coordinates */
-	wp = mouse_find_win(&row, &col, FAIL_POPUP);
+	wp = mouse_find_win(&row, &col, FIND_POPUP);
 	if (wp == NULL)
 	    return;
+#ifdef FEAT_TEXT_PROP
+	if (WIN_IS_POPUP(wp) && !wp->w_has_scrollbar)
+	    return;
+#endif
 	curwin = wp;
 	curbuf = curwin->w_buffer;
     }
@@ -4543,10 +4550,22 @@ nv_mousescroll(cmdarg_T *cap)
 	}
 	else
 	{
-	    cap->count1 = 3;
-	    cap->count0 = 3;
+	    // Don't scroll more than half the window height.
+	    if (curwin->w_height < 6)
+	    {
+		cap->count1 = curwin->w_height / 2;
+		if (cap->count1 == 0)
+		    cap->count1 = 1;
+	    }
+	    else
+		cap->count1 = 3;
+	    cap->count0 = cap->count1;
 	    nv_scroll_line(cap);
 	}
+#ifdef FEAT_TEXT_PROP
+	if (WIN_IS_POPUP(curwin))
+	    popup_set_firstline(curwin);
+#endif
     }
 # ifdef FEAT_GUI
     else
@@ -6237,7 +6256,7 @@ nv_search(cmdarg_T *cap)
 
     /* When using 'incsearch' the cursor may be moved to set a different search
      * start position. */
-    cap->searchbuf = getcmdline(cap->cmdchar, cap->count1, 0);
+    cap->searchbuf = getcmdline(cap->cmdchar, cap->count1, 0, TRUE);
 
     if (cap->searchbuf == NULL)
     {

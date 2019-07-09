@@ -8202,6 +8202,8 @@ do_highlight(
 	{
 	    if (gui.in_use && do_colors)
 		gui_new_scrollbar_colors();
+	    else
+		set_hl_attr(idx);
 	}
 # ifdef FEAT_BEVAL_GUI
 	else if (is_tooltip_group)
@@ -9440,6 +9442,7 @@ syn_list_header(
 {
     int	    endcol = 19;
     int	    newline = TRUE;
+    int	    name_col = 0;
 
     if (!did_header)
     {
@@ -9447,6 +9450,7 @@ syn_list_header(
 	if (got_int)
 	    return TRUE;
 	msg_outtrans(HL_TABLE()[id - 1].sg_name);
+	name_col = msg_col;
 	endcol = 15;
     }
     else if (msg_col + outlen + 1 >= Columns)
@@ -9471,6 +9475,8 @@ syn_list_header(
     /* Show "xxx" with the attributes. */
     if (!did_header)
     {
+	if (endcol == Columns - 1 && endcol <= name_col)
+	    msg_putchar(' ');
 	msg_puts_attr("xxx", syn_id2attr(id));
 	msg_putchar(' ');
     }
@@ -9554,6 +9560,10 @@ set_hl_attr(
 	at_en.ae_u.cterm.bg_color = sgp->sg_cterm_bg;
 # ifdef FEAT_TERMGUICOLORS
 #  ifdef MSWIN
+#   ifdef VIMDLL
+	// Only when not using the GUI.
+	if (!gui.in_use && !gui.starting)
+#   endif
 	{
 	    int id;
 	    guicolor_T fg, bg;
