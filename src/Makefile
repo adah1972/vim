@@ -521,6 +521,7 @@ CClink = $(CC)
 # gpm - For mouse support on Linux console via gpm
 # Uncomment this when you do not want to include gpm support, even
 # though you have gpm libraries and includes.
+# For Debian/Ubuntu gpm support requires the libgpm-dev package.
 #CONF_OPT_GPM = --disable-gpm
 
 # sysmouse - For mouse support on FreeBSD and DragonFly console via sysmouse
@@ -1603,6 +1604,7 @@ BASIC_SRC = \
 	getchar.c \
 	hardcopy.c \
 	hashtab.c \
+	highlight.c \
 	if_cscope.c \
 	if_xcmdsrv.c \
 	indent.c \
@@ -1626,6 +1628,7 @@ BASIC_SRC = \
 	auto/pathdef.c \
 	popupmnu.c \
 	popupwin.c \
+	profiler.c \
 	pty.c \
 	quickfix.c \
 	regexp.c \
@@ -1640,12 +1643,14 @@ BASIC_SRC = \
 	tag.c \
 	term.c \
 	terminal.c \
+	testing.c \
 	textprop.c \
 	ui.c \
 	undo.c \
 	usercmd.c \
 	userfunc.c \
 	version.c \
+	viminfo.c \
 	window.c \
 	$(OS_EXTRA_SRC)
 
@@ -1722,6 +1727,7 @@ OBJ_COMMON = \
 	objects/getchar.o \
 	objects/hardcopy.o \
 	objects/hashtab.o \
+	objects/highlight.o \
 	$(HANGULIN_OBJ) \
 	objects/if_cscope.o \
 	objects/if_xcmdsrv.o \
@@ -1742,6 +1748,7 @@ OBJ_COMMON = \
 	objects/pathdef.o \
 	objects/popupmnu.o \
 	objects/popupwin.o \
+	objects/profiler.o \
 	objects/pty.o \
 	objects/quickfix.o \
 	objects/regexp.o \
@@ -1756,12 +1763,14 @@ OBJ_COMMON = \
 	objects/tag.o \
 	objects/term.o \
 	objects/terminal.o \
+	objects/testing.o \
 	objects/textprop.o \
 	objects/ui.o \
 	objects/undo.o \
 	objects/usercmd.o \
 	objects/userfunc.o \
 	objects/version.o \
+	objects/viminfo.o \
 	objects/window.o \
 	$(GUI_OBJ) \
 	$(TERM_OBJ) \
@@ -1855,6 +1864,7 @@ PRO_AUTO = \
 	hardcopy.pro \
 	hashtab.pro \
 	hangulin.pro \
+	highlight.pro \
 	if_cscope.pro \
 	if_lua.pro \
 	if_mzsch.pro \
@@ -1883,6 +1893,7 @@ PRO_AUTO = \
 	os_unix.pro \
 	popupmnu.pro \
 	popupwin.pro \
+	profiler.pro \
 	pty.pro \
 	quickfix.pro \
 	regexp.pro \
@@ -1898,12 +1909,14 @@ PRO_AUTO = \
 	term.pro \
 	terminal.pro \
 	termlib.pro \
+	testing.pro \
 	textprop.pro \
 	ui.pro \
 	undo.pro \
 	usercmd.pro \
 	userfunc.pro \
 	version.pro \
+	viminfo.pro \
 	window.pro \
 	beval.pro \
 	gui_beval.pro \
@@ -3096,6 +3109,9 @@ objects/gui_mac.o: gui_mac.c
 objects/hangulin.o: hangulin.c
 	$(CCC) -o $@ hangulin.c
 
+objects/highlight.o: highlight.c
+	$(CCC) -o $@ highlight.c
+
 objects/if_cscope.o: if_cscope.c
 	$(CCC) -o $@ if_cscope.c
 
@@ -3222,6 +3238,9 @@ objects/popupmnu.o: popupmnu.c
 objects/popupwin.o: popupwin.c
 	$(CCC) -o $@ popupwin.c
 
+objects/profiler.o: profiler.c
+	$(CCC) -o $@ profiler.c
+
 objects/pty.o: pty.c
 	$(CCC) -o $@ pty.c
 
@@ -3264,6 +3283,9 @@ objects/term.o: term.c
 objects/terminal.o: terminal.c $(TERM_DEPS)
 	$(CCC) -o $@ terminal.c
 
+objects/testing.o: testing.c
+	$(CCC) -o $@ testing.c
+
 objects/textprop.o: textprop.c
 	$(CCC) -o $@ textprop.c
 
@@ -3278,6 +3300,9 @@ objects/usercmd.o: usercmd.c
 
 objects/userfunc.o: userfunc.c
 	$(CCC) -o $@ userfunc.c
+
+objects/viminfo.o: viminfo.c
+	$(CCC) -o $@ viminfo.c
 
 objects/window.o: window.c
 	$(CCC) -o $@ window.c
@@ -3541,6 +3566,10 @@ objects/hashtab.o: hashtab.c vim.h protodef.h auto/config.h feature.h os_unix.h 
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h
+objects/highlight.o: highlight.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
 objects/if_cscope.o: if_cscope.c vim.h protodef.h auto/config.h feature.h \
  os_unix.h auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
@@ -3633,6 +3662,10 @@ objects/popupwin.o: popupwin.c vim.h protodef.h auto/config.h feature.h os_unix.
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h
+objects/profiler.o: profiler.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
 objects/pty.o: pty.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
@@ -3691,6 +3724,10 @@ objects/terminal.o: terminal.c vim.h protodef.h auto/config.h feature.h os_unix.
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h libvterm/include/vterm.h \
  libvterm/include/vterm_keycodes.h
+objects/testing.o: testing.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
 objects/textprop.o: textprop.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
@@ -3715,6 +3752,10 @@ objects/version.o: version.c vim.h protodef.h auto/config.h feature.h os_unix.h 
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h version.h
+objects/viminfo.o: viminfo.c vim.h protodef.h auto/config.h feature.h \
+ os_unix.h auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
 objects/window.o: window.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \

@@ -10,7 +10,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_BEVAL) || defined(FEAT_TEXT_PROP) || defined(PROT)
+#if defined(FEAT_BEVAL) || defined(FEAT_TEXT_PROP) || defined(PROTO)
 /*
  * Find text under the mouse position "row" / "col".
  * If "getword" is TRUE the returned text in "*textp" is not the whole line but
@@ -27,10 +27,12 @@ find_word_under_cursor(
 	win_T	    **winp,	// can be NULL
 	linenr_T    *lnump,	// can be NULL
 	char_u	    **textp,
-	int	    *colp)
+	int	    *colp,	// column where mouse hovers, can be NULL
+	int	    *startcolp) // column where text starts, can be NULL
 {
     int		row = mouserow;
     int		col = mousecol;
+    int		scol;
     win_T	*wp;
     char_u	*lbuf;
     linenr_T	lnum;
@@ -41,7 +43,7 @@ find_word_under_cursor(
     {
 	// Found a window and the cursor is in the text.  Now find the line
 	// number.
-	if (!mouse_comp_pos(wp, &row, &col, &lnum))
+	if (!mouse_comp_pos(wp, &row, &col, &lnum, NULL))
 	{
 	    // Not past end of the file.
 	    lbuf = ml_get_buf(wp->w_buffer, lnum, FALSE);
@@ -70,6 +72,7 @@ find_word_under_cursor(
 		    }
 
 		    col = vcol2col(wp, lnum, col);
+		    scol = col;
 
 		    if (VIsual_active
 			    && wp->w_buffer == curwin->w_buffer
@@ -93,13 +96,14 @@ find_word_under_cursor(
 			lbuf = vim_strnsave(lbuf + spos->col, len);
 			lnum = spos->lnum;
 			col = spos->col;
+			scol = col;
 		    }
 		    else
 		    {
 			// Find the word under the cursor.
 			++emsg_off;
-			len = find_ident_at_pos(wp, lnum, (colnr_T)col, &lbuf,
-									flags);
+			len = find_ident_at_pos(wp, lnum, (colnr_T)col,
+							  &lbuf, &scol, flags);
 			--emsg_off;
 			if (len == 0)
 			    return FAIL;
@@ -112,7 +116,10 @@ find_word_under_cursor(
 		if (lnump != NULL)
 		    *lnump = lnum;
 		*textp = lbuf;
-		*colp = col;
+		if (colp != NULL)
+		    *colp = col;
+		if (startcolp != NULL)
+		    *startcolp = scol;
 		return OK;
 	    }
 	}
@@ -150,7 +157,7 @@ get_beval_info(
 #endif
     if (find_word_under_cursor(row, col, getword,
 		FIND_IDENT + FIND_STRING + FIND_EVAL,
-		winp, lnump, textp, colp) == OK)
+		winp, lnump, textp, colp, NULL) == OK)
     {
 #ifdef FEAT_VARTABS
 	vim_free(beval->vts);
@@ -296,12 +303,10 @@ general_beval_cb(BalloonEval *beval, int state UNUSED)
 	    if (result != NULL && result[0] != NUL)
 		post_balloon(beval, result, NULL);
 
-# ifdef FEAT_GUI
 	    // The 'balloonexpr' evaluation may show something on the screen
 	    // that requires a screen update.
-	    if (gui.in_use && must_redraw)
+	    if (must_redraw)
 		redraw_after_callback(FALSE);
-# endif
 
 	    recursive = FALSE;
 	    return;
