@@ -795,6 +795,11 @@ update_screen(int type_arg)
     FOR_ALL_WINDOWS(wp)
 	wp->w_buffer->b_mod_set = FALSE;
 
+#ifdef FEAT_TEXT_PROP
+    // Display popup windows on top of the windows and command line.
+    update_popups(win_update);
+#endif
+
     after_updating_screen(TRUE);
 
     /* Clear or redraw the command line.  Done last, because scrolling may
@@ -809,11 +814,6 @@ update_screen(int type_arg)
     if (!did_intro)
 	maybe_intro_message();
     did_intro = TRUE;
-
-#ifdef FEAT_TEXT_PROP
-    // Display popup windows on top of the windows.
-    update_popups(win_update);
-#endif
 
 #ifdef FEAT_GUI
     /* Redraw the cursor and update the scrollbars when all screen updating is
@@ -995,7 +995,7 @@ get_wcr_attr(win_T *wp)
     if (*wp->w_p_wcr != NUL)
 	wcr_attr = syn_name2attr(wp->w_p_wcr);
 #ifdef FEAT_TEXT_PROP
-    if (WIN_IS_POPUP(wp) && wcr_attr == 0)
+    else if (WIN_IS_POPUP(wp))
 	wcr_attr = HL_ATTR(HLF_PNI);
 #endif
     return wcr_attr;
@@ -9210,8 +9210,8 @@ win_ins_lines(
     /*
      * If there is a next window or a status line, we first try to delete the
      * lines at the bottom to avoid messing what is after the window.
-     * If this fails and there are following windows, don't do anything to avoid
-     * messing up those windows, better just redraw.
+     * If this fails and there are following windows, don't do anything to
+     * avoid messing up those windows, better just redraw.
      */
     did_delete = FALSE;
     if (wp->w_next != NULL || wp->w_status_height)
@@ -9241,7 +9241,7 @@ win_ins_lines(
     if (screen_ins_lines(0, W_WINROW(wp) + row, line_count, (int)Rows, 0, NULL)
 								      == FAIL)
     {
-	    /* deletion will have messed up other windows */
+	// deletion will have messed up other windows
 	if (did_delete)
 	{
 	    wp->w_redr_status = TRUE;

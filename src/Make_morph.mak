@@ -30,6 +30,7 @@ SRC =	arabic.c						\
 	buffer.c						\
 	change.c						\
 	charset.c						\
+	cmdhist.c						\
 	crypt.c							\
 	crypt_zip.c						\
 	debugger.c						\
@@ -56,6 +57,7 @@ SRC =	arabic.c						\
 	json.c							\
 	list.c							\
 	main.c							\
+	map.c							\
 	mark.c							\
 	mbyte.c							\
 	memfile.c						\
@@ -75,6 +77,7 @@ SRC =	arabic.c						\
 	regexp.c						\
 	screen.c						\
 	search.c						\
+	session.c						\
 	sha256.c						\
 	sign.c							\
 	spell.c							\

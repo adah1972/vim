@@ -65,6 +65,7 @@ extern int _stricoll(char *a, char *b);
 # include "buffer.pro"
 # include "change.pro"
 # include "charset.pro"
+# include "cmdhist.pro"
 # ifdef FEAT_CSCOPE
 #  include "if_cscope.pro"
 # endif
@@ -98,6 +99,7 @@ extern int _stricoll(char *a, char *b);
 # include "list.pro"
 # include "blob.pro"
 # include "main.pro"
+# include "map.pro"
 # include "mark.pro"
 # include "memfile.pro"
 # include "memline.pro"
@@ -183,6 +185,7 @@ void qsort(void *base, size_t elm_count, size_t elm_size, int (*cmp)(const void 
 # endif
 # include "regexp.pro"
 # include "screen.pro"
+# include "session.pro"
 # if defined(FEAT_CRYPT) || defined(FEAT_PERSISTENT_UNDO)
 #  include "sha256.pro"
 # endif

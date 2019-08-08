@@ -5736,11 +5736,11 @@ nv_ident(cmdarg_T *cap)
 		    ? vim_iswordp(mb_prevptr(ml_get_curline(), ptr))
 		    : vim_iswordc(ptr[-1])))
 	    STRCAT(buf, "\\>");
-#ifdef FEAT_CMDHIST
-	/* put pattern in search history */
+
+	// put pattern in search history
 	init_history();
 	add_to_history(HIST_SEARCH, buf, TRUE, NUL);
-#endif
+
 	(void)normal_search(cap, cmdchar == '*' ? '/' : '?', buf, 0);
     }
     else
@@ -8062,10 +8062,14 @@ nv_g_cmd(cmdarg_T *cap)
 	    }
 	    else
 	    {
+		if (cap->count1 > 1)
+		    // if it fails, let the cursor still move to the last char
+		    cursor_down(cap->count1 - 1, FALSE);
+
 		i = curwin->w_leftcol + curwin->w_width - col_off - 1;
 		coladvance((colnr_T)i);
 
-		/* Make sure we stick in this column. */
+		// Make sure we stick in this column.
 		validate_virtcol();
 		curwin->w_curswant = curwin->w_virtcol;
 		curwin->w_set_curswant = FALSE;

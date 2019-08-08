@@ -88,6 +88,7 @@
 # define PV_DICT	OPT_BOTH(OPT_BUF(BV_DICT))
 # define PV_TSR		OPT_BOTH(OPT_BUF(BV_TSR))
 #endif
+#define PV_CSL		OPT_BUF(BV_CSL)
 #ifdef FEAT_COMPL_FUNC
 # define PV_CFU		OPT_BUF(BV_CFU)
 #endif
@@ -887,6 +888,15 @@ static struct vimoption options[] =
 #ifdef FEAT_INS_EXPAND
 			    (char_u *)&p_cot, PV_NONE,
 			    {(char_u *)"menu,preview", (char_u *)0L}
+#else
+			    (char_u *)NULL, PV_NONE,
+			    {(char_u *)0L, (char_u *)0L}
+#endif
+			    SCTX_INIT},
+    {"completeslash",   "csl",  P_STRING|P_VI_DEF|P_VIM,
+#if defined(FEAT_INS_EXPAND) && defined(BACKSLASH_IN_FILENAME)
+			    (char_u *)&p_csl, PV_CSL,
+			    {(char_u *)"", (char_u *)0L}
 #else
 			    (char_u *)NULL, PV_NONE,
 			    {(char_u *)0L, (char_u *)0L}
@@ -3238,6 +3248,9 @@ static char *(p_fcl_values[]) = {"all", NULL};
 #endif
 #ifdef FEAT_INS_EXPAND
 static char *(p_cot_values[]) = {"menu", "menuone", "longest", "preview", "noinsert", "noselect", NULL};
+# ifdef BACKSLASH_IN_FILENAME
+static char *(p_csl_values[]) = {"slash", "backslash", NULL};
+# endif
 #endif
 #ifdef FEAT_SIGNS
 static char *(p_scl_values[]) = {"yes", "no", "auto", "number", NULL};
@@ -6732,11 +6745,10 @@ did_set_string_option(
     /* 'cryptkey' */
     else if (gvarp == &p_key)
     {
-# if defined(FEAT_CMDHIST)
-	/* Make sure the ":set" command doesn't show the new value in the
-	 * history. */
+	// Make sure the ":set" command doesn't show the new value in the
+	// history.
 	remove_key_from_history();
-# endif
+
 	if (STRCMP(curbuf->b_p_key, oldval) != 0)
 	    /* Need to update the swapfile. */
 	    ml_set_crypt_key(curbuf, oldval,
@@ -7409,7 +7421,7 @@ did_set_string_option(
 	}
     }
 
-    /* 'completeopt' */
+    // 'completeopt'
     else if (varp == &p_cot)
     {
 	if (check_opt_strings(p_cot, p_cot_values, TRUE) != OK)
@@ -7417,7 +7429,17 @@ did_set_string_option(
 	else
 	    completeopt_was_set();
     }
-#endif /* FEAT_INS_EXPAND */
+
+# ifdef BACKSLASH_IN_FILENAME
+    // 'completeslash'
+    else if (gvarp == &p_csl)
+    {
+	if (check_opt_strings(p_csl, p_csl_values, FALSE) != OK
+		|| check_opt_strings(curbuf->b_p_csl, p_csl_values, FALSE) != OK)
+	    errmsg = e_invarg;
+    }
+# endif
+#endif // FEAT_INS_EXPAND
 
 #ifdef FEAT_SIGNS
     // 'signcolumn'
@@ -7908,6 +7930,7 @@ did_set_string_option(
 	    // recursively, to avoid endless recurrence.
 	    apply_autocmds(EVENT_SYNTAX, curbuf->b_p_syn, curbuf->b_fname,
 		    value_changed || syn_recursive == 1, curbuf);
+	    curbuf->b_flags |= BF_SYN_SET;
 	    --syn_recursive;
 	}
 #endif
@@ -11110,7 +11133,6 @@ get_varp(struct vimoption *p)
 #endif
 	case PV_MENC:	return *curbuf->b_p_menc != NUL
 				    ? (char_u *)&(curbuf->b_p_menc) : p->var;
-
 #ifdef FEAT_ARABIC
 	case PV_ARAB:	return (char_u *)&(curwin->w_p_arab);
 #endif
@@ -11197,6 +11219,9 @@ get_varp(struct vimoption *p)
 #endif
 #ifdef FEAT_INS_EXPAND
 	case PV_CPT:	return (char_u *)&(curbuf->b_p_cpt);
+# ifdef BACKSLASH_IN_FILENAME
+	case PV_CSL:	return (char_u *)&(curbuf->b_p_csl);
+# endif
 #endif
 #ifdef FEAT_COMPL_FUNC
 	case PV_CFU:	return (char_u *)&(curbuf->b_p_cfu);
@@ -11591,6 +11616,9 @@ buf_copy_options(buf_T *buf, int flags)
 	    buf->b_p_swf = cmdmod.noswapfile ? FALSE : p_swf;
 #ifdef FEAT_INS_EXPAND
 	    buf->b_p_cpt = vim_strsave(p_cpt);
+# ifdef BACKSLASH_IN_FILENAME
+	    buf->b_p_csl = vim_strsave(p_csl);
+# endif
 #endif
 #ifdef FEAT_COMPL_FUNC
 	    buf->b_p_cfu = vim_strsave(p_cfu);

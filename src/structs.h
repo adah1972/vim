@@ -1198,6 +1198,7 @@ typedef struct hashitem_S
 
 // Initial size for a hashtable.  Our items are relatively small and growing
 // is expensive, thus use 16 as a start.  Must be a power of 2.
+// This allows for storing 10 items (2/3 of 16) before a resize is needed.
 #define HT_INIT_SIZE 16
 
 typedef struct hashtable_S
@@ -1603,6 +1604,23 @@ typedef struct
     int	    dummy;
 } scriptitem_T;
 #endif
+
+// Struct passed between functions dealing with function call execution.
+//
+// "argv_func", when not NULL, can be used to fill in arguments only when the
+// invoked function uses them.  It is called like this:
+//   new_argcount = argv_func(current_argcount, argv, called_func_argcount)
+//
+typedef struct {
+    int		(* argv_func)(int, typval_T *, int);
+    linenr_T	firstline;	// first line of range
+    linenr_T	lastline;	// last line of range
+    int		*doesrange;	// if not NULL: return: function handled range
+    int		evaluate;	// actually evaluate expressions
+    partial_T	*partial;	// for extra arguments
+    dict_T	*selfdict;	// Dictionary for "self"
+    typval_T	*basetv;	// base for base->method()
+} funcexe_T;
 
 struct partial_S
 {
@@ -2292,13 +2310,12 @@ struct file_buffer
      */
     char_u	b_chartab[32];
 
-#ifdef FEAT_LOCALMAP
     // Table used for mappings local to a buffer.
     mapblock_T	*(b_maphash[256]);
 
     // First abbreviation local to a buffer.
     mapblock_T	*b_first_abbr;
-#endif
+
     // User commands local to the buffer.
     garray_T	b_ucmds;
     // start and end of an operator, also used for '[ and ']
@@ -2394,6 +2411,9 @@ struct file_buffer
 #endif
 #ifdef FEAT_INS_EXPAND
     char_u	*b_p_cpt;	// 'complete'
+#endif
+#ifdef BACKSLASH_IN_FILENAME
+    char_u	*b_p_csl;	// 'completeslash'
 #endif
 #ifdef FEAT_COMPL_FUNC
     char_u	*b_p_cfu;	// 'completefunc'
@@ -3014,7 +3034,6 @@ struct window_S
     int		w_popup_mouse_row;  // close popup if mouse moves away
     int		w_popup_mouse_mincol;  // close popup if mouse moves away
     int		w_popup_mouse_maxcol;  // close popup if mouse moves away
-    int		w_popup_drag;	    // allow moving the popup with the mouse
     popclose_T	w_popup_close;	    // allow closing the popup with the mouse
 
     list_T	*w_popup_mask;	     // list of lists for "mask"
