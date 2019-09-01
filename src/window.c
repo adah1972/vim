@@ -39,8 +39,11 @@ static int leave_tabpage(buf_T *new_curbuf, int trigger_leave_autocmds);
 static void enter_tabpage(tabpage_T *tp, buf_T *old_curbuf, int trigger_enter_autocmds, int trigger_leave_autocmds);
 static void frame_fix_height(win_T *wp);
 static int frame_minheight(frame_T *topfrp, win_T *next_curwin);
+static int may_open_tabpage(void);
 static void win_enter_ext(win_T *wp, int undo_sync, int no_curwin, int trigger_new_autocmds, int trigger_enter_autocmds, int trigger_leave_autocmds);
 static void win_free(win_T *wp, tabpage_T *tp);
+static int win_unlisted(win_T *wp);
+static void win_append(win_T *after, win_T *wp);
 static void frame_append(frame_T *after, frame_T *frp);
 static void frame_insert(frame_T *before, frame_T *frp);
 static void frame_remove(frame_T *frp);
@@ -2519,6 +2522,10 @@ win_close(win_T *win, int free_buf)
 	out_flush();
 #endif
 
+#ifdef FEAT_TEXT_PROP
+    if (popup_win_closed(win) && !win_valid(win))
+	return FAIL;
+#endif
     win_close_buffer(win, free_buf ? DOBUF_UNLOAD : 0, TRUE);
 
     if (only_one_window() && win_valid(win) && win->w_buffer == NULL
@@ -3541,17 +3548,7 @@ close_others(
 	emsg(_("E445: Other window contains changes"));
 }
 
-/*
- * Init the current window "curwin".
- * Called when a new file is being edited.
- */
-    void
-curwin_init(void)
-{
-    win_init_empty(curwin);
-}
-
-    void
+    static void
 win_init_empty(win_T *wp)
 {
     redraw_win_later(wp, NOT_VALID);
@@ -3571,6 +3568,16 @@ win_init_empty(win_T *wp)
 #if defined(FEAT_SYN_HL) || defined(FEAT_SPELL)
     wp->w_s = &wp->w_buffer->b_s;
 #endif
+}
+
+/*
+ * Init the current window "curwin".
+ * Called when a new file is being edited.
+ */
+    void
+curwin_init(void)
+{
+    win_init_empty(curwin);
 }
 
 /*
@@ -3861,7 +3868,7 @@ win_new_tabpage(int after)
  * like with ":split".
  * Returns OK if a new tab page was created, FAIL otherwise.
  */
-    int
+    static int
 may_open_tabpage(void)
 {
     int		n = (cmdmod.tab == 0) ? postponed_split_tab : cmdmod.tab;
@@ -4952,7 +4959,7 @@ win_free(
  * Return TRUE if "wp" is not in the list of windows: the autocmd window or a
  * popup window.
  */
-    int
+    static int
 win_unlisted(win_T *wp)
 {
     return wp == aucmd_win || WIN_IS_POPUP(wp);
@@ -4967,7 +4974,7 @@ win_unlisted(win_T *wp)
 win_free_popup(win_T *win)
 {
     if (bt_popup(win->w_buffer))
-	win_close_buffer(win, DOBUF_WIPE, FALSE);
+	win_close_buffer(win, DOBUF_WIPE_REUSE, FALSE);
     else
 	close_buffer(win, win->w_buffer, 0, FALSE);
 # if defined(FEAT_TIMERS)
@@ -4982,7 +4989,7 @@ win_free_popup(win_T *win)
 /*
  * Append window "wp" in the window list after window "after".
  */
-    void
+    static void
 win_append(win_T *after, win_T *wp)
 {
     win_T	*before;
@@ -6887,24 +6894,48 @@ win_id2tabwin(typval_T *argvars, list_T *list)
     list_append_number(list, 0);
 }
 
+/*
+ * Return the window pointer of window "id".
+ */
     win_T *
 win_id2wp(int id)
+{
+    return win_id2wp_tp(id, NULL);
+}
+
+/*
+ * Return the window and tab pointer of window "id".
+ */
+    win_T *
+win_id2wp_tp(int id, tabpage_T **tpp)
 {
     win_T	*wp;
     tabpage_T   *tp;
 
     FOR_ALL_TAB_WINDOWS(tp, wp)
 	if (wp->w_id == id)
+	{
+	    if (tpp != NULL)
+		*tpp = tp;
 	    return wp;
+	}
 #ifdef FEAT_TEXT_PROP
     // popup windows are in separate lists
      FOR_ALL_TABPAGES(tp)
 	 for (wp = tp->tp_first_popupwin; wp != NULL; wp = wp->w_next)
 	     if (wp->w_id == id)
+	     {
+		 if (tpp != NULL)
+		     *tpp = tp;
 		 return wp;
+	     }
     for (wp = first_popupwin; wp != NULL; wp = wp->w_next)
 	if (wp->w_id == id)
+	{
+	    if (tpp != NULL)
+		*tpp = tp;
 	    return wp;
+	}
 #endif
 
     return NULL;
@@ -6936,6 +6967,109 @@ win_findbuf(typval_T *argvars, list_T *list)
     FOR_ALL_TAB_WINDOWS(tp, wp)
 	    if (wp->w_buffer->b_fnum == bufnr)
 		list_append_number(list, wp->w_id);
+}
+
+/*
+ * Find window specified by "vp" in tabpage "tp".
+ */
+    win_T *
+find_win_by_nr(
+    typval_T	*vp,
+    tabpage_T	*tp)	// NULL for current tab page
+{
+    win_T	*wp;
+    int		nr = (int)tv_get_number_chk(vp, NULL);
+
+    if (nr < 0)
+	return NULL;
+    if (nr == 0)
+	return curwin;
+
+    FOR_ALL_WINDOWS_IN_TAB(tp, wp)
+    {
+	if (nr >= LOWEST_WIN_ID)
+	{
+	    if (wp->w_id == nr)
+		return wp;
+	}
+	else if (--nr <= 0)
+	    break;
+    }
+    if (nr >= LOWEST_WIN_ID)
+    {
+#ifdef FEAT_TEXT_PROP
+	// check tab-local popup windows
+	for (wp = tp->tp_first_popupwin; wp != NULL; wp = wp->w_next)
+	    if (wp->w_id == nr)
+		return wp;
+	// check global popup windows
+	for (wp = first_popupwin; wp != NULL; wp = wp->w_next)
+	    if (wp->w_id == nr)
+		return wp;
+#endif
+	return NULL;
+    }
+    return wp;
+}
+
+/*
+ * Find a window: When using a Window ID in any tab page, when using a number
+ * in the current tab page.
+ */
+    win_T *
+find_win_by_nr_or_id(typval_T *vp)
+{
+    int	nr = (int)tv_get_number_chk(vp, NULL);
+
+    if (nr >= LOWEST_WIN_ID)
+	return win_id2wp(tv_get_number(vp));
+    return find_win_by_nr(vp, NULL);
+}
+
+/*
+ * Find window specified by "wvp" in tabpage "tvp".
+ * Returns the tab page in 'ptp'
+ */
+    win_T *
+find_tabwin(
+    typval_T	*wvp,	// VAR_UNKNOWN for current window
+    typval_T	*tvp,	// VAR_UNKNOWN for current tab page
+    tabpage_T	**ptp)
+{
+    win_T	*wp = NULL;
+    tabpage_T	*tp = NULL;
+    long	n;
+
+    if (wvp->v_type != VAR_UNKNOWN)
+    {
+	if (tvp->v_type != VAR_UNKNOWN)
+	{
+	    n = (long)tv_get_number(tvp);
+	    if (n >= 0)
+		tp = find_tabpage(n);
+	}
+	else
+	    tp = curtab;
+
+	if (tp != NULL)
+	{
+	    wp = find_win_by_nr(wvp, tp);
+	    if (wp == NULL && wvp->v_type == VAR_NUMBER
+						&& wvp->vval.v_number != -1)
+		// A window with the specified number is not found
+		tp = NULL;
+	}
+    }
+    else
+    {
+	wp = curwin;
+	tp = curtab;
+    }
+
+    if (ptp != NULL)
+	*ptp = tp;
+
+    return wp;
 }
 
 /*

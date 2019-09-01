@@ -8,6 +8,7 @@ func Test_list_method()
   eval l->assert_notequal([3, 2, 1])
   eval l->assert_notequal([3, 2, 1], 'wrong')
   call assert_equal(l, l->copy())
+  call assert_equal(l, l->deepcopy())
   call assert_equal(1, l->count(2))
   call assert_false(l->empty())
   call assert_true([]->empty())
@@ -38,6 +39,7 @@ func Test_dict_method()
   let d = #{one: 1, two: 2, three: 3}
 
   call assert_equal(d, d->copy())
+  call assert_equal(d, d->deepcopy())
   call assert_equal(1, d->count(2))
   call assert_false(d->empty())
   call assert_true({}->empty())
@@ -67,13 +69,15 @@ func Test_dict_method()
 endfunc
 
 func Test_string_method()
-  call assert_equal(['1', '2', '3'], '1 2 3'->split())
-  call assert_equal([1, 2, 3], '1 2 3'->split()->map({i, v -> str2nr(v)}))
-  call assert_equal([65, 66, 67], 'ABC'->str2list())
-  call assert_equal(3, 'ABC'->strlen())
-  call assert_equal('a^Mb^[c', "a\rb\ec"->strtrans())
-  call assert_equal(4, "aあb"->strwidth())
-  call assert_equal('axc', 'abc'->substitute('b', 'x', ''))
+  eval '1 2 3'->split()->assert_equal(['1', '2', '3'])
+  eval '1 2 3'->split()->map({i, v -> str2nr(v)})->assert_equal([1, 2, 3])
+  eval 'ABC'->str2list()->assert_equal([65, 66, 67])
+  eval 'ABC'->strlen()->assert_equal(3)
+  eval "a\rb\ec"->strtrans()->assert_equal('a^Mb^[c')
+  eval "aあb"->strwidth()->assert_equal(4)
+  eval 'abc'->substitute('b', 'x', '')->assert_equal('axc')
+
+  eval 'abc'->printf('the %s arg')->assert_equal('the abc arg')
 endfunc
 
 func Test_method_append()
@@ -111,4 +115,33 @@ func Test_method_funcref()
   call assert_fails("eval 'one'->Partial('three', 'four')", 'E118:')
 
   delfunc Concat
+endfunc
+
+func Test_method_float()
+  eval 1.234->string()->assert_equal('1.234')
+  eval -1.234->string()->assert_equal('-1.234')
+endfunc
+
+func Test_method_syntax()
+  eval [1, 2, 3]  ->sort( )
+  eval [1, 2, 3]  
+	\ ->sort(
+	\ )
+  call assert_fails('eval [1, 2, 3]-> sort()', 'E260:')
+  call assert_fails('eval [1, 2, 3]->sort ()', 'E274:')
+  call assert_fails('eval [1, 2, 3]-> sort ()', 'E260:')
+endfunc
+
+func Test_method_lambda()
+  eval "text"->{x -> x .. " extended"}()->assert_equal('text extended')
+  eval "text"->{x, y -> x .. " extended " .. y}('more')->assert_equal('text extended more')
+
+  call assert_fails('eval "text"->{x -> x .. " extended"} ()', 'E274:')
+
+  " todo: lambda accepts more arguments than it consumes
+  " call assert_fails('eval "text"->{x -> x .. " extended"}("more")', 'E99:')
+endfunc
+
+func Test_method_not_supported()
+  call assert_fails('eval 123->changenr()', 'E276:')
 endfunc

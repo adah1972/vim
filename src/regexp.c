@@ -751,7 +751,7 @@ get_equi_class(char_u **pp)
 /*
  * Table for equivalence class "c". (IBM-1047)
  */
-char *EQUIVAL_CLASS_C[16] = {
+static char *EQUIVAL_CLASS_C[16] = {
     "A\x62\x63\x64\x65\x66\x67",
     "C\x68",
     "E\x71\x72\x73\x74",
@@ -1319,7 +1319,7 @@ bt_regcomp(char_u *expr, int re_flags)
 	return NULL;
 
     /* Allocate space. */
-    r = alloc(sizeof(bt_regprog_T) + regsize);
+    r = alloc(offsetof(bt_regprog_T, program) + regsize);
     if (r == NULL)
 	return NULL;
     r->re_in_use = FALSE;
@@ -3436,7 +3436,7 @@ static int	regmatch(char_u *prog, proftime_T *tm, int *timed_out);
 static int	regrepeat(char_u *p, long maxcount);
 
 #ifdef DEBUG
-int		regnarrate = 0;
+static int		regnarrate = 0;
 #endif
 
 /*

@@ -1,4 +1,4 @@
-*textprop.txt*  For Vim version 8.1.  Last change: 2019 Jul 20
+*textprop.txt*  For Vim version 8.1.  Last change: 2019 Aug 25
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -170,7 +170,7 @@ prop_clear({lnum} [, {lnum-end} [, {props}]])		*prop_clear()*
 
 							*prop_find()*
 prop_find({props} [, {direction}])
-		NOT IMPLEMENTED YET
+		{not implemented yet}
 		Search for a text property as specified with {props}:
 		   id		property with this ID
 		   type		property with this type name
@@ -246,7 +246,7 @@ prop_remove({props} [, {lnum} [, {lnum-end}]])
 
 prop_type_add({name}, {props})		*prop_type_add()* *E969* *E970*
 		Add a text property type {name}.  If a property type with this
-		name already exists an error is given.
+		name already exists an error is given.  Nothing is returned.
 		{props} is a dictionary with these optional fields:
 		   bufnr	define the property only for this buffer; this
 				avoids name collisions and automatically
@@ -322,6 +322,11 @@ will move accordingly.
 When text is deleted and a text property no longer includes any text, it is
 deleted.  However, a text property that was defined as zero-width will remain,
 unless the whole line is deleted.
+`								*E275*
+When a buffer is unloaded, all the text properties are gone.  There is no way
+to store the properties in a file.  You can only re-create them.  When a
+buffer is hidden the text is preserved and so are the text properties.  It is
+not possible to add text properties to an unloaded buffer.
 
 When using replace mode, the text properties stay on the same character
 positions, even though the characters themselves change.

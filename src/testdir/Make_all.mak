@@ -199,6 +199,7 @@ NEW_TESTS = \
 	test_plus_arg_edit \
 	test_popup \
 	test_popupwin \
+	test_popupwin_textprop \
 	test_preview \
 	test_profile \
 	test_prompt_buffer \
@@ -227,6 +228,7 @@ NEW_TESTS = \
 	test_searchpos \
 	test_set \
 	test_sha256 \
+	test_shift \
 	test_shortpathname \
 	test_signals \
 	test_signs \
@@ -236,6 +238,7 @@ NEW_TESTS = \
 	test_source \
 	test_source_utf8 \
 	test_spell \
+	test_spellfile \
 	test_startup \
 	test_startup_utf8 \
 	test_stat \
@@ -386,6 +389,7 @@ NEW_TESTS_RES = \
 	test_perl.res \
 	test_plus_arg_edit.res \
 	test_popupwin.res \
+	test_popupwin_textprop.res \
 	test_preview.res \
 	test_profile.res \
 	test_prompt_buffer.res \
@@ -411,6 +415,7 @@ NEW_TESTS_RES = \
 	test_sound.res \
 	test_source.res \
 	test_spell.res \
+	test_spellfile.res \
 	test_startup.res \
 	test_stat.res \
 	test_substitute.res \
