@@ -41,14 +41,17 @@ SRC =	arabic.c						\
 	digraph.c						\
 	edit.c							\
 	eval.c							\
+	evalbuffer.c						\
 	evalfunc.c						\
 	evalvars.c						\
+	evalwindow.c						\
 	ex_cmds.c						\
 	ex_cmds2.c						\
 	ex_docmd.c						\
 	ex_eval.c						\
 	ex_getln.c						\
 	fileio.c						\
+	filepath.c						\
 	findfile.c						\
 	fold.c							\
 	getchar.c						\
@@ -73,6 +76,7 @@ SRC =	arabic.c						\
 	normal.c						\
 	ops.c							\
 	option.c						\
+	optionstr.c						\
 	os_amiga.c						\
 	popupmnu.c						\
 	profiler.c						\

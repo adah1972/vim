@@ -1182,12 +1182,17 @@ getcount:
 
 	    kmsg = keep_msg;
 	    keep_msg = NULL;
-	    /* showmode() will clear keep_msg, but we want to use it anyway */
+	    // showmode() will clear keep_msg, but we want to use it anyway
 	    update_screen(0);
-	    /* now reset it, otherwise it's put in the history again */
+	    // now reset it, otherwise it's put in the history again
 	    keep_msg = kmsg;
-	    msg_attr((char *)kmsg, keep_msg_attr);
-	    vim_free(kmsg);
+
+	    kmsg = vim_strsave(keep_msg);
+	    if (kmsg != NULL)
+	    {
+		msg_attr((char *)kmsg, keep_msg_attr);
+		vim_free(kmsg);
+	    }
 	}
 	setcursor();
 	cursor_on();
@@ -8898,6 +8903,27 @@ nv_esc(cmdarg_T *cap)
 }
 
 /*
+ * Move the cursor for the "A" command.
+ */
+    void
+set_cursor_for_append_to_line(void)
+{
+    curwin->w_set_curswant = TRUE;
+    if (ve_flags == VE_ALL)
+    {
+	int save_State = State;
+
+	/* Pretend Insert mode here to allow the cursor on the
+	 * character past the end of the line */
+	State = INSERT;
+	coladvance((colnr_T)MAXCOL);
+	State = save_State;
+    }
+    else
+	curwin->w_cursor.col += (colnr_T)STRLEN(ml_get_cursor());
+}
+
+/*
  * Handle "A", "a", "I", "i" and <Insert> commands.
  * Also handle K_PS, start bracketed paste.
  */
@@ -8983,19 +9009,7 @@ nv_edit(cmdarg_T *cap)
 	switch (cap->cmdchar)
 	{
 	    case 'A':	/* "A"ppend after the line */
-		curwin->w_set_curswant = TRUE;
-		if (ve_flags == VE_ALL)
-		{
-		    int save_State = State;
-
-		    /* Pretend Insert mode here to allow the cursor on the
-		     * character past the end of the line */
-		    State = INSERT;
-		    coladvance((colnr_T)MAXCOL);
-		    State = save_State;
-		}
-		else
-		    curwin->w_cursor.col += (colnr_T)STRLEN(ml_get_cursor());
+		set_cursor_for_append_to_line();
 		break;
 
 	    case 'I':	/* "I"nsert before the first non-blank */

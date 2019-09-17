@@ -4892,8 +4892,10 @@ win_free(
     win_free_lsize(wp);
 
     for (i = 0; i < wp->w_tagstacklen; ++i)
+    {
 	vim_free(wp->w_tagstack[i].tagname);
-
+	vim_free(wp->w_tagstack[i].user_data);
+    }
     vim_free(wp->w_localdir);
 
     /* Remove the window from the b_wininfo lists, it may happen that the
@@ -6585,144 +6587,6 @@ restore_snapshot_rec(frame_T *sn, frame_T *fr)
     return wp;
 }
 
-#if defined(FEAT_EVAL) || defined(FEAT_PYTHON) || defined(FEAT_PYTHON3) \
-	|| defined(PROTO)
-/*
- * Set "win" to be the curwin and "tp" to be the current tab page.
- * restore_win() MUST be called to undo, also when FAIL is returned.
- * No autocommands will be executed until restore_win() is called.
- * When "no_display" is TRUE the display won't be affected, no redraw is
- * triggered, another tabpage access is limited.
- * Returns FAIL if switching to "win" failed.
- */
-    int
-switch_win(
-    win_T	**save_curwin,
-    tabpage_T	**save_curtab,
-    win_T	*win,
-    tabpage_T	*tp,
-    int		no_display)
-{
-    block_autocmds();
-    return switch_win_noblock(save_curwin, save_curtab, win, tp, no_display);
-}
-
-/*
- * As switch_win() but without blocking autocommands.
- */
-    int
-switch_win_noblock(
-    win_T	**save_curwin,
-    tabpage_T	**save_curtab,
-    win_T	*win,
-    tabpage_T	*tp,
-    int		no_display)
-{
-    *save_curwin = curwin;
-    if (tp != NULL)
-    {
-	*save_curtab = curtab;
-	if (no_display)
-	{
-	    curtab->tp_firstwin = firstwin;
-	    curtab->tp_lastwin = lastwin;
-	    curtab = tp;
-	    firstwin = curtab->tp_firstwin;
-	    lastwin = curtab->tp_lastwin;
-	}
-	else
-	    goto_tabpage_tp(tp, FALSE, FALSE);
-    }
-    if (!win_valid(win))
-	return FAIL;
-    curwin = win;
-    curbuf = curwin->w_buffer;
-    return OK;
-}
-
-/*
- * Restore current tabpage and window saved by switch_win(), if still valid.
- * When "no_display" is TRUE the display won't be affected, no redraw is
- * triggered.
- */
-    void
-restore_win(
-    win_T	*save_curwin,
-    tabpage_T	*save_curtab,
-    int		no_display)
-{
-    restore_win_noblock(save_curwin, save_curtab, no_display);
-    unblock_autocmds();
-}
-
-/*
- * As restore_win() but without unblocking autocommands.
- */
-    void
-restore_win_noblock(
-    win_T	*save_curwin,
-    tabpage_T	*save_curtab,
-    int		no_display)
-{
-    if (save_curtab != NULL && valid_tabpage(save_curtab))
-    {
-	if (no_display)
-	{
-	    curtab->tp_firstwin = firstwin;
-	    curtab->tp_lastwin = lastwin;
-	    curtab = save_curtab;
-	    firstwin = curtab->tp_firstwin;
-	    lastwin = curtab->tp_lastwin;
-	}
-	else
-	    goto_tabpage_tp(save_curtab, FALSE, FALSE);
-    }
-    if (win_valid(save_curwin))
-    {
-	curwin = save_curwin;
-	curbuf = curwin->w_buffer;
-    }
-#ifdef FEAT_TEXT_PROP
-    else if (WIN_IS_POPUP(curwin))
-	// original window was closed and now we're in a popup window: Go
-	// to the first valid window.
-	win_goto(firstwin);
-#endif
-}
-
-/*
- * Make "buf" the current buffer.  restore_buffer() MUST be called to undo.
- * No autocommands will be executed.  Use aucmd_prepbuf() if there are any.
- */
-    void
-switch_buffer(bufref_T *save_curbuf, buf_T *buf)
-{
-    block_autocmds();
-    set_bufref(save_curbuf, curbuf);
-    --curbuf->b_nwindows;
-    curbuf = buf;
-    curwin->w_buffer = buf;
-    ++curbuf->b_nwindows;
-}
-
-/*
- * Restore the current buffer after using switch_buffer().
- */
-    void
-restore_buffer(bufref_T *save_curbuf)
-{
-    unblock_autocmds();
-    /* Check for valid buffer, just in case. */
-    if (bufref_valid(save_curbuf))
-    {
-	--curbuf->b_nwindows;
-	curwin->w_buffer = save_curbuf->br_buf;
-	curbuf = save_curbuf->br_buf;
-	++curbuf->b_nwindows;
-    }
-}
-#endif
-
 #if defined(FEAT_GUI) || defined(PROTO)
 /*
  * Return TRUE if there is any vertically split window.
@@ -6814,311 +6678,83 @@ frame_check_width(frame_T *topfrp, int width)
     return TRUE;
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
-    int
-win_getid(typval_T *argvars)
+#if defined(FEAT_SYN_HL) || defined(PROTO)
+/*
+ * Simple int comparison function for use with qsort()
+ */
+    static int
+int_cmp(const void *a, const void *b)
 {
-    int	    winnr;
-    win_T   *wp;
+    return *(const int *)a - *(const int *)b;
+}
 
-    if (argvars[0].v_type == VAR_UNKNOWN)
-	return curwin->w_id;
-    winnr = tv_get_number(&argvars[0]);
-    if (winnr > 0)
+/*
+ * Handle setting 'colorcolumn' or 'textwidth' in window "wp".
+ * Returns error message, NULL if it's OK.
+ */
+    char *
+check_colorcolumn(win_T *wp)
+{
+    char_u	*s;
+    int		col;
+    int		count = 0;
+    int		color_cols[256];
+    int		i;
+    int		j = 0;
+
+    if (wp->w_buffer == NULL)
+	return NULL;  // buffer was closed
+
+    for (s = wp->w_p_cc; *s != NUL && count < 255;)
     {
-	if (argvars[1].v_type == VAR_UNKNOWN)
-	    wp = firstwin;
+	if (*s == '-' || *s == '+')
+	{
+	    // -N and +N: add to 'textwidth'
+	    col = (*s == '-') ? -1 : 1;
+	    ++s;
+	    if (!VIM_ISDIGIT(*s))
+		return e_invarg;
+	    col = col * getdigits(&s);
+	    if (wp->w_buffer->b_p_tw == 0)
+		goto skip;  // 'textwidth' not set, skip this item
+	    col += wp->w_buffer->b_p_tw;
+	    if (col < 0)
+		goto skip;
+	}
+	else if (VIM_ISDIGIT(*s))
+	    col = getdigits(&s);
 	else
-	{
-	    tabpage_T	*tp;
-	    int		tabnr = tv_get_number(&argvars[1]);
-
-	    FOR_ALL_TABPAGES(tp)
-		if (--tabnr == 0)
-		    break;
-	    if (tp == NULL)
-		return -1;
-	    if (tp == curtab)
-		wp = firstwin;
-	    else
-		wp = tp->tp_firstwin;
-	}
-	for ( ; wp != NULL; wp = wp->w_next)
-	    if (--winnr == 0)
-		return wp->w_id;
-    }
-    return 0;
-}
-
-    int
-win_gotoid(typval_T *argvars)
-{
-    win_T	*wp;
-    tabpage_T   *tp;
-    int		id = tv_get_number(&argvars[0]);
-
-    FOR_ALL_TAB_WINDOWS(tp, wp)
-	    if (wp->w_id == id)
-	    {
-		goto_tabpage_win(tp, wp);
-		return 1;
-	    }
-    return 0;
-}
-
-    void
-win_id2tabwin(typval_T *argvars, list_T *list)
-{
-    win_T	*wp;
-    tabpage_T   *tp;
-    int		winnr = 1;
-    int		tabnr = 1;
-    int		id = tv_get_number(&argvars[0]);
-
-    FOR_ALL_TABPAGES(tp)
-    {
-	FOR_ALL_WINDOWS_IN_TAB(tp, wp)
-	{
-	    if (wp->w_id == id)
-	    {
-		list_append_number(list, tabnr);
-		list_append_number(list, winnr);
-		return;
-	    }
-	    ++winnr;
-	}
-	++tabnr;
-	winnr = 1;
-    }
-    list_append_number(list, 0);
-    list_append_number(list, 0);
-}
-
-/*
- * Return the window pointer of window "id".
- */
-    win_T *
-win_id2wp(int id)
-{
-    return win_id2wp_tp(id, NULL);
-}
-
-/*
- * Return the window and tab pointer of window "id".
- */
-    win_T *
-win_id2wp_tp(int id, tabpage_T **tpp)
-{
-    win_T	*wp;
-    tabpage_T   *tp;
-
-    FOR_ALL_TAB_WINDOWS(tp, wp)
-	if (wp->w_id == id)
-	{
-	    if (tpp != NULL)
-		*tpp = tp;
-	    return wp;
-	}
-#ifdef FEAT_TEXT_PROP
-    // popup windows are in separate lists
-     FOR_ALL_TABPAGES(tp)
-	 for (wp = tp->tp_first_popupwin; wp != NULL; wp = wp->w_next)
-	     if (wp->w_id == id)
-	     {
-		 if (tpp != NULL)
-		     *tpp = tp;
-		 return wp;
-	     }
-    for (wp = first_popupwin; wp != NULL; wp = wp->w_next)
-	if (wp->w_id == id)
-	{
-	    if (tpp != NULL)
-		*tpp = tp;
-	    return wp;
-	}
-#endif
-
-    return NULL;
-}
-
-    int
-win_id2win(typval_T *argvars)
-{
-    win_T   *wp;
-    int	    nr = 1;
-    int	    id = tv_get_number(&argvars[0]);
-
-    FOR_ALL_WINDOWS(wp)
-    {
-	if (wp->w_id == id)
-	    return nr;
-	++nr;
-    }
-    return 0;
-}
-
-    void
-win_findbuf(typval_T *argvars, list_T *list)
-{
-    win_T	*wp;
-    tabpage_T   *tp;
-    int		bufnr = tv_get_number(&argvars[0]);
-
-    FOR_ALL_TAB_WINDOWS(tp, wp)
-	    if (wp->w_buffer->b_fnum == bufnr)
-		list_append_number(list, wp->w_id);
-}
-
-/*
- * Find window specified by "vp" in tabpage "tp".
- */
-    win_T *
-find_win_by_nr(
-    typval_T	*vp,
-    tabpage_T	*tp)	// NULL for current tab page
-{
-    win_T	*wp;
-    int		nr = (int)tv_get_number_chk(vp, NULL);
-
-    if (nr < 0)
-	return NULL;
-    if (nr == 0)
-	return curwin;
-
-    FOR_ALL_WINDOWS_IN_TAB(tp, wp)
-    {
-	if (nr >= LOWEST_WIN_ID)
-	{
-	    if (wp->w_id == nr)
-		return wp;
-	}
-	else if (--nr <= 0)
+	    return e_invarg;
+	color_cols[count++] = col - 1;  // 1-based to 0-based
+skip:
+	if (*s == NUL)
 	    break;
+	if (*s != ',')
+	    return e_invarg;
+	if (*++s == NUL)
+	    return e_invarg;  // illegal trailing comma as in "set cc=80,"
     }
-    if (nr >= LOWEST_WIN_ID)
-    {
-#ifdef FEAT_TEXT_PROP
-	// check tab-local popup windows
-	for (wp = tp->tp_first_popupwin; wp != NULL; wp = wp->w_next)
-	    if (wp->w_id == nr)
-		return wp;
-	// check global popup windows
-	for (wp = first_popupwin; wp != NULL; wp = wp->w_next)
-	    if (wp->w_id == nr)
-		return wp;
-#endif
-	return NULL;
-    }
-    return wp;
-}
 
-/*
- * Find a window: When using a Window ID in any tab page, when using a number
- * in the current tab page.
- */
-    win_T *
-find_win_by_nr_or_id(typval_T *vp)
-{
-    int	nr = (int)tv_get_number_chk(vp, NULL);
-
-    if (nr >= LOWEST_WIN_ID)
-	return win_id2wp(tv_get_number(vp));
-    return find_win_by_nr(vp, NULL);
-}
-
-/*
- * Find window specified by "wvp" in tabpage "tvp".
- * Returns the tab page in 'ptp'
- */
-    win_T *
-find_tabwin(
-    typval_T	*wvp,	// VAR_UNKNOWN for current window
-    typval_T	*tvp,	// VAR_UNKNOWN for current tab page
-    tabpage_T	**ptp)
-{
-    win_T	*wp = NULL;
-    tabpage_T	*tp = NULL;
-    long	n;
-
-    if (wvp->v_type != VAR_UNKNOWN)
-    {
-	if (tvp->v_type != VAR_UNKNOWN)
-	{
-	    n = (long)tv_get_number(tvp);
-	    if (n >= 0)
-		tp = find_tabpage(n);
-	}
-	else
-	    tp = curtab;
-
-	if (tp != NULL)
-	{
-	    wp = find_win_by_nr(wvp, tp);
-	    if (wp == NULL && wvp->v_type == VAR_NUMBER
-						&& wvp->vval.v_number != -1)
-		// A window with the specified number is not found
-		tp = NULL;
-	}
-    }
+    vim_free(wp->w_p_cc_cols);
+    if (count == 0)
+	wp->w_p_cc_cols = NULL;
     else
     {
-	wp = curwin;
-	tp = curtab;
-    }
-
-    if (ptp != NULL)
-	*ptp = tp;
-
-    return wp;
-}
-
-/*
- * Get the layout of the given tab page for winlayout().
- */
-    void
-get_framelayout(frame_T *fr, list_T *l, int outer)
-{
-    frame_T	*child;
-    list_T	*fr_list;
-    list_T	*win_list;
-
-    if (fr == NULL)
-	return;
-
-    if (outer)
-	// outermost call from f_winlayout()
-	fr_list = l;
-    else
-    {
-	fr_list = list_alloc();
-	if (fr_list == NULL)
-	    return;
-	list_append_list(l, fr_list);
-    }
-
-    if (fr->fr_layout == FR_LEAF)
-    {
-	if (fr->fr_win != NULL)
+	wp->w_p_cc_cols = ALLOC_MULT(int, count + 1);
+	if (wp->w_p_cc_cols != NULL)
 	{
-	    list_append_string(fr_list, (char_u *)"leaf", -1);
-	    list_append_number(fr_list, fr->fr_win->w_id);
+	    // sort the columns for faster usage on screen redraw inside
+	    // win_line()
+	    qsort(color_cols, count, sizeof(int), int_cmp);
+
+	    for (i = 0; i < count; ++i)
+		// skip duplicates
+		if (j == 0 || wp->w_p_cc_cols[j - 1] != color_cols[i])
+		    wp->w_p_cc_cols[j++] = color_cols[i];
+	    wp->w_p_cc_cols[j] = -1;  // end marker
 	}
     }
-    else
-    {
-	list_append_string(fr_list,
-	     fr->fr_layout == FR_ROW ?  (char_u *)"row" : (char_u *)"col", -1);
 
-	win_list = list_alloc();
-	if (win_list == NULL)
-	    return;
-	list_append_list(fr_list, win_list);
-	child = fr->fr_child;
-	while (child != NULL)
-	{
-	    get_framelayout(child, win_list, FALSE);
-	    child = child->fr_next;
-	}
-    }
+    return NULL;  // no error
 }
 #endif

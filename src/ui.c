@@ -479,7 +479,9 @@ ui_wait_for_chars_or_timer(
 	    // There is a pending job or channel, should return soon in order
 	    // to handle them ASAP.  Do check for input briefly.
 	    due_time = 10L;
+#  ifdef FEAT_JOB_CHANNEL
 	    brief_wait = TRUE;
+#  endif
 	}
 # endif
 	if (wait_func(due_time, interrupted, ignore_input))
@@ -3637,6 +3639,8 @@ mouse_find_win(int *rowp, int *colp, mouse_find_T popup UNUSED)
 	|| defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_MSWIN) \
 	|| defined(FEAT_GUI_PHOTON) || defined(FEAT_TERM_POPUP_MENU) \
 	|| defined(PROTO)
+# define NEED_VCOL2COL
+
 /*
  * Translate window coordinates to buffer position without any side effects
  */
@@ -3678,10 +3682,8 @@ get_fpos_of_mouse(pos_T *mpos)
 }
 #endif
 
-#if defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MAC) \
-	|| defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_MSWIN) \
-	|| defined(FEAT_GUI_PHOTON) || defined(FEAT_BEVAL) \
-	|| defined(FEAT_TERM_POPUP_MENU) || defined(PROTO)
+#if defined(NEED_VCOL2COL) || defined(FEAT_BEVAL) || defined(FEAT_TEXT_PROP) \
+	|| defined(PROTO)
 /*
  * Convert a virtual (screen) column to a character column.
  * The first column is one.

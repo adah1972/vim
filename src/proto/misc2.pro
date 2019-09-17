@@ -92,7 +92,6 @@ void update_mouseshape(int shape_idx);
 int vim_chdir(char_u *new_dir);
 int get_user_name(char_u *buf, int len);
 void sort_strings(char_u **files, int count);
-int pathcmp(const char *p, const char *q, int maxlen);
 int filewritable(char_u *fname);
 int get2c(FILE *fd);
 int get3c(FILE *fd);
@@ -103,8 +102,8 @@ int put_bytes(FILE *fd, long_u nr, int len);
 int put_time(FILE *fd, time_T the_time);
 void time_to_bytes(time_T the_time, char_u *buf);
 int has_non_ascii(char_u *s);
-void parse_queued_messages(void);
 int mch_parse_cmd(char_u *cmd, int use_shcf, char ***argv, int *argc);
 int build_argv_from_string(char_u *cmd, char ***argv, int *argc);
 int build_argv_from_list(list_T *l, char ***argv, int *argc);
+int get_special_pty_type(void);
 /* vim: set ft=c : */

@@ -307,11 +307,15 @@
 #define NUMBUFLEN 65
 
 // flags for vim_str2nr()
-#define STR2NR_BIN 1
-#define STR2NR_OCT 2
-#define STR2NR_HEX 4
+#define STR2NR_BIN 0x01
+#define STR2NR_OCT 0x02
+#define STR2NR_HEX 0x04
 #define STR2NR_ALL (STR2NR_BIN + STR2NR_OCT + STR2NR_HEX)
-#define STR2NR_FORCE 8 // only when ONE of the above is used
+#define STR2NR_NO_OCT (STR2NR_BIN + STR2NR_HEX)
+
+#define STR2NR_FORCE 0x80   // only when ONE of the above is used
+
+#define STR2NR_QUOTE 0x10   // ignore embedded single quotes
 
 /*
  * Shorthand for unsigned variables. Many systems, but not all, have u_char
@@ -680,6 +684,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define CONFIRM		0x800	// ":confirm" prompt
 #define SELECTMODE	0x1000	// Select mode, only for mappings
 #define TERMINAL        0x2000  // Terminal mode
+#define MODE_ALL	0xffff
 
 // all mode bits used for mapping
 #define MAP_ALL_MODES	(0x3f | SELECTMODE | TERMINAL)
@@ -832,10 +837,6 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 # define W_WINROW(wp)	(wp->w_winrow + wp->w_winbar_height)
 #else
 # define W_WINROW(wp)	(wp->w_winrow)
-#endif
-
-#ifdef NO_EXPANDPATH
-# define gen_expand_wildcards mch_expand_wildcards
 #endif
 
 // Values for the find_pattern_in_path() function args 'type' and 'action':
@@ -1314,6 +1315,8 @@ enum auto_event
     EVENT_QUICKFIXCMDPRE,	// before :make, :grep etc.
     EVENT_QUITPRE,		// before :quit
     EVENT_REMOTEREPLY,		// upon string reception from a remote vim
+    EVENT_SAFESTATE,		// going to wait for a character
+    EVENT_SAFESTATEAGAIN,	// still waiting for a character
     EVENT_SESSIONLOADPOST,	// after loading a session file
     EVENT_SHELLCMDPOST,		// after ":!cmd"
     EVENT_SHELLFILTERPOST,	// after ":1,2!cmd", ":w !cmd", ":r !cmd".

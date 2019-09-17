@@ -33,9 +33,12 @@ cmdhist.c	| command-line history
 debugger.c	| vim script debugger
 diff.c		| diff mode (vimdiff)
 eval.c		| expression evaluation
+evalbuffer.c	| buffer related built-in functions
 evalfunc.c	| built-in functions
 evalvars.c	| vim variables
+evalwindow.c	| window related built-in functions
 fileio.c	| reading and writing files
+filepath.c	| dealing with file names and paths
 findfile.c	| search for files in 'path'
 fold.c		| folding
 getchar.c	| getting characters and key mapping
@@ -51,6 +54,7 @@ menu.c		| menus
 message.c	| (error) messages
 ops.c		| handling operators ("d", "y", "p")
 option.c	| options
+optionstr.c	| handling string options
 popupmnu.c	| popup menu
 popupwin.c	| popup window
 profiler.c	| vim script profiler
