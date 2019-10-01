@@ -365,7 +365,7 @@ read_console_input(
 peek_console_input(
     HANDLE	    hInput,
     INPUT_RECORD    *lpBuffer,
-    DWORD	    nLength,
+    DWORD	    nLength UNUSED,
     LPDWORD	    lpEvents)
 {
     return read_console_input(hInput, lpBuffer, -1, lpEvents);
@@ -1006,7 +1006,7 @@ decode_key_event(
     WCHAR		*pch,
     WCHAR		*pch2,
     int			*pmodifiers,
-    BOOL		fDoPost)
+    BOOL		fDoPost UNUSED)
 {
     int i;
     const int nModifs = pker->dwControlKeyState & (SHIFT | ALT | CTRL);
@@ -4494,7 +4494,7 @@ mch_system_g(char *cmd, int options)
 
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
     static int
-mch_system_c(char *cmd, int options)
+mch_system_c(char *cmd, int options UNUSED)
 {
     int		ret;
     WCHAR	*wcmd;
@@ -4665,12 +4665,14 @@ mch_call_shell(
     {
 	char_u	*cmdbase = cmd;
 
-	// Skip a leading quote and (.
-	while (*cmdbase == '"' || *cmdbase == '(')
-	    ++cmdbase;
+	if (cmdbase != NULL)
+	    // Skip a leading quote and (.
+	    while (*cmdbase == '"' || *cmdbase == '(')
+		++cmdbase;
 
 	// Check the command does not begin with "start "
-	if (STRNICMP(cmdbase, "start", 5) != 0 || !VIM_ISWHITE(cmdbase[5]))
+	if (cmdbase == NULL
+		|| STRNICMP(cmdbase, "start", 5) != 0 || !VIM_ISWHITE(cmdbase[5]))
 	{
 	    // Use a terminal window to run the command in.
 	    x = mch_call_shell_terminal(cmd, options);
@@ -5837,7 +5839,7 @@ delete_lines(unsigned cLines)
 
 
 /*
- * Set the cursor position
+ * Set the cursor position to (x,y) (1-based).
  */
     static void
 gotoxy(
@@ -5847,14 +5849,25 @@ gotoxy(
     if (x < 1 || x > (unsigned)Columns || y < 1 || y > (unsigned)Rows)
 	return;
 
-    /* external cursor coords are 1-based; internal are 0-based */
-    g_coord.X = x - 1;
-    g_coord.Y = y - 1;
-
     if (!USE_VTP)
+    {
+	// external cursor coords are 1-based; internal are 0-based
+	g_coord.X = x - 1;
+	g_coord.Y = y - 1;
 	SetConsoleCursorPosition(g_hConOut, g_coord);
+    }
     else
+    {
+	// Move the cursor to the left edge of the screen to prevent screen
+	// destruction.  Insider build bug.
+	if (conpty_type == 3)
+	    vtp_printf("\033[%d;%dH", g_coord.Y + 1, 1);
+
 	vtp_printf("\033[%d;%dH", y, x);
+
+	g_coord.X = x - 1;
+	g_coord.Y = y - 1;
+    }
 }
 
 
@@ -6462,7 +6475,7 @@ mch_remove(char_u *name)
  * Check for an "interrupt signal": CTRL-break or CTRL-C.
  */
     void
-mch_breakcheck(int force)
+mch_breakcheck(int force UNUSED)
 {
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
 # ifdef VIMDLL
@@ -7224,7 +7237,7 @@ fix_arg_enc(void)
 }
 
     int
-mch_setenv(char *var, char *value, int x)
+mch_setenv(char *var, char *value, int x UNUSED)
 {
     char_u	*envbuf;
     WCHAR	*p;
@@ -7272,7 +7285,7 @@ mch_setenv(char *var, char *value, int x)
  * Confirm until this version.  Also the logic changes.
  * insider preview.
  */
-#define CONPTY_INSIDER_BUILD	    MAKE_VER(10, 0, 18898)
+#define CONPTY_INSIDER_BUILD	    MAKE_VER(10, 0, 18990)
 
 /*
  * Not stable now.

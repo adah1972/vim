@@ -933,7 +933,7 @@ ins_typebuf(
     init_typebuf();
     if (++typebuf.tb_change_cnt == 0)
 	typebuf.tb_change_cnt = 1;
-    state_no_longer_safe();
+    state_no_longer_safe("ins_typebuf()");
 
     addlen = (int)STRLEN(str);
 
@@ -1296,11 +1296,11 @@ free_typebuf(void)
     if (typebuf.tb_buf == typebuf_init)
 	internal_error("Free typebuf 1");
     else
-	vim_free(typebuf.tb_buf);
+	VIM_CLEAR(typebuf.tb_buf);
     if (typebuf.tb_noremap == noremapbuf_init)
 	internal_error("Free typebuf 2");
     else
-	vim_free(typebuf.tb_noremap);
+	VIM_CLEAR(typebuf.tb_noremap);
 }
 
 /*
@@ -1797,7 +1797,7 @@ vgetc(void)
     // Need to process the character before we know it's safe to do something
     // else.
     if (c != K_IGNORE)
-	state_no_longer_safe();
+	state_no_longer_safe("key typed");
 
     return c;
 }
@@ -2047,6 +2047,7 @@ parse_queued_messages(void)
     int	    i;
     int	    save_may_garbage_collect = may_garbage_collect;
     static int entered = 0;
+    int	    was_safe = get_was_safe_state();
 
     // Do not handle messages while redrawing, because it may cause buffers to
     // change or be wiped while they are being redrawn.
@@ -2102,8 +2103,8 @@ parse_queued_messages(void)
 
     // When not nested we'll go back to waiting for a typed character.  If it
     // was safe before then this triggers a SafeStateAgain autocommand event.
-    if (entered == 1)
-	leave_unsafe_state();
+    if (entered == 1 && was_safe)
+	may_trigger_safestateagain();
 
     may_garbage_collect = save_may_garbage_collect;
 

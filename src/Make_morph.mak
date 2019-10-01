@@ -29,6 +29,7 @@ SRC =	arabic.c						\
 	autocmd.c						\
 	blowfish.c						\
 	buffer.c						\
+	bufwrite.c						\
 	change.c						\
 	charset.c						\
 	cmdexpand.c						\
@@ -39,6 +40,8 @@ SRC =	arabic.c						\
 	dict.c							\
 	diff.c							\
 	digraph.c						\
+	drawline.c						\
+	drawscreen.c						\
 	edit.c							\
 	eval.c							\
 	evalbuffer.c						\
@@ -72,16 +75,18 @@ SRC =	arabic.c						\
 	message.c						\
 	misc1.c							\
 	misc2.c							\
+	mouse.c							\
 	move.c							\
 	normal.c						\
 	ops.c							\
 	option.c						\
 	optionstr.c						\
 	os_amiga.c						\
-	popupmnu.c						\
+	popupmenu.c						\
 	profiler.c						\
 	quickfix.c						\
 	regexp.c						\
+	register.c						\
 	scriptfile.c						\
 	screen.c						\
 	search.c						\
@@ -90,6 +95,7 @@ SRC =	arabic.c						\
 	sign.c							\
 	spell.c							\
 	spellfile.c						\
+	spellsuggest.c						\
 	syntax.c						\
 	tag.c							\
 	term.c							\

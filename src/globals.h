@@ -62,6 +62,31 @@ EXTERN int	Screen_mco INIT(= 0);		// value of p_mco used when
 EXTERN schar_T	*ScreenLines2 INIT(= NULL);
 
 /*
+ * Buffer for one screen line (characters and attributes).
+ */
+EXTERN schar_T	*current_ScreenLine INIT(= NULL);
+
+/*
+ * Last known cursor position.
+ * Positioning the cursor is reduced by remembering the last position.
+ * Mostly used by windgoto() and screen_char().
+ */
+EXTERN int	screen_cur_row INIT(= 0);
+EXTERN int	screen_cur_col INIT(= 0);
+
+#ifdef FEAT_SEARCH_EXTRA
+EXTERN match_T	screen_search_hl; // used for 'hlsearch' highlight matching
+#endif
+
+#ifdef FEAT_FOLDING
+EXTERN foldinfo_T win_foldinfo;	// info for 'foldcolumn'
+#endif
+
+// Flag that is set when drawing for a callback, not from the main command
+// loop.
+EXTERN int redrawing_for_callback INIT(= 0);
+
+/*
  * Indexes for tab page line:
  *	N > 0 for label of tab page N
  *	N == 0 for no label
@@ -753,6 +778,13 @@ EXTERN int	VIsual_mode INIT(= 'v');
 EXTERN int	redo_VIsual_busy INIT(= FALSE);
 				// TRUE when redoing Visual
 
+/*
+ * The Visual area is remembered for reselection.
+ */
+EXTERN int	resel_VIsual_mode INIT(= NUL);	// 'v', 'V', or Ctrl-V
+EXTERN linenr_T	resel_VIsual_line_count;	// number of lines
+EXTERN colnr_T	resel_VIsual_vcol;		// nr of cols or end col
+
 #ifdef FEAT_MOUSE
 /*
  * When pasting text with the middle mouse button in visual mode with
@@ -775,7 +807,6 @@ EXTERN int     did_ai INIT(= FALSE);
  */
 EXTERN colnr_T	ai_col INIT(= 0);
 
-#ifdef FEAT_COMMENTS
 /*
  * This is a character which will end a start-middle-end comment when typed as
  * the first character on a new line.  It is taken from the last character of
@@ -783,7 +814,6 @@ EXTERN colnr_T	ai_col INIT(= 0);
  * comment end in 'comments'.  It is only valid when did_ai is TRUE.
  */
 EXTERN int     end_comment_pending INIT(= NUL);
-#endif
 
 /*
  * This flag is set after a ":syncbind" to let the check_scrollbind() function
@@ -1702,4 +1732,10 @@ typedef int HINSTANCE;
 # endif
 EXTERN int ctrl_break_was_pressed INIT(= FALSE);
 EXTERN HINSTANCE g_hinst INIT(= NULL);
+#endif
+
+#if defined(FEAT_JOB_CHANNEL)
+EXTERN int did_repeated_msg INIT(= 0);
+# define REPEATED_MSG_LOOKING	    1
+# define REPEATED_MSG_SAFESTATE	    2
 #endif
