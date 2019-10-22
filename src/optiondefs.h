@@ -2655,7 +2655,7 @@ static struct vimoption options[] =
 			    (char_u *)&p_tf, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"ttymouse",    "ttym", P_STRING|P_NODEFAULT|P_NO_MKRC|P_VI_DEF,
-#if defined(FEAT_MOUSE) && (defined(UNIX) || defined(VMS))
+#if defined(UNIX) || defined(VMS)
 			    (char_u *)&p_ttym, PV_NONE,
 #else
 			    (char_u *)NULL, PV_NONE,
@@ -2969,7 +2969,9 @@ static struct vimoption options[] =
     p_term("t_ST", T_CST)
     p_term("t_Te", T_STE)
     p_term("t_te", T_TE)
+    p_term("t_TE", T_CTE)
     p_term("t_ti", T_TI)
+    p_term("t_TI", T_CTI)
     p_term("t_Ts", T_STS)
     p_term("t_ts", T_TS)
     p_term("t_u7", T_U7)

@@ -1134,18 +1134,6 @@ typedef struct
 } vimconv_T;
 
 /*
- * Structure used for reading from the viminfo file.
- */
-typedef struct
-{
-    char_u	*vir_line;	// text of the current line
-    FILE	*vir_fd;	// file descriptor
-    vimconv_T	vir_conv;	// encoding conversion
-    int		vir_version;	// viminfo version detected or -1
-    garray_T	vir_barlines;	// lines starting with |
-} vir_T;
-
-/*
  * Structure used for the command line history.
  */
 typedef struct hist_entry
@@ -1184,6 +1172,8 @@ struct mapblock
     char_u	*m_orig_str;	// rhs as entered by the user
     int		m_keylen;	// strlen(m_keys)
     int		m_mode;		// valid mode
+    int		m_simplified;	// m_keys was simplified, do not use this map
+				// if seenModifyOtherKeys is TRUE
     int		m_noremap;	// if non-zero no re-mapping for m_str
     char	m_silent;	// <silent> used, don't echo commands
     char	m_nowait;	// <nowait> used
@@ -3880,6 +3870,19 @@ typedef struct spat
     int		    no_scs;	// no smartcase for this pattern
     soffset_T	    off;
 } spat_T;
+
+/*
+ * Optional extra arguments for searchit().
+ */
+typedef struct
+{
+    linenr_T	sa_stop_lnum;	// stop after this line number when != 0
+#ifdef FEAT_RELTIME
+    proftime_T	*sa_tm;		// timeout limit or NULL
+    int		sa_timed_out;	// set when timed out
+#endif
+    int		sa_wrapped;	// search wrapped around
+} searchit_arg_T;
 
 #define WRITEBUFSIZE	8192	// size of normal write buffer
 
