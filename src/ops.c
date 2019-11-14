@@ -912,6 +912,8 @@ op_delete(oparg_T *oap)
 		oap->end = curwin->w_cursor;
 		curwin->w_cursor = oap->start;
 	    }
+	    if (has_mbyte)
+		mb_adjust_opend(oap);
 	}
 
 	if (oap->line_count == 1)	/* delete characters within one line */
@@ -1997,7 +1999,8 @@ do_join(
 	if (insert_space && t > 0)
 	{
 	    curr = skipwhite(curr);
-	    if (*curr != ')' && currsize != 0 && endcurr1 != TAB
+	    if (*curr != NUL && *curr != ')'
+		    && currsize != 0 && endcurr1 != TAB
 		    && (!has_format_option(FO_MBYTE_JOIN)
 			|| (mb_ptr2char(curr) < 0x100 && endcurr1 < 0x100))
 		    && (!has_format_option(FO_MBYTE_JOIN2)
@@ -3634,9 +3637,11 @@ cursor_pos_info(dict_T *dict)
 	    {
 #ifdef FEAT_LINEBREAK
 		char_u * saved_sbr = p_sbr;
+		char_u * saved_w_sbr = curwin->w_p_sbr;
 
 		/* Make 'sbr' empty for a moment to get the correct size. */
 		p_sbr = empty_option;
+		curwin->w_p_sbr = empty_option;
 #endif
 		oparg.is_VIsual = 1;
 		oparg.block_mode = TRUE;
@@ -3645,6 +3650,7 @@ cursor_pos_info(dict_T *dict)
 					  &oparg.start_vcol, &oparg.end_vcol);
 #ifdef FEAT_LINEBREAK
 		p_sbr = saved_sbr;
+		curwin->w_p_sbr = saved_w_sbr;
 #endif
 		if (curwin->w_curswant == MAXCOL)
 		    oparg.end_vcol = MAXCOL;

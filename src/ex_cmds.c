@@ -3867,6 +3867,7 @@ do_sub(exarg_T *eap)
 	    linenr_T	sub_firstlnum;	/* nr of first sub line */
 #ifdef FEAT_TEXT_PROP
 	    int		apc_flags = APC_SAVE_FOR_UNDO | APC_SUBSTITUTE;
+	    colnr_T	total_added =  0;
 #endif
 
 	    /*
@@ -3945,6 +3946,11 @@ do_sub(exarg_T *eap)
 		    nmatch -= regmatch.startpos[0].lnum;
 		    VIM_CLEAR(sub_firstline);
 		}
+
+		// Match might be after the last line for "\n\zs" matching at
+		// the end of the last line.
+		if (lnum > curbuf->b_ml.ml_line_count)
+		    break;
 
 		if (sub_firstline == NULL)
 		{
@@ -4279,13 +4285,18 @@ do_sub(exarg_T *eap)
 #ifdef FEAT_TEXT_PROP
 		    if (curbuf->b_has_textprop)
 		    {
+			int bytes_added = sublen - 1 - (regmatch.endpos[0].col
+						   - regmatch.startpos[0].col);
+
 			// When text properties are changed, need to save for
 			// undo first, unless done already.
-			if (adjust_prop_columns(lnum, regmatch.startpos[0].col,
-			      sublen - 1 - (regmatch.endpos[0].col
-						   - regmatch.startpos[0].col),
-								    apc_flags))
+			if (adjust_prop_columns(lnum,
+					total_added + regmatch.startpos[0].col,
+						       bytes_added, apc_flags))
 			    apc_flags &= ~APC_SAVE_FOR_UNDO;
+			// Offset for column byte number of the text property
+			// in the resulting buffer afterwards.
+			total_added += bytes_added;
 		    }
 #endif
 		}
@@ -4949,7 +4960,7 @@ prepare_tagpreview(
 	{
 	    wp = popup_find_preview_window();
 	    if (wp != NULL)
-		popup_set_wantpos_cursor(wp, wp->w_minwidth);
+		popup_set_wantpos_cursor(wp, wp->w_minwidth, NULL);
 	}
 	else if (use_popup != USEPOPUP_NONE)
 	{
@@ -4960,6 +4971,9 @@ prepare_tagpreview(
 		    popup_show(wp);
 		else
 		    popup_hide(wp);
+		// When the popup moves or resizes it may reveal part of
+		// another window.  TODO: can this be done more efficiently?
+		redraw_all_later(NOT_VALID);
 	    }
 	}
 	else

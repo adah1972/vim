@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.1.  Last change: 2019 Oct 13
+*eval.txt*	For Vim version 8.1.  Last change: 2019 Nov 06
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1662,6 +1662,10 @@ PREDEFINED VIM VARIABLES			*vim-variable* *v:var* *v:*
 								*E963*
 Some variables can be set by the user, but the type cannot be changed.
 
+					*v:argv* *argv-variable*
+v:argv		The command line arguments Vim was invoked with.  This is a
+		list of strings.  The first item is the Vim command.
+
 					*v:beval_col* *beval_col-variable*
 v:beval_col	The number of the column, over which the mouse pointer is.
 		This is the byte index in the |v:beval_lnum| line.
@@ -1952,11 +1956,15 @@ v:mouse_winid	Window ID for a mouse click obtained with |getchar()|.
 
 					*v:mouse_lnum* *mouse_lnum-variable*
 v:mouse_lnum	Line number for a mouse click obtained with |getchar()|.
+		Also used for a click in a popup window when the filter is
+		invoked.
 		This is the text line number, not the screen line number.  The
 		value is zero when there was no mouse button click.
 
 					*v:mouse_col* *mouse_col-variable*
 v:mouse_col	Column number for a mouse click obtained with |getchar()|.
+		Also used for a click in a popup window when the filter is
+		invoked.
 		This is the screen column number, like with |virtcol()|.  The
 		value is zero when there was no mouse button click.
 
@@ -3034,6 +3042,7 @@ argv([{nr} [, {winid}])
 		the whole |arglist| is returned.
 
 		The {winid} argument specifies the window ID, see |argc()|.
+		For the Vim command line arguments see |v:argv|.
 
 
 assert_ functions are documented here: |assert-functions-details|
@@ -4242,8 +4251,8 @@ expandcmd({expr})					*expandcmd()*
 		Expand special items in {expr} like what is done for an Ex
 		command such as `:edit`.  This expands special keywords, like
 		with |expand()|, and environment variables, anywhere in
-		{expr}.  Returns the expanded string.
-		Example: >
+		{expr}.  "~user" and "~/path" are only expanded at the start.
+		Returns the expanded string.  Example: >
 			:echo expandcmd('make %<.o')
 
 <		Can also be used as a |method|: >
@@ -4778,6 +4787,10 @@ getbufinfo([{dict}])
 			changed		TRUE if the buffer is modified.
 			changedtick	number of changes made to the buffer.
 			hidden		TRUE if the buffer is hidden.
+			lastused	timestamp in seconds, like
+					|localtime()|, when the buffer was
+					last used.
+					{only with the |+viminfo| feature}
 			listed		TRUE if the buffer is listed.
 			lnum		current line number in buffer.
 			loaded		TRUE if the buffer is loaded.
@@ -6492,8 +6505,8 @@ listener_add({callback} [, {buf}])			*listener_add()*
 		    a:bufnr	the buffer that was changed
 		    a:start	first changed line number
 		    a:end	first line number below the change
-		    a:added	total number of lines added, negative if lines
-				were deleted
+		    a:added	number of lines added, negative if lines were
+				deleted
 		    a:changes	a List of items with details about the changes
 
 		Example: >
@@ -7506,7 +7519,7 @@ pum_getpos()						*pum_getpos()*
 			row		top screen row (0 first row)
 			col		leftmost screen column (0 first col)
 			size		total nr of items
-			scrollbar	|TRUE| if visible
+			scrollbar	|TRUE| if scrollbar is visible
 
 		The values are the same as in |v:event| during
 		|CompleteChanged|.

@@ -325,7 +325,7 @@ typedef unsigned short	short_u;
 typedef unsigned int	int_u;
 
 // Older systems do not have support for long long
-// use a typedef instead of hadcoded long long
+// use a typedef instead of hard-coded long long
 #ifdef HAVE_NO_LONG_LONG
  typedef long long_long_T;
  typedef long unsigned long_long_u_T;
@@ -624,14 +624,21 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 // Values for w_popup_flags.
 #define POPF_IS_POPUP	0x01	// this is a popup window
 #define POPF_HIDDEN	0x02	// popup is not displayed
-#define POPF_HANDLED	0x04	// popup was just redrawn or filtered
-#define POPF_CURSORLINE	0x08	// popup is highlighting at the cursorline
-#define POPF_ON_CMDLINE	0x10	// popup overlaps command line
-#define POPF_DRAG	0x20	// popup can be moved by dragging
-#define POPF_RESIZE	0x40	// popup can be resized by dragging
-#define POPF_MAPPING	0x80	// mapping keys
-#define POPF_INFO	0x100	// used for info of popup menu
-#define POPF_INFO_MENU	0x200	// align info popup with popup menu
+#define POPF_CURSORLINE	0x04	// popup is highlighting at the cursorline
+#define POPF_ON_CMDLINE	0x08	// popup overlaps command line
+#define POPF_DRAG	0x10	// popup can be moved by dragging
+#define POPF_RESIZE	0x20	// popup can be resized by dragging
+#define POPF_MAPPING	0x40	// mapping keys
+#define POPF_INFO	0x80	// used for info of popup menu
+#define POPF_INFO_MENU	0x100	// align info popup with popup menu
+#define POPF_POSINVERT	0x200	// vertical position can be inverted
+
+// flags used in w_popup_handled
+#define POPUP_HANDLED_1	    0x01    // used by mouse_find_win()
+#define POPUP_HANDLED_2	    0x02    // used by popup_do_filter()
+#define POPUP_HANDLED_3	    0x04    // used by popup_check_cursor_pos()
+#define POPUP_HANDLED_4	    0x08    // used by may_update_popup_mask()
+#define POPUP_HANDLED_5	    0x10    // used by update_popups()
 
 #ifdef FEAT_TEXT_PROP
 # define WIN_IS_POPUP(wp) ((wp)->w_popup_flags != 0)
@@ -811,6 +818,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define WILD_ALLLINKS		    0x200
 #define WILD_IGNORE_COMPLETESLASH   0x400
 #define WILD_NOERROR		    0x800  // sets EW_NOERROR
+#define WILD_BUFLASTUSED	    0x1000
 
 // Flags for expand_wildcards()
 #define EW_DIR		0x01	// include directory names
@@ -1341,6 +1349,7 @@ enum auto_event
     EVENT_TABNEW,		// when entering a new tab page
     EVENT_TERMCHANGED,		// after changing 'term'
     EVENT_TERMINALOPEN,		// after a terminal buffer was created
+    EVENT_TERMINALWINOPEN,	// after a terminal buffer was created and entering its window
     EVENT_TERMRESPONSE,		// after setting "v:termresponse"
     EVENT_TEXTCHANGED,		// text was modified not in Insert mode
     EVENT_TEXTCHANGEDI,         // text was modified in Insert mode
@@ -1380,6 +1389,8 @@ typedef enum
     , HLF_M	    // "--More--" message
     , HLF_CM	    // Mode (e.g., "-- INSERT --")
     , HLF_N	    // line number for ":number" and ":#" commands
+    , HLF_LNA	    // LineNrAbove
+    , HLF_LNB	    // LineNrBelow
     , HLF_CLN	    // current line number
     , HLF_R	    // return to continue message and yes/no questions
     , HLF_S	    // status lines
@@ -1421,8 +1432,8 @@ typedef enum
 // The HL_FLAGS must be in the same order as the HLF_ enums!
 // When changing this also adjust the default for 'highlight'.
 #define HL_FLAGS {'8', '~', '@', 'd', 'e', 'h', 'i', 'l', 'm', 'M', \
-		  'n', 'N', 'r', 's', 'S', 'c', 't', 'v', 'V', 'w', 'W', \
-		  'f', 'F', 'A', 'C', 'D', 'T', '-', '>', \
+		  'n', 'a', 'b', 'N', 'r', 's', 'S', 'c', 't', 'v', 'V', \
+		  'w', 'W', 'f', 'F', 'A', 'C', 'D', 'T', '-', '>', \
 		  'B', 'P', 'R', 'L', \
 		  '+', '=', 'x', 'X', '*', '#', '_', '!', '.', 'o', 'q', \
 		  'z', 'Z'}
@@ -1986,7 +1997,8 @@ typedef int sock_T;
 #define VV_EVENT	90
 #define VV_VERSIONLONG	91
 #define VV_ECHOSPACE	92
-#define VV_LEN		93	// number of v: vars
+#define VV_ARGV		93
+#define VV_LEN		94	// number of v: vars
 
 // used for v_number in VAR_SPECIAL
 #define VVAL_FALSE	0L

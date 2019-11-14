@@ -870,13 +870,13 @@ getcount:
 	 */
 	if (cp != NULL)
 	{
-#ifdef CURSOR_SHAPE
 	    if (repl)
 	    {
 		State = REPLACE;	/* pretend Replace mode */
+#ifdef CURSOR_SHAPE
 		ui_cursor_shape();	/* show different cursor shape */
-	    }
 #endif
+	    }
 	    if (lang && curbuf->b_p_iminsert == B_IMODE_LMAP)
 	    {
 		/* Allow mappings defined with ":lmap". */
@@ -913,9 +913,7 @@ getcount:
 	    }
 	    p_smd = save_smd;
 #endif
-#ifdef CURSOR_SHAPE
 	    State = NORMAL_BUSY;
-#endif
 #ifdef FEAT_CMDL_INFO
 	    need_flushbuf |= add_to_showcmd(*cp);
 #endif
@@ -1770,13 +1768,16 @@ clear_showcmd(void)
 	{
 # ifdef FEAT_LINEBREAK
 	    char_u *saved_sbr = p_sbr;
+	    char_u *saved_w_sbr = curwin->w_p_sbr;
 
 	    /* Make 'sbr' empty for a moment to get the correct size. */
 	    p_sbr = empty_option;
+	    curwin->w_p_sbr = empty_option;
 # endif
 	    getvcols(curwin, &curwin->w_cursor, &VIsual, &leftcol, &rightcol);
 # ifdef FEAT_LINEBREAK
 	    p_sbr = saved_sbr;
+	    curwin->w_p_sbr = saved_w_sbr;
 # endif
 	    sprintf((char *)showcmd_buf, "%ldx%ld", lines,
 					      (long)(rightcol - leftcol + 1));
@@ -2579,8 +2580,8 @@ nv_screengo(oparg_T *oap, int dir, long dist)
 	validate_virtcol();
 	virtcol = curwin->w_virtcol;
 #if defined(FEAT_LINEBREAK)
-	if (virtcol > (colnr_T)width1 && *p_sbr != NUL)
-	    virtcol -= vim_strsize(p_sbr);
+	if (virtcol > (colnr_T)width1 && *get_showbreak_value(curwin) != NUL)
+	    virtcol -= vim_strsize(get_showbreak_value(curwin));
 #endif
 
 	if (virtcol > curwin->w_curswant
@@ -5977,6 +5978,24 @@ nv_g_cmd(cmdarg_T *cap)
 	    curwin->w_valid &= ~VALID_WCOL;
 	}
 	curwin->w_set_curswant = TRUE;
+	break;
+
+    case 'M':
+	{
+	    char_u  *ptr = ml_get_curline();
+
+	    oap->motion_type = MCHAR;
+	    oap->inclusive = FALSE;
+	    if (has_mbyte)
+		i = mb_string2cells(ptr, (int)STRLEN(ptr));
+	    else
+		i = (int)STRLEN(ptr);
+	    if (cap->count0 > 0 && cap->count0 <= 100)
+		coladvance((colnr_T)(i * cap->count0 / 100));
+	    else
+		coladvance((colnr_T)(i / 2));
+	    curwin->w_set_curswant = TRUE;
+	}
 	break;
 
     case '_':

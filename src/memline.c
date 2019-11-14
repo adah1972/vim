@@ -2318,7 +2318,7 @@ swapfile_unchanged(char_u *fname)
 	ret = FALSE;
 
 #if defined(UNIX) || defined(MSWIN)
-    // process must known and not be running
+    // process must be known and not be running
     pid = char_to_long(b0.b0_pid);
     if (pid == 0L || mch_process_running(pid))
 	ret = FALSE;
@@ -2663,7 +2663,10 @@ errorret:
 		/* Avoid giving this message for a recursive call, may happen
 		 * when the GUI redraws part of the text. */
 		++recursive;
-		siemsg(_("E316: ml_get: cannot find line %ld"), lnum);
+		get_trans_bufname(buf);
+		shorten_dir(NameBuff);
+		siemsg(_("E316: ml_get: cannot find line %ld in buffer %d %s"),
+						  lnum, buf->b_fnum, NameBuff);
 		--recursive;
 	    }
 	    goto errorret;

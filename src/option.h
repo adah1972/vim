@@ -338,6 +338,7 @@
 #define WIM_FULL	0x01
 #define WIM_LONGEST	0x02
 #define WIM_LIST	0x04
+#define WIM_BUFLASTUSED	0x08
 
 // arguments for can_bs()
 #define BS_INDENT	'i'	// "Indent"
@@ -813,6 +814,9 @@ EXTERN char_u	*p_ruf;		// 'rulerformat'
 EXTERN char_u	*p_pp;		// 'packpath'
 EXTERN char_u	*p_rtp;		// 'runtimepath'
 EXTERN long	p_sj;		// 'scrolljump'
+#if defined(MSWIN) && defined(FEAT_GUI)
+EXTERN int	p_scf;		// 'scrollfocus'
+#endif
 EXTERN long	p_so;		// 'scrolloff'
 EXTERN char_u	*p_sbo;		// 'scrollopt'
 EXTERN char_u	*p_sections;	// 'sections'
@@ -1266,6 +1270,9 @@ enum
     , WV_CUL
     , WV_CULOPT
     , WV_CC
+#endif
+#ifdef FEAT_LINEBREAK
+    , WV_SBR
 #endif
 #ifdef FEAT_STL_OPT
     , WV_STL

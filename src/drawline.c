@@ -121,9 +121,9 @@ get_sign_display_info(
 #endif
        )
     {
-	text_sign = (sattr->text != NULL) ? sattr->typenr : 0;
+	text_sign = (sattr->sat_text != NULL) ? sattr->sat_typenr : 0;
 # ifdef FEAT_SIGN_ICONS
-	icon_sign = (sattr->icon != NULL) ? sattr->typenr : 0;
+	icon_sign = (sattr->sat_icon != NULL) ? sattr->sat_typenr : 0;
 	if (gui.in_use && icon_sign != 0)
 	{
 	    // Use the image in this position.
@@ -158,7 +158,7 @@ get_sign_display_info(
 # endif
 	    if (text_sign != 0)
 	    {
-		*pp_extra = sattr->text;
+		*pp_extra = sattr->sat_text;
 		if (*pp_extra != NULL)
 		{
 		    if (nrcol)
@@ -176,7 +176,7 @@ get_sign_display_info(
 		    *c_finalp = NUL;
 		    *n_extrap = (int)STRLEN(*pp_extra);
 		}
-		*char_attrp = sattr->texthl;
+		*char_attrp = sattr->sat_texthl;
 	    }
     }
 }
@@ -597,7 +597,8 @@ win_line(
 	    }
 
 	    // Check if the character under the cursor should not be inverted
-	    if (!highlight_match && lnum == curwin->w_cursor.lnum && wp == curwin
+	    if (!highlight_match && lnum == curwin->w_cursor.lnum
+								&& wp == curwin
 #ifdef FEAT_GUI
 		    && !gui.in_use
 #endif
@@ -670,14 +671,14 @@ win_line(
 #endif
 
 #ifdef FEAT_SIGNS
-    sign_present = buf_get_signattrs(wp->w_buffer, lnum, &sattr);
+    sign_present = buf_get_signattrs(wp, lnum, &sattr);
 #endif
 
 #ifdef LINE_ATTR
 # ifdef FEAT_SIGNS
     // If this line has a sign with line highlighting set line_attr.
     if (sign_present)
-	line_attr = sattr.linehl;
+	line_attr = sattr.sat_linehl;
 # endif
 # if defined(FEAT_QUICKFIX)
     // Highlight the current line in the quickfix window.
@@ -750,8 +751,6 @@ win_line(
 	win_attr = wcr_attr;
 	area_highlighting = TRUE;
     }
-    if (vi_attr != 0 && win_attr != 0)
-	vi_attr = hl_combine_attr(win_attr, vi_attr);
 
 #ifdef FEAT_TEXT_PROP
     if (WIN_IS_POPUP(wp))
@@ -1126,13 +1125,23 @@ win_line(
 				  || wp->w_p_culopt_flags & CULOPT_LINE))
 			char_attr = hl_combine_attr(wcr_attr, HL_ATTR(HLF_CLN));
 #endif
+		      if (wp->w_p_rnu && lnum < wp->w_cursor.lnum
+						      && HL_ATTR(HLF_LNA) != 0)
+			  // Use LineNrAbove
+			  char_attr = hl_combine_attr(wcr_attr,
+							     HL_ATTR(HLF_LNA));
+		      if (wp->w_p_rnu && lnum > wp->w_cursor.lnum
+						      && HL_ATTR(HLF_LNB) != 0)
+			  // Use LineNrBelow
+			  char_attr = hl_combine_attr(wcr_attr,
+							     HL_ATTR(HLF_LNB));
 		    }
 		}
 	    }
 
 #ifdef FEAT_LINEBREAK
 	    if (wp->w_p_brisbr && draw_state == WL_BRI - 1
-					     && n_extra == 0 && *p_sbr != NUL)
+			    && n_extra == 0 && *get_showbreak_value(wp) != NUL)
 		// draw indent after showbreak value
 		draw_state = WL_BRI;
 	    else if (wp->w_p_brisbr && draw_state == WL_SBR && n_extra == 0)
@@ -1164,6 +1173,7 @@ win_line(
 # endif
 		    p_extra = NULL;
 		    c_extra = ' ';
+		    c_final = NUL;
 		    n_extra = get_breakindent_win(wp,
 				       ml_get_buf(wp->w_buffer, lnum, FALSE));
 		    // Correct end of highlighted area for 'breakindent',
@@ -1177,6 +1187,8 @@ win_line(
 #if defined(FEAT_LINEBREAK) || defined(FEAT_DIFF)
 	    if (draw_state == WL_SBR - 1 && n_extra == 0)
 	    {
+		char_u *sbr;
+
 		draw_state = WL_SBR;
 # ifdef FEAT_DIFF
 		if (filler_todo > 0)
@@ -1202,16 +1214,17 @@ win_line(
 		}
 # endif
 # ifdef FEAT_LINEBREAK
-		if (*p_sbr != NUL && need_showbreak)
+		sbr = get_showbreak_value(wp);
+		if (*sbr != NUL && need_showbreak)
 		{
 		    // Draw 'showbreak' at the start of each broken line.
-		    p_extra = p_sbr;
+		    p_extra = sbr;
 		    c_extra = NUL;
 		    c_final = NUL;
-		    n_extra = (int)STRLEN(p_sbr);
+		    n_extra = (int)STRLEN(sbr);
 		    char_attr = HL_ATTR(HLF_AT);
 		    need_showbreak = FALSE;
-		    vcol_sbr = vcol + MB_CHARLEN(p_sbr);
+		    vcol_sbr = vcol + MB_CHARLEN(sbr);
 		    // Correct end of highlighted area for 'showbreak',
 		    // required when 'linebreak' is also set.
 		    if (tocol == vcol)
@@ -1433,10 +1446,6 @@ win_line(
 			prev_syntax_attr = syntax_attr;
 		    }
 
-		    // combine syntax attribute with 'wincolor'
-		    if (syntax_attr != 0 && win_attr != 0)
-			syntax_attr = hl_combine_attr(win_attr, syntax_attr);
-
 		    if (did_emsg)
 		    {
 			wp->w_s->b_syn_error = TRUE;
@@ -1464,6 +1473,16 @@ win_line(
 # endif
 		}
 	    }
+# ifdef FEAT_TEXT_PROP
+	    // Combine text property highlight into syntax highlight.
+	    if (text_prop_type != NULL)
+	    {
+		if (text_prop_combine)
+		    syntax_attr = hl_combine_attr(syntax_attr, text_prop_attr);
+		else
+		    syntax_attr = text_prop_attr;
+	    }
+# endif
 #endif
 
 	    // Decide which of the highlight attributes to use.
@@ -1473,28 +1492,16 @@ win_line(
 	    {
 		char_attr = hl_combine_attr(line_attr, area_attr);
 # ifdef FEAT_SYN_HL
-		if (syntax_attr != 0)
-		    char_attr = hl_combine_attr(syntax_attr, char_attr);
+		char_attr = hl_combine_attr(syntax_attr, char_attr);
 # endif
 	    }
 	    else if (search_attr != 0)
 	    {
 		char_attr = hl_combine_attr(line_attr, search_attr);
 # ifdef FEAT_SYN_HL
-		if (syntax_attr != 0)
-		    char_attr = hl_combine_attr(syntax_attr, char_attr);
+		char_attr = hl_combine_attr(syntax_attr, char_attr);
 # endif
 	    }
-# ifdef FEAT_TEXT_PROP
-	    else if (text_prop_type != NULL)
-	    {
-		char_attr = hl_combine_attr(line_attr != 0
-						? line_attr
-						: syntax_attr != 0
-						    ? syntax_attr
-						    : win_attr, text_prop_attr);
-	    }
-# endif
 	    else if (line_attr != 0 && ((fromcol == -10 && tocol == MAXCOL)
 				|| vcol < fromcol || vcol_prev < fromcol_prev
 				|| vcol >= tocol))
@@ -1502,11 +1509,10 @@ win_line(
 		// Use line_attr when not in the Visual or 'incsearch' area
 		// (area_attr may be 0 when "noinvcur" is set).
 # ifdef FEAT_SYN_HL
-		if (syntax_attr != 0)
-		    char_attr = hl_combine_attr(syntax_attr, line_attr);
-		else
+		char_attr = hl_combine_attr(syntax_attr, line_attr);
+# else
+		char_attr = line_attr;
 # endif
-		    char_attr = line_attr;
 		attr_pri = FALSE;
 	    }
 #else
@@ -1518,27 +1524,22 @@ win_line(
 	    else
 	    {
 		attr_pri = FALSE;
-#ifdef FEAT_TEXT_PROP
-		if (text_prop_type != NULL)
-		{
-		    if (text_prop_combine)
-			char_attr = hl_combine_attr(
-						  syntax_attr, text_prop_attr);
-		    else
-			char_attr = hl_combine_attr(
-						  win_attr, text_prop_attr);
-		}
-		else
-#endif
 #ifdef FEAT_SYN_HL
-		    char_attr = syntax_attr;
+		char_attr = syntax_attr;
 #else
-		    char_attr = 0;
+		char_attr = 0;
 #endif
 	    }
 	}
-	if (char_attr == 0)
-	    char_attr = win_attr;
+
+	// combine attribute with 'wincolor'
+	if (win_attr != 0)
+	{
+	    if (char_attr == 0)
+		char_attr = win_attr;
+	    else
+		char_attr = hl_combine_attr(win_attr, char_attr);
+	}
 
 	// Get the next character to put on the screen.
 
@@ -1635,9 +1636,8 @@ win_line(
 #ifdef FEAT_LINEBREAK
 	    int c0;
 #endif
+	    VIM_CLEAR(p_extra_free);
 
-	    if (p_extra_free != NULL)
-		VIM_CLEAR(p_extra_free);
 	    // Get a character from the line itself.
 	    c = *ptr;
 #ifdef FEAT_LINEBREAK
@@ -2014,10 +2014,12 @@ win_line(
 		    int tab_len = 0;
 		    long vcol_adjusted = vcol; // removed showbreak length
 #ifdef FEAT_LINEBREAK
+		    char_u *sbr = get_showbreak_value(wp);
+
 		    // only adjust the tab_len, when at the first column
 		    // after the showbreak value was drawn
-		    if (*p_sbr != NUL && vcol == vcol_sbr && wp->w_p_wrap)
-			vcol_adjusted = vcol - MB_CHARLEN(p_sbr);
+		    if (*sbr != NUL && vcol == vcol_sbr && wp->w_p_wrap)
+			vcol_adjusted = vcol - MB_CHARLEN(sbr);
 #endif
 		    // tab amount depends on current column
 #ifdef FEAT_VARTABS
@@ -3129,4 +3131,3 @@ win_line(
     vim_free(p_extra_free);
     return row;
 }
-

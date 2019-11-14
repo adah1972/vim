@@ -988,6 +988,10 @@ curs_columns(
 	/* long line wrapping, adjust curwin->w_wrow */
 	if (curwin->w_wcol >= curwin->w_width)
 	{
+#ifdef FEAT_LINEBREAK
+	    char_u *sbr;
+#endif
+
 	    /* this same formula is used in validate_cursor_col() */
 	    n = (curwin->w_wcol - curwin->w_width) / width + 1;
 	    curwin->w_wcol -= n * width;
@@ -997,8 +1001,9 @@ curs_columns(
 	    /* When cursor wraps to first char of next line in Insert
 	     * mode, the 'showbreak' string isn't shown, backup to first
 	     * column */
-	    if (*p_sbr && *ml_get_cursor() == NUL
-		    && curwin->w_wcol == (int)vim_strsize(p_sbr))
+	    sbr = get_showbreak_value(curwin);
+	    if (*sbr && *ml_get_cursor() == NUL
+				    && curwin->w_wcol == (int)vim_strsize(sbr))
 		curwin->w_wcol = 0;
 #endif
 	}
@@ -1217,7 +1222,7 @@ textpos2screenpos(
 	    col -= rowoff * width;
 	}
 	col -= wp->w_leftcol;
-	if (col >= width)
+	if (col >= wp->w_width)
 	    col = -1;
 	if (col >= 0)
 	    coloff = col - scol + wp->w_wincol + 1;

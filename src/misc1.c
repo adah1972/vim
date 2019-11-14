@@ -985,6 +985,8 @@ prompt_for_number(int *mouse_used)
 	if (msg_row > 0)
 	    cmdline_row = msg_row - 1;
 	need_wait_return = FALSE;
+	msg_didany = FALSE;
+	msg_didout = FALSE;
     }
     else
 	cmdline_row = save_cmdline_row;
@@ -2575,4 +2577,35 @@ path_with_url(char_u *fname)
     for (p = fname; isalpha(*p); ++p)
 	;
     return path_is_url(p);
+}
+
+/*
+ * Put timestamp "tt" in "buf[buflen]" in a nice format.
+ */
+    void
+add_time(char_u *buf, size_t buflen, time_t tt)
+{
+#ifdef HAVE_STRFTIME
+    struct tm	tmval;
+    struct tm	*curtime;
+
+    if (vim_time() - tt >= 100)
+    {
+	curtime = vim_localtime(&tt, &tmval);
+	if (vim_time() - tt < (60L * 60L * 12L))
+	    /* within 12 hours */
+	    (void)strftime((char *)buf, buflen, "%H:%M:%S", curtime);
+	else
+	    /* longer ago */
+	    (void)strftime((char *)buf, buflen, "%Y/%m/%d %H:%M:%S", curtime);
+    }
+    else
+#endif
+    {
+	long seconds = (long)(vim_time() - tt);
+
+	vim_snprintf((char *)buf, buflen,
+		NGETTEXT("%ld second ago", "%ld seconds ago", seconds),
+		seconds);
+    }
 }

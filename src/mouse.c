@@ -2012,7 +2012,7 @@ nv_mousescroll(cmdarg_T *cap)
 	if (term_use_loop())
 	    // This window is a terminal window, send the mouse event there.
 	    // Set "typed" to FALSE to avoid an endless loop.
-	    send_keys_to_term(curbuf->b_term, cap->cmdchar, FALSE);
+	    send_keys_to_term(curbuf->b_term, cap->cmdchar, mod_mask, FALSE);
 	else
 # endif
 	if (mod_mask & (MOD_MASK_SHIFT | MOD_MASK_CTRL))
@@ -2921,8 +2921,8 @@ mouse_find_win(int *rowp, int *colp, mouse_find_T popup UNUSED)
 
     if (popup != IGNORE_POPUP)
     {
-	popup_reset_handled();
-	while ((wp = find_next_popup(TRUE)) != NULL)
+	popup_reset_handled(POPUP_HANDLED_1);
+	while ((wp = find_next_popup(TRUE, POPUP_HANDLED_1)) != NULL)
 	{
 	    if (*rowp >= wp->w_winrow && *rowp < wp->w_winrow + popup_height(wp)
 		    && *colp >= wp->w_wincol
