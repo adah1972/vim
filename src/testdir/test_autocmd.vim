@@ -1713,10 +1713,12 @@ func Test_nocatch_wipe_all_buffers()
 endfunc
 
 func Test_nocatch_wipe_dummy_buffer()
-  " Nasty autocommand: wipe buffer on any event.
-  au * x bwipe
-  call assert_fails('lv½ /x', 'E480')
-  au!
+  if has('quickfix')
+    " Nasty autocommand: wipe buffer on any event.
+    au * x bwipe
+    call assert_fails('lv½ /x', 'E480')
+    au!
+  endif
 endfunc
 
 function s:Before_test_dirchanged()
@@ -2251,9 +2253,9 @@ func Test_autocmd_SafeState()
   call WaitForAssert({-> assert_match('^xxxx', term_getline(buf, 6))}, 1000)
 
   call term_sendkeys(buf, ":let g:again = ''\<CR>:call CallTimer()\<CR>")
-  call term_wait(buf)
+  call term_wait(buf, 50)
   call term_sendkeys(buf, ":\<CR>")
-  call term_wait(buf)
+  call term_wait(buf, 50)
   call term_sendkeys(buf, ":echo g:again\<CR>")
   call WaitForAssert({-> assert_match('xtx', term_getline(buf, 6))}, 1000)
 
@@ -2291,9 +2293,45 @@ func Test_autocmd_CmdWinEnter()
 endfunc
 
 func Test_autocmd_was_using_freed_memory()
+  CheckFeature quickfix
+
   pedit xx
   n x
   au WinEnter * quit
   split
   au! WinEnter
+endfunc
+
+func Test_BufWrite_lockmarks()
+  edit! Xtest
+  call setline(1, ['a', 'b', 'c', 'd'])
+
+  " :lockmarks preserves the marks
+  call SetChangeMarks(2, 3)
+  lockmarks write
+  call assert_equal([2, 3], [line("'["), line("']")])
+
+  " *WritePre autocmds get the correct line range, but lockmarks preserves the
+  " original values for the user
+  augroup lockmarks
+    au!
+    au BufWritePre,FilterWritePre * call assert_equal([1, 4], [line("'["), line("']")])
+    au FileWritePre * call assert_equal([3, 4], [line("'["), line("']")])
+  augroup END
+
+  lockmarks write
+  call assert_equal([2, 3], [line("'["), line("']")])
+
+  if executable('cat')
+    lockmarks %!cat
+    call assert_equal([2, 3], [line("'["), line("']")])
+  endif
+
+  lockmarks 3,4write Xtest2
+  call assert_equal([2, 3], [line("'["), line("']")])
+
+  au! lockmarks
+  augroup! lockmarks
+  call delete('Xtest')
+  call delete('Xtest2')
 endfunc

@@ -5,12 +5,16 @@ source screendump.vim
 
 " SEGV occurs in older versions.  (At least 7.4.1748 or older)
 func Test_ptag_with_notagstack()
+  CheckFeature quickfix
+
   set notagstack
   call assert_fails('ptag does_not_exist_tag_name', 'E426')
   set tagstack&vim
 endfunc
 
 func Test_cancel_ptjump()
+  CheckFeature quickfix
+
   set tags=Xtags
   call writefile(["!_TAG_FILE_ENCODING\tutf-8\t//",
         \ "word\tfile1\tcmd1",
@@ -70,6 +74,8 @@ func Test_duplicate_tagjump()
 endfunc
 
 func Test_tagjump_switchbuf()
+  CheckFeature quickfix
+
   set tags=Xtags
   call writefile(["!_TAG_FILE_ENCODING\tutf-8\t//",
         \ "second\tXfile1\t2",
@@ -524,6 +530,30 @@ func Test_tselect()
   call delete('Xtags')
   call delete('Xtest.c')
   call delete('XTest_tselect')
+endfunc
+
+func Test_tagline()
+  call writefile([
+	\ 'provision	Xtest.py	/^    def provision(self, **kwargs):$/;"	m	line:1	language:Python class:Foo',
+	\ 'provision	Xtest.py	/^    def provision(self, **kwargs):$/;"	m	line:3	language:Python class:Bar',
+	\], 'Xtags')
+  call writefile([
+	\ '    def provision(self, **kwargs):',
+	\ '        pass',
+	\ '    def provision(self, **kwargs):',
+	\ '        pass',
+	\], 'Xtest.py')
+
+  set tags=Xtags
+
+  1tag provision
+  call assert_equal(line('.'), 1)
+  2tag provision
+  call assert_equal(line('.'), 3)
+
+  call delete('Xtags')
+  call delete('Xtest.py')
+  set tags&
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

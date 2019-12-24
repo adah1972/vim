@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.1.  Last change: 2019 Nov 06
+*eval.txt*	For Vim version 8.2.  Last change: 2019 Dec 17
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -42,7 +42,8 @@ Profiling is documented at |profiling|.
 						*E712* *E896* *E897* *E899*
 There are ten types of variables:
 
-Number		A 32 or 64 bit signed number.  |expr-number| *Number*
+							*Number* *Integer*
+Number		A 32 or 64 bit signed number.  |expr-number|
 		64-bit Numbers are available only when compiled with the
 		|+num64| feature.
 		Examples:  -123  0x10  0177  0b1011
@@ -488,7 +489,7 @@ as a key.
 To avoid having to put quotes around every key the #{} form can be used.  This
 does require the key to consist only of ASCII letters, digits, '-' and '_'.
 Example: >
-	let mydict = #{zero: 0, one_key: 1, two-key: 2, 333: 3}
+	:let mydict = #{zero: 0, one_key: 1, two-key: 2, 333: 3}
 Note that 333 here is the string "333".  Empty keys are not possible with #{}.
 
 A value can be any expression.  Using a Dictionary for a value creates a
@@ -1956,15 +1957,11 @@ v:mouse_winid	Window ID for a mouse click obtained with |getchar()|.
 
 					*v:mouse_lnum* *mouse_lnum-variable*
 v:mouse_lnum	Line number for a mouse click obtained with |getchar()|.
-		Also used for a click in a popup window when the filter is
-		invoked.
 		This is the text line number, not the screen line number.  The
 		value is zero when there was no mouse button click.
 
 					*v:mouse_col* *mouse_col-variable*
 v:mouse_col	Column number for a mouse click obtained with |getchar()|.
-		Also used for a click in a popup window when the filter is
-		invoked.
 		This is the screen column number, like with |virtcol()|.  The
 		value is zero when there was no mouse button click.
 
@@ -2484,6 +2481,7 @@ getline({lnum})			String	line {lnum} of current buffer
 getline({lnum}, {end})		List	lines {lnum} to {end} of current buffer
 getloclist({nr} [, {what}])	List	list of location list items
 getmatches([{win}])		List	list of current matches
+getmousepos()			Dict	last known mouse position
 getpid()			Number	process ID of Vim
 getpos({expr})			List	position of cursor, mark, etc.
 getqflist([{what}])		List	list of quickfix items
@@ -2534,6 +2532,7 @@ inputrestore()			Number	restore typeahead
 inputsave()			Number	save and clear typeahead
 inputsecret({prompt} [, {text}]) String	like input() but hiding the text
 insert({object}, {item} [, {idx}]) List	insert {item} in {object} [before {idx}]
+interrupt()			none	interrupt script execution
 invert({expr})			Number	bitwise invert
 isdirectory({directory})	Number	|TRUE| if {directory} is a directory
 isinf({expr})			Number	determine if {expr} is infinity value
@@ -2650,6 +2649,7 @@ pumvisible()			Number	whether popup menu is visible
 pyeval({expr})			any	evaluate |Python| expression
 py3eval({expr})			any	evaluate |python3| expression
 pyxeval({expr})			any	evaluate |python_x| expression
+rand([{expr}])			Number	get pseudo-random number
 range({expr} [, {max} [, {stride}]])
 				List	items from {expr} to {max}
 readdir({dir} [, {expr}])	List	file names in {dir} selected by {expr}
@@ -2670,7 +2670,7 @@ remote_read({serverid} [, {timeout}])
 remote_send({server}, {string} [, {idvar}])
 				String	send key sequence
 remote_startserver({name})	none	become server {name}
-remove({list}, {idx} [, {end}])	any/List 
+remove({list}, {idx} [, {end}])	any/List
 					remove items {idx}-{end} from {list}
 remove({blob}, {idx} [, {end}])	Number/Blob
 					remove bytes {idx}-{end} from {blob}
@@ -2763,6 +2763,7 @@ spellsuggest({word} [, {max} [, {capital}]])
 split({expr} [, {pat} [, {keepempty}]])
 				List	make |List| from {pat} separated {expr}
 sqrt({expr})			Float	square root of {expr}
+srand([{expr}])			List	get seed for |rand()|
 state([{what}])			String	current state of Vim
 str2float({expr})		Float	convert String to Float
 str2list({expr} [, {utf8}])	List	convert each character of {expr} to
@@ -2773,7 +2774,7 @@ strchars({expr} [, {skipcc}])	Number	character length of the String {expr}
 strcharpart({str}, {start} [, {len}])
 				String	{len} characters of {str} at {start}
 strdisplaywidth({expr} [, {col}]) Number display length of the String {expr}
-strftime({format} [, {time}])	String	time in specified format
+strftime({format} [, {time}])	String	format time with a specified format
 strgetchar({str}, {index})	Number	get char {index} from {str}
 stridx({haystack}, {needle} [, {start}])
 				Number	index of {needle} in {haystack}
@@ -2781,6 +2782,8 @@ string({expr})			String	String representation of {expr} value
 strlen({expr})			Number	length of the String {expr}
 strpart({str}, {start} [, {len}])
 				String	{len} characters of {str} at {start}
+strptime({format}, {timestring})
+				Number	Convert {timestring} to unix timestamp
 strridx({haystack}, {needle} [, {start}])
 				Number	last index of {needle} in {haystack}
 strtrans({expr})		String	translate string to make it printable
@@ -4793,6 +4796,8 @@ getbufinfo([{dict}])
 					{only with the |+viminfo| feature}
 			listed		TRUE if the buffer is listed.
 			lnum		current line number in buffer.
+			linecount	number of lines in the buffer (only
+					valid when loaded)
 			loaded		TRUE if the buffer is loaded.
 			name		full path to the file in the buffer.
 			signs		list of signs placed in the buffer.
@@ -4922,8 +4927,9 @@ getchar([expr])						*getchar()*
 
 		When the user clicks a mouse button, the mouse event will be
 		returned.  The position can then be found in |v:mouse_col|,
-		|v:mouse_lnum|, |v:mouse_winid| and |v:mouse_win|.  This
-		example positions the mouse as it would normally happen: >
+		|v:mouse_lnum|, |v:mouse_winid| and |v:mouse_win|.
+		|getmousepos()| can also be used.  This example positions the
+		mouse as it would normally happen: >
 			let c = getchar()
 			if c == "\<LeftMouse>" && v:mouse_win > 0
 			  exe v:mouse_win . "wincmd w"
@@ -5333,6 +5339,35 @@ getmatches([{win}])					*getmatches()*
 			'pattern': 'FIXME', 'priority': 10, 'id': 2}] >
 			:unlet m
 <
+getmousepos()						*getmousepos()*
+		Returns a Dictionary with the last known position of the
+		mouse.  This can be used in a mapping for a mouse click or in
+		a filter of a popup window.  The items are:
+			screenrow	screen row
+			screencol	screen column
+			winid		Window ID of the click
+			winrow		row inside "winid"
+			wincol		column inside "winid"
+			line		text line inside "winid"
+			column		text column inside "winid"
+		All numbers are 1-based.
+
+		If not over a window, e.g. when in the command line, then only
+		"screenrow" and "screencol" are valid, the others are zero.
+
+		When on the status line below a window or the vertical
+		separater right of a window, the "line" and "column" values
+		are zero.
+
+		When the position is after the text then "column" is the
+		length of the text in bytes.
+
+		If the mouse is over a popup window then that window is used.
+
+
+		When using |getchar()| the Vim variables |v:mouse_lnum|,
+		|v:mouse_col| and |v:mouse_winid| also provide these values.
+
 							*getpid()*
 getpid()	Return a Number which is the process ID of the Vim process.
 		On Unix and MS-Windows this is a unique number, until Vim
@@ -5607,7 +5642,7 @@ getwininfo([{winid}])					*getwininfo()*
 			terminal	1 if a terminal window
 					{only with the +terminal feature}
 			tabnr		tab page number
-			topline		first displayed buffer line 
+			topline		first displayed buffer line
 			variables	a reference to the dictionary with
 					window-local variables
 			width		window width
@@ -5625,7 +5660,7 @@ getwininfo([{winid}])					*getwininfo()*
 
 getwinpos([{timeout}])					*getwinpos()*
 		The result is a list with two numbers, the result of
-		getwinposx() and getwinposy() combined:
+		|getwinposx()| and |getwinposy()| combined:
 			[x-pos, y-pos]
 		{timeout} can be used to specify how long to wait in msec for
 		a response from the terminal.  When omitted 100 msec is used.
@@ -6152,6 +6187,19 @@ insert({object}, {item} [, {idx}])			*insert()*
 		Can also be used as a |method|: >
 			mylist->insert(item)
 
+interrupt()						*interrupt()*
+		Interrupt script execution.  It works more or less like the
+		user typing CTRL-C, most commands won't execute and control
+		returns to the user.  This is useful to abort execution
+		from lower down, e.g. in an autocommand.  Example: >
+		:function s:check_typoname(file)
+		:   if fnamemodify(a:file, ':t') == '['
+		:       echomsg 'Maybe typo'
+		:       call interrupt()
+		:   endif
+		:endfunction
+		:au BufWritePre * call s:check_typoname(expand('<amatch>'))
+
 invert({expr})						*invert()*
 		Bitwise invert.  The argument is converted to a number.  A
 		List, Dict or Float argument causes an error.  Example: >
@@ -6587,7 +6635,7 @@ listener_remove({id})					*listener_remove()*
 
 localtime()						*localtime()*
 		Return the current time, measured as seconds since 1st Jan
-		1970.  See also |strftime()| and |getftime()|.
+		1970.  See also |strftime()|, |strptime()| and |getftime()|.
 
 
 log({expr})						*log()*
@@ -7076,9 +7124,9 @@ mkdir({name} [, {path} [, {prot}]])
 
 		There is no error if the directory already exists and the "p"
 		flag is passed (since patch 8.0.1708).  However, without the
-		"p" option the call will fail.  
+		"p" option the call will fail.
 
-		The function result is a Number, which is 1 if the call was 
+		The function result is a Number, which is 1 if the call was
 		successful or 0 if the directory creation failed or partly
 		failed.
 
@@ -7593,6 +7641,21 @@ range({expr} [, {max} [, {stride}]])				*range()*
 <
 		Can also be used as a |method|: >
 			GetExpr()->range()
+<
+
+rand([{expr}])						*rand()*
+		Return a pseudo-random Number generated with an xoshiro128**
+		algorithm using seed {expr}.  The returned number is 32 bits,
+		also on 64 bits systems, for consistency.
+		{expr} can be initialized by |srand()| and will be updated by
+		rand().  If {expr} is omitted, an internal seed value is used
+		and updated.
+
+		Examples: >
+			:echo rand()
+			:let seed = srand()
+			:echo rand(seed)
+			:echo rand(seed) % 16  " random number 0 - 15
 <
 							*readdir()*
 readdir({directory} [, {expr}])
@@ -9087,6 +9150,20 @@ sqrt({expr})						*sqrt()*
 		{only available when compiled with the |+float| feature}
 
 
+srand([{expr}])						*srand()*
+		Initialize seed used by |rand()|:
+		- If {expr} is not given, seed values are initialized by
+		  reading from /dev/urandom, if possible, or using time(NULL)
+		  a.k.a. epoch time otherwise; this only has second accuracy.
+		- If {expr} is given it must be a Number.  It is used to
+		  initialize the seed values.  This is useful for testing or
+		  when a predictable sequence is intended.
+
+		Examples: >
+			:let seed = srand()
+			:let seed = srand(userinput)
+			:echo rand(seed)
+
 state([{what}])						*state()*
 		Return a string which contains characters indicating the
 		current state.  Mostly useful in callbacks that want to do
@@ -9240,7 +9317,7 @@ strftime({format} [, {time}])				*strftime()*
 		{format} depends on your system, thus this is not portable!
 		See the manual page of the C function strftime() for the
 		format.  The maximum length of the result is 80 characters.
-		See also |localtime()| and |getftime()|.
+		See also |localtime()|, |getftime()| and |strptime()|.
 		The language can be changed with the |:language| command.
 		Examples: >
 		  :echo strftime("%c")		   Sun Apr 27 11:49:23 1997
@@ -9340,6 +9417,34 @@ strpart({src}, {start} [, {len}])			*strpart()*
 <
 		Can also be used as a |method|: >
 			GetText()->strpart(5)
+
+strptime({format}, {timestring})				*strptime()*
+		The result is a Number, which is a unix timestamp representing
+		the date and time in {timestring}, which is expected to match
+		the format specified in {format}.
+
+		The accepted {format} depends on your system, thus this is not
+		portable!  See the manual page of the C function strptime()
+		for the format.  Especially avoid "%c".  The value of $TZ also
+		matters.
+
+		If the {timestring} cannot be parsed with {format} zero is
+		returned.  If you do not know the format of {timestring} you
+		can try different {format} values until you get a non-zero
+		result.
+
+		See also |strftime()|.
+		Examples: >
+		  :echo strptime("%Y %b %d %X", "1997 Apr 27 11:49:23")
+<		  862156163 >
+		  :echo strftime("%c", strptime("%y%m%d %T", "970427 11:53:55"))
+<		  Sun Apr 27 11:53:55 1997 >
+		  :echo strftime("%c", strptime("%Y%m%d%H%M%S", "19970427115355") + 3600)
+<		  Sun Apr 27 12:53:55 1997
+
+		Not available on all systems.  To check use: >
+			:if exists("*strptime")
+
 
 strridx({haystack}, {needle} [, {start}])			*strridx()*
 		The result is a Number, which gives the byte index in
@@ -9650,7 +9755,7 @@ system({expr} [, {input}])				*system()* *E677*
 		The command executed is constructed using several options:
 	'shell' 'shellcmdflag' 'shellxquote' {expr} 'shellredir' {tmp} 'shellxquote'
 		({tmp} is an automatically generated file name).
-		For Unix and OS/2 braces are put around {expr} to allow for
+		For Unix, braces are put around {expr} to allow for
 		concatenated commands.
 
 		The command will be executed in "cooked" mode, so that a
@@ -10573,7 +10678,7 @@ eval			Compiled with expression evaluation support.  Always
 ex_extra		|+ex_extra| (always true)
 extra_search		Compiled with support for |'incsearch'| and
 			|'hlsearch'|
-farsi			Compiled with Farsi support |farsi|.
+farsi			Support for Farsi was removed |farsi|.
 file_in_path		Compiled with support for |gf| and |<cfile>|
 filterpipe		When 'shelltemp' is off pipes are used for shell
 			read/write/filter commands
@@ -10699,6 +10804,7 @@ ttyout			output is a terminal (tty)
 unix			Unix version of Vim. *+unix*
 unnamedplus		Compiled with support for "unnamedplus" in 'clipboard'
 user_commands		User-defined commands. (always true)
+vartabs			Compiled with variable tabstop support |'vartabstop'|.
 vcon			Win32: Virtual console support is working, can use
 			'termguicolors'. Also see |+vtp|.
 vertsplit		Compiled with vertically split windows |:vsplit|.
@@ -11558,21 +11664,6 @@ text...
 			Unlock the internal variable {name}.  Does the
 			opposite of |:lockvar|.
 
-							*:eval*
-:eval {expr}		Evaluate {expr} and discard the result.  Example: >
-				:eval Getlist()->Filter()->append('$')
-
-<			The expression is supposed to have a side effect,
-			since the resulting value is not used.  In the example
-			the `append()` call appends the List with text to the
-			buffer.  This is similar to `:call` but works with any
-			expression.
-
-			The command can be shortened to `:ev` or `:eva`, but
-			these are hard to recognize and therefore not to be
-			used.
-
-
 :if {expr1}			*:if* *:end* *:endif* *:en* *E171* *E579* *E580*
 :en[dif]		Execute the commands until the next matching ":else"
 			or ":endif" if {expr1} evaluates to non-zero.
@@ -11859,6 +11950,21 @@ text...
 			And to get a beep: >
 		:exe "normal \<Esc>"
 <
+							*:eval*
+:eval {expr}		Evaluate {expr} and discard the result.  Example: >
+				:eval Getlist()->Filter()->append('$')
+
+<			The expression is supposed to have a side effect,
+			since the resulting value is not used.  In the example
+			the `append()` call appends the List with text to the
+			buffer.  This is similar to `:call` but works with any
+			expression.
+
+			The command can be shortened to `:ev` or `:eva`, but
+			these are hard to recognize and therefore not to be
+			used.
+
+
 							*:exe* *:execute*
 :exe[cute] {expr1} ..	Executes the string that results from the evaluation
 			of {expr1} as an Ex command.

@@ -1316,13 +1316,16 @@ op_yank(oparg_T *oap, int deleting, int mess)
 	}
     }
 
-    // Set "'[" and "']" marks.
-    curbuf->b_op_start = oap->start;
-    curbuf->b_op_end = oap->end;
-    if (yanktype == MLINE && !oap->block_mode)
+    if (!cmdmod.lockmarks)
     {
-	curbuf->b_op_start.col = 0;
-	curbuf->b_op_end.col = MAXCOL;
+	// Set "'[" and "']" marks.
+	curbuf->b_op_start = oap->start;
+	curbuf->b_op_end = oap->end;
+	if (yanktype == MLINE && !oap->block_mode)
+	{
+	    curbuf->b_op_start.col = 0;
+	    curbuf->b_op_end.col = MAXCOL;
+	}
     }
 
 #ifdef FEAT_CLIPBOARD
@@ -1474,6 +1477,8 @@ do_put(
     char_u	*insert_string = NULL;
     int		allocated = FALSE;
     long	cnt;
+    pos_T	orig_start = curbuf->b_op_start;
+    pos_T	orig_end = curbuf->b_op_end;
 
 #ifdef FEAT_CLIPBOARD
     // Adjust register name for "unnamed" in 'clipboard'.
@@ -1663,21 +1668,19 @@ do_put(
     {
 	if (gchar_cursor() == TAB)
 	{
+	    int viscol = getviscol();
+	    int ts = curbuf->b_p_ts;
+
 	    // Don't need to insert spaces when "p" on the last position of a
 	    // tab or "P" on the first position.
+	    if (dir == FORWARD ?
 #ifdef FEAT_VARTABS
-	    int viscol = getviscol();
-	    if (dir == FORWARD
-		    ? tabstop_padding(viscol, curbuf->b_p_ts,
-						    curbuf->b_p_vts_array) != 1
+		    tabstop_padding(viscol, ts, curbuf->b_p_vts_array) != 1
+#else
+		    ts - (viscol % ts) != 1
+#endif
 		    : curwin->w_cursor.coladd > 0)
 		coladvance_force(viscol);
-#else
-	    if (dir == FORWARD
-		    ? (int)curwin->w_cursor.coladd < curbuf->b_p_ts - 1
-						: curwin->w_cursor.coladd > 0)
-		coladvance_force(getviscol());
-#endif
 	    else
 		curwin->w_cursor.coladd = 0;
 	}
@@ -2100,6 +2103,11 @@ error:
     curwin->w_set_curswant = TRUE;
 
 end:
+    if (cmdmod.lockmarks)
+    {
+	curbuf->b_op_start = orig_start;
+	curbuf->b_op_end = orig_end;
+    }
     if (allocated)
 	vim_free(insert_string);
     if (regname == '=')
@@ -2864,9 +2872,9 @@ write_reg_contents_ex(
 	p = vim_strnsave(str, (int)len);
 	if (p == NULL)
 	    return;
-	if (must_append)
+	if (must_append && expr_line != NULL)
 	{
-	    s = concat_str(get_expr_line_src(), p);
+	    s = concat_str(expr_line, p);
 	    vim_free(p);
 	    p = s;
 	}

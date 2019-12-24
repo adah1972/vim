@@ -559,10 +559,12 @@ lookup_color(int idx, int foreground, int *boldp)
     {
 	// t_Co is 8: use the 8 colors table
 #if defined(__QNXNTO__)
-	color = color_numbers_8_qansi[idx];
-#else
-	color = color_numbers_8[idx];
+	// On qnx, the 8 & 16 color arrays are the same
+	if (STRNCMP(T_NAME, "qansi", 5) == 0)
+	    color = color_numbers_16[idx];
+	else
 #endif
+	    color = color_numbers_8[idx];
 	if (foreground)
 	{
 	    // set/reset bold attribute to get light foreground
@@ -1135,13 +1137,6 @@ do_highlight(
 	    else
 	    {
 		int bold = MAYBE;
-
-#if defined(__QNXNTO__)
-		static int *color_numbers_8_qansi = color_numbers_8;
-		// On qnx, the 8 & 16 color arrays are the same
-		if (STRNCMP(T_NAME, "qansi", 5) == 0)
-		    color_numbers_8_qansi = color_numbers_16;
-#endif
 
 		// reduce calls to STRICMP a bit, it can be slow
 		off = TOUPPER_ASC(*arg);
@@ -3378,7 +3373,7 @@ highlight_changed(void)
 	     * bold-underlined.
 	     */
 	    attr = 0;
-	    for ( ; *p && *p != ','; ++p)	    // parse upto comma
+	    for ( ; *p && *p != ','; ++p)	    // parse up to comma
 	    {
 		if (VIM_ISWHITE(*p))		    // ignore white space
 		    continue;
@@ -4060,7 +4055,7 @@ next_search_hl(
     linenr_T	l;
     colnr_T	matchcol;
     long	nmatched;
-    int		save_called_emsg = called_emsg;
+    int		called_emsg_before = called_emsg;
 
     // for :{range}s/pat only highlight inside the range
     if (lnum < search_first_line || lnum > search_last_line)
@@ -4086,7 +4081,6 @@ next_search_hl(
      * Repeat searching for a match until one is found that includes "mincol"
      * or none is found in this line.
      */
-    called_emsg = FALSE;
     for (;;)
     {
 # ifdef FEAT_RELTIME
@@ -4148,7 +4142,7 @@ next_search_hl(
 	    if (regprog_is_copy)
 		cur->match.regprog = cur->hl.rm.regprog;
 
-	    if (called_emsg || got_int || timed_out)
+	    if (called_emsg > called_emsg_before || got_int || timed_out)
 	    {
 		// Error while handling regexp: stop using this regexp.
 		if (shl == search_hl)
@@ -4181,9 +4175,6 @@ next_search_hl(
 	    break;			// useful match found
 	}
     }
-
-    // Restore called_emsg for assert_fails().
-    called_emsg = save_called_emsg;
 }
 
 /*

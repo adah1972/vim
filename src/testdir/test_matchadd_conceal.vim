@@ -298,12 +298,14 @@ func Test_cursor_column_in_concealed_line_after_window_scroll()
   END
   call writefile(lines, 'Xcolesearch')
   let buf = RunVimInTerminal('Xcolesearch', {})
+  call term_wait(buf, 100)
 
   " Jump to something that is beyond the bottom of the window,
   " so there's a scroll down.
   call term_sendkeys(buf, ":so %\<CR>")
+  call term_wait(buf, 100)
   call term_sendkeys(buf, "/expr\<CR>")
-  call term_wait(buf)
+  call term_wait(buf, 100)
 
   " Are the concealed parts of the current line really hidden?
   let cursor_row = term_scrape(buf, '.')->map({_, e -> e.chars})->join('')
@@ -315,4 +317,32 @@ func Test_cursor_column_in_concealed_line_after_window_scroll()
 
   call StopVimInTerminal(buf)
   call delete('Xcolesearch')
+endfunc
+
+func Test_cursor_column_in_concealed_line_after_leftcol_change()
+  CheckRunVimInTerminal
+
+  " Test for issue #5214 fix.
+  let lines =<< trim END
+    0put = 'ab' .. repeat('-', &columns) .. 'c'
+    call matchadd('Conceal', '-')
+    set nowrap ss=0 cole=3 cocu=n
+  END
+  call writefile(lines, 'Xcurs-columns')
+  let buf = RunVimInTerminal('-S Xcurs-columns', {})
+
+  " Go to the end of the line (3 columns beyond the end of the screen).
+  " Horizontal scroll would center the cursor in the screen line, but conceal
+  " makes it go to screen column 1.
+  call term_sendkeys(buf, "$")
+  call term_wait(buf)
+
+  " Are the concealed parts of the current line really hidden?
+  call WaitForAssert({-> assert_equal('c', term_getline(buf, '.'))})
+
+  " BugFix check: Is the window's cursor column properly updated for conceal?
+  call assert_equal(1, term_getcursor(buf)[1])
+
+  call StopVimInTerminal(buf)
+  call delete('Xcurs-columns')
 endfunc
