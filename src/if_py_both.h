@@ -19,7 +19,8 @@ static char_u e_py_systemexit[]	= "E880: Can't handle SystemExit of %s exception
 typedef int Py_ssize_t;  // Python 2.4 and earlier don't have this type.
 #endif
 
-#define ENC_OPT ((char *)p_enc)
+// Use values that are known to work, others may make Vim crash.
+#define ENC_OPT (enc_utf8 ? "utf-8" : enc_dbcs ? "euc-jp" : (char *)p_enc)
 #define DOPY_FUNC "_vim_pydo"
 
 static const char *vim_special_path = "_vim_path_";
@@ -843,23 +844,24 @@ VimToPython(typval_T *our_tv, int depth, PyObject *lookup_dict)
 	    }
 	}
     }
-    else if (our_tv->v_type == VAR_SPECIAL)
+    else if (our_tv->v_type == VAR_BOOL)
     {
 	if (our_tv->vval.v_number == VVAL_FALSE)
 	{
 	    ret = Py_False;
 	    Py_INCREF(ret);
 	}
-	else if (our_tv->vval.v_number == VVAL_TRUE)
+	else
 	{
 	    ret = Py_True;
 	    Py_INCREF(ret);
 	}
-	else
-	{
-	    Py_INCREF(Py_None);
-	    ret = Py_None;
-	}
+	return ret;
+    }
+    else if (our_tv->v_type == VAR_SPECIAL)
+    {
+	Py_INCREF(Py_None);
+	ret = Py_None;
 	return ret;
     }
     else if (our_tv->v_type == VAR_BLOB)
@@ -6388,6 +6390,7 @@ ConvertToPyObject(typval_T *tv)
 	case VAR_JOB:
 	    Py_INCREF(Py_None);
 	    return Py_None;
+	case VAR_BOOL:
 	case VAR_SPECIAL:
 	    switch (tv->vval.v_number)
 	    {

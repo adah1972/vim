@@ -911,6 +911,7 @@ vim_main2(void)
     void
 common_init(mparm_T *paramp)
 {
+    estack_init();
     cmdline_init();
 
     (void)mb_init();	// init mb_bytelen_tab[] to ones
@@ -3085,17 +3086,20 @@ exe_pre_commands(mparm_T *parmp)
     char_u	**cmds = parmp->pre_commands;
     int		cnt = parmp->n_pre_commands;
     int		i;
+    ESTACK_CHECK_DECLARATION
 
     if (cnt > 0)
     {
 	curwin->w_cursor.lnum = 0; // just in case..
-	sourcing_name = (char_u *)_("pre-vimrc command line");
+	estack_push(ETYPE_ARGS, (char_u *)_("pre-vimrc command line"), 0);
+	ESTACK_CHECK_SETUP
 # ifdef FEAT_EVAL
 	current_sctx.sc_sid = SID_CMDARG;
 # endif
 	for (i = 0; i < cnt; ++i)
 	    do_cmdline_cmd(cmds[i]);
-	sourcing_name = NULL;
+	ESTACK_CHECK_NOW
+	estack_pop();
 # ifdef FEAT_EVAL
 	current_sctx.sc_sid = 0;
 # endif
@@ -3110,6 +3114,7 @@ exe_pre_commands(mparm_T *parmp)
 exe_commands(mparm_T *parmp)
 {
     int		i;
+    ESTACK_CHECK_DECLARATION
 
     /*
      * We start commands on line 0, make "vim +/pat file" match a
@@ -3119,7 +3124,8 @@ exe_commands(mparm_T *parmp)
     msg_scroll = TRUE;
     if (parmp->tagname == NULL && curwin->w_cursor.lnum <= 1)
 	curwin->w_cursor.lnum = 0;
-    sourcing_name = (char_u *)"command line";
+    estack_push(ETYPE_ARGS, (char_u *)"command line", 0);
+    ESTACK_CHECK_SETUP
 #ifdef FEAT_EVAL
     current_sctx.sc_sid = SID_CARG;
     current_sctx.sc_seq = 0;
@@ -3130,7 +3136,8 @@ exe_commands(mparm_T *parmp)
 	if (parmp->cmds_tofree[i])
 	    vim_free(parmp->commands[i]);
     }
-    sourcing_name = NULL;
+    ESTACK_CHECK_NOW
+    estack_pop();
 #ifdef FEAT_EVAL
     current_sctx.sc_sid = 0;
 #endif
@@ -3336,20 +3343,17 @@ process_env(
     int		is_viminit) // when TRUE, called for VIMINIT
 {
     char_u	*initstr;
-    char_u	*save_sourcing_name;
-    linenr_T	save_sourcing_lnum;
 #ifdef FEAT_EVAL
     sctx_T	save_current_sctx;
 #endif
+    ESTACK_CHECK_DECLARATION
 
     if ((initstr = mch_getenv(env)) != NULL && *initstr != NUL)
     {
 	if (is_viminit)
 	    vimrc_found(NULL, NULL);
-	save_sourcing_name = sourcing_name;
-	save_sourcing_lnum = sourcing_lnum;
-	sourcing_name = env;
-	sourcing_lnum = 0;
+	estack_push(ETYPE_ENV, env, 0);
+	ESTACK_CHECK_SETUP
 #ifdef FEAT_EVAL
 	save_current_sctx = current_sctx;
 	current_sctx.sc_sid = SID_ENV;
@@ -3358,8 +3362,9 @@ process_env(
 	current_sctx.sc_version = 1;
 #endif
 	do_cmdline_cmd(initstr);
-	sourcing_name = save_sourcing_name;
-	sourcing_lnum = save_sourcing_lnum;
+
+	ESTACK_CHECK_NOW
+	estack_pop();
 #ifdef FEAT_EVAL
 	current_sctx = save_current_sctx;
 #endif

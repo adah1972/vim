@@ -74,6 +74,8 @@ typedef struct VimMenu vimmenu_T;
  * function was defined, "sourcing_lnum" is the line number inside the
  * function.  When stored with a function, mapping, option, etc. "sc_lnum" is
  * the line number in the script "sc_sid".
+ *
+ * sc_version is also here, for convenience.
  */
 typedef struct {
     scid_T	sc_sid;		// script ID
@@ -1313,7 +1315,8 @@ typedef enum
     VAR_LIST,	 // "v_list" is used
     VAR_DICT,	 // "v_dict" is used
     VAR_FLOAT,	 // "v_float" is used
-    VAR_SPECIAL, // "v_number" is used
+    VAR_BOOL,	 // "v_number" is VVAL_FALSE or VVAL_TRUE
+    VAR_SPECIAL, // "v_number" is VVAL_NONE or VVAL_NULL
     VAR_JOB,	 // "v_job" is used
     VAR_CHANNEL, // "v_channel" is used
     VAR_BLOB,	 // "v_blob" is used
@@ -1496,6 +1499,8 @@ typedef struct
 				// used for s: variables
     int		uf_refcount;	// reference count, see func_name_refcount()
     funccall_T	*uf_scoped;	// l: local variables for closure
+    char_u	*uf_name_exp;	// if "uf_name[]" starts with SNR the name with
+				// "<SNR>" as a string, otherwise NULL
     char_u	uf_name[1];	// name of function (actually longer); can
 				// start with <SNR>123_ (<SNR> is K_SPECIAL
 				// KS_EXTRA KE_SNR)
@@ -1563,13 +1568,28 @@ struct funccal_entry {
 #define HI2UF(hi)     HIKEY2UF((hi)->hi_key)
 
 /*
+ * Holds the hashtab with variables local to each sourced script.
+ * Each item holds a variable (nameless) that points to the dict_T.
+ */
+typedef struct
+{
+    dictitem_T	sv_var;
+    dict_T	sv_dict;
+} scriptvar_T;
+
+/*
  * Growarray to store info about already sourced scripts.
  * For Unix also store the dev/ino, so that we don't have to stat() each
  * script when going through the list.
  */
-typedef struct scriptitem_S
+typedef struct
 {
+    scriptvar_T	*sn_vars;	// stores s: variables for this script
+
     char_u	*sn_name;
+
+    int		sn_version;	// :scriptversion
+
 # ifdef UNIX
     int		sn_dev_valid;
     dev_t	sn_dev;
@@ -1664,6 +1684,38 @@ struct partial_S
     typval_T	*pt_argv;	// arguments in allocated array
     dict_T	*pt_dict;	// dict for "self"
 };
+
+typedef struct AutoPatCmd_S AutoPatCmd;
+
+/*
+ * Entry in the execution stack "exestack".
+ */
+typedef enum {
+    ETYPE_TOP,		    // toplevel
+    ETYPE_SCRIPT,           // sourcing script, use es_info.sctx
+    ETYPE_UFUNC,            // user function, use es_info.ufunc
+    ETYPE_AUCMD,            // autocomand, use es_info.aucmd
+    ETYPE_MODELINE,         // modeline, use es_info.sctx
+    ETYPE_EXCEPT,           // exception, use es_info.exception
+    ETYPE_ARGS,             // command line argument
+    ETYPE_ENV,              // environment variable
+    ETYPE_INTERNAL,         // internal operation
+    ETYPE_SPELL,            // loading spell file
+} etype_T;
+
+typedef struct {
+    long      es_lnum;      // replaces "sourcing_lnum"
+    char_u    *es_name;     // replaces "sourcing_name"
+    etype_T   es_type;
+    union {
+	sctx_T  *sctx;      // script and modeline info
+#if defined(FEAT_EVAL)
+	ufunc_T *ufunc;     // function info
+#endif
+	AutoPatCmd *aucmd;  // autocommand info
+	except_T   *except; // exception info
+    } es_info;
+} estack_T;
 
 // Information returned by get_tty_info().
 typedef struct {
@@ -3628,15 +3680,17 @@ typedef struct {
  */
 typedef enum
 {
-    TYPE_UNKNOWN = 0,
-    TYPE_EQUAL,		// ==
-    TYPE_NEQUAL,	// !=
-    TYPE_GREATER,	// >
-    TYPE_GEQUAL,	// >=
-    TYPE_SMALLER,	// <
-    TYPE_SEQUAL,	// <=
-    TYPE_MATCH,		// =~
-    TYPE_NOMATCH,	// !~
+    EXPR_UNKNOWN = 0,
+    EXPR_EQUAL,		// ==
+    EXPR_NEQUAL,	// !=
+    EXPR_GREATER,	// >
+    EXPR_GEQUAL,	// >=
+    EXPR_SMALLER,	// <
+    EXPR_SEQUAL,	// <=
+    EXPR_MATCH,		// =~
+    EXPR_NOMATCH,	// !~
+    EXPR_IS,		// is
+    EXPR_ISNOT,		// isnot
 } exptype_T;
 
 /*

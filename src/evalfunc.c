@@ -276,6 +276,7 @@ static void f_type(typval_T *argvars, typval_T *rettv);
 static void f_virtcol(typval_T *argvars, typval_T *rettv);
 static void f_visualmode(typval_T *argvars, typval_T *rettv);
 static void f_wildmenumode(typval_T *argvars, typval_T *rettv);
+static void f_windowsversion(typval_T *argvars, typval_T *rettv);
 static void f_wordcount(typval_T *argvars, typval_T *rettv);
 static void f_xor(typval_T *argvars, typval_T *rettv);
 
@@ -619,6 +620,7 @@ static funcentry_T global_functions[] =
 #ifdef FEAT_PROP_POPUP
     {"prop_add",	3, 3, FEARG_1,	  f_prop_add},
     {"prop_clear",	1, 3, FEARG_1,	  f_prop_clear},
+    {"prop_find",	1, 2, FEARG_1,	  f_prop_find},
     {"prop_list",	1, 2, FEARG_1,	  f_prop_list},
     {"prop_remove",	1, 3, FEARG_1,	  f_prop_remove},
     {"prop_type_add",	2, 2, FEARG_1,	  f_prop_type_add},
@@ -864,6 +866,7 @@ static funcentry_T global_functions[] =
     {"win_splitmove",   2, 3, FEARG_1,    f_win_splitmove},
     {"winbufnr",	1, 1, FEARG_1,	  f_winbufnr},
     {"wincol",		0, 0, 0,	  f_wincol},
+    {"windowsversion",	0, 0, 0,	  f_windowsversion},
     {"winheight",	1, 1, FEARG_1,	  f_winheight},
     {"winlayout",	0, 1, FEARG_1,	  f_winlayout},
     {"winline",		0, 0, 0,	  f_winline},
@@ -974,14 +977,14 @@ call_internal_func(
 
     i = find_internal_func(name);
     if (i < 0)
-	return ERROR_UNKNOWN;
+	return FCERR_UNKNOWN;
     if (argcount < global_functions[i].f_min_argc)
-	return ERROR_TOOFEW;
+	return FCERR_TOOFEW;
     if (argcount > global_functions[i].f_max_argc)
-	return ERROR_TOOMANY;
+	return FCERR_TOOMANY;
     argvars[argcount].v_type = VAR_UNKNOWN;
     global_functions[i].f_func(argvars, rettv);
-    return ERROR_NONE;
+    return FCERR_NONE;
 }
 
 /*
@@ -1001,13 +1004,13 @@ call_internal_method(
 
     fi = find_internal_func(name);
     if (fi < 0)
-	return ERROR_UNKNOWN;
+	return FCERR_UNKNOWN;
     if (global_functions[fi].f_argtype == 0)
-	return ERROR_NOTMETHOD;
+	return FCERR_NOTMETHOD;
     if (argcount + 1 < global_functions[fi].f_min_argc)
-	return ERROR_TOOFEW;
+	return FCERR_TOOFEW;
     if (argcount + 1 > global_functions[fi].f_max_argc)
-	return ERROR_TOOMANY;
+	return FCERR_TOOMANY;
 
     if (global_functions[fi].f_argtype == FEARG_LAST)
     {
@@ -1053,7 +1056,7 @@ call_internal_method(
     argv[argcount + 1].v_type = VAR_UNKNOWN;
 
     global_functions[fi].f_func(argv, rettv);
-    return ERROR_NONE;
+    return FCERR_NONE;
 }
 
 /*
@@ -1064,7 +1067,7 @@ non_zero_arg(typval_T *argvars)
 {
     return ((argvars[0].v_type == VAR_NUMBER
 		&& argvars[0].vval.v_number != 0)
-	    || (argvars[0].v_type == VAR_SPECIAL
+	    || (argvars[0].v_type == VAR_BOOL
 		&& argvars[0].vval.v_number == VVAL_TRUE)
 	    || (argvars[0].v_type == VAR_STRING
 		&& argvars[0].vval.v_string != NULL
@@ -1808,6 +1811,7 @@ f_empty(typval_T *argvars, typval_T *rettv)
 	    n = argvars[0].vval.v_dict == NULL
 			|| argvars[0].vval.v_dict->dv_hashtab.ht_used == 0;
 	    break;
+	case VAR_BOOL:
 	case VAR_SPECIAL:
 	    n = argvars[0].vval.v_number != VVAL_TRUE;
 	    break;
@@ -2012,6 +2016,12 @@ execute_common(typval_T *argvars, typval_T *rettv, int arg_off)
 	    // empty list, no commands, empty output
 	    return;
 	++list->lv_refcount;
+    }
+    else if (argvars[arg_off].v_type == VAR_JOB
+	    || argvars[arg_off].v_type == VAR_CHANNEL)
+    {
+	emsg(_(e_inval_string));
+	return;
     }
     else
     {
@@ -4309,6 +4319,7 @@ f_len(typval_T *argvars, typval_T *rettv)
 	    rettv->vval.v_number = dict_len(argvars[0].vval.v_dict);
 	    break;
 	case VAR_UNKNOWN:
+	case VAR_BOOL:
 	case VAR_SPECIAL:
 	case VAR_FLOAT:
 	case VAR_FUNC:
@@ -6594,7 +6605,7 @@ f_setpos(typval_T *argvars, typval_T *rettv)
     {
 	if (list2fpos(&argvars[1], &pos, &fnum, &curswant) == OK)
 	{
-	    if (--pos.col < 0)
+	    if (pos.col != MAXCOL && --pos.col < 0)
 		pos.col = 0;
 	    if (name[0] == '.' && name[1] == NUL)
 	    {
@@ -6774,7 +6785,8 @@ f_settagstack(typval_T *argvars, typval_T *rettv)
 	actstr = tv_get_string_chk(&argvars[2]);
 	if (actstr == NULL)
 	    return;
-	if ((*actstr == 'r' || *actstr == 'a') && actstr[1] == NUL)
+	if ((*actstr == 'r' || *actstr == 'a' || *actstr == 't')
+		&& actstr[1] == NUL)
 	    action = *actstr;
 	else
 	{
@@ -8331,20 +8343,15 @@ f_type(typval_T *argvars, typval_T *rettv)
 
     switch (argvars[0].v_type)
     {
-	case VAR_NUMBER: n = VAR_TYPE_NUMBER; break;
-	case VAR_STRING: n = VAR_TYPE_STRING; break;
+	case VAR_NUMBER:  n = VAR_TYPE_NUMBER; break;
+	case VAR_STRING:  n = VAR_TYPE_STRING; break;
 	case VAR_PARTIAL:
-	case VAR_FUNC:   n = VAR_TYPE_FUNC; break;
-	case VAR_LIST:   n = VAR_TYPE_LIST; break;
-	case VAR_DICT:   n = VAR_TYPE_DICT; break;
-	case VAR_FLOAT:  n = VAR_TYPE_FLOAT; break;
-	case VAR_SPECIAL:
-	     if (argvars[0].vval.v_number == VVAL_FALSE
-		     || argvars[0].vval.v_number == VVAL_TRUE)
-		 n = VAR_TYPE_BOOL;
-	     else
-		 n = VAR_TYPE_NONE;
-	     break;
+	case VAR_FUNC:    n = VAR_TYPE_FUNC; break;
+	case VAR_LIST:    n = VAR_TYPE_LIST; break;
+	case VAR_DICT:    n = VAR_TYPE_DICT; break;
+	case VAR_FLOAT:   n = VAR_TYPE_FLOAT; break;
+	case VAR_BOOL:	  n = VAR_TYPE_BOOL; break;
+	case VAR_SPECIAL: n = VAR_TYPE_NONE; break;
 	case VAR_JOB:     n = VAR_TYPE_JOB; break;
 	case VAR_CHANNEL: n = VAR_TYPE_CHANNEL; break;
 	case VAR_BLOB:    n = VAR_TYPE_BLOB; break;
@@ -8365,11 +8372,21 @@ f_virtcol(typval_T *argvars, typval_T *rettv)
     colnr_T	vcol = 0;
     pos_T	*fp;
     int		fnum = curbuf->b_fnum;
+    int		len;
 
     fp = var2fpos(&argvars[0], FALSE, &fnum);
     if (fp != NULL && fp->lnum <= curbuf->b_ml.ml_line_count
 						    && fnum == curbuf->b_fnum)
     {
+	// Limit the column to a valid value, getvvcol() doesn't check.
+	if (fp->col < 0)
+	    fp->col = 0;
+	else
+	{
+	    len = (int)STRLEN(ml_get(fp->lnum));
+	    if (fp->col > len)
+		fp->col = len;
+	}
 	getvvcol(curwin, fp, NULL, NULL, &vcol);
 	++vcol;
     }
@@ -8405,6 +8422,16 @@ f_wildmenumode(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     if (wild_menu_showing)
 	rettv->vval.v_number = 1;
 #endif
+}
+
+/*
+ * "windowsversion()" function
+ */
+    static void
+f_windowsversion(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+{
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = vim_strsave((char_u *)windowsVersion);
 }
 
 /*

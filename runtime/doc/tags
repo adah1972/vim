@@ -4061,6 +4061,7 @@ E287	mbyte.txt	/*E287*
 E288	mbyte.txt	/*E288*
 E289	mbyte.txt	/*E289*
 E29	change.txt	/*E29*
+E292	message.txt	/*E292*
 E293	message.txt	/*E293*
 E294	message.txt	/*E294*
 E295	message.txt	/*E295*
@@ -4753,7 +4754,7 @@ E947	terminal.txt	/*E947*
 E948	terminal.txt	/*E948*
 E949	editing.txt	/*E949*
 E95	message.txt	/*E95*
-E950	message.txt	/*E950*
+E950	options.txt	/*E950*
 E951	pattern.txt	/*E951*
 E952	autocmd.txt	/*E952*
 E953	terminal.txt	/*E953*
@@ -5989,7 +5990,6 @@ debug.txt	debug.txt	/*debug.txt*
 debugbreak()	eval.txt	/*debugbreak()*
 debugger-compilation	debugger.txt	/*debugger-compilation*
 debugger-features	debugger.txt	/*debugger-features*
-debugger-integration	debugger.txt	/*debugger-integration*
 debugger-support	debugger.txt	/*debugger-support*
 debugger.txt	debugger.txt	/*debugger.txt*
 dec-mouse	options.txt	/*dec-mouse*
@@ -7261,6 +7261,7 @@ i_CTRL-R_=	insert.txt	/*i_CTRL-R_=*
 i_CTRL-R_CTRL-O	insert.txt	/*i_CTRL-R_CTRL-O*
 i_CTRL-R_CTRL-P	insert.txt	/*i_CTRL-R_CTRL-P*
 i_CTRL-R_CTRL-R	insert.txt	/*i_CTRL-R_CTRL-R*
+i_CTRL-SHIFT-Q	insert.txt	/*i_CTRL-SHIFT-Q*
 i_CTRL-SHIFT-V	insert.txt	/*i_CTRL-SHIFT-V*
 i_CTRL-T	insert.txt	/*i_CTRL-T*
 i_CTRL-U	insert.txt	/*i_CTRL-U*
@@ -7557,6 +7558,7 @@ log10()	eval.txt	/*log10()*
 logiPat	pi_logipat.txt	/*logiPat*
 logiPat-arg	pi_logipat.txt	/*logiPat-arg*
 logiPat-caveat	pi_logipat.txt	/*logiPat-caveat*
+logiPat-cmd	pi_logipat.txt	/*logiPat-cmd*
 logiPat-contents	pi_logipat.txt	/*logiPat-contents*
 logiPat-copyright	pi_logipat.txt	/*logiPat-copyright*
 logiPat-examples	pi_logipat.txt	/*logiPat-examples*
@@ -10057,6 +10059,7 @@ windows.txt	windows.txt	/*windows.txt*
 windows95	os_win32.txt	/*windows95*
 windows98	os_win32.txt	/*windows98*
 windowsme	os_win32.txt	/*windowsme*
+windowsversion()	eval.txt	/*windowsversion()*
 winheight()	eval.txt	/*winheight()*
 winid	windows.txt	/*winid*
 winlayout()	eval.txt	/*winlayout()*

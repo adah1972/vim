@@ -21,22 +21,24 @@
     static void
 prepare_assert_error(garray_T *gap)
 {
-    char buf[NUMBUFLEN];
+    char    buf[NUMBUFLEN];
+    char_u  *sname = estack_sfile();
 
     ga_init2(gap, 1, 100);
-    if (sourcing_name != NULL)
+    if (sname != NULL)
     {
-	ga_concat(gap, sourcing_name);
-	if (sourcing_lnum > 0)
+	ga_concat(gap, sname);
+	if (SOURCING_LNUM > 0)
 	    ga_concat(gap, (char_u *)" ");
     }
-    if (sourcing_lnum > 0)
+    if (SOURCING_LNUM > 0)
     {
-	sprintf(buf, "line %ld", (long)sourcing_lnum);
+	sprintf(buf, "line %ld", (long)SOURCING_LNUM);
 	ga_concat(gap, (char_u *)buf);
     }
-    if (sourcing_name != NULL || sourcing_lnum > 0)
+    if (sname != NULL || SOURCING_LNUM > 0)
 	ga_concat(gap, (char_u *)": ");
+    vim_free(sname);
 }
 
 /*
@@ -220,7 +222,7 @@ assert_bool(typval_T *argvars, int isTrue)
     int		error = FALSE;
     garray_T	ga;
 
-    if (argvars[0].v_type == VAR_SPECIAL
+    if (argvars[0].v_type == VAR_BOOL
 	    && argvars[0].vval.v_number == (isTrue ? VVAL_TRUE : VVAL_FALSE))
 	return 0;
     if (argvars[0].v_type != VAR_NUMBER
@@ -758,6 +760,7 @@ f_test_refcount(typval_T *argvars, typval_T *rettv)
 	case VAR_UNKNOWN:
 	case VAR_NUMBER:
 	case VAR_FLOAT:
+	case VAR_BOOL:
 	case VAR_SPECIAL:
 	case VAR_STRING:
 	    break;

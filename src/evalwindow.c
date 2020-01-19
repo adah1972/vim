@@ -183,7 +183,8 @@ find_win_by_nr(
     {
 #ifdef FEAT_PROP_POPUP
 	// check tab-local popup windows
-	for (wp = tp->tp_first_popupwin; wp != NULL; wp = wp->w_next)
+	for (wp = (tp == NULL ? curtab : tp)->tp_first_popupwin;
+						   wp != NULL; wp = wp->w_next)
 	    if (wp->w_id == nr)
 		return wp;
 	// check global popup windows
@@ -808,7 +809,8 @@ f_win_splitmove(typval_T *argvars, typval_T *rettv)
     wp = find_win_by_nr_or_id(&argvars[0]);
     targetwin = find_win_by_nr_or_id(&argvars[1]);
 
-    if (wp == NULL || targetwin == NULL || wp == targetwin)
+    if (wp == NULL || targetwin == NULL || wp == targetwin
+	    || !win_valid(wp) || !win_valid(targetwin))
     {
         emsg(_(e_invalwindow));
 	rettv->vval.v_number = -1;

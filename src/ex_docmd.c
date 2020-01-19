@@ -320,7 +320,6 @@ static void	ex_setfiletype(exarg_T *eap);
 # define ex_diffupdate		ex_ni
 #endif
 static void	ex_digraphs(exarg_T *eap);
-static void	ex_set(exarg_T *eap);
 #ifdef FEAT_SEARCH_EXTRA
 static void	ex_nohlsearch(exarg_T *eap);
 #else
@@ -645,6 +644,7 @@ do_cmdline(
 # define cmd_cookie cookie
 #endif
     static int	call_depth = 0;		// recursiveness
+    ESTACK_CHECK_DECLARATION
 
 #ifdef FEAT_EVAL
     // For every pair of do_cmdline()/do_one_cmd() calls, use an extra memory
@@ -703,7 +703,7 @@ do_cmdline(
     }
     else if (getline_equal(fgetline, cookie, getsourceline))
     {
-	fname = sourcing_name;
+	fname = SOURCING_NAME;
 	breakpoint = source_breakpoint(real_cookie);
 	dbg_tick = source_dbg_tick(real_cookie);
     }
@@ -819,22 +819,22 @@ do_cmdline(
 	    {
 		*breakpoint = dbg_find_breakpoint(
 				getline_equal(fgetline, cookie, getsourceline),
-							fname, sourcing_lnum);
+							fname, SOURCING_LNUM);
 		*dbg_tick = debug_tick;
 	    }
 
 	    next_cmdline = ((wcmd_T *)(lines_ga.ga_data))[current_line].line;
-	    sourcing_lnum = ((wcmd_T *)(lines_ga.ga_data))[current_line].lnum;
+	    SOURCING_LNUM = ((wcmd_T *)(lines_ga.ga_data))[current_line].lnum;
 
 	    // Did we encounter a breakpoint?
 	    if (breakpoint != NULL && *breakpoint != 0
-					      && *breakpoint <= sourcing_lnum)
+					      && *breakpoint <= SOURCING_LNUM)
 	    {
-		dbg_breakpoint(fname, sourcing_lnum);
+		dbg_breakpoint(fname, SOURCING_LNUM);
 		// Find next breakpoint.
 		*breakpoint = dbg_find_breakpoint(
 			       getline_equal(fgetline, cookie, getsourceline),
-							fname, sourcing_lnum);
+							fname, SOURCING_LNUM);
 		*dbg_tick = debug_tick;
 	    }
 # ifdef FEAT_PROFILE
@@ -963,8 +963,8 @@ do_cmdline(
 	    }
 	}
 
-	if (p_verbose >= 15 && sourcing_name != NULL)
-	    msg_verbose_cmd(sourcing_lnum, cmdline_copy);
+	if (p_verbose >= 15 && SOURCING_NAME != NULL)
+	    msg_verbose_cmd(SOURCING_LNUM, cmdline_copy);
 
 	/*
 	 * 2. Execute one '|' separated command.
@@ -1081,7 +1081,7 @@ do_cmdline(
 	// Check for the next breakpoint after a watchexpression
 	if (breakpoint != NULL && has_watchexpr())
 	{
-	    *breakpoint = dbg_find_breakpoint(FALSE, fname, sourcing_lnum);
+	    *breakpoint = dbg_find_breakpoint(FALSE, fname, SOURCING_LNUM);
 	    *dbg_tick = debug_tick;
 	}
 
@@ -1092,7 +1092,7 @@ do_cmdline(
 	{
 	    if (lines_ga.ga_len > 0)
 	    {
-		sourcing_lnum =
+		SOURCING_LNUM =
 		       ((wcmd_T *)lines_ga.ga_data)[lines_ga.ga_len - 1].lnum;
 		free_cmdlines(&lines_ga);
 	    }
@@ -1234,8 +1234,6 @@ do_cmdline(
 	if (did_throw)
 	{
 	    void	*p = NULL;
-	    char_u	*saved_sourcing_name;
-	    int		saved_sourcing_lnum;
 	    struct msglist	*messages = NULL, *next;
 
 	    /*
@@ -1260,10 +1258,9 @@ do_cmdline(
 		    break;
 	    }
 
-	    saved_sourcing_name = sourcing_name;
-	    saved_sourcing_lnum = sourcing_lnum;
-	    sourcing_name = current_exception->throw_name;
-	    sourcing_lnum = current_exception->throw_lnum;
+	    estack_push(ETYPE_EXCEPT, current_exception->throw_name,
+						current_exception->throw_lnum);
+	    ESTACK_CHECK_SETUP
 	    current_exception->throw_name = NULL;
 
 	    discard_current_exception();	// uses IObuff if 'verbose'
@@ -1287,9 +1284,9 @@ do_cmdline(
 		emsg(p);
 		vim_free(p);
 	    }
-	    vim_free(sourcing_name);
-	    sourcing_name = saved_sourcing_name;
-	    sourcing_lnum = saved_sourcing_lnum;
+	    vim_free(SOURCING_NAME);
+	    ESTACK_CHECK_NOW
+	    estack_pop();
 	}
 
 	/*
@@ -1428,7 +1425,7 @@ get_loop_line(int c, void *cookie, int indent, int do_concat)
     KeyTyped = FALSE;
     ++cp->current_line;
     wp = (wcmd_T *)(cp->lines_gap->ga_data) + cp->current_line;
-    sourcing_lnum = wp->lnum;
+    SOURCING_LNUM = wp->lnum;
     return vim_strsave(wp->line);
 }
 
@@ -1441,7 +1438,7 @@ store_loop_line(garray_T *gap, char_u *line)
     if (ga_grow(gap, 1) == FAIL)
 	return FAIL;
     ((wcmd_T *)(gap->ga_data))[gap->ga_len].line = vim_strsave(line);
-    ((wcmd_T *)(gap->ga_data))[gap->ga_len].lnum = sourcing_lnum;
+    ((wcmd_T *)(gap->ga_data))[gap->ga_len].lnum = SOURCING_LNUM;
     ++gap->ga_len;
     return OK;
 }
@@ -4615,6 +4612,9 @@ ex_bmodified(exarg_T *eap)
     static void
 ex_bnext(exarg_T *eap)
 {
+    if (ERROR_IF_POPUP_WINDOW)
+	return;
+
     goto_buffer(eap, DOBUF_CURRENT, FORWARD, (int)eap->line2);
     if (eap->do_ecmd_cmd != NULL)
 	do_cmdline_cmd(eap->do_ecmd_cmd);
@@ -4629,6 +4629,9 @@ ex_bnext(exarg_T *eap)
     static void
 ex_bprevious(exarg_T *eap)
 {
+    if (ERROR_IF_POPUP_WINDOW)
+	return;
+
     goto_buffer(eap, DOBUF_CURRENT, BACKWARD, (int)eap->line2);
     if (eap->do_ecmd_cmd != NULL)
 	do_cmdline_cmd(eap->do_ecmd_cmd);
@@ -4643,6 +4646,9 @@ ex_bprevious(exarg_T *eap)
     static void
 ex_brewind(exarg_T *eap)
 {
+    if (ERROR_IF_POPUP_WINDOW)
+	return;
+
     goto_buffer(eap, DOBUF_FIRST, FORWARD, 0);
     if (eap->do_ecmd_cmd != NULL)
 	do_cmdline_cmd(eap->do_ecmd_cmd);
@@ -4655,6 +4661,9 @@ ex_brewind(exarg_T *eap)
     static void
 ex_blast(exarg_T *eap)
 {
+    if (ERROR_IF_POPUP_WINDOW)
+	return;
+
     goto_buffer(eap, DOBUF_LAST, BACKWARD, 0);
     if (eap->do_ecmd_cmd != NULL)
 	do_cmdline_cmd(eap->do_ecmd_cmd);
@@ -4925,8 +4934,8 @@ ex_quit(exarg_T *eap)
     static void
 ex_cquit(exarg_T *eap UNUSED)
 {
-    getout(1);	// this does not always pass on the exit code to the Manx
-		// compiler. why?
+    // this does not always pass on the exit code to the Manx compiler. why?
+    getout(eap->addr_count > 0 ? (int)eap->line2 : EXIT_FAILURE);
 }
 
 /*
@@ -5929,7 +5938,7 @@ ex_mode(exarg_T *eap)
     if (*eap->arg == NUL)
 	shell_resized();
     else
-	mch_screenmode(eap->arg);
+	emsg(_(e_screenmode));
 }
 
 /*
@@ -8171,33 +8180,34 @@ eval_vars(
 		break;
 
 	case SPEC_SFILE:	// file name for ":so" command
-		result = sourcing_name;
+		result = estack_sfile();
 		if (result == NULL)
 		{
 		    *errormsg = _("E498: no :source file name to substitute for \"<sfile>\"");
 		    return NULL;
 		}
+		resultbuf = result;	    // remember allocated string
 		break;
 
 	case SPEC_SLNUM:	// line in file for ":so" command
-		if (sourcing_name == NULL || sourcing_lnum == 0)
+		if (SOURCING_NAME == NULL || SOURCING_LNUM == 0)
 		{
 		    *errormsg = _("E842: no line number to use for \"<slnum>\"");
 		    return NULL;
 		}
-		sprintf((char *)strbuf, "%ld", (long)sourcing_lnum);
+		sprintf((char *)strbuf, "%ld", SOURCING_LNUM);
 		result = strbuf;
 		break;
 
 #ifdef FEAT_EVAL
 	case SPEC_SFLNUM:	// line in script file
-		if (current_sctx.sc_lnum + sourcing_lnum == 0)
+		if (current_sctx.sc_lnum + SOURCING_LNUM == 0)
 		{
 		    *errormsg = _("E961: no line number to use for \"<sflnum>\"");
 		    return NULL;
 		}
 		sprintf((char *)strbuf, "%ld",
-				 (long)(current_sctx.sc_lnum + sourcing_lnum));
+				 (long)(current_sctx.sc_lnum + SOURCING_LNUM));
 		result = strbuf;
 		break;
 #endif
@@ -8475,23 +8485,6 @@ ex_digraphs(exarg_T *eap UNUSED)
 #else
     emsg(_("E196: No digraphs in this version"));
 #endif
-}
-
-    static void
-ex_set(exarg_T *eap)
-{
-    int		flags = 0;
-
-    if (eap->cmdidx == CMD_setlocal)
-	flags = OPT_LOCAL;
-    else if (eap->cmdidx == CMD_setglobal)
-	flags = OPT_GLOBAL;
-#if defined(FEAT_EVAL) && defined(FEAT_BROWSE)
-    if (cmdmod.browse && flags == 0)
-	ex_options(eap);
-    else
-#endif
-	(void)do_set(eap->arg, flags);
 }
 
 #if defined(FEAT_SEARCH_EXTRA) || defined(PROTO)
