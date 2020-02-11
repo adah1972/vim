@@ -2771,7 +2771,7 @@ get_nth_entry(qf_list_T *qfl, int errornr, int *new_qfidx)
 }
 
 /*
- * Get a entry specied by 'errornr' and 'dir' from the current
+ * Get a entry specified by 'errornr' and 'dir' from the current
  * quickfix/location list. 'errornr' specifies the index of the entry and 'dir'
  * specifies the direction (FORWARD/BACKWARD/FORWARD_FILE/BACKWARD_FILE).
  * Returns a pointer to the entry and the index of the new entry is stored in
@@ -4520,7 +4520,7 @@ qf_fill_buffer(qf_list_T *qfl, buf_T *buf, qfline_T *old_last)
 	*dirname = NUL;
 
 	// Add one line for each error
-	if (old_last == NULL)
+	if (old_last == NULL || old_last->qf_next == NULL)
 	{
 	    qfp = qfl->qf_start;
 	    lnum = 0;
@@ -6320,7 +6320,7 @@ unload_dummy_buffer(buf_T *buf, char_u *dirname_start)
 
 #if defined(FEAT_EVAL) || defined(PROTO)
 /*
- * Copy the specified quickfix entry items into a new dict and appened the dict
+ * Copy the specified quickfix entry items into a new dict and append the dict
  * to 'list'.  Returns OK on success.
  */
     static int

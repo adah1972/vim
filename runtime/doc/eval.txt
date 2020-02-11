@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.2.  Last change: 2020 Jan 06
+*eval.txt*	For Vim version 8.2.  Last change: 2020 Feb 03
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -11,6 +11,10 @@ Using expressions is introduced in chapter 41 of the user manual |usr_41.txt|.
 Note: Expression evaluation can be disabled at compile time.  If this has been
 done, the features in this document are not available.  See |+eval| and
 |no-eval-feature|.
+
+This file is about the backwards compatible Vim script.  For Vim9 script,
+which executes much faster, supports type checking and much more, see
+|vim9.txt|.
 
 1.  Variables			|variables|
     1.1 Variable types
@@ -1804,7 +1808,9 @@ v:errors	Errors found by assert functions, such as |assert_true()|.
 
 					*v:event* *event-variable*
 v:event		Dictionary containing information about the current
-		|autocommand|.  The dictionary is emptied when the |autocommand|
+		|autocommand|.  See the specific event for what it puts in
+		this dictionary.
+		The dictionary is emptied when the |autocommand|
 		finishes, please refer to |dict-identity| for how to get an
 		independent copy of it.
 
@@ -2512,8 +2518,8 @@ haslocaldir([{winnr} [, {tabnr}]])
 					or |:tcd|
 hasmapto({what} [, {mode} [, {abbr}]])
 				Number	|TRUE| if mapping to {what} exists
-histadd({history}, {item})	String	add an item to a history
-histdel({history} [, {item}])	String	remove an item from a history
+histadd({history}, {item})	Number	add an item to a history
+histdel({history} [, {item}])	Number	remove an item from a history
 histget({history} [, {index}])	String	get the item {index} from a history
 histnr({history})		Number	highest index of a history
 hlexists({name})		Number	|TRUE| if highlight group {name} exists
@@ -2842,6 +2848,7 @@ term_wait({buf} [, {time}])	Number  wait for screen to be updated
 test_alloc_fail({id}, {countdown}, {repeat})
 				none	make memory allocation fail
 test_autochdir()		none	enable 'autochdir' during startup
+test_clear_search_pat()		none	clears the last used search pattern
 test_feedinput({string})	none	add key sequence to input buffer
 test_garbagecollect_now()	none	free memory right now for testing
 test_garbagecollect_soon()	none	free memory soon for testing
@@ -2860,6 +2867,7 @@ test_refcount({expr})		Number	get the reference count of {expr}
 test_scrollbar({which}, {value}, {dragging})
 				none	scroll in the GUI for testing
 test_setmouse({row}, {col})	none	set the mouse position for testing
+test_srand_seed([seed])		none	set seed for testing srand()
 test_settime({expr})		none	set current time for testing
 timer_info([{id}])		List	information about timers
 timer_pause({id}, {pause})	none	pause or unpause a timer
@@ -3451,6 +3459,7 @@ chdir({dir})						*chdir()*
 			  directory (|:tcd|) then changes the tabpage local
 			  directory.
 			- Otherwise, changes the global directory.
+		{dir} must be a String.
 		If successful, returns the previous working directory.  Pass
 		this to another chdir() to restore the directory.
 		On failure, returns an empty string.
@@ -5660,7 +5669,7 @@ getwininfo([{winid}])					*getwininfo()*
 			GetWinnr()->getwininfo()
 
 getwinpos([{timeout}])					*getwinpos()*
-		The result is a list with two numbers, the result of
+		The result is a List with two numbers, the result of
 		|getwinposx()| and |getwinposy()| combined:
 			[x-pos, y-pos]
 		{timeout} can be used to specify how long to wait in msec for
@@ -10457,6 +10466,7 @@ winline()	The result is a Number, which is the screen line of the cursor
 							*winnr()*
 winnr([{arg}])	The result is a Number, which is the number of the current
 		window.  The top window has number 1.
+		Returns zero for a popup window.
 
 		The optional argument {arg} supports the following values:
 			$	the number of the last window (the window
@@ -10630,7 +10640,7 @@ xor({expr}, {expr})					*xor()*
 <
 
 							*feature-list*
-There are four types of features:
+There are three types of features:
 1.  Features that are only supported when they have been enabled when Vim
     was compiled |+feature-list|.  Example: >
 	:if has("cindent")
@@ -10893,6 +10903,9 @@ Don't forget that "^" will only match at the first character of the String and
 New functions can be defined.  These can be called just like builtin
 functions.  The function executes a sequence of Ex commands.  Normal mode
 commands can be executed with the |:normal| command.
+
+This section is about the legacy functions. For the Vim9 functions, which
+execute much faster, support type checking and more, see |vim9.txt|.
 
 The function name must start with an uppercase letter, to avoid confusion with
 builtin functions.  To prevent from using the same name in different scripts
