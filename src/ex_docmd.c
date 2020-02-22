@@ -2375,6 +2375,7 @@ do_one_cmd(
 	    case CMD_echoerr:
 	    case CMD_echomsg:
 	    case CMD_echon:
+	    case CMD_eval:
 	    case CMD_execute:
 	    case CMD_filter:
 	    case CMD_help:
@@ -3670,7 +3671,7 @@ get_address(
 			curwin->w_cursor.col = 0;
 		    searchcmdlen = 0;
 		    flags = silent ? 0 : SEARCH_HIS | SEARCH_MSG;
-		    if (!do_search(NULL, c, cmd, 1L, flags, NULL))
+		    if (!do_search(NULL, c, c, cmd, 1L, flags, NULL))
 		    {
 			curwin->w_cursor = pos;
 			cmd = NULL;
@@ -6184,9 +6185,11 @@ do_exedit(
 		hold_gui_events = 0;
 #endif
 		must_redraw = CLEAR;
+		pending_exmode_active = TRUE;
 
 		main_loop(FALSE, TRUE);
 
+		pending_exmode_active = FALSE;
 		RedrawingDisabled = rd;
 		no_wait_return = nwr;
 		msg_scroll = ms;

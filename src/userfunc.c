@@ -3053,6 +3053,7 @@ ex_function(exarg_T *eap)
 	flags |= FC_SANDBOX;
     fp->uf_flags = flags;
     fp->uf_calls = 0;
+    fp->uf_cleared = FALSE;
     fp->uf_script_ctx = current_sctx;
     fp->uf_script_ctx.sc_lnum += sourcing_lnum_top;
     if (is_export)
@@ -3554,13 +3555,17 @@ ex_call(exarg_T *eap)
     if (eap->skip)
 	--emsg_skip;
 
-    if (!failed)
+    // When inside :try we need to check for following "| catch".
+    if (!failed || eap->cstack->cs_trylevel > 0)
     {
 	// Check for trailing illegal characters and a following command.
 	if (!ends_excmd(*arg))
 	{
-	    emsg_severe = TRUE;
-	    emsg(_(e_trailing));
+	    if (!failed)
+	    {
+		emsg_severe = TRUE;
+		emsg(_(e_trailing));
+	    }
 	}
 	else
 	    eap->nextcmd = check_nextcmd(arg);

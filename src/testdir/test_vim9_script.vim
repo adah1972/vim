@@ -29,6 +29,7 @@ endfunc
 
 let s:appendToMe = 'xxx'
 let s:addToMe = 111
+let g:existing = 'yes'
 
 def Test_assignment()
   let bool1: bool = true
@@ -39,12 +40,18 @@ def Test_assignment()
   let list1: list<string> = ['sdf', 'asdf']
   let list2: list<number> = [1, 2, 3]
 
-  " TODO: does not work yet
-  " let listS: list<string> = []
-  " let listN: list<number> = []
+  let listS: list<string> = []
+  let listN: list<number> = []
 
   let dict1: dict<string> = #{key: 'value'}
   let dict2: dict<number> = #{one: 1, two: 2}
+
+  g:newvar = 'new'
+  assert_equal('new', g:newvar)
+
+  assert_equal('yes', g:existing)
+  g:existing = 'no'
+  assert_equal('no', g:existing)
 
   v:char = 'abc'
   assert_equal('abc', v:char)
@@ -53,10 +60,12 @@ def Test_assignment()
   assert_equal('foobar', $ENVVAR)
   $ENVVAR = ''
 
-  appendToMe ..= 'yyy'
-  assert_equal('xxxyyy', appendToMe)
-  addToMe += 222
-  assert_equal(333, addToMe)
+  s:appendToMe ..= 'yyy'
+  assert_equal('xxxyyy', s:appendToMe)
+  s:addToMe += 222
+  assert_equal(333, s:addToMe)
+  s:newVar = 'new'
+  assert_equal('new', s:newVar)
 enddef
 
 func Test_assignment_failure()
@@ -105,9 +114,16 @@ def ReturnNumber(): number
   return 123
 enddef
 
+let g:notNumber = 'string'
+
+def ReturnGlobal(): number
+  return g:notNumber
+enddef
+
 def Test_return_string()
   assert_equal('string', ReturnString())
   assert_equal(123, ReturnNumber())
+  assert_fails('call ReturnGlobal()', 'E1029: Expected number but got string')
 enddef
 
 func Increment()
@@ -204,6 +220,62 @@ def Test_try_catch()
     add(l, '3')
   endtry
   assert_equal(['1', 'wrong', '3'], l)
+enddef
+
+def ThrowFromDef()
+  throw 'getout'
+enddef
+
+func CatchInFunc()
+  try
+    call ThrowFromDef()
+  catch
+    let g:thrown_func = v:exception
+  endtry
+endfunc
+
+def CatchInDef()
+  try
+    ThrowFromDef()
+  catch
+    g:thrown_def = v:exception
+  endtry
+enddef
+
+def ReturnFinally(): string
+  try
+    return 'intry'
+  finally
+    g:in_finally = 'finally'
+  endtry
+  return 'end'
+enddef
+
+def Test_try_catch_nested()
+  CatchInFunc()
+  assert_equal('getout', g:thrown_func)
+
+  CatchInDef()
+  assert_equal('getout', g:thrown_def)
+
+  assert_equal('intry', ReturnFinally())
+  assert_equal('finally', g:in_finally)
+enddef
+
+def Test_try_catch_match()
+  let seq = 'a'
+  try
+    throw 'something'
+  catch /nothing/
+    seq ..= 'x'
+  catch /some/
+    seq ..= 'b'
+  catch /asdf/
+    seq ..= 'x'
+  finally
+    seq ..= 'c'
+  endtry
+  assert_equal('abc', seq)
 enddef
 
 let s:export_script_lines =<< trim END
@@ -475,6 +547,34 @@ def Test_if_elseif_else()
   assert_equal('one', IfElse(1))
   assert_equal('two', IfElse(2))
   assert_equal('three', IfElse(3))
+enddef
+
+def Test_delfunc()
+  let lines =<< trim END
+    vim9script
+    def GoneSoon()
+      echo 'hello'
+    enddef
+
+    def CallGoneSoon()
+      GoneSoon()
+    enddef
+
+    delfunc GoneSoon
+    CallGoneSoon()
+  END
+  writefile(lines, 'XToDelFunc')
+  assert_fails('so XToDelFunc', 'E933')
+  assert_fails('so XToDelFunc', 'E933')
+
+  delete('XToDelFunc')
+enddef
+
+def Test_substitute_cmd()
+  new
+  setline(1, 'something')
+  :substitute(some(other(
+  assert_equal('otherthing', getline(1))
 enddef
 
 

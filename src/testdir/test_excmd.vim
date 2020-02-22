@@ -20,6 +20,7 @@ func Test_range_error()
   call assert_fails(':\/echo 1', 'E481:')
   normal vv
   call assert_fails(":'<,'>echo 1", 'E481:')
+  call assert_fails(":\\xcenter", 'E10:')
 endfunc
 
 func Test_buffers_lastused()
@@ -237,8 +238,155 @@ func Test_confirm_cmd()
   call assert_equal(['foo4'], readfile('foo'))
   call assert_equal(['bar2'], readfile('bar'))
 
+  " Test for closing a window with a modified buffer
+  let buf = RunVimInTerminal('', {'rows': 20})
+  call term_sendkeys(buf, ":set nomore\n")
+  call term_sendkeys(buf, ":new\n")
+  call term_sendkeys(buf, ":call setline(1, 'abc')\n")
+  call term_sendkeys(buf, ":confirm close\n")
+  call WaitForAssert({-> assert_match('^\[Y\]es, (N)o, (C)ancel: *$',
+        \ term_getline(buf, 20))}, 1000)
+  call term_sendkeys(buf, "C")
+  call term_sendkeys(buf, ":confirm close\n")
+  call WaitForAssert({-> assert_match('^\[Y\]es, (N)o, (C)ancel: *$',
+        \ term_getline(buf, 20))}, 1000)
+  call term_sendkeys(buf, "N")
+  call term_sendkeys(buf, ":quit\n")
+  call StopVimInTerminal(buf)
+
   call delete('foo')
   call delete('bar')
+endfunc
+
+" Test for the :print command
+func Test_print_cmd()
+  call assert_fails('print', 'E749:')
+endfunc
+
+" Test for the :winsize command
+func Test_winsize_cmd()
+  call assert_fails('winsize 1', 'E465:')
+endfunc
+
+" Test for the :redir command
+func Test_redir_cmd()
+  call assert_fails('redir @@', 'E475:')
+  call assert_fails('redir abc', 'E475:')
+  if has('unix')
+    call mkdir('Xdir')
+    call assert_fails('redir > Xdir', 'E17:')
+    call delete('Xdir', 'd')
+  endif
+  if !has('bsd')
+    call writefile([], 'Xfile')
+    call setfperm('Xfile', 'r--r--r--')
+    call assert_fails('redir! > Xfile', 'E190:')
+    call delete('Xfile')
+  endif
+
+  " Test for redirecting to a register
+  redir @q> | echon 'clean ' | redir END
+  redir @q>> | echon 'water' | redir END
+  call assert_equal('clean water', @q)
+
+  " Test for redirecting to a variable
+  redir => color | echon 'blue ' | redir END
+  redir =>> color | echon 'sky' | redir END
+  call assert_equal('blue sky', color)
+endfunc
+
+" Test for the :filetype command
+func Test_filetype_cmd()
+  call assert_fails('filetype abc', 'E475:')
+endfunc
+
+" Test for the :mode command
+func Test_mode_cmd()
+  call assert_fails('mode abc', 'E359:')
+endfunc
+
+" Test for the :sleep command
+func Test_sleep_cmd()
+  call assert_fails('sleep x', 'E475:')
+endfunc
+
+" Test for the :read command
+func Test_read_cmd()
+  call writefile(['one'], 'Xfile')
+  new
+  call assert_fails('read', 'E32:')
+  edit Xfile
+  read
+  call assert_equal(['one', 'one'], getline(1, '$'))
+  close!
+  new
+  read Xfile
+  call assert_equal(['', 'one'], getline(1, '$'))
+  call deletebufline('', 1, '$')
+  call feedkeys("Qr Xfile\<CR>visual\<CR>", 'xt')
+  call assert_equal(['one'], getline(1, '$'))
+  close!
+  call delete('Xfile')
+endfunc
+
+" Test for running Ex commands when text is locked.
+" <C-\>e in the command line is used to lock the text
+func Test_run_excmd_with_text_locked()
+  " :quit
+  let cmd = ":\<C-\>eexecute('quit')\<CR>\<C-C>"
+  call assert_fails("call feedkeys(cmd, 'xt')", 'E523:')
+
+  " :qall
+  let cmd = ":\<C-\>eexecute('qall')\<CR>\<C-C>"
+  call assert_fails("call feedkeys(cmd, 'xt')", 'E523:')
+
+  " :exit
+  let cmd = ":\<C-\>eexecute('exit')\<CR>\<C-C>"
+  call assert_fails("call feedkeys(cmd, 'xt')", 'E523:')
+
+  " :close - should be ignored
+  new
+  let cmd = ":\<C-\>eexecute('close')\<CR>\<C-C>"
+  call assert_equal(2, winnr('$'))
+  close
+
+  call assert_fails("call feedkeys(\":\<C-R>=execute('bnext')\<CR>\", 'xt')", 'E523:')
+endfunc
+
+" Test for the :verbose command
+func Test_verbose_cmd()
+  call assert_equal(['  verbose=1'], split(execute('verbose set vbs'), "\n"))
+  call assert_equal(['  verbose=0'], split(execute('0verbose set vbs'), "\n"))
+  let l = execute("4verbose set verbose | set verbose")
+  call assert_equal(['  verbose=4', '  verbose=0'], split(l, "\n"))
+endfunc
+
+" Test for the :delete command and the related abbreviated commands
+func Test_excmd_delete()
+  new
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['^Ibar$'], split(execute('dl'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['^Ibar$'], split(execute('dell'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['^Ibar$'], split(execute('delel'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['^Ibar$'], split(execute('deletl'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['^Ibar$'], split(execute('deletel'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['        bar'], split(execute('dp'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['        bar'], split(execute('dep'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['        bar'], split(execute('delp'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['        bar'], split(execute('delep'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['        bar'], split(execute('deletp'), "\n"))
+  call setline(1, ['foo', "\tbar"])
+  call assert_equal(['        bar'], split(execute('deletep'), "\n"))
+  close!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -1,4 +1,4 @@
-*popup.txt*  For Vim version 8.2.  Last change: 2020 Feb 03
+*popup.txt*  For Vim version 8.2.  Last change: 2020 Feb 20
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -148,6 +148,8 @@ different:						*E863*
 - The popup window always has focus, it is not possible to switch to another
   window.
 - When the job ends, the popup window closes.
+- The popup window can be closed with `popup_close()`, the terminal buffer
+  then becomes hidden.
 - The default Pmenu color is only used for the border and padding.  To change
   the color of the terminal itself set 'wincolor'.
 
@@ -402,6 +404,7 @@ popup_hide({id})						*popup_hide()*
 		hidden.
 		If window {id} does not exist nothing happens.  If window {id}
 		exists but is not a popup window an error is given. *E993*
+		If popup window {id} contains a terminal an error is given.
 
 		Can also be used as a |method|: >
 			GetPopup()->popup_hide()
