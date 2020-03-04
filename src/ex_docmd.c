@@ -1647,6 +1647,9 @@ do_one_cmd(
     int		save_reg_executing = reg_executing;
     int		ni;			// set when Not Implemented
     char_u	*cmd;
+#ifdef FEAT_EVAL
+    int		starts_with_colon;
+#endif
 
     vim_memset(&ea, 0, sizeof(ea));
     ea.line1 = 1;
@@ -1689,6 +1692,7 @@ do_one_cmd(
     ea.cookie = cookie;
 #ifdef FEAT_EVAL
     ea.cstack = cstack;
+    starts_with_colon = *skipwhite(ea.cmd) == ':';
 #endif
     if (parse_command_modifiers(&ea, &errormsg, FALSE) == FAIL)
 	goto doend;
@@ -1713,7 +1717,7 @@ do_one_cmd(
 	ea.cmd = skipwhite(ea.cmd + 1);
 
 #ifdef FEAT_EVAL
-    if (current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+    if (current_sctx.sc_version == SCRIPT_VERSION_VIM9 && !starts_with_colon)
 	p = find_ex_command(&ea, NULL, lookup_scriptvar, NULL);
     else
 #endif
@@ -2353,6 +2357,7 @@ do_one_cmd(
 	    case CMD_finally:
 	    case CMD_endtry:
 	    case CMD_function:
+	    case CMD_def:
 				break;
 
 	    // Commands that handle '|' themselves.  Check: A command should
