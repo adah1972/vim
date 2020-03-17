@@ -382,6 +382,7 @@ term_close_buffer(buf_T *buf, buf_T *old_curbuf)
 	curwin->w_buffer = curbuf;
 	++curbuf->b_nwindows;
     }
+    CHECK_CURBUF;
 
     // Wiping out the buffer will also close the window and call
     // free_terminal().
@@ -5745,13 +5746,12 @@ f_term_scrape(typval_T *argvars, typval_T *rettv)
  * "term_sendkeys(buf, keys)" function
  */
     void
-f_term_sendkeys(typval_T *argvars, typval_T *rettv)
+f_term_sendkeys(typval_T *argvars, typval_T *rettv UNUSED)
 {
     buf_T	*buf = term_get_buf(argvars, "term_sendkeys()");
     char_u	*msg;
     term_T	*term;
 
-    rettv->v_type = VAR_UNKNOWN;
     if (buf == NULL)
 	return;
 

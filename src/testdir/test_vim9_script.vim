@@ -362,7 +362,7 @@ let s:export_script_lines =<< trim END
   enddef
 END
 
-def Test_vim9script()
+def Test_vim9_import_export()
   let import_script_lines =<< trim END
     vim9script
     import {exported, Exported} from './Xexport.vim'
@@ -449,6 +449,33 @@ def Test_vim9script()
   writefile(import_not_exported_lines, 'Ximport.vim')
   assert_fails('source Ximport.vim', 'E1049:')
 
+  " try to import something that is already defined
+  let import_already_defined =<< trim END
+    vim9script
+    let exported = 'something'
+    import exported from './Xexport.vim'
+  END
+  writefile(import_already_defined, 'Ximport.vim')
+  assert_fails('source Ximport.vim', 'E1073:')
+
+  " try to import something that is already defined
+  import_already_defined =<< trim END
+    vim9script
+    let exported = 'something'
+    import * as exported from './Xexport.vim'
+  END
+  writefile(import_already_defined, 'Ximport.vim')
+  assert_fails('source Ximport.vim', 'E1073:')
+
+  " try to import something that is already defined
+  import_already_defined =<< trim END
+    vim9script
+    let exported = 'something'
+    import {exported} from './Xexport.vim'
+  END
+  writefile(import_already_defined, 'Ximport.vim')
+  assert_fails('source Ximport.vim', 'E1073:')
+
   " import a very long name, requires making a copy
   let import_long_name_lines =<< trim END
     vim9script
@@ -482,10 +509,11 @@ def Test_vim9script()
     vim9script
     import {exported name} from './Xexport.vim'
   END
-  writefile(import_missing_comma_lines, 'Ximport.vim')
-  assert_fails('source Ximport.vim', 'E1046:')
+  writefile(import_missing_comma_lines, 'Ximport3.vim')
+  assert_fails('source Ximport3.vim', 'E1046:')
 
   delete('Ximport.vim')
+  delete('Ximport3.vim')
   delete('Xexport.vim')
 
   " Check that in a Vim9 script 'cpo' is set to the Vim default.
@@ -855,28 +883,6 @@ def Test_delfunc()
   delete('XToDelFunc')
 enddef
 
-def Test_substitute_cmd()
-  new
-  setline(1, 'something')
-  :substitute(some(other(
-  assert_equal('otherthing', getline(1))
-  bwipe!
-
-  " also when the context is Vim9 script
-  let lines =<< trim END
-    vim9script
-    new
-    setline(1, 'something')
-    :substitute(some(other(
-    assert_equal('otherthing', getline(1))
-    bwipe!
-  END
-  writefile(lines, 'Xvim9lines')
-  source Xvim9lines
-
-  delete('Xvim9lines')
-enddef
-
 def Test_execute_cmd()
   new
   setline(1, 'default')
@@ -918,6 +924,44 @@ def Test_for_outside_of_function()
   writefile(lines, 'Xvim9for.vim')
   source Xvim9for.vim
   delete('Xvim9for.vim')
+enddef
+
+def Test_while_loop()
+  let result = ''
+  let cnt = 0
+  while cnt < 555
+    if cnt == 3
+      break
+    endif
+    cnt += 1
+    if cnt == 2
+      continue
+    endif
+    result ..= cnt .. '_'
+  endwhile
+  assert_equal('1_3_', result)
+enddef
+
+def Test_substitute_cmd()
+  new
+  setline(1, 'something')
+  :substitute(some(other(
+  assert_equal('otherthing', getline(1))
+  bwipe!
+
+  " also when the context is Vim9 script
+  let lines =<< trim END
+    vim9script
+    new
+    setline(1, 'something')
+    :substitute(some(other(
+    assert_equal('otherthing', getline(1))
+    bwipe!
+  END
+  writefile(lines, 'Xvim9lines')
+  source Xvim9lines
+
+  delete('Xvim9lines')
 enddef
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

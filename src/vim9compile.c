@@ -203,6 +203,25 @@ lookup_script(char_u *name, size_t len)
     return di == NULL ? FAIL: OK;
 }
 
+/*
+ * Check if "p[len]" is already defined, either in script "import_sid" or in
+ * compilation context "cctx".
+ * Return FAIL and give an error if it defined.
+ */
+    int
+check_defined(char_u *p, int len, cctx_T *cctx)
+{
+    if (lookup_script(p, len) == OK
+	    || (cctx != NULL
+		&& (lookup_local(p, len, cctx) >= 0
+		    || find_imported(p, len, cctx) != NULL)))
+    {
+	semsg("E1073: imported name already defined: %s", p);
+	return FAIL;
+    }
+    return OK;
+}
+
     static type_T *
 get_list_type(type_T *member_type, garray_T *type_list)
 {
@@ -773,8 +792,8 @@ generate_STORENR(cctx_T *cctx, int idx, varnumber_T value)
     RETURN_OK_IF_SKIP(cctx);
     if ((isn = generate_instr(cctx, ISN_STORENR)) == NULL)
 	return FAIL;
-    isn->isn_arg.storenr.str_idx = idx;
-    isn->isn_arg.storenr.str_val = value;
+    isn->isn_arg.storenr.stnr_idx = idx;
+    isn->isn_arg.storenr.stnr_val = value;
 
     return OK;
 }
@@ -3789,8 +3808,8 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
 		    garray_T	*stack = &cctx->ctx_type_stack;
 
 		    isn->isn_type = ISN_STORENR;
-		    isn->isn_arg.storenr.str_idx = idx;
-		    isn->isn_arg.storenr.str_val = val;
+		    isn->isn_arg.storenr.stnr_idx = idx;
+		    isn->isn_arg.storenr.stnr_val = val;
 		    if (stack->ga_len > 0)
 			--stack->ga_len;
 		}
@@ -3812,7 +3831,7 @@ theend:
     static char_u *
 compile_import(char_u *arg, cctx_T *cctx)
 {
-    return handle_import(arg, &cctx->ctx_imports, 0);
+    return handle_import(arg, &cctx->ctx_imports, 0, cctx);
 }
 
 /*

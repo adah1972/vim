@@ -926,6 +926,7 @@ func Test_win_execute_not_allowed()
   call assert_fails('call win_execute(winid, "tabnext")', 'E994:')
   call assert_fails('call win_execute(winid, "next")', 'E994:')
   call assert_fails('call win_execute(winid, "rewind")', 'E994:')
+  call assert_fails('call win_execute(winid, "pedit filename")', 'E994:')
   call assert_fails('call win_execute(winid, "buf")', 'E994:')
   call assert_fails('call win_execute(winid, "bnext")', 'E994:')
   call assert_fails('call win_execute(winid, "bprev")', 'E994:')
@@ -3284,15 +3285,26 @@ func Test_popupwin_filter_input_multibyte()
   call feedkeys("\u3000", 'xt')
   call assert_equal([0xe3, 0x80, 0x80], g:bytes)
 
-  if has('gui')
-    " UTF-8: E3 80 9B, including CSI(0x9B)
-    call feedkeys("\u301b", 'xt')
-    call assert_equal([0xe3, 0x80, 0x9b], g:bytes)
-  endif
+  " UTF-8: E3 80 9B, including CSI(0x9B)
+  call feedkeys("\u301b", 'xt')
+  call assert_equal([0xe3, 0x80, 0x9b], g:bytes)
 
   call popup_clear()
   delfunc MyPopupFilter
   unlet g:bytes
+endfunc
+
+func Test_popupwin_atcursor_far_right()
+  new
+
+  " this was getting stuck
+  set signcolumn=yes
+  call setline(1, repeat('=', &columns))
+  normal! ggg$
+  call popup_atcursor(repeat('x', 500), #{moved: 'any', border: []})
+
+  bwipe!
+  set signcolumn&
 endfunc
 
 " vim: shiftwidth=2 sts=2
