@@ -1868,6 +1868,8 @@ endfunc
 func Test_Changed_FirstTime()
   CheckFeature terminal
   CheckNotGui
+  " Starting a terminal to run Vim is always considered flaky.
+  let g:test_is_flaky = 1
 
   " Prepare file for TextChanged event.
   call writefile([''], 'Xchanged.txt')
@@ -2404,6 +2406,47 @@ func Test_TermChanged()
   au! TermChanged
   let &term = term_save
   bwipe!
+endfunc
+
+" Test for FileReadCmd autocmd
+func Test_autocmd_FileReadCmd()
+  func ReadFileCmd()
+    call append(line('$'), "v:cmdarg = " .. v:cmdarg)
+  endfunc
+  augroup FileReadCmdTest
+    au!
+    au FileReadCmd Xtest call ReadFileCmd()
+  augroup END
+
+  new
+  read ++bin Xtest
+  read ++nobin Xtest
+  read ++edit Xtest
+  read ++bad=keep Xtest
+  read ++bad=drop Xtest
+  read ++bad=- Xtest
+  read ++ff=unix Xtest
+  read ++ff=dos Xtest
+  read ++ff=mac Xtest
+  read ++enc=utf-8 Xtest
+
+  call assert_equal(['',
+        \ 'v:cmdarg =  ++bin',
+        \ 'v:cmdarg =  ++nobin',
+        \ 'v:cmdarg =  ++edit',
+        \ 'v:cmdarg =  ++bad=keep',
+        \ 'v:cmdarg =  ++bad=drop',
+        \ 'v:cmdarg =  ++bad=-',
+        \ 'v:cmdarg =  ++ff=unix',
+        \ 'v:cmdarg =  ++ff=dos',
+        \ 'v:cmdarg =  ++ff=mac',
+        \ 'v:cmdarg =  ++enc=utf-8'], getline(1, '$'))
+
+  close!
+  augroup FileReadCmdTest
+    au!
+  augroup END
+  delfunc ReadFileCmd
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

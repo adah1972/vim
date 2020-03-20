@@ -4188,13 +4188,16 @@ open_cmdwin(void)
     if (win_split((int)p_cwh, WSP_BOT) == FAIL)
     {
 	beep_flush();
+	ga_clear(&winsizes);
 	return K_IGNORE;
     }
     cmdwin_type = get_cmdline_type();
 
     // Create the command-line buffer empty.
     (void)do_ecmd(0, NULL, NULL, NULL, ECMD_ONE, ECMD_HIDE, NULL);
+    apply_autocmds(EVENT_BUFFILEPRE, NULL, NULL, FALSE, curbuf);
     (void)setfname(curbuf, (char_u *)"[Command Line]", NULL, TRUE);
+    apply_autocmds(EVENT_BUFFILEPOST, NULL, NULL, FALSE, curbuf);
     set_option_value((char_u *)"bt", 0L, (char_u *)"nofile", OPT_LOCAL);
     curbuf->b_p_ma = TRUE;
 #ifdef FEAT_FOLDING
