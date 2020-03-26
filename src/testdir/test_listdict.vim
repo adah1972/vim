@@ -31,6 +31,7 @@ func Test_list_slice()
   call assert_equal([1, 'as''d', [1, 2, function('strlen')]], l[:-2])
   call assert_equal([1, 'as''d', [1, 2, function('strlen')], {'a': 1}], l[0:8])
   call assert_equal([], l[8:-1])
+  call assert_equal([], l[0:-10])
 endfunc
 
 " List identity
@@ -104,6 +105,8 @@ func Test_list_range_assign()
   let l = [0]
   let l[:] = [1, 2]
   call assert_equal([1, 2], l)
+  let l[-4:-1] = [5, 6]
+  call assert_equal([5, 6], l)
 endfunc
 
 " Test removing items in list
@@ -299,6 +302,7 @@ func Test_dict_deepcopy()
   let l[1] = l2
   let l3 = deepcopy(l2)
   call assert_true(l3[1] is l3[2])
+  call assert_fails("call deepcopy([1, 2], 2)", 'E474:')
 endfunc
 
 " Locked variables
@@ -378,6 +382,11 @@ func Test_list_locked_var()
       call assert_equal(expected[depth][u][1], ps)
     endfor
   endfor
+  call assert_fails("let x=islocked('a b')", 'E488:')
+  let mylist = [1, 2, 3]
+  call assert_fails("let x = islocked('mylist[1:2]')", 'E786:')
+  let mydict = {'k' : 'v'}
+  call assert_fails("let x = islocked('mydict.a')", 'E716:')
 endfunc
 
 " Unletting locked variables
@@ -626,7 +635,7 @@ func Test_reverse_sort_uniq()
   call assert_fails('call reverse("")', 'E899:')
 endfunc
 
-" splitting a string to a List
+" splitting a string to a List using split()
 func Test_str_split()
   call assert_equal(['aa', 'bb'], split('  aa  bb '))
   call assert_equal(['aa', 'bb'], split('  aa  bb  ', '\W\+', 0))
@@ -637,6 +646,8 @@ func Test_str_split()
   call assert_equal(['aa', '', 'bb', 'cc', ''], split('aa,,bb, cc,', ',\s*', 1))
   call assert_equal(['a', 'b', 'c'], split('abc', '\zs'))
   call assert_equal(['', 'a', '', 'b', '', 'c', ''], split('abc', '\zs', 1))
+  call assert_fails("call split('abc', [])", 'E730:')
+  call assert_fails("call split('abc', 'b', [])", 'E745:')
 endfunc
 
 " compare recursively linked list and dict
@@ -648,6 +659,12 @@ func Test_listdict_compare()
   call assert_true(d == d)
   call assert_false(l != deepcopy(l))
   call assert_false(d != deepcopy(d))
+
+  " comparison errors
+  call assert_fails('echo [1, 2] =~ {}', 'E691:')
+  call assert_fails('echo [1, 2] =~ [1, 2]', 'E692:')
+  call assert_fails('echo {} =~ 5', 'E735:')
+  call assert_fails('echo {} =~ {}', 'E736:')
 endfunc
 
   " compare complex recursively linked list and dict
@@ -840,6 +857,19 @@ func Test_deep_nested_dict()
   call assert_fails('let x = execute("echo deep_dict")', 'E724:')
   call test_garbagecollect_now()
   unlet deep_dict
+endfunc
+
+" List and dict indexing tests
+func Test_listdict_index()
+  call assert_fails('echo function("min")[0]', 'E695:')
+  call assert_fails('echo v:true[0]', 'E909:')
+  let d = {'k' : 10}
+  call assert_fails('echo d.', 'E15:')
+  call assert_fails('echo d[1:2]', 'E719:')
+  call assert_fails("let v = [4, 6][{-> 1}]", 'E729:')
+  call assert_fails("let v = range(5)[2:[]]", 'E730:')
+  call assert_fails("let v = range(5)[2:{-> 2}(]", 'E116:')
+  call assert_fails("let v = range(5)[2:3", 'E111:')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

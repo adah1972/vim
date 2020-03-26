@@ -298,13 +298,16 @@ func Test_terminal_scroll()
   let job = term_getjob(buf)
   call WaitForAssert({-> assert_equal("dead", job_status(job))})
   call term_wait(buf)
-  if has('win32')
-    " TODO: this should not be needed
-    sleep 100m
-  endif
 
-  let scrolled = buf->term_getscrolled()
-  call assert_equal(scrolled, term_getscrolled(buf))
+  " wait until the scrolling stops
+  while 1
+    let scrolled = buf->term_getscrolled()
+    sleep 20m
+    if scrolled == buf->term_getscrolled()
+      break
+    endif
+  endwhile
+
   call assert_equal('1', getline(1))
   call assert_equal('1', term_getline(buf, 1 - scrolled))
   call assert_equal('49', getline(49))
@@ -662,10 +665,14 @@ endfunction
 
 func Test_terminal_noblock()
   let buf = term_start(&shell)
+  let wait_time = 5000
+  let letters = 'abcdefghijklmnopqrstuvwxyz'
   if has('bsd') || has('mac') || has('sun')
     " The shell or something else has a problem dealing with more than 1000
-    " characters at the same time.
+    " characters at the same time.  It's very slow too.
     let len = 1000
+    let wait_time = 15000
+    let letters = 'abcdefghijklm'
   " NPFS is used in Windows, nonblocking mode does not work properly.
   elseif has('win32')
     let len = 1
@@ -673,7 +680,8 @@ func Test_terminal_noblock()
     let len = 5000
   endif
 
-  for c in ['a','b','c','d','e','f','g','h','i','j','k']
+  " Send a lot of text lines, should be buffered properly.
+  for c in split(letters, '\zs')
     call term_sendkeys(buf, 'echo ' . repeat(c, len) . "\<cr>")
   endfor
   call term_sendkeys(buf, "echo done\<cr>")
@@ -681,7 +689,7 @@ func Test_terminal_noblock()
   " On MS-Windows there is an extra empty line below "done".  Find "done" in
   " the last-but-one or the last-but-two line.
   let lnum = term_getsize(buf)[0] - 1
-  call WaitFor({-> term_getline(buf, lnum) =~ "done" || term_getline(buf, lnum - 1) =~ "done"}, 10000)
+  call WaitForAssert({-> assert_match('done', term_getline(buf, lnum - 1) .. '//' .. term_getline(buf, lnum))}, wait_time)
   let line = term_getline(buf, lnum)
   if line !~ 'done'
     let line = term_getline(buf, lnum - 1)
@@ -2330,6 +2338,10 @@ func Test_terminal_api_arg()
   unlet! g:called_arg
 endfunc
 
+func Test_terminal_invalid_arg()
+  call assert_fails('terminal ++xyz', 'E181:')
+endfunc
+
 func Test_terminal_in_popup()
   CheckRunVimInTerminal
 
@@ -2491,7 +2503,7 @@ func Test_term_nasty_callback()
   func TermExit(...)
     call term_sendkeys(bufnr('#'), "exit\<CR>")
     call popup_close(win_getid())
-  endfu
+  endfunc
   call OpenTerms()
 
   call term_sendkeys(g:buf0, "exit\<CR>")
@@ -2499,4 +2511,3 @@ func Test_term_nasty_callback()
   exe g:buf0 .. 'bwipe!'
   set hidden&
 endfunc
-
