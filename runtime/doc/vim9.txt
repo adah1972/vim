@@ -1,4 +1,4 @@
-*vim9.txt*	For Vim version 8.2.  Last change: 2020 Mar 01
+*vim9.txt*	For Vim version 8.2.  Last change: 2020 Apr 09
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -120,6 +120,13 @@ and without `:let`, because there is no rule about where they are declared.
 Variables cannot shadow previously defined variables.
 Variables may shadow Ex commands, rename the variable if needed.
 
+Global variables must be prefixed with "g:", also at the script level.
+However, global user defined functions are used without "g:". >
+	vim9script
+	let script_local = 'text'
+	let g:global = 'value'
+	let Funcref = ThatFunction
+
 Since "&opt = value" is now assigning a value to option "opt", ":&" cannot be
 used to repeat a `:substitute` command.
 
@@ -154,6 +161,18 @@ functions can be called before being defined.  This is required to be able
 have cyclic dependencies between functions.  It is slightly less efficient,
 since the function has to be looked up by name.  And a typo in the function
 name will only be found when the call is executed.
+
+
+Omitting function() ~
+
+A user defined function can be used as a function reference in an expression
+without `function()`. The argument types and return type will then be checked.
+The function must already have been defined. >
+
+	let Funcref = MyFunction
+
+When using `function()` the resulting type is "func", a function with any
+number of arguments and any return type.  The function can be defined later.
 
 
 No curly braces expansion ~
@@ -213,8 +232,7 @@ few exceptions.
 	blob		non-empty
 	list		non-empty (different from JavaScript)
 	dictionary	non-empty (different from JavaScript)
-	func		when not NULL
-	partial		when not NULL
+	func		when there is a function name
 	special		v:true
 	job		when not NULL
 	channel		when not NULL
@@ -249,8 +267,8 @@ THIS IS STILL UNDER DEVELOPMENT - ANYTHING CAN BREAK - ANYTHING CAN CHANGE
 			the function follows in the next lines, until the
 			matching `:enddef`.
 
-			When {return-type} is omitted the function is not
-			expected to return anything.
+			When {return-type} is omitted or is "void" the
+			function is not expected to return anything.
 			
 			{arguments} is a sequence of zero or more argument
 			declarations.  There are three forms:
@@ -296,29 +314,51 @@ The following builtin types are supported:
 	float
 	string
 	blob
-	list<type>
-	dict<type>
-	(a: type, b: type): type
+	list<{type}>
+	dict<{type}>
 	job
 	channel
 	func
-	partial
+	func: {type}
+	func({type}, ...)
+	func({type}, ...): {type}
 
 Not supported yet:
-	tuple<a: type, b: type, ...>
+	tuple<a: {type}, b: {type}, ...>
 
-These types can be used in declarations, but no variable will have this type:
-	type|type
+These types can be used in declarations, but no value will have this type:
+	{type}|{type}
 	void
 	any
 
-There is no array type, use list<type> instead.  For a list constant an
+There is no array type, use list<{type}> instead.  For a list constant an
 efficient implementation is used that avoids allocating lot of small pieces of
 memory.
 
-A function defined with `:def` must declare the return type.  If there is no
-type then the function doesn't return anything.  "void" is used in type
-declarations.
+A partial and function can be declared in more or less specific ways:
+func				any kind of function reference, no type
+				checking for arguments or return value
+func: {type}			any number and type of arguments with specific
+				return type
+func({type})			function with argument type, does not return
+				a value
+func({type}): {type}		function with argument type and return type
+func(?{type})			function with type of optional argument, does
+				not return a value
+func(...{type})			function with type of variable number of
+				arguments, does not return a value
+func({type}, ?{type}, ...{type}): {type}
+				function with:
+				- type of mandatory argument
+				- type of optional argument
+				- type of variable number of arguments
+				- return type
+
+If the return type is "void" the function does not return a value.
+
+The reference can also be a |Partial|, in which case it stores extra arguments
+and/or a dictionary, which are not visible to the caller.  Since they are
+called in the same way the declaration is the same.
 
 Custom types can be defined with `:type`: >
 	:type MyList list<string>

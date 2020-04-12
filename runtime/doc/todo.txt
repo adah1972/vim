@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 8.2.  Last change: 2020 Mar 19
+*todo.txt*      For Vim version 8.2.  Last change: 2020 Apr 10
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -38,19 +38,20 @@ browser use: https://github.com/vim/vim/issues/1234
 							*known-bugs*
 -------------------- Known bugs and current work -----------------------
 
-Add second argument to has(), return True when the feature can exist at all.
-
-Patch to fix buffer menu. (Yee Cheng Chin, #5787)
-
-Add $TEST_MAY_FAIL, comma separated list of test functions that won't be fatal
-when failed. 
-- When matcning in AfterTheTest() then do not add to s:errors but to
-  s:warnings.  in testdir/runtest.vim
-
 Vim9 script:
-- Add vim9 commands to index, so that vim.vim will get them automatically.
-    See email from Charles March 11 2020.
+func and partial types:
+- check using func type with default arguments and varargs.
+	func(type, type?, ...): rettype
+- Type checking arguments when calling :def function and test
+- Calling unknown user function does not give proper error message:
+      assert_equal('123text', RefDef2Arg())  typo for "RetDef2Arg"
 - "func" inside "vim9script" doesn't work?  (Ben Jackson, #5670)
+- :func inside vim9script must still use a:arg
+- define function and create funcref in one step:
+	let ref = def(arg: type): rettype
+	    body
+	enddef
+Also:
 - "echo Func()" is an error if Func() does not return anything.
 - better implementation for partial and tests for that.
 - Make "g:imported = Export.exported" work in Vim9 script.
@@ -59,7 +60,6 @@ Vim9 script:
 - Disallow unlet for local/script/imported vars
 - Support type for ":let"/":const" at script level for Vim9 script.
     (Ben Jackson, #5671)
-- :func inside vim9script must still use a:arg
 - Make "++nr" work.
 - Check that import in legacy script works and puts item in s:
 - Error in any command in "vim9script" aborts sourcing.
@@ -69,23 +69,19 @@ Vim9 script:
 - Test try/catch and throw better, also nested.
   Test return inside try/finally jumps to finally and then returns.
 - call autoload function.
-- Type checking arguments when calling :def function
 - Implement more expressions, e.g. [a:b]
 - can use func as reference:
 	def SomeFunc() ...
 	map(list, SomeFunc)
-- define function and create funcref in one step:
-	let ref = def(arg: type): rettype
-  Also extends lambda
 - Test: Function declared inside a :def function is local, disappears at the
   end of the function.  Unless g: is used, just like with variables.
 - Can we omit \ for line continuation inside (), {}, ?
   Requires parsing while reading a function.  Like fgetline in do_one_cmd()?
 - implement :type
+- import type declaration?
 - implement class
 - implement interface
 - predefined class: Promise<T>
-- import statement for type declaration?
 - Make accessing varargs faster: arg[expr]
 	EVAL expr
 	LOADVARARG (varags idx)
@@ -115,6 +111,8 @@ Popup windows:
 - Figure out the size and position better if wrapping inserts indent
 
 Text properties:
+- Patch to fix that split / join does not update properties properly (Axel
+  Forsman, #5839)  Alternative: #5875.
 - "cc" does not call inserted_bytes(). (Axel Forsman, #5763)
 - Get E685 with a sequence of commands. (#5674)
 - Combining text property with 'cursorline' does not always work (Billie
@@ -185,17 +183,22 @@ Terminal emulator window:
   conversions.
 
 Error numbers available:
-E451, E452, E453, E454, E460, E489, E491, E565, E578, E610, E611, E653,
+E453, E454, E460, E489, E491, E565, E578, E610, E611, E653,
 E654, E856, E857, E861, E900
+
+Buffer autocommands are a bit inconsistent.  Add a separate set of
+autocommands for the buffer lifecycle:
+    BufIsCreated  (after buffer ID exists)
+    BufIsLoaded   (after buffer ID has content)
+    BufIsUnloaded (after buffer ID no longer has)
+    BufIsWiped    (after buffer ID was wiped)
+    BufIsRenamed  (after buffer ID gets another name)
+The buffer list and windows are locked, no changes possible
 
 Patch to fix drawing error with DirectX. (James Grant, #5688)
 Causes flicker on resizing.
 
-Patch to make lambda functions faster (Ken Takata)
-https://github.com/vim/vim/pull/5727
- LGTM remark: size derived from user input (getenv).  Don't see how.
-
-Patch to use more FOR_ALL_ macros and use them. (Yegappan Lakshmanan, #5339)
+In gvim always set t_Co to 16777216 (#5903)
 
 Patch to explain use of "%" in :!.  (David Briscoe, #5591)
 
@@ -205,6 +208,9 @@ Ready to include.
 Patch to add "-d" to xxd. (#5616)
 
 Patch to add Turkish manual. (Emir Sarı, #5641)
+
+Patch to support cindent option to handle pragmas differently.
+(Max Rumpf, #5468)
 
 File marks merging has duplicates since 7.4.1925. (Ingo Karkat, #5733)
 
@@ -226,6 +232,8 @@ Ready to include?  Review the code.
 
 When 'lazyredraw' is set sometimes the title is not updated.
 (Jason Franklin, 2020 Feb 3)  Looks like a race condition.
+
+Patch to delete BeOS code. (#5817)
 
 Strange sequence of BufWipeout and BufNew events while doing omni-complete.
 (Paul Jolly, #5656)
@@ -259,9 +267,6 @@ Also #5326: netrw buffers are not restored.
 
 When 'backupdir' has a path ending in double slash (meaning: use full path of
 the file) combined with 'patchmode' the file name is wrong. (#5791)
-
-Patch to support cindent option to handle pragmas differently.
-(Max Rumpf, #5468)
 
 Patch to make ":verbose pwd" show the scope of the directory. (Takuya
 Fujiwara, #5469)
@@ -646,24 +651,7 @@ Make ":interactive !cmd" stop termcap mode, also when used in an autocommand.
 
 Add buffer argument to undotree(). (#4001)
 
-Using uninitialized value in test_gn
 Using uninitialized value in test_crypt (can't explain why).
-memory leak in test_cmdline
-==6522==    by 0x291AFF: ga_grow (misc2.c:2069)
-==6522==    by 0x3D5B4B: win_size_save (window.c:5243)
-==6522==    by 0x222922: open_cmdwin (ex_getln.c:4177)
-==6522==    by 0x21D472: getcmdline_int (ex_getln.c:1376)
-memory leak in test_paste
-Memory leak in test_terminal:
-==23530==    by 0x2640D7: alloc (misc2.c:874)
-==23530==    by 0x2646D6: vim_strsave (misc2.c:1315)
-==23530==    by 0x25841D: FullName_save (misc1.c:5443)
-==23530==    by 0x17CB4F: fix_fname (buffer.c:4794)
-==23530==    by 0x17CB9A: fname_expand (buffer.c:4838)
-==23530==    by 0x1759AB: buflist_new (buffer.c:1889)
-==23530==    by 0x35C923: term_start (terminal.c:421)
-==23530==    by 0x2AFF30: mch_call_shell_terminal (os_unix.c:4377)
-==23530==    by 0x2B16BE: mch_call_shell (os_unix.c:5383)
 Memory leak in test_terminal_fail
 TODO: be able to run all parts of test_alot with valgrind separately
 Memory leak in test_alot with pyeval() (allocating partial)

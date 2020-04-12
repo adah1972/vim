@@ -930,7 +930,7 @@ skip_var_list(
 	    {
 		if (*semicolon == 1)
 		{
-		    emsg(_("Double ; in list of variables"));
+		    emsg(_("E452: Double ; in list of variables"));
 		    return NULL;
 		}
 		*semicolon = 1;
@@ -1668,6 +1668,7 @@ item_lock(typval_T *tv, int deep, int lock)
     switch (tv->v_type)
     {
 	case VAR_UNKNOWN:
+	case VAR_ANY:
 	case VAR_VOID:
 	case VAR_NUMBER:
 	case VAR_BOOL:
@@ -1698,7 +1699,7 @@ item_lock(typval_T *tv, int deep, int lock)
 		    l->lv_lock &= ~VAR_LOCKED;
 		if ((deep < 0 || deep > 1) && l->lv_first != &range_list_item)
 		    // recursive: lock/unlock the items the List contains
-		    for (li = l->lv_first; li != NULL; li = li->li_next)
+		    FOR_ALL_LIST_ITEMS(l, li)
 			item_lock(&li->li_tv, deep - 1, lock);
 	    }
 	    break;
@@ -1914,15 +1915,17 @@ get_vimvar_dict(void)
 
 /*
  * Returns the index of a v:variable.  Negative if not found.
+ * Returns DI_ flags in "di_flags".
  */
     int
-find_vim_var(char_u *name)
+find_vim_var(char_u *name, int *di_flags)
 {
-    dictitem_T *di = find_var_in_ht(&vimvarht, 0, name, TRUE);
-    struct vimvar *vv;
+    dictitem_T	    *di = find_var_in_ht(&vimvarht, 0, name, TRUE);
+    struct vimvar   *vv;
 
     if (di == NULL)
 	return -1;
+    *di_flags = di->di_flags;
     vv = (struct vimvar *)((char *)di - offsetof(vimvar_T, vv_di));
     return (int)(vv - vimvars);
 }
@@ -1973,6 +1976,17 @@ set_vim_var_tv(int idx, typval_T *tv)
     {
 	emsg(_("E1063: type mismatch for v: variable"));
 	clear_tv(tv);
+	return FAIL;
+    }
+    // VV_RO is also checked when compiling, but let's check here as well.
+    if (vimvars[idx].vv_flags & VV_RO)
+    {
+	semsg(_(e_readonlyvar), vimvars[idx].vv_name);
+	return FAIL;
+    }
+    if (sandbox && (vimvars[idx].vv_flags & VV_RO_SBX))
+    {
+	semsg(_(e_readonlysbx), vimvars[idx].vv_name);
 	return FAIL;
     }
     clear_tv(&vimvars[idx].vv_di.di_tv);
@@ -2382,6 +2396,7 @@ find_var(char_u *name, hashtab_T **htp, int no_autoload)
 
 /*
  * Find variable "varname" in hashtab "ht" with name "htname".
+ * When "varname" is empty returns curwin/curtab/etc vars dictionary.
  * Returns NULL if not found.
  */
     dictitem_T *
@@ -2434,7 +2449,7 @@ find_var_in_ht(
 /*
  * Get the script-local hashtab.  NULL if not in a script context.
  */
-    hashtab_T *
+    static hashtab_T *
 get_script_local_ht(void)
 {
     scid_T sid = current_sctx.sc_sid;
@@ -3461,7 +3476,6 @@ f_getwinvar(typval_T *argvars, typval_T *rettv)
 f_getbufvar(typval_T *argvars, typval_T *rettv)
 {
     buf_T	*buf;
-    buf_T	*save_curbuf;
     char_u	*varname;
     dictitem_T	*v;
     int		done = FALSE;
@@ -3476,12 +3490,13 @@ f_getbufvar(typval_T *argvars, typval_T *rettv)
 
     if (buf != NULL && varname != NULL)
     {
-	// set curbuf to be our buf, temporarily
-	save_curbuf = curbuf;
-	curbuf = buf;
-
 	if (*varname == '&')
 	{
+	    buf_T	*save_curbuf = curbuf;
+
+	    // set curbuf to be our buf, temporarily
+	    curbuf = buf;
+
 	    if (varname[1] == NUL)
 	    {
 		// get all buffer-local options in a dict
@@ -3496,22 +3511,25 @@ f_getbufvar(typval_T *argvars, typval_T *rettv)
 	    else if (get_option_tv(&varname, rettv, TRUE) == OK)
 		// buffer-local-option
 		done = TRUE;
+
+	    // restore previous notion of curbuf
+	    curbuf = save_curbuf;
 	}
 	else
 	{
 	    // Look up the variable.
-	    // Let getbufvar({nr}, "") return the "b:" dictionary.
-	    v = find_var_in_ht(&curbuf->b_vars->dv_hashtab,
-							 'b', varname, FALSE);
+	    if (*varname == NUL)
+		// Let getbufvar({nr}, "") return the "b:" dictionary.
+		v = &buf->b_bufvar;
+	    else
+		v = find_var_in_ht(&buf->b_vars->dv_hashtab, 'b',
+							       varname, FALSE);
 	    if (v != NULL)
 	    {
 		copy_tv(&v->di_tv, rettv);
 		done = TRUE;
 	    }
 	}
-
-	// restore previous notion of curbuf
-	curbuf = save_curbuf;
     }
 
     if (!done && argvars[2].v_type != VAR_UNKNOWN)
@@ -3618,11 +3636,11 @@ f_setbufvar(typval_T *argvars, typval_T *rettv UNUSED)
 	}
 	else
 	{
-	    buf_T *save_curbuf = curbuf;
-
 	    bufvarname = alloc(STRLEN(varname) + 3);
 	    if (bufvarname != NULL)
 	    {
+		buf_T *save_curbuf = curbuf;
+
 		curbuf = buf;
 		STRCPY(bufvarname, "b:");
 		STRCPY(bufvarname + 2, varname);

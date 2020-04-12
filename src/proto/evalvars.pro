@@ -28,7 +28,7 @@ char *get_var_special_name(int nr);
 dict_T *get_globvar_dict(void);
 hashtab_T *get_globvar_ht(void);
 dict_T *get_vimvar_dict(void);
-int find_vim_var(char_u *name);
+int find_vim_var(char_u *name, int *di_flags);
 void set_vim_var_type(int idx, vartype_T type);
 void set_vim_var_nr(int idx, varnumber_T val);
 char *get_vim_var_name(int idx);
@@ -54,7 +54,6 @@ int get_var_tv(char_u *name, int len, typval_T *rettv, dictitem_T **dip, int ver
 void check_vars(char_u *name, int len);
 dictitem_T *find_var(char_u *name, hashtab_T **htp, int no_autoload);
 dictitem_T *find_var_in_ht(hashtab_T *ht, int htname, char_u *varname, int no_autoload);
-hashtab_T *get_script_local_ht(void);
 int lookup_scriptvar(char_u *name, size_t len, cctx_T *dummy);
 hashtab_T *find_var_ht(char_u *name, char_u **varname);
 char_u *get_var_value(char_u *name);
