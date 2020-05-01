@@ -96,6 +96,7 @@ def Test_call_default_args()
   assert_fails('call MyDefaultArgs("one", "two")', 'E118:')
 
   call CheckScriptFailure(['def Func(arg: number = asdf)', 'enddef'], 'E1001:')
+  call CheckScriptFailure(['def Func(arg: number = "text")', 'enddef'], 'E1013: argument 1: type mismatch, expected number but got string')
 enddef
 
 func Test_call_default_args_from_func()
@@ -192,7 +193,7 @@ def Test_using_var_as_arg()
 enddef
 
 def Test_call_func_defined_later()
-  call assert_equal('one', DefinedLater('one'))
+  call assert_equal('one', g:DefinedLater('one'))
   call assert_fails('call NotDefined("one")', 'E117:')
 enddef
 
@@ -200,8 +201,37 @@ func DefinedLater(arg)
   return a:arg
 endfunc
 
+def Test_call_funcref()
+  assert_equal(3, g:SomeFunc('abc'))
+  assert_fails('NotAFunc()', 'E117:')
+  assert_fails('g:NotAFunc()', 'E117:')
+enddef
+
+let SomeFunc = function('len')
+let NotAFunc = 'text'
+
+def CombineFuncrefTypes()
+  " same arguments, different return type
+  let Ref1: func(bool): string
+  let Ref2: func(bool): number
+  let Ref3: func(bool): any
+  Ref3 = g:cond ? Ref1 : Ref2
+
+  " different number of arguments
+  let Refa1: func(bool): number
+  let Refa2: func(bool, number): number
+  let Refa3: func: number
+  Refa3 = g:cond ? Refa1 : Refa2
+
+  " different argument types
+  let Refb1: func(bool, string): number
+  let Refb2: func(string, number): number
+  let Refb3: func(any, any): number
+  Refb3 = g:cond ? Refb1 : Refb2
+enddef
+
 def FuncWithForwardCall()
-  return DefinedEvenLater("yes")
+  return g:DefinedEvenLater("yes")
 enddef
 
 def DefinedEvenLater(arg: string): string
@@ -229,6 +259,8 @@ enddef
 def Test_arg_type_wrong()
   CheckScriptFailure(['def Func3(items: list)', 'echo "a"', 'enddef'], 'E1008: Missing <type>')
   CheckScriptFailure(['def Func4(...)', 'echo "a"', 'enddef'], 'E1055: Missing name after ...')
+  CheckScriptFailure(['def Func5(items:string)', 'echo "a"'], 'E1069:')
+  CheckScriptFailure(['def Func5(items)', 'echo "a"'], 'E1077:')
 enddef
 
 def Test_vim9script_call()
@@ -321,7 +353,7 @@ endfunc
 def Test_delfunc()
   let lines =<< trim END
     vim9script
-    def GoneSoon()
+    def g:GoneSoon()
       echo 'hello'
     enddef
 
@@ -329,7 +361,7 @@ def Test_delfunc()
       GoneSoon()
     enddef
 
-    delfunc GoneSoon
+    delfunc g:GoneSoon
     CallGoneSoon()
   END
   writefile(lines, 'XToDelFunc')
@@ -350,13 +382,27 @@ def Test_redef_failure()
   so Xdef
   call delete('Xdef')
 
-  call assert_equal(0, Func0())
-  call assert_equal('Func1', Func1())
-  call assert_equal('Func2', Func2())
+  call assert_equal(0, g:Func0())
+  call assert_equal('Func1', g:Func1())
+  call assert_equal('Func2', g:Func2())
 
   delfunc! Func0
   delfunc! Func1
   delfunc! Func2
+enddef
+
+def Test_vim9script_func()
+  let lines =<< trim END
+    vim9script
+    func Func(arg)
+      echo a:arg
+    endfunc
+    Func('text')
+  END
+  writefile(lines, 'XVim9Func')
+  so XVim9Func
+
+  delete('XVim9Func')
 enddef
 
 " Test for internal functions returning different types
@@ -539,6 +585,37 @@ def Test_func_return_type()
 
   CheckDefFailure(['let str: string', 'str = FuncNoArgRetNumber()'], 'E1013: type mismatch, expected string but got number')
 enddef
+
+def MultiLine(
+    arg1: string,
+    arg2 = 1234,
+    ...rest: list<string>
+      ): string
+  return arg1 .. arg2 .. join(rest, '-')
+enddef
+
+def MultiLineComment(
+    arg1: string, # comment
+    arg2 = 1234, # comment
+    ...rest: list<string> # comment
+      ): string # comment
+  return arg1 .. arg2 .. join(rest, '-')
+enddef
+
+def Test_multiline()
+  assert_equal('text1234', MultiLine('text'))
+  assert_equal('text777', MultiLine('text', 777))
+  assert_equal('text777one', MultiLine('text', 777, 'one'))
+  assert_equal('text777one-two', MultiLine('text', 777, 'one', 'two'))
+enddef
+
+func Test_multiline_not_vim9()
+  call assert_equal('text1234', MultiLine('text'))
+  call assert_equal('text777', MultiLine('text', 777))
+  call assert_equal('text777one', MultiLine('text', 777, 'one'))
+  call assert_equal('text777one-two', MultiLine('text', 777, 'one', 'two'))
+endfunc
+
 
 " When using CheckScriptFailure() for the below test, E1010 is generated instead
 " of E1056.

@@ -128,6 +128,7 @@ SRC_ALL =	\
 		src/term.h \
 		src/termlib.c \
 		src/testing.c \
+		src/textobject.c \
 		src/textprop.c \
 		src/time.c \
 		src/ui.c \
@@ -162,6 +163,7 @@ SRC_ALL =	\
 		src/testdir/setup.vim \
 		src/testdir/setup_gui.vim \
 		src/testdir/shared.vim \
+		src/testdir/vim9.vim \
 		src/testdir/summarize.vim \
 		src/testdir/term_util.vim \
 		src/testdir/view_util.vim \
@@ -182,8 +184,6 @@ SRC_ALL =	\
 		src/testdir/python_after/*.py \
 		src/testdir/python_before/*.py \
 		src/testdir/pyxfile/*.py \
-		src/testdir/bench*.in \
-		src/testdir/bench*.vim \
 		src/testdir/dumps/*.dump \
 		src/testdir/samples/*.txt \
 		src/testdir/samples/test000 \
@@ -280,6 +280,7 @@ SRC_ALL =	\
 		src/proto/terminal.pro \
 		src/proto/termlib.pro \
 		src/proto/testing.pro \
+		src/proto/textobject.pro \
 		src/proto/textprop.pro \
 		src/proto/time.pro \
 		src/proto/ui.pro \
@@ -607,8 +608,9 @@ SRC_AMI =	\
 
 # source files for Haiku (also in the extra archive)
 SRC_HAIKU =	\
+		README_haiku.txt \
 		src/os_haiku.h \
-		src/os_haiku.rdef \
+		src/os_haiku.rdef.in \
 		src/gui_haiku.cc \
 		src/gui_haiku.h \
 		src/proto/gui_haiku.pro \

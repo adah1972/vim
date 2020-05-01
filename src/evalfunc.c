@@ -2149,7 +2149,7 @@ f_eval(typval_T *argvars, typval_T *rettv)
     static void
 f_eventhandler(typval_T *argvars UNUSED, typval_T *rettv)
 {
-    rettv->vval.v_number = vgetc_busy;
+    rettv->vval.v_number = vgetc_busy || input_busy;
 }
 
 static garray_T	redir_execute_ga;
@@ -2566,7 +2566,7 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 #ifdef FEAT_TIMERS
 			|| timer_busy
 #endif
-			)
+			|| input_busy)
 		    typebuf_was_filled = TRUE;
 	    }
 	    vim_free(keys_esc);
@@ -2679,6 +2679,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
     int		use_string = FALSE;
     partial_T   *arg_pt = NULL;
     char_u	*trans_name = NULL;
+    int		is_global = FALSE;
 
     if (argvars[0].v_type == VAR_FUNC)
     {
@@ -2702,7 +2703,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
     if ((use_string && vim_strchr(s, AUTOLOAD_CHAR) == NULL) || is_funcref)
     {
 	name = s;
-	trans_name = trans_function_name(&name, FALSE,
+	trans_name = trans_function_name(&name, &is_global, FALSE,
 	     TFN_INT | TFN_QUIET | TFN_NO_AUTOLOAD | TFN_NO_DEREF, NULL, NULL);
 	if (*name != NUL)
 	    s = NULL;
@@ -2713,8 +2714,8 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 	semsg(_(e_invarg2), use_string ? tv_get_string(&argvars[0]) : s);
     // Don't check an autoload name for existence here.
     else if (trans_name != NULL && (is_funcref
-				? find_func(trans_name, NULL) == NULL
-				: !translated_function_exists(trans_name)))
+			 ? find_func(trans_name, is_global, NULL) == NULL
+			 : !translated_function_exists(trans_name, is_global)))
 	semsg(_("E700: Unknown function: %s"), s);
     else
     {
@@ -2851,7 +2852,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 		}
 		else if (is_funcref)
 		{
-		    pt->pt_func = find_func(trans_name, NULL);
+		    pt->pt_func = find_func(trans_name, is_global, NULL);
 		    func_ptr_ref(pt->pt_func);
 		    vim_free(name);
 		}
@@ -2886,7 +2887,7 @@ f_funcref(typval_T *argvars, typval_T *rettv)
 }
 
     static type_T *
-ret_f_function(int argcount, type_T **argtypes UNUSED)
+ret_f_function(int argcount, type_T **argtypes)
 {
     if (argcount == 1 && argtypes[0]->tt_type == VAR_STRING)
 	return &t_func_any;
@@ -2977,7 +2978,7 @@ f_get(typval_T *argvars, typval_T *rettv)
 	    pt = argvars[0].vval.v_partial;
 	else
 	{
-	    vim_memset(&fref_pt, 0, sizeof(fref_pt));
+	    CLEAR_FIELD(fref_pt);
 	    fref_pt.pt_name = argvars[0].vval.v_string;
 	    pt = &fref_pt;
 	}
@@ -3943,6 +3944,13 @@ f_has(typval_T *argvars, typval_T *rettv)
 #endif
 		},
 	{"insert_expand", 1},
+	{"ipv6",
+#ifdef FEAT_IPV6
+		1
+#else
+		0
+#endif
+	},
 	{"job",
 #ifdef FEAT_JOB_CHANNEL
 		1
@@ -6523,7 +6531,7 @@ search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
     }
 
     pos = save_cursor = curwin->w_cursor;
-    vim_memset(&sia, 0, sizeof(sia));
+    CLEAR_FIELD(sia);
     sia.sa_stop_lnum = (linenr_T)lnum_stop;
 #ifdef FEAT_RELTIME
     sia.sa_tm = &tm;
@@ -6971,7 +6979,7 @@ do_searchpair(
     {
 	searchit_arg_T sia;
 
-	vim_memset(&sia, 0, sizeof(sia));
+	CLEAR_FIELD(sia);
 	sia.sa_stop_lnum = lnum_stop;
 #ifdef FEAT_RELTIME
 	sia.sa_tm = &tm;
@@ -8394,7 +8402,7 @@ f_synconcealed(typval_T *argvars UNUSED, typval_T *rettv)
     lnum = tv_get_lnum(argvars);		// -1 on type error
     col = (colnr_T)tv_get_number(&argvars[1]) - 1;	// -1 on type error
 
-    vim_memset(str, NUL, sizeof(str));
+    CLEAR_FIELD(str);
 
     if (rettv_list_alloc(rettv) != FAIL)
     {

@@ -52,6 +52,14 @@ func CheckExecutable(name)
   endif
 endfunc
 
+" Command to check for the presence of python.  Argument should have been
+" obtained with PythonProg()
+func CheckPython(name)
+  if a:name == ''
+    throw 'Skipped: python command not available'
+  endif
+endfunc
+
 " Command to check for running on MS-Windows
 command CheckMSWindows call CheckMSWindows()
 func CheckMSWindows()
@@ -140,6 +148,39 @@ func CheckEnglish()
   if v:lang != "C" && v:lang !~ '^[Ee]n'
       throw 'Skipped: only works in English language environment'
   endif
+endfunc
+
+" Command to check that loopback device has IPv6 address
+command CheckIPv6 call CheckIPv6()
+func CheckIPv6()
+  if !has('ipv6')
+    throw 'Skipped: cannot use IPv6 networking'
+  endif
+  if !exists('s:ipv6_loopback')
+    let s:ipv6_loopback = s:CheckIPv6Loopback()
+  endif
+  if !s:ipv6_loopback
+    throw 'Skipped: no IPv6 address for loopback device'
+  endif
+endfunc
+
+func s:CheckIPv6Loopback()
+  if has('win32')
+    return system('netsh interface ipv6 show interface') =~? '\<Loopback\>'
+  elseif filereadable('/proc/net/if_inet6')
+    return (match(readfile('/proc/net/if_inet6'), '\slo$') >= 0)
+  elseif executable('ifconfig')
+    for dev in ['lo0', 'lo', 'loop']
+      " NOTE: On SunOS, need specify address family 'inet6' to get IPv6 info.
+      if system('ifconfig ' .. dev .. ' inet6 2>/dev/null') =~? '\<inet6\>'
+            \ || system('ifconfig ' .. dev .. ' 2>/dev/null') =~? '\<inet6\>'
+        return v:true
+      endif
+    endfor
+  else
+    " TODO: How to check it in other platforms?
+  endif
+  return v:false
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

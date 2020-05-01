@@ -358,7 +358,7 @@ call_ufunc(ufunc_T *ufunc, int argcount, ectx_T *ectx, isn_T *iptr)
 
     if (call_prepare(argcount, argvars, ectx) == FAIL)
 	return FAIL;
-    vim_memset(&funcexe, 0, sizeof(funcexe));
+    CLEAR_FIELD(funcexe);
     funcexe.evaluate = TRUE;
 
     // Call the user function.  Result goes in last position on the stack.
@@ -400,7 +400,7 @@ call_by_name(char_u *name, int argcount, ectx_T *ectx, isn_T *iptr)
 	return call_bfunc(func_idx, argcount, ectx);
     }
 
-    ufunc = find_func(name, NULL);
+    ufunc = find_func(name, FALSE, NULL);
     if (ufunc != NULL)
 	return call_ufunc(ufunc, argcount, ectx, iptr);
 
@@ -446,6 +446,7 @@ store_var(char_u *name, typval_T *tv)
     restore_funccal();
 }
 
+
 /*
  * Execute a function by "name".
  * This can be a builtin function, user function or a funcref.
@@ -459,13 +460,20 @@ call_eval_func(char_u *name, int argcount, ectx_T *ectx, isn_T *iptr)
     if (call_by_name(name, argcount, ectx, iptr) == FAIL
 					  && called_emsg == called_emsg_before)
     {
-	// "name" may be a variable that is a funcref or partial
-	//    if find variable
-	//      call_partial()
-	//    else
-	//      semsg(_(e_unknownfunc), name);
-	emsg("call_eval_func(partial) not implemented yet");
-	return FAIL;
+	dictitem_T	*v;
+
+	v = find_var(name, NULL, FALSE);
+	if (v == NULL)
+	{
+	    semsg(_(e_unknownfunc), name);
+	    return FAIL;
+	}
+	if (v->di_tv.v_type != VAR_PARTIAL && v->di_tv.v_type != VAR_FUNC)
+	{
+	    semsg(_(e_unknownfunc), name);
+	    return FAIL;
+	}
+	return call_partial(&v->di_tv, argcount, ectx);
     }
     return OK;
 }
@@ -477,16 +485,18 @@ call_eval_func(char_u *name, int argcount, ectx_T *ectx, isn_T *iptr)
     int
 call_def_function(
     ufunc_T	*ufunc,
-    int		argc,		// nr of arguments
+    int		argc_arg,	// nr of arguments
     typval_T	*argv,		// arguments
     typval_T	*rettv)		// return value
 {
     ectx_T	ectx;		// execution context
+    int		argc = argc_arg;
     int		initial_frame_ptr;
     typval_T	*tv;
     int		idx;
     int		ret = FAIL;
     int		defcount = ufunc->uf_args.ga_len - argc;
+    int		save_sc_version = current_sctx.sc_version;
 
 // Get pointer to item in the stack.
 #define STACK_TV(idx) (((typval_T *)ectx.ec_stack.ga_data) + idx)
@@ -498,7 +508,7 @@ call_def_function(
 // Get pointer to a local variable on the stack.  Negative for arguments.
 #define STACK_TV_VAR(idx) (((typval_T *)ectx.ec_stack.ga_data) + ectx.ec_frame + STACK_FRAME_SIZE + idx)
 
-    vim_memset(&ectx, 0, sizeof(ectx));
+    CLEAR_FIELD(ectx);
     ga_init2(&ectx.ec_stack, sizeof(typval_T), 500);
     if (ga_grow(&ectx.ec_stack, 20) == FAIL)
 	return FAIL;
@@ -512,13 +522,34 @@ call_def_function(
 	copy_tv(&argv[idx], STACK_TV_BOT(0));
 	++ectx.ec_stack.ga_len;
     }
+
+    // Turn varargs into a list.  Empty list if no args.
+    if (ufunc->uf_va_name != NULL)
+    {
+	int vararg_count = argc - ufunc->uf_args.ga_len;
+
+	if (vararg_count < 0)
+	    vararg_count = 0;
+	else
+	    argc -= vararg_count;
+	if (exe_newlist(vararg_count, &ectx) == FAIL)
+	    goto failed_early;
+	if (defcount > 0)
+	    // Move varargs list to below missing default arguments.
+	    *STACK_TV_BOT(defcount- 1) = *STACK_TV_BOT(-1);
+	--ectx.ec_stack.ga_len;
+    }
+
     // Make space for omitted arguments, will store default value below.
+    // Any varargs list goes after them.
     if (defcount > 0)
 	for (idx = 0; idx < defcount; ++idx)
 	{
 	    STACK_TV_BOT(0)->v_type = VAR_UNKNOWN;
 	    ++ectx.ec_stack.ga_len;
 	}
+    if (ufunc->uf_va_name != NULL)
+	    ++ectx.ec_stack.ga_len;
 
     // Frame pointer points to just after arguments.
     ectx.ec_frame = ectx.ec_stack.ga_len;
@@ -543,6 +574,9 @@ call_def_function(
 	ectx.ec_instr = dfunc->df_instr;
     }
 
+    // Commands behave like vim9script.
+    current_sctx.sc_version = SCRIPT_VERSION_VIM9;
+
     // Decide where to start execution, handles optional arguments.
     init_instr_idx(ufunc, argc, &ectx);
 
@@ -558,6 +592,16 @@ call_def_function(
 	    if (throw_exception("Vim:Interrupt", ET_INTERRUPT, NULL) == FAIL)
 		goto failed;
 	    did_throw = TRUE;
+	}
+
+	if (did_emsg && msg_list != NULL && *msg_list != NULL)
+	{
+	    // Turn an error message into an exception.
+	    did_emsg = FALSE;
+	    if (throw_exception(*msg_list, ET_ERROR, NULL) == FAIL)
+		goto failed;
+	    did_throw = TRUE;
+	    *msg_list = NULL;
 	}
 
 	if (did_throw && !ectx.ec_in_catch)
@@ -601,7 +645,48 @@ call_def_function(
 	{
 	    // execute Ex command line
 	    case ISN_EXEC:
+		SOURCING_LNUM = iptr->isn_lnum;
 		do_cmdline_cmd(iptr->isn_arg.string);
+		break;
+
+	    // execute Ex command from pieces on the stack
+	    case ISN_EXECCONCAT:
+		{
+		    int	    count = iptr->isn_arg.number;
+		    size_t  len = 0;
+		    int	    pass;
+		    int	    i;
+		    char_u  *cmd = NULL;
+		    char_u  *str;
+
+		    for (pass = 1; pass <= 2; ++pass)
+		    {
+			for (i = 0; i < count; ++i)
+			{
+			    tv = STACK_TV_BOT(i - count);
+			    str = tv->vval.v_string;
+			    if (str != NULL && *str != NUL)
+			    {
+				if (pass == 2)
+				    STRCPY(cmd + len, str);
+				len += STRLEN(str);
+			    }
+			    if (pass == 2)
+				clear_tv(tv);
+			}
+			if (pass == 1)
+			{
+			    cmd = alloc(len + 1);
+			    if (cmd == NULL)
+				goto failed;
+			    len = 0;
+			}
+		    }
+
+		    SOURCING_LNUM = iptr->isn_lnum;
+		    do_cmdline_cmd(cmd);
+		    vim_free(cmd);
+		}
 		break;
 
 	    // execute :echo {string} ...
@@ -624,8 +709,12 @@ call_def_function(
 		}
 		break;
 
-	    // execute :execute {string} ...
+	    // :execute {string} ...
+	    // :echomsg {string} ...
+	    // :echoerr {string} ...
 	    case ISN_EXECUTE:
+	    case ISN_ECHOMSG:
+	    case ISN_ECHOERR:
 		{
 		    int		count = iptr->isn_arg.number;
 		    garray_T	ga;
@@ -661,7 +750,30 @@ call_def_function(
 		    ectx.ec_stack.ga_len -= count;
 
 		    if (!failed && ga.ga_data != NULL)
-			do_cmdline_cmd((char_u *)ga.ga_data);
+		    {
+			if (iptr->isn_type == ISN_EXECUTE)
+			    do_cmdline_cmd((char_u *)ga.ga_data);
+			else
+			{
+			    msg_sb_eol();
+			    if (iptr->isn_type == ISN_ECHOMSG)
+			    {
+				msg_attr(ga.ga_data, echo_attr);
+				out_flush();
+			    }
+			    else
+			    {
+				int		save_did_emsg = did_emsg;
+
+				SOURCING_LNUM = iptr->isn_lnum;
+				emsg(ga.ga_data);
+				if (!force_abort)
+				    // We don't want to abort following
+				    // commands, restore did_emsg.
+				    did_emsg = save_did_emsg;
+			    }
+			}
+		    }
 		    ga_clear(&ga);
 		}
 		break;
@@ -721,16 +833,42 @@ call_def_function(
 		}
 		break;
 
-	    // load g: variable
+	    // load g:/b:/w:/t: variable
 	    case ISN_LOADG:
+	    case ISN_LOADB:
+	    case ISN_LOADW:
+	    case ISN_LOADT:
 		{
-		    dictitem_T *di = find_var_in_ht(get_globvar_ht(), 0,
-						   iptr->isn_arg.string, TRUE);
+		    dictitem_T *di = NULL;
+		    hashtab_T *ht = NULL;
+		    char namespace;
+		    switch (iptr->isn_type)
+		    {
+			case ISN_LOADG:
+			    ht = get_globvar_ht();
+			    namespace = 'g';
+			    break;
+			case ISN_LOADB:
+			    ht = &curbuf->b_vars->dv_hashtab;
+			    namespace = 'b';
+			    break;
+			case ISN_LOADW:
+			    ht = &curwin->w_vars->dv_hashtab;
+			    namespace = 'w';
+			    break;
+			case ISN_LOADT:
+			    ht = &curtab->tp_vars->dv_hashtab;
+			    namespace = 't';
+			    break;
+			default:  // Cannot reach here
+			    goto failed;
+		    }
+		    di = find_var_in_ht(ht, 0, iptr->isn_arg.string, TRUE);
 
 		    if (di == NULL)
 		    {
-			semsg(_("E121: Undefined variable: g:%s"),
-							 iptr->isn_arg.string);
+			semsg(_("E121: Undefined variable: %c:%s"),
+					     namespace, iptr->isn_arg.string);
 			goto failed;
 		    }
 		    else
@@ -889,13 +1027,34 @@ call_def_function(
 		    goto failed;
 		break;
 
-	    // store g: variable
+	    // store g:/b:/w:/t: variable
 	    case ISN_STOREG:
+	    case ISN_STOREB:
+	    case ISN_STOREW:
+	    case ISN_STORET:
 		{
 		    dictitem_T *di;
+		    hashtab_T *ht;
+		    switch (iptr->isn_type)
+		    {
+			case ISN_STOREG:
+			    ht = get_globvar_ht();
+			    break;
+			case ISN_STOREB:
+			    ht = &curbuf->b_vars->dv_hashtab;
+			    break;
+			case ISN_STOREW:
+			    ht = &curwin->w_vars->dv_hashtab;
+			    break;
+			case ISN_STORET:
+			    ht = &curtab->tp_vars->dv_hashtab;
+			    break;
+			default:  // Cannot reach here
+			    goto failed;
+		    }
 
 		    --ectx.ec_stack.ga_len;
-		    di = find_var_in_ht(get_globvar_ht(), 0,
+		    di = find_var_in_ht(ht, 0,
 					       iptr->isn_arg.string + 2, TRUE);
 		    if (di == NULL)
 			store_var(iptr->isn_arg.string, STACK_TV_BOT(0));
@@ -982,6 +1141,15 @@ call_def_function(
 				iptr->isn_arg.string == NULL
 					? (char_u *)"" : iptr->isn_arg.string);
 		}
+		break;
+
+	    case ISN_UNLET:
+		if (do_unlet(iptr->isn_arg.unlet.ul_name,
+				       iptr->isn_arg.unlet.ul_forceit) == FAIL)
+		    goto failed;
+		break;
+	    case ISN_UNLETENV:
+		vim_unsetenv(iptr->isn_arg.unlet.ul_name);
 		break;
 
 	    // create a list from items on the stack; uses a single allocation
@@ -1751,7 +1919,8 @@ failed:
     // When failed need to unwind the call stack.
     while (ectx.ec_frame != initial_frame_ptr)
 	func_return(&ectx);
-
+failed_early:
+    current_sctx.sc_version = save_sc_version;
     for (idx = 0; idx < ectx.ec_stack.ga_len; ++idx)
 	clear_tv(STACK_TV(idx));
     vim_free(ectx.ec_stack.ga_data);
@@ -1775,8 +1944,9 @@ ex_disassemble(exarg_T *eap)
     int		current;
     int		line_idx = 0;
     int		prev_current = 0;
+    int		is_global = FALSE;
 
-    fname = trans_function_name(&arg, FALSE,
+    fname = trans_function_name(&arg, &is_global, FALSE,
 	     TFN_INT | TFN_QUIET | TFN_NO_AUTOLOAD | TFN_NO_DEREF, NULL, NULL);
     if (fname == NULL)
     {
@@ -1784,7 +1954,15 @@ ex_disassemble(exarg_T *eap)
 	return;
     }
 
-    ufunc = find_func(fname, NULL);
+    ufunc = find_func(fname, is_global, NULL);
+    if (ufunc == NULL)
+    {
+	char_u *p = untrans_function_name(fname);
+
+	if (p != NULL)
+	    // Try again without making it script-local.
+	    ufunc = find_func(p, FALSE, NULL);
+    }
     vim_free(fname);
     if (ufunc == NULL)
     {
@@ -1825,6 +2003,10 @@ ex_disassemble(exarg_T *eap)
 	    case ISN_EXEC:
 		smsg("%4d EXEC %s", current, iptr->isn_arg.string);
 		break;
+	    case ISN_EXECCONCAT:
+		smsg("%4d EXECCONCAT %lld", current,
+					      (long long)iptr->isn_arg.number);
+		break;
 	    case ISN_ECHO:
 		{
 		    echo_T *echo = &iptr->isn_arg.echo;
@@ -1836,6 +2018,14 @@ ex_disassemble(exarg_T *eap)
 		break;
 	    case ISN_EXECUTE:
 		smsg("%4d EXECUTE %lld", current,
+					    (long long)(iptr->isn_arg.number));
+		break;
+	    case ISN_ECHOMSG:
+		smsg("%4d ECHOMSG %lld", current,
+					    (long long)(iptr->isn_arg.number));
+		break;
+	    case ISN_ECHOERR:
+		smsg("%4d ECHOERR %lld", current,
 					    (long long)(iptr->isn_arg.number));
 		break;
 	    case ISN_LOAD:
@@ -1873,6 +2063,15 @@ ex_disassemble(exarg_T *eap)
 	    case ISN_LOADG:
 		smsg("%4d LOADG g:%s", current, iptr->isn_arg.string);
 		break;
+	    case ISN_LOADB:
+		smsg("%4d LOADB b:%s", current, iptr->isn_arg.string);
+		break;
+	    case ISN_LOADW:
+		smsg("%4d LOADW w:%s", current, iptr->isn_arg.string);
+		break;
+	    case ISN_LOADT:
+		smsg("%4d LOADT t:%s", current, iptr->isn_arg.string);
+		break;
 	    case ISN_LOADOPT:
 		smsg("%4d LOADOPT %s", current, iptr->isn_arg.string);
 		break;
@@ -1897,6 +2096,15 @@ ex_disassemble(exarg_T *eap)
 		break;
 	    case ISN_STOREG:
 		smsg("%4d STOREG %s", current, iptr->isn_arg.string);
+		break;
+	    case ISN_STOREB:
+		smsg("%4d STOREB %s", current, iptr->isn_arg.string);
+		break;
+	    case ISN_STOREW:
+		smsg("%4d STOREW %s", current, iptr->isn_arg.string);
+		break;
+	    case ISN_STORET:
+		smsg("%4d STORET %s", current, iptr->isn_arg.string);
 		break;
 	    case ISN_STORES:
 		{
@@ -1996,6 +2204,16 @@ ex_disassemble(exarg_T *eap)
 		break;
 	    case ISN_PUSHEXC:
 		smsg("%4d PUSH v:exception", current);
+		break;
+	    case ISN_UNLET:
+		smsg("%4d UNLET%s %s", current,
+			iptr->isn_arg.unlet.ul_forceit ? "!" : "",
+			iptr->isn_arg.unlet.ul_name);
+		break;
+	    case ISN_UNLETENV:
+		smsg("%4d UNLETENV%s $%s", current,
+			iptr->isn_arg.unlet.ul_forceit ? "!" : "",
+			iptr->isn_arg.unlet.ul_name);
 		break;
 	    case ISN_NEWLIST:
 		smsg("%4d NEWLIST size %lld", current,

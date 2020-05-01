@@ -1443,7 +1443,7 @@ item_compare2(const void *s1, const void *s2)
     copy_tv(&si2->item->li_tv, &argv[1]);
 
     rettv.v_type = VAR_UNKNOWN;		// clear_tv() uses this
-    vim_memset(&funcexe, 0, sizeof(funcexe));
+    CLEAR_FIELD(funcexe);
     funcexe.evaluate = TRUE;
     funcexe.partial = partial;
     funcexe.selfdict = sortinfo->item_compare_selfdict;
@@ -2166,6 +2166,9 @@ f_insert(typval_T *argvars, typval_T *rettv)
     {
 	int	    val, len;
 	char_u	    *p;
+
+	if (argvars[0].vval.v_blob == NULL)
+	    return;
 
 	len = blob_len(argvars[0].vval.v_blob);
 	if (argvars[2].v_type != VAR_UNKNOWN)
