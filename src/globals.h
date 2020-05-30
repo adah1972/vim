@@ -120,7 +120,12 @@ EXTERN int	screen_Columns INIT(= 0);   // actual size of ScreenLines[]
  * When vgetc() is called, it sets mod_mask to the set of modifiers that are
  * held down based on the MOD_MASK_* symbols that are read first.
  */
-EXTERN int	mod_mask INIT(= 0x0);		// current key modifiers
+EXTERN int	mod_mask INIT(= 0);		// current key modifiers
+
+// The value of "mod_mask" and the unomdified character before calling
+// merge_modifyOtherKeys().
+EXTERN int	vgetc_mod_mask INIT(= 0);
+EXTERN int	vgetc_char INIT(= 0);
 
 /*
  * Cmdline_row is the row where the command line starts, just below the
@@ -344,7 +349,7 @@ EXTERN int force_abort INIT(= FALSE);
  * field of a later list element, when the "emsg_severe" flag was set when the
  * emsg() call was made.
  */
-EXTERN struct msglist **msg_list INIT(= NULL);
+EXTERN msglist_T **msg_list INIT(= NULL);
 
 /*
  * suppress_errthrow: When TRUE, don't convert an error to an exception.  Used
@@ -758,6 +763,9 @@ EXTERN int	ru_wid;		// 'rulerfmt' width of ruler when non-zero
 EXTERN int	sc_col;		// column for shown command
 
 #ifdef TEMPDIRNAMES
+# if defined(UNIX) && defined(HAVE_FLOCK) && defined(HAVE_DIRFD)
+EXTERN DIR	*vim_tempdir_dp INIT(= NULL); // File descriptor of temp dir
+# endif
 EXTERN char_u	*vim_tempdir INIT(= NULL); // Name of Vim's own temp dir.
 					   // Ends in a slash.
 #endif
@@ -1168,7 +1176,7 @@ EXTERN volatile sig_atomic_t got_int INIT(= FALSE); // set to TRUE when interrup
 EXTERN int	term_console INIT(= FALSE); // set to TRUE when console used
 #endif
 EXTERN int	termcap_active INIT(= FALSE);	// set by starttermcap()
-EXTERN int	cur_tmode INIT(= TMODE_COOK);	// input terminal mode
+EXTERN tmode_T	cur_tmode INIT(= TMODE_COOK);	// input terminal mode
 EXTERN int	bangredo INIT(= FALSE);	    // set to TRUE with ! command
 EXTERN int	searchcmdlen;		    // length of previous search cmd
 #ifdef FEAT_SYN_HL
@@ -1670,6 +1678,7 @@ EXTERN char e_toofewarg[]	INIT(= N_("E119: Not enough arguments for function: %s
 EXTERN char e_func_deleted[]	INIT(= N_("E933: Function was deleted: %s"));
 EXTERN char e_dictkey[]		INIT(= N_("E716: Key not present in Dictionary: %s"));
 EXTERN char e_listreq[]		INIT(= N_("E714: List required"));
+EXTERN char e_listdictblobreq[]	INIT(= N_("E1090: List, Dict or Blob required"));
 EXTERN char e_listblobreq[]	INIT(= N_("E897: List or Blob required"));
 EXTERN char e_list_end[]	INIT(= N_("E697: Missing end of List ']': %s"));
 EXTERN char e_listdictarg[]	INIT(= N_("E712: Argument of %s must be a List or Dictionary"));
@@ -1762,6 +1771,9 @@ EXTERN char e_white_after[]	INIT(= N_("E1069: white space required after '%s'"))
 EXTERN char e_no_white_before[] INIT(= N_("E1068: No white space allowed before '%s'"));
 
 EXTERN char e_lock_unlock[]	INIT(= N_("E940: Cannot lock or unlock variable %s"));
+#endif
+#if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
+EXTERN char e_alloc_color[]	INIT(= N_("E254: Cannot allocate color %s"));
 #endif
 
 #ifdef FEAT_GUI_MAC

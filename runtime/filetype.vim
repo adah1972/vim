@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2020 Apr 29
+" Last Change:	2020 May 07
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -1132,6 +1132,9 @@ au BufNewFile,BufRead pf.conf			setf pf
 
 " Pam conf
 au BufNewFile,BufRead */etc/pam.conf		setf pamconf
+
+" Pam environment
+au BufNewFile,BufRead pam_env.conf,.pam_environment	setf pamenv
 
 " PApp
 au BufNewFile,BufRead *.papp,*.pxml,*.pxsl	setf papp

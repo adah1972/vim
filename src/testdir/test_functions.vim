@@ -570,6 +570,12 @@ func Test_tolower()
   " invalid memory.
   call tolower("\xC0\x80\xC0")
   call tolower("123\xC0\x80\xC0")
+
+  " Test in latin1 encoding
+  let save_enc = &encoding
+  set encoding=latin1
+  call assert_equal("abc", tolower("ABC"))
+  let &encoding = save_enc
 endfunc
 
 func Test_toupper()
@@ -641,6 +647,12 @@ func Test_toupper()
   " invalid memory.
   call toupper("\xC0\x80\xC0")
   call toupper("123\xC0\x80\xC0")
+
+  " Test in latin1 encoding
+  let save_enc = &encoding
+  set encoding=latin1
+  call assert_equal("ABC", toupper("abc"))
+  let &encoding = save_enc
 endfunc
 
 func Test_tr()
@@ -1159,6 +1171,10 @@ func Test_filewritable()
   call assert_equal(1, 'Xfilewritable'->filewritable())
 
   call assert_equal(0, filewritable('doesnotexist'))
+
+  call mkdir('Xdir')
+  call assert_equal(2, filewritable('Xdir'))
+  call delete('Xdir', 'd')
 
   call delete('Xfilewritable')
   bw!
@@ -2262,6 +2278,9 @@ func Test_nr2char()
   set encoding=utf8
   call assert_equal('a', nr2char(97, 1))
   call assert_equal('a', nr2char(97, 0))
+
+  call assert_equal("\x80\xfc\b\xf4\x80\xfeX\x80\xfeX\x80\xfeX", eval('"\<M-' .. nr2char(0x100000) .. '>"'))
+  call assert_equal("\x80\xfc\b\xfd\x80\xfeX\x80\xfeX\x80\xfeX\x80\xfeX\x80\xfeX", eval('"\<M-' .. nr2char(0x40000000) .. '>"'))
 endfunc
 
 " Test for screenattr(), screenchar() and screenchars() functions

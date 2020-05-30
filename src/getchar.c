@@ -685,6 +685,46 @@ stuffnumReadbuff(long n)
 }
 
 /*
+ * Stuff a string into the typeahead buffer, such that edit() will insert it
+ * literally ("literally" TRUE) or interpret is as typed characters.
+ */
+    void
+stuffescaped(char_u *arg, int literally)
+{
+    int		c;
+    char_u	*start;
+
+    while (*arg != NUL)
+    {
+	// Stuff a sequence of normal ASCII characters, that's fast.  Also
+	// stuff K_SPECIAL to get the effect of a special key when "literally"
+	// is TRUE.
+	start = arg;
+	while ((*arg >= ' '
+#ifndef EBCDIC
+		    && *arg < DEL // EBCDIC: chars above space are normal
+#endif
+		    )
+		|| (*arg == K_SPECIAL && !literally))
+	    ++arg;
+	if (arg > start)
+	    stuffReadbuffLen(start, (long)(arg - start));
+
+	// stuff a single special character
+	if (*arg != NUL)
+	{
+	    if (has_mbyte)
+		c = mb_cptr2char_adv(&arg);
+	    else
+		c = *arg++;
+	    if (literally && ((c < ' ' && c != TAB) || c == DEL))
+		stuffcharReadbuff(Ctrl_V);
+	    stuffcharReadbuff(c);
+	}
+    }
+}
+
+/*
  * Read a character from the redo buffer.  Translates K_SPECIAL, CSI and
  * multibyte characters.
  * The redo buffer is left as it is.
@@ -1061,18 +1101,29 @@ ins_typebuf(
  * the char.
  */
     void
-ins_char_typebuf(int c)
+ins_char_typebuf(int c, int modifier)
 {
-    char_u	buf[MB_MAXBYTES + 1];
-    if (IS_SPECIAL(c))
+    char_u	buf[MB_MAXBYTES + 4];
+    int		idx = 0;
+
+    if (modifier != 0)
     {
 	buf[0] = K_SPECIAL;
-	buf[1] = K_SECOND(c);
-	buf[2] = K_THIRD(c);
+	buf[1] = KS_MODIFIER;
+	buf[2] = modifier;
 	buf[3] = NUL;
+	idx = 3;
+    }
+    if (IS_SPECIAL(c))
+    {
+	buf[idx] = K_SPECIAL;
+	buf[idx + 1] = K_SECOND(c);
+	buf[idx + 2] = K_THIRD(c);
+	buf[idx + 3] = NUL;
+	idx += 3;
     }
     else
-	buf[(*mb_char2bytes)(c, buf)] = NUL;
+	buf[(*mb_char2bytes)(c, buf + idx) + idx] = NUL;
     (void)ins_typebuf(buf, KeyNoremap, 0, !KeyTyped, cmd_silent);
 }
 
@@ -1600,8 +1651,11 @@ vgetc(void)
     }
     else
     {
-	mod_mask = 0x0;
+	mod_mask = 0;
+	vgetc_mod_mask = 0;
+	vgetc_char = 0;
 	last_recorded_len = 0;
+
 	for (;;)		// this is done twice if there are modifiers
 	{
 	    int did_inc = FALSE;
@@ -1795,9 +1849,15 @@ vgetc(void)
 	    }
 
 	    if (!no_reduce_keys)
+	    {
 		// A modifier was not used for a mapping, apply it to ASCII
 		// keys.  Shift would already have been applied.
+		// Remember the character and mod_mask from before, in some
+		// cases they are put back in the typeahead buffer.
+		vgetc_mod_mask = mod_mask;
+		vgetc_char = c;
 		c = merge_modifyOtherKeys(c);
+	    }
 
 	    break;
 	}
@@ -2107,7 +2167,7 @@ parse_queued_messages(void)
     for (i = 0; i < MAX_REPEAT_PARSE; ++i)
     {
 	// For Win32 mch_breakcheck() does not check for input, do it here.
-# if defined(MSWIN) && defined(FEAT_JOB_CHANNEL)
+# if (defined(MSWIN) || defined(__HAIKU__)) && defined(FEAT_JOB_CHANNEL)
 	channel_handle_events(FALSE);
 # endif
 
@@ -2152,7 +2212,7 @@ parse_queued_messages(void)
     // If the current window or buffer changed we need to bail out of the
     // waiting loop.  E.g. when a job exit callback closes the terminal window.
     if (curwin->w_id != old_curwin_id || curbuf->b_fnum != old_curbuf_fnum)
-	ins_char_typebuf(K_IGNORE);
+	ins_char_typebuf(K_IGNORE, 0);
 
     --entered;
 }
@@ -2239,6 +2299,15 @@ handle_mapping(
 		    || ((compl_cont_status & CONT_LOCAL)
 			&& (tb_c1 == Ctrl_N || tb_c1 == Ctrl_P))))
     {
+#ifdef FEAT_GUI
+	if (gui.in_use && tb_c1 == CSI && typebuf.tb_len >= 2
+		&& typebuf.tb_buf[typebuf.tb_off + 1] == KS_MODIFIER)
+	{
+	    // The GUI code sends CSI KS_MODIFIER {flags}, but mappings expect
+	    // K_SPECIAL KS_MODIFIER {flags}.
+	    tb_c1 = K_SPECIAL;
+	}
+#endif
 #ifdef FEAT_LANGMAP
 	if (tb_c1 == K_SPECIAL)
 	    nolmaplen = 2;
@@ -2297,7 +2366,7 @@ handle_mapping(
 		    if (mp->m_keys[mlen] != c2)
 #else
 		    if (mp->m_keys[mlen] !=
-			typebuf.tb_buf[typebuf.tb_off + mlen])
+					 typebuf.tb_buf[typebuf.tb_off + mlen])
 #endif
 			break;
 		}

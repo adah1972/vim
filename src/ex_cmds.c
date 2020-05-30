@@ -2484,6 +2484,11 @@ do_ecmd(
     int		did_inc_redrawing_disabled = FALSE;
     long        *so_ptr = curwin->w_p_so >= 0 ? &curwin->w_p_so : &p_so;
 
+#ifdef FEAT_PROP_POPUP
+    if (ERROR_IF_TERM_POPUP_WINDOW)
+	return FAIL;
+#endif
+
     if (eap != NULL)
 	command = eap->do_ecmd_cmd;
     set_bufref(&old_curbuf, curbuf);
@@ -6343,6 +6348,9 @@ ex_drop(exarg_T *eap)
     win_T	*wp;
     buf_T	*buf;
     tabpage_T	*tp;
+
+    if (ERROR_IF_POPUP_WINDOW || ERROR_IF_TERM_POPUP_WINDOW)
+	return;
 
     /*
      * Check if the first argument is already being edited in a window.  If

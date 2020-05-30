@@ -595,7 +595,7 @@ normal_cmd(
 	// restart automatically.
 	// Insert the typed character in the typeahead buffer, so that it can
 	// be mapped in Insert mode.  Required for ":lmap" to work.
-	ins_char_typebuf(c);
+	ins_char_typebuf(vgetc_char, vgetc_mod_mask);
 	if (restart_edit != 0)
 	    c = 'd';
 	else
@@ -4169,6 +4169,10 @@ nv_gotofile(cmdarg_T *cap)
 	clearop(cap->oap);
 	return;
     }
+#ifdef FEAT_PROP_POPUP
+    if (ERROR_IF_TERM_POPUP_WINDOW)
+	return;
+#endif
 
     ptr = grab_file_name(cap->count1, &lnum);
 

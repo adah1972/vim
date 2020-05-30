@@ -686,8 +686,10 @@ LINT_OPTIONS = -beprxzF
 # 7. Open the objects/index.html file in a web browser to view the coverage
 #    information.
 #
-# PROFILE_CFLAGS=-g -O0 -fprofile-arcs -ftest-coverage
 # LDFLAGS=--coverage
+# PROFILE_CFLAGS=-g -O0 -fprofile-arcs -ftest-coverage -DWE_ARE_PROFILING -DUSE_GCOV_FLUSH
+# Alternate flags
+# PROFILE_CFLAGS=-g -O0 --coverage -DWE_ARE_PROFILING -DUSE_GCOV_FLUSH
 
 
 # Uncomment one of the next two lines to compile Vim with the
@@ -1680,6 +1682,7 @@ BASIC_SRC = \
 	term.c \
 	terminal.c \
 	testing.c \
+	textformat.c \
 	textobject.c \
 	textprop.c \
 	time.c \
@@ -1823,6 +1826,7 @@ OBJ_COMMON = \
 	objects/term.o \
 	objects/terminal.o \
 	objects/testing.o \
+	objects/textformat.o \
 	objects/textobject.o \
 	objects/textprop.o \
 	objects/time.o \
@@ -1998,6 +2002,7 @@ PRO_AUTO = \
 	terminal.pro \
 	termlib.pro \
 	testing.pro \
+	textformat.pro \
 	textobject.pro \
 	textprop.pro \
 	time.pro \
@@ -2918,7 +2923,7 @@ clean celan: testclean
 #  % make
 SHADOWDIR = shadow
 
-LINKEDFILES = ../*.[chm] ../*.in ../*.sh ../*.xs ../*.xbm ../gui_gtk_res.xml ../toolcheck ../proto ../libvterm ../vimtutor ../gvimtutor ../install-sh ../Make_all.mak
+LINKEDFILES = ../*.[chm] ../*.cc ../*.in ../*.sh ../*.xs ../*.xbm ../gui_gtk_res.xml ../toolcheck ../proto ../libvterm ../vimtutor ../gvimtutor ../install-sh ../Make_all.mak
 
 shadow:	runtime pixmaps
 	$(MKDIR_P) $(SHADOWDIR)
@@ -3479,6 +3484,9 @@ objects/terminal.o: terminal.c $(TERM_DEPS)
 objects/testing.o: testing.c
 	$(CCC) -o $@ testing.c
 
+objects/textformat.o: textformat.c
+	$(CCC) -o $@ textformat.c
+
 objects/textobject.o: textobject.c
 	$(CCC) -o $@ textobject.c
 
@@ -3529,6 +3537,7 @@ Makefile:
 # prefix vterm_ to avoid name clashes.
 CCCTERM = $(CCC_NF) $(VTERM_CFLAGS) $(ALL_CFLAGS) -DINLINE="" \
 	  -DVSNPRINTF=vim_vsnprintf \
+	  -DSNPRINTF=vim_snprintf \
 	  -DIS_COMBINING_FUNCTION=utf_iscomposing_uint \
 	  -DWCWIDTH_FUNCTION=utf_uint2cells
 
@@ -3553,7 +3562,7 @@ objects/vterm_screen.o: libvterm/src/screen.c $(TERM_DEPS)
 objects/vterm_state.o: libvterm/src/state.c $(TERM_DEPS)
 	$(CCCTERM) -o $@ libvterm/src/state.c
 
-objects/vterm_unicode.o: libvterm/src/unicode.c $(TERM_DEPS)
+objects/vterm_unicode.o: libvterm/src/unicode.c $(TERM_DEPS) libvterm/src/fullwidth.inc
 	$(CCCTERM) -o $@ libvterm/src/unicode.c
 
 objects/vterm_vterm.o: libvterm/src/vterm.c $(TERM_DEPS)
@@ -4070,6 +4079,10 @@ objects/terminal.o: terminal.c vim.h protodef.h auto/config.h feature.h os_unix.
  proto.h globals.h libvterm/include/vterm.h \
  libvterm/include/vterm_keycodes.h
 objects/testing.o: testing.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
+ proto.h globals.h
+objects/textformat.o: textformat.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h term.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
  proto.h globals.h

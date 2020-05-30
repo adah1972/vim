@@ -822,7 +822,7 @@ win32_enable_privilege(LPTSTR lpszPrivilege, BOOL bEnable)
 #endif
 
 /*
- * Set "win8_or_later" and fill in "windowsVersion".
+ * Set "win8_or_later" and fill in "windowsVersion" if possible.
  */
     void
 PlatformId(void)
@@ -836,9 +836,10 @@ PlatformId(void)
 	ovi.dwOSVersionInfoSize = sizeof(ovi);
 	GetVersionEx(&ovi);
 
+#ifdef FEAT_EVAL
 	vim_snprintf(windowsVersion, sizeof(windowsVersion), "%d.%d",
 		(int)ovi.dwMajorVersion, (int)ovi.dwMinorVersion);
-
+#endif
 	if ((ovi.dwMajorVersion == 6 && ovi.dwMinorVersion >= 2)
 		|| ovi.dwMajorVersion > 6)
 	    win8_or_later = TRUE;
@@ -3600,7 +3601,7 @@ handler_routine(
  * set the tty in (raw) ? "raw" : "cooked" mode
  */
     void
-mch_settmode(int tmode)
+mch_settmode(tmode_T tmode)
 {
     DWORD cmodein;
     DWORD cmodeout;
@@ -4907,7 +4908,11 @@ mch_call_shell(
     }
 
     if (tmode == TMODE_RAW)
+    {
+	// The shell may have messed with the mode, always set it.
+	cur_tmode = TMODE_UNKNOWN;
 	settmode(TMODE_RAW);	// set to raw mode
+    }
 
     // Print the return value, unless "vimrun" was used.
     if (x != 0 && !(options & SHELL_SILENT) && !emsg_silent

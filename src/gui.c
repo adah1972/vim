@@ -803,6 +803,8 @@ gui_init(void)
 	if (!p_beval)
 	    gui_mch_disable_beval_area(balloonEval);
 #endif
+	// In case the terminal was used before ":gui".
+	seenModifyOtherKeys = FALSE;
 
 #if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
 	if (!im_xim_isvalid_imactivate())
@@ -4741,7 +4743,7 @@ gui_get_color(char_u *name)
 	    && gui.in_use
 #endif
 	    )
-	semsg(_("E254: Cannot allocate color %s"), name);
+	semsg(_(e_alloc_color), name);
     return t;
 }
 

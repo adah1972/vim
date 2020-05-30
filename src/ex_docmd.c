@@ -269,10 +269,11 @@ static void	ex_tag_cmd(exarg_T *eap, char_u *name);
 # define ex_call		ex_ni
 # define ex_catch		ex_ni
 # define ex_compiler		ex_ni
-# define ex_const		ex_ni
 # define ex_continue		ex_ni
 # define ex_debug		ex_ni
 # define ex_debuggreedy		ex_ni
+# define ex_def			ex_ni
+# define ex_defcompile		ex_ni
 # define ex_delfunction		ex_ni
 # define ex_disassemble		ex_ni
 # define ex_echo		ex_ni
@@ -633,8 +634,8 @@ do_cmdline(
     int		*dbg_tick = NULL;	// ptr to dbg_tick field in cookie
     struct dbg_stuff debug_saved;	// saved things for debug mode
     int		initial_trylevel;
-    struct msglist	**saved_msg_list = NULL;
-    struct msglist	*private_msg_list;
+    msglist_T	**saved_msg_list = NULL;
+    msglist_T	*private_msg_list;
 
     // "fgetline" and "cookie" passed to do_one_cmd()
     char_u	*(*cmd_getline)(int, void *, int, int);
@@ -966,7 +967,7 @@ do_cmdline(
 	    }
 	}
 
-	if (p_verbose >= 15 && SOURCING_NAME != NULL)
+	if ((p_verbose >= 15 && SOURCING_NAME != NULL) || p_verbose >= 16)
 	    msg_verbose_cmd(SOURCING_LNUM, cmdline_copy);
 
 	/*
@@ -1237,7 +1238,7 @@ do_cmdline(
 	if (did_throw)
 	{
 	    void	*p = NULL;
-	    struct msglist	*messages = NULL, *next;
+	    msglist_T	*messages = NULL, *next;
 
 	    /*
 	     * If the uncaught exception is a user exception, report it as an
@@ -1689,9 +1690,6 @@ do_one_cmd(
     // "#!anything" is handled like a comment.
     if ((*cmdlinep)[0] == '#' && (*cmdlinep)[1] == '!')
 	goto doend;
-
-    if (p_verbose >= 16)
-	msg_verbose_cmd(0, *cmdlinep);
 
 /*
  * 1. Skip comment lines and leading white space and colons.
@@ -2918,8 +2916,12 @@ parse_cmd_address(exarg_T *eap, char **errormsg, int silent)
 	{
 	    case ADDR_LINES:
 	    case ADDR_OTHER:
-		// default is current line number
-		eap->line2 = curwin->w_cursor.lnum;
+		// Default is the cursor line number.  Avoid using an invalid
+		// line number though.
+		if (curwin->w_cursor.lnum > curbuf->b_ml.ml_line_count)
+		    eap->line2 = curbuf->b_ml.ml_line_count;
+		else
+		    eap->line2 = curwin->w_cursor.lnum;
 		break;
 	    case ADDR_WINDOWS:
 		eap->line2 = CURRENT_WIN_NR;
@@ -3157,7 +3159,7 @@ append_command(char_u *cmd)
 find_ex_command(
 	exarg_T *eap,
 	int	*full UNUSED,
-	int	(*lookup)(char_u *, size_t, cctx_T *) UNUSED,
+	void	*(*lookup)(char_u *, size_t, cctx_T *) UNUSED,
 	cctx_T	*cctx UNUSED)
 {
     int		len;
@@ -3197,7 +3199,7 @@ find_ex_command(
 	    // "g:var = expr"
 	    // "var = expr"  where "var" is a local var name.
 	    if (((p - eap->cmd) > 2 && eap->cmd[1] == ':')
-		    || lookup(eap->cmd, p - eap->cmd, cctx) >= 0)
+		    || lookup(eap->cmd, p - eap->cmd, cctx) != NULL)
 	    {
 		eap->cmdidx = CMD_let;
 		return eap->cmd;

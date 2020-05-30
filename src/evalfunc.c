@@ -664,6 +664,7 @@ static funcentry_T global_functions[] =
     {"map",		2, 2, FEARG_1,	  ret_any,	f_map},
     {"maparg",		1, 4, FEARG_1,	  ret_string,	f_maparg},
     {"mapcheck",	1, 3, FEARG_1,	  ret_string,	f_mapcheck},
+    {"mapset",		3, 3, FEARG_1,	  ret_void,	f_mapset},
     {"match",		2, 4, FEARG_1,	  ret_any,	f_match},
     {"matchadd",	2, 5, FEARG_1,	  ret_number,	f_matchadd},
     {"matchaddpos",	2, 5, FEARG_1,	  ret_number,	f_matchaddpos},
@@ -704,7 +705,7 @@ static funcentry_T global_functions[] =
 			},
     {"popup_atcursor",	2, 2, FEARG_1,	  ret_number,	PROP_FUNC(f_popup_atcursor)},
     {"popup_beval",	2, 2, FEARG_1,	  ret_number,	PROP_FUNC(f_popup_beval)},
-    {"popup_clear",	0, 0, 0,	  ret_void,	PROP_FUNC(f_popup_clear)},
+    {"popup_clear",	0, 1, 0,	  ret_void,	PROP_FUNC(f_popup_clear)},
     {"popup_close",	1, 2, FEARG_1,	  ret_void,	PROP_FUNC(f_popup_close)},
     {"popup_create",	2, 2, FEARG_1,	  ret_number,	PROP_FUNC(f_popup_create)},
     {"popup_dialog",	2, 2, FEARG_1,	  ret_number,	PROP_FUNC(f_popup_dialog)},
@@ -715,6 +716,7 @@ static funcentry_T global_functions[] =
     {"popup_getoptions", 1, 1, FEARG_1,	  ret_dict_any,	PROP_FUNC(f_popup_getoptions)},
     {"popup_getpos",	1, 1, FEARG_1,	  ret_dict_any,	PROP_FUNC(f_popup_getpos)},
     {"popup_hide",	1, 1, FEARG_1,	  ret_void,	PROP_FUNC(f_popup_hide)},
+    {"popup_list",	0, 0, 0,	  ret_list_number, PROP_FUNC(f_popup_list)},
     {"popup_locate",	2, 2, 0,	  ret_number,	PROP_FUNC(f_popup_locate)},
     {"popup_menu",	2, 2, FEARG_1,	  ret_number,	PROP_FUNC(f_popup_menu)},
     {"popup_move",	2, 2, FEARG_1,	  ret_void,	PROP_FUNC(f_popup_move)},
@@ -2131,7 +2133,7 @@ f_eval(typval_T *argvars, typval_T *rettv)
 	s = skipwhite(s);
 
     p = s;
-    if (s == NULL || eval1(&s, rettv, TRUE) == FAIL)
+    if (s == NULL || eval1(&s, rettv, EVAL_EVALUATE) == FAIL)
     {
 	if (p != NULL && !aborting())
 	    semsg(_(e_invexpr2), p);
@@ -2274,7 +2276,7 @@ execute_common(typval_T *argvars, typval_T *rettv, int arg_off)
     {
 	listitem_T	*item;
 
-	range_list_materialize(list);
+	CHECK_LIST_MATERIALIZE(list);
 	item = list->lv_first;
 	do_cmdline(NULL, get_list_line, (void *)&item,
 		      DOCMD_NOWAIT|DOCMD_VERBOSE|DOCMD_REPEAT|DOCMD_KEYTYPED);
@@ -2601,9 +2603,9 @@ f_float2nr(typval_T *argvars, typval_T *rettv)
 
     if (get_float_arg(argvars, &f) == OK)
     {
-	if (f <= -VARNUM_MAX + DBL_EPSILON)
+	if (f <= (float_T)-VARNUM_MAX + DBL_EPSILON)
 	    rettv->vval.v_number = -VARNUM_MAX;
-	else if (f >= VARNUM_MAX - DBL_EPSILON)
+	else if (f >= (float_T)VARNUM_MAX - DBL_EPSILON)
 	    rettv->vval.v_number = VARNUM_MAX;
 	else
 	    rettv->vval.v_number = (varnumber_T)f;
@@ -2819,7 +2821,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 			copy_tv(&arg_pt->pt_argv[i], &pt->pt_argv[i]);
 		    if (lv_len > 0)
 		    {
-			range_list_materialize(list);
+			CHECK_LIST_MATERIALIZE(list);
 			FOR_ALL_LIST_ITEMS(list, li)
 			    copy_tv(&li->li_tv, &pt->pt_argv[i++]);
 		    }
@@ -4911,7 +4913,7 @@ f_index(typval_T *argvars, typval_T *rettv)
     l = argvars[0].vval.v_list;
     if (l != NULL)
     {
-	range_list_materialize(l);
+	CHECK_LIST_MATERIALIZE(l);
 	item = l->lv_first;
 	if (argvars[2].v_type != VAR_UNKNOWN)
 	{
@@ -5017,7 +5019,7 @@ f_inputlist(typval_T *argvars, typval_T *rettv)
     msg_clr_eos();
 
     l = argvars[0].vval.v_list;
-    range_list_materialize(l);
+    CHECK_LIST_MATERIALIZE(l);
     FOR_ALL_LIST_ITEMS(l, li)
     {
 	msg_puts((char *)tv_get_string(&li->li_tv));
@@ -5493,7 +5495,7 @@ find_some_match(typval_T *argvars, typval_T *rettv, matchtype_T type)
     {
 	if ((l = argvars[0].vval.v_list) == NULL)
 	    goto theend;
-	range_list_materialize(l);
+	CHECK_LIST_MATERIALIZE(l);
 	li = l->lv_first;
     }
     else
@@ -6278,7 +6280,7 @@ f_range(typval_T *argvars, typval_T *rettv)
 	list_T *list = rettv->vval.v_list;
 
 	// Create a non-materialized list.  This is much more efficient and
-	// works with ":for".  If used otherwise range_list_materialize() must
+	// works with ":for".  If used otherwise CHECK_LIST_MATERIALIZE() must
 	// be called.
 	list->lv_first = &range_list_item;
 	list->lv_u.nonmat.lv_start = start;
@@ -6289,26 +6291,24 @@ f_range(typval_T *argvars, typval_T *rettv)
 }
 
 /*
- * If "list" is a non-materialized list then materialize it now.
+ * Materialize "list".
+ * Do not call directly, use CHECK_LIST_MATERIALIZE()
  */
     void
 range_list_materialize(list_T *list)
 {
-    if (list->lv_first == &range_list_item)
-    {
-	varnumber_T start = list->lv_u.nonmat.lv_start;
-	varnumber_T end = list->lv_u.nonmat.lv_end;
-	int	    stride = list->lv_u.nonmat.lv_stride;
-	varnumber_T i;
+    varnumber_T start = list->lv_u.nonmat.lv_start;
+    varnumber_T end = list->lv_u.nonmat.lv_end;
+    int	    stride = list->lv_u.nonmat.lv_stride;
+    varnumber_T i;
 
-	list->lv_first = NULL;
-	list->lv_u.mat.lv_last = NULL;
-	list->lv_len = 0;
-	list->lv_u.mat.lv_idx_item = NULL;
-	for (i = start; stride > 0 ? i <= end : i >= end; i += stride)
-	    if (list_append_number(list, (varnumber_T)i) == FAIL)
-		break;
-    }
+    list->lv_first = NULL;
+    list->lv_u.mat.lv_last = NULL;
+    list->lv_len = 0;
+    list->lv_u.mat.lv_idx_item = NULL;
+    for (i = start; stride > 0 ? i <= end : i >= end; i += stride)
+	if (list_append_number(list, (varnumber_T)i) == FAIL)
+	    break;
 }
 
     static void
@@ -7326,7 +7326,7 @@ f_setreg(typval_T *argvars, typval_T *rettv)
 
 	if (ll != NULL)
 	{
-	    range_list_materialize(ll);
+	    CHECK_LIST_MATERIALIZE(ll);
 	    FOR_ALL_LIST_ITEMS(ll, li)
 	    {
 		strval = tv_get_string_buf_chk(&li->li_tv, buf);
