@@ -244,7 +244,9 @@ evalvars_init(void)
 
     set_vim_var_nr(VV_ECHOSPACE,    sc_col - 1);
 
-    set_reg_var(0);  // default for v:register is not 0 but '"'
+    // Default for v:register is not 0 but '"'.  This is adjusted once the
+    // clipboard has been setup by calling reset_reg_var().
+    set_reg_var(0);
 }
 
 #if defined(EXITFREE) || defined(PROTO)
@@ -2192,6 +2194,22 @@ set_argv_var(char **argv, int argc)
 }
 
 /*
+ * Reset v:register, taking the 'clipboard' setting into account.
+ */
+    void
+reset_reg_var(void)
+{
+    int regname = 0;
+
+    // Adjust the register according to 'clipboard', so that when
+    // "unnamed" is present it becomes '*' or '+' instead of '"'.
+#ifdef FEAT_CLIPBOARD
+    adjust_clip_reg(&regname);
+#endif
+    set_reg_var(regname);
+}
+
+/*
  * Set v:register if needed.
  */
     void
@@ -3791,6 +3809,81 @@ free_callback(callback_T *callback)
 	callback->cb_free_name = FALSE;
     }
     callback->cb_name = NULL;
+}
+
+/*
+ * Process a function argument that can be a string expression or a function
+ * reference.
+ * "tv" must remain valid until calling evalarg_clean()!
+ * Returns FAIL when the argument is invalid.
+ */
+    int
+evalarg_get(typval_T *tv, evalarg_T *eva)
+{
+    if (tv->v_type == VAR_STRING
+	    || tv->v_type == VAR_NUMBER
+	    || tv->v_type == VAR_BOOL
+	    || tv->v_type == VAR_SPECIAL)
+    {
+	eva->eva_string = tv_get_string_buf(tv, eva->eva_buf);
+	return OK;
+    }
+
+    eva->eva_callback = get_callback(tv);
+    return eva->eva_callback.cb_name == NULL ? FAIL : OK;
+}
+
+/*
+ * Return whether "eva" has a valid expression or callback.
+ */
+    int
+evalarg_valid(evalarg_T *eva)
+{
+    return eva->eva_string != NULL || eva->eva_callback.cb_name != NULL;
+}
+
+/*
+ * Invoke the expression or callback "eva" and return the result in "tv".
+ * Returns FAIL if something failed
+ */
+    int
+evalarg_call(evalarg_T *eva, typval_T *tv)
+{
+    typval_T	argv[1];
+
+    if (eva->eva_string != NULL)
+	return eval0(eva->eva_string, tv, NULL, EVAL_EVALUATE);
+
+    argv[0].v_type = VAR_UNKNOWN;
+    return call_callback(&eva->eva_callback, -1, tv, 0, argv);
+}
+
+/*
+ * Like evalarg_call(), but just return TRUE of FALSE.
+ * Sets "error" to TRUE if evaluation failed.
+ */
+    int
+evalarg_call_bool(evalarg_T *eva, int *error)
+{
+    typval_T	tv;
+    int		r;
+
+    if (evalarg_call(eva, &tv) == FAIL)
+    {
+	*error = TRUE;
+	return FALSE;
+    }
+    r = tv_get_number(&tv);
+    clear_tv(&tv);
+    *error = FALSE;
+    return r;
+}
+
+    void
+evalarg_clean(evalarg_T *eva)
+{
+    if (eva->eva_string == NULL)
+	free_callback(&eva->eva_callback);
 }
 
 #endif // FEAT_EVAL

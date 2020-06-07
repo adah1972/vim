@@ -46,6 +46,7 @@ void set_vim_var_string(int idx, char_u *val, int len);
 void set_vim_var_list(int idx, list_T *val);
 void set_vim_var_dict(int idx, dict_T *val);
 void set_argv_var(char **argv, int argc);
+void reset_reg_var(void);
 void set_reg_var(int c);
 char_u *v_exception(char_u *oldval);
 char_u *v_throwpoint(char_u *oldval);
@@ -87,4 +88,9 @@ callback_T get_callback(typval_T *arg);
 void put_callback(callback_T *cb, typval_T *tv);
 void set_callback(callback_T *dest, callback_T *src);
 void free_callback(callback_T *callback);
+int evalarg_get(typval_T *tv, evalarg_T *eva);
+int evalarg_valid(evalarg_T *eva);
+int evalarg_call(evalarg_T *eva, typval_T *tv);
+int evalarg_call_bool(evalarg_T *eva, int *error);
+void evalarg_clean(evalarg_T *eva);
 /* vim: set ft=c : */

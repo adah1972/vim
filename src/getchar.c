@@ -1582,33 +1582,43 @@ updatescript(int c)
 }
 
 /*
- * Convert "c" plus "mod_mask" to merge the effect of modifyOtherKeys into the
+ * Convert "c" plus "modifiers" to merge the effect of modifyOtherKeys into the
  * character.
  */
     int
-merge_modifyOtherKeys(int c_arg)
+merge_modifyOtherKeys(int c_arg, int *modifiers)
 {
     int c = c_arg;
 
-    if (mod_mask & MOD_MASK_CTRL)
+    if (*modifiers & MOD_MASK_CTRL)
     {
 	if ((c >= '`' && c <= 0x7f) || (c >= '@' && c <= '_'))
-	{
 	    c &= 0x1f;
-	    mod_mask &= ~MOD_MASK_CTRL;
-	}
 	else if (c == '6')
-	{
 	    // CTRL-6 is equivalent to CTRL-^
 	    c = 0x1e;
-	    mod_mask &= ~MOD_MASK_CTRL;
-	}
+#ifdef FEAT_GUI_GTK
+	// These mappings look arbitrary at the first glance, but in fact
+	// resemble quite exactly the behaviour of the GTK+ 1.2 GUI on my
+	// machine.  The only difference is BS vs. DEL for CTRL-8 (makes
+	// more sense and is consistent with usual terminal behaviour).
+	else if (c == '2')
+	    c = NUL;
+	else if (c >= '3' && c <= '7')
+	    c = c ^ 0x28;
+	else if (c == '8')
+	    c = BS;
+	else if (c == '?')
+	    c = DEL;
+#endif
+	if (c != c_arg)
+	    *modifiers &= ~MOD_MASK_CTRL;
     }
-    if ((mod_mask & (MOD_MASK_META | MOD_MASK_ALT))
+    if ((*modifiers & (MOD_MASK_META | MOD_MASK_ALT))
 	    && c >= 0 && c <= 127)
     {
 	c += 0x80;
-	mod_mask &= ~(MOD_MASK_META|MOD_MASK_ALT);
+	*modifiers &= ~(MOD_MASK_META|MOD_MASK_ALT);
     }
     return c;
 }
@@ -1856,7 +1866,7 @@ vgetc(void)
 		// cases they are put back in the typeahead buffer.
 		vgetc_mod_mask = mod_mask;
 		vgetc_char = c;
-		c = merge_modifyOtherKeys(c);
+		c = merge_modifyOtherKeys(c, &mod_mask);
 	    }
 
 	    break;
@@ -2245,6 +2255,44 @@ at_ctrl_x_key(void)
 }
 
 /*
+ * Check if typebuf.tb_buf[] contains a modifer plus key that can be changed
+ * into just a key, apply that.
+ * Check from typebuf.tb_buf[typebuf.tb_off] to typebuf.tb_buf[typebuf.tb_off
+ * + "max_offset"].
+ * Return the length of the replaced bytes, zero if nothing changed.
+ */
+    static int
+check_simplify_modifier(int max_offset)
+{
+    int		offset;
+    char_u	*tp;
+
+    for (offset = 0; offset < max_offset; ++offset)
+    {
+	if (offset + 3 >= typebuf.tb_len)
+	    break;
+	tp = typebuf.tb_buf + typebuf.tb_off + offset;
+	if (tp[0] == K_SPECIAL && tp[1] == KS_MODIFIER)
+	{
+	    int modifier = tp[2];
+	    int new_c = merge_modifyOtherKeys(tp[3], &modifier);
+
+	    if (new_c != tp[3] && modifier == 0)
+	    {
+		char_u	new_string[MB_MAXBYTES];
+		int	len = mb_char2bytes(new_c, new_string);
+
+		if (put_string_in_typebuf(offset, 4, new_string, len,
+							   NULL, 0, 0) == FAIL)
+		    return -1;
+		return len;
+	    }
+	}
+    }
+    return 0;
+}
+
+/*
  * Handle mappings in the typeahead buffer.
  * - When something was mapped, return map_result_retry for recursive mappings.
  * - When nothing mapped and typeahead has a character: return map_result_get.
@@ -2345,7 +2393,8 @@ handle_mapping(
 	    // Skip ":lmap" mappings if keys were mapped.
 	    if (mp->m_keys[0] == tb_c1
 		    && (mp->m_mode & local_State)
-		    && !(mp->m_simplified && seenModifyOtherKeys)
+		    && !(mp->m_simplified && seenModifyOtherKeys
+						     && typebuf.tb_maplen == 0)
 		    && ((mp->m_mode & LANGMAP) == 0 || typebuf.tb_maplen == 0))
 	    {
 #ifdef FEAT_LANGMAP
@@ -2507,6 +2556,11 @@ handle_mapping(
 	    // like an incomplete key sequence.
 	    if (keylen == 0 && save_keylen == KEYLEN_PART_KEY)
 		keylen = KEYLEN_PART_KEY;
+
+	    // If no termcode matched, try to include the modifier into the
+	    // key.  This for when modifyOtherKeys is working.
+	    if (keylen == 0)
+		keylen = check_simplify_modifier(max_mlen + 1);
 
 	    // When getting a partial match, but the last characters were not
 	    // typed, don't wait for a typed character to complete the

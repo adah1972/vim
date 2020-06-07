@@ -1183,6 +1183,33 @@ func Test_cmdwin_jump_to_win()
   call assert_equal(1, winnr('$'))
 endfunc
 
+func Test_cmdwin_interrupted()
+  CheckScreendump
+
+  " aborting the :smile output caused the cmdline window to use the current
+  " buffer.
+  let lines =<< trim [SCRIPT]
+    au WinNew * smile
+  [SCRIPT]
+  call writefile(lines, 'XTest_cmdwin')
+
+  let buf = RunVimInTerminal('-S XTest_cmdwin', {'rows': 18})
+  call TermWait(buf, 1000)
+  " open cmdwin
+  call term_sendkeys(buf, "q:")
+  call TermWait(buf, 500)
+  " quit more prompt for :smile command
+  call term_sendkeys(buf, "q")
+  call TermWait(buf, 500)
+  " execute a simple command
+  call term_sendkeys(buf, "aecho 'done'\<CR>")
+  call VerifyScreenDump(buf, 'Test_cmdwin_interrupted', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XTest_cmdwin')
+endfunc
+
 " Test for backtick expression in the command line
 func Test_cmd_backtick()
   %argd
@@ -1218,6 +1245,22 @@ func Test_cmd_bang()
   endif
   call delete('Xscript')
   call delete('Xresult')
+endfunc
+
+" Test error: "E135: *Filter* Autocommands must not change current buffer"
+func Test_cmd_bang_E135()
+  new
+  call setline(1, ['a', 'b', 'c', 'd'])
+  augroup test_cmd_filter_E135
+    au!
+    autocmd FilterReadPost * help
+  augroup END
+  call assert_fails('2,3!echo "x"', 'E135:')
+
+  augroup test_cmd_filter_E135
+    au!
+  augroup END
+  %bwipe!
 endfunc
 
 " Test for using ~ for home directory in cmdline completion matches

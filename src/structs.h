@@ -742,6 +742,15 @@ typedef struct memline
 #endif
 } memline_T;
 
+// Values for the flags argument of ml_delete_flags().
+#define ML_DEL_MESSAGE	    1	// may give a "No lines in buffer" message
+#define ML_DEL_UNDO	    2	// called from undo, do not update textprops
+
+// Values for the flags argument of ml_append_int().
+#define ML_APPEND_NEW	    1	// starting to edit a new file
+#define ML_APPEND_MARK	    2	// mark the new line
+#define ML_APPEND_UNDO	    4	// called from undo
+
 
 /*
  * Structure defining text properties.  These stick with the text.
@@ -1059,9 +1068,11 @@ typedef struct attr_entry
 	    // These colors need to be > 8 bits to hold 256.
 	    short_u	    fg_color;	// foreground color number
 	    short_u	    bg_color;	// background color number
+	    short_u	    ul_color;	// underline color number
 # ifdef FEAT_TERMGUICOLORS
 	    guicolor_T	    fg_rgb;	// foreground color RGB
 	    guicolor_T	    bg_rgb;	// background color RGB
+	    guicolor_T	    ul_rgb;	// underline color RGB
 # endif
 	} cterm;
 # ifdef FEAT_GUI
@@ -2255,6 +2266,10 @@ typedef struct
 #define SYNSPL_TOP	1	// spell check toplevel text
 #define SYNSPL_NOTOP	2	// don't spell check toplevel text
 
+// values for b_syn_foldlevel: how to compute foldlevel on a line
+#define SYNFLD_START	0	// use level of item at start of line
+#define SYNFLD_MINIMUM	1	// use lowest local minimum level on line
+
 // avoid #ifdefs for when b_spell is not available
 #ifdef FEAT_SPELL
 # define B_SPELL(buf)  ((buf)->b_spell)
@@ -2349,6 +2364,7 @@ typedef struct {
     int		b_syn_slow;		// TRUE when 'redrawtime' reached
 # endif
     int		b_syn_ic;		// ignore case for :syn cmds
+    int		b_syn_foldlevel;	// how to compute foldlevel on a line
     int		b_syn_spell;		// SYNSPL_ values
     garray_T	b_syn_patterns;		// table for syntax patterns
     garray_T	b_syn_clusters;		// table for syntax clusters
@@ -2792,6 +2808,7 @@ struct file_buffer
     int		b_ind_cpp_namespace;
     int		b_ind_if_for_while;
     int		b_ind_cpp_extern_c;
+    int		b_ind_pragma;
 #endif
 
     linenr_T	b_no_eol_lnum;	// non-zero lnum when last line of next binary
@@ -2977,6 +2994,8 @@ struct tabpage_S
 
     char_u	    *tp_localdir;	// absolute path of local directory or
 					// NULL
+    char_u	    *tp_prevdir;	// previous directory
+
 #ifdef FEAT_DIFF
     diff_T	    *tp_first_diff;
     buf_T	    *(tp_diffbuf[DB_COUNT]);
@@ -3380,6 +3399,7 @@ struct window_S
 
     char_u	*w_localdir;	    // absolute path of local directory or
 				    // NULL
+    char_u	*w_prevdir;	    // previous directory
 #ifdef FEAT_MENU
     vimmenu_T	*w_winbar;	    // The root of the WinBar menu hierarchy.
     winbar_item_T *w_winbar_items;  // list of items in the WinBar
@@ -4109,6 +4129,21 @@ typedef struct
 #endif
     int		sa_wrapped;	// search wrapped around
 } searchit_arg_T;
+
+/*
+ * Function argument that can be a string, funcref or partial.
+ * - declare:	evalarg_T name;
+ * - init:	CLEAR_FIELD(name);
+ * - set:	evalarg_get(&argvars[3], &name);
+ * - use:	if (evalarg_valid(&name)) res = evalarg_call(&name);
+ * - cleanup:	evalarg_clean(&name);
+ */
+typedef struct
+{
+    char_u	eva_buf[NUMBUFLEN];  // buffer for get_tv_string_buf()
+    char_u	*eva_string;
+    callback_T	eva_callback;
+} evalarg_T;
 
 #define WRITEBUFSIZE	8192	// size of normal write buffer
 
