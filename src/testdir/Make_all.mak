@@ -90,10 +90,12 @@ NEW_TESTS = \
 	test_close_count \
 	test_cmdline \
 	test_command_count \
+	test_comments \
 	test_comparators \
 	test_compiler \
 	test_conceal \
 	test_const \
+	test_cpoptions \
 	test_crypt \
 	test_cscope \
 	test_cursor_func \
@@ -135,6 +137,7 @@ NEW_TESTS = \
 	test_find_complete \
 	test_findfile \
 	test_fixeol \
+	test_flatten \
 	test_float_func \
 	test_fnameescape \
 	test_fnamemodify \
@@ -339,9 +342,11 @@ NEW_TESTS_RES = \
 	test_close_count.res \
 	test_cmdline.res \
 	test_command_count.res \
+	test_comments.res \
 	test_comparators.res \
 	test_conceal.res \
 	test_const.res \
+	test_cpoptions.res \
 	test_crypt.res \
 	test_cscope.res \
 	test_cursor_func.res \
@@ -373,6 +378,7 @@ NEW_TESTS_RES = \
 	test_find_complete.res \
 	test_findfile.res \
 	test_fixeol.res \
+	test_flatten.res \
 	test_float_func.res \
 	test_fnameescape.res \
 	test_fold.res \

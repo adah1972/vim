@@ -1,4 +1,4 @@
-*syntax.txt*	For Vim version 8.2.  Last change: 2020 Feb 29
+*syntax.txt*	For Vim version 8.2.  Last change: 2020 Jun 01
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1214,11 +1214,13 @@ DESKTOP					   *desktop.vim* *ft-desktop-syntax*
 
 Primary goal of this syntax file is to highlight .desktop and .directory files
 according to freedesktop.org standard:
-http://standards.freedesktop.org/desktop-entry-spec/latest/
-But actually almost none implements this standard fully.  Thus it will
-highlight all Unix ini files.  But you can force strict highlighting according
-to standard by placing this in your vimrc file: >
-	:let enforce_freedesktop_standard = 1
+https://specifications.freedesktop.org/desktop-entry-spec/latest/
+To highlight nonstandard extensions that does not begin with X-, set >
+	let g:desktop_enable_nonstd = 1
+Note that this may cause wrong highlight.
+To highlight KDE-reserved features, set >
+	let g:desktop_enable_kde = 1
+g:desktop_enable_kde follows g:desktop_enable_nonstd if not supplied
 
 
 DIFF							*diff.vim*
@@ -4879,7 +4881,12 @@ term={attr-list}			*attr-list* *highlight-term* *E418*
 	have the same effect.
 	"undercurl" is a curly underline.  When "undercurl" is not possible
 	then "underline" is used.  In general "undercurl" and "strikethrough"
-	is only available in the GUI.  The color is set with |highlight-guisp|.
+	are only available in the GUI and some terminals.  The color is set
+	with |highlight-guisp| or |highlight-ctermul|.  You can try these
+	termcap entries to make undercurl work in a terminal: >
+	    let &t_Cs = "\e[4:3m"
+	    let &t_Ce = "\e[4:0m"
+
 
 start={term-list}				*highlight-start* *E422*
 stop={term-list}				*term-list* *highlight-stop*
@@ -5011,7 +5018,7 @@ ctermul={color-nr}				*highlight-ctermul*
 	console.  Example, for reverse video: >
 	    :highlight Visual ctermfg=bg ctermbg=fg
 <	Note that the colors are used that are valid at the moment this
-	command are given.  If the Normal group colors are changed later, the
+	command is given.  If the Normal group colors are changed later, the
 	"fg" and "bg" colors will not be adjusted.
 
 

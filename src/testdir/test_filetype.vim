@@ -131,7 +131,7 @@ let s:filename_checks = {
     \ 'def': ['file.def'],
     \ 'denyhosts': ['denyhosts.conf'],
     \ 'desc': ['file.desc'],
-    \ 'desktop': ['file.desktop', '.directory'],
+    \ 'desktop': ['file.desktop', '.directory', 'file.directory'],
     \ 'dictconf': ['dict.conf', '.dictrc'],
     \ 'dictdconf': ['dictd.conf'],
     \ 'diff': ['file.diff', 'file.rej'],
@@ -139,7 +139,7 @@ let s:filename_checks = {
     \ 'dnsmasq': ['/etc/dnsmasq.conf'],
     \ 'dockerfile': ['Containerfile', 'Dockerfile', 'file.Dockerfile'],
     \ 'dosbatch': ['file.bat', 'file.sys'],
-    \ 'dosini': ['.editorconfig', '/etc/yum.conf', 'file.ini'],
+    \ 'dosini': ['.editorconfig', '/etc/pacman.conf', '/etc/yum.conf', 'file.ini'],
     \ 'dot': ['file.dot', 'file.gv'],
     \ 'dracula': ['file.drac', 'file.drc', 'filelvs', 'filelpe'],
     \ 'dsl': ['file.dsl'],
@@ -150,7 +150,7 @@ let s:filename_checks = {
     \ 'dylanlid': ['file.lid'],
     \ 'ecd': ['file.ecd'],
     \ 'edif': ['file.edf', 'file.edif', 'file.edo'],
-    \ 'elinks': ['/etc/elinks.conf', '/.elinks/elinks.conf'],
+    \ 'elinks': ['elinks.conf'],
     \ 'elm': ['file.elm'],
     \ 'elmfilt': ['filter-rules'],
     \ 'erlang': ['file.erl', 'file.hrl', 'file.yaws'],
@@ -330,7 +330,7 @@ let s:filename_checks = {
     \ 'pccts': ['file.g'],
     \ 'pdf': ['file.pdf'],
     \ 'perl': ['file.plx', 'file.al', 'file.psgi', 'gitolite.rc', '.gitolite.rc', 'example.gitolite.rc'],
-    \ 'perl6': ['file.p6', 'file.pm6', 'file.pl6'],
+    \ 'perl6': ['file.p6', 'file.pm6', 'file.pl6', 'file.raku', 'file.rakumod'],
     \ 'pf': ['pf.conf'],
     \ 'pfmain': ['main.cf'],
     \ 'php': ['file.php', 'file.php9', 'file.phtml', 'file.ctp'],
@@ -361,7 +361,7 @@ let s:filename_checks = {
     \ 'protocols': ['/etc/protocols'],
     \ 'psf': ['file.psf'],
     \ 'pyrex': ['file.pyx', 'file.pxd'],
-    \ 'python': ['file.py', 'file.pyw', '.pythonstartup', '.pythonrc', 'file.ptl', 'file.pyi'],
+    \ 'python': ['file.py', 'file.pyw', '.pythonstartup', '.pythonrc', 'file.ptl', 'file.pyi', 'SConstruct'],
     \ 'quake': ['anybaseq2/file.cfg', 'anyid1/file.cfg', 'quake3/file.cfg'],
     \ 'radiance': ['file.rad', 'file.mat'],
     \ 'ratpoison': ['.ratpoisonrc', 'ratpoisonrc'],
@@ -428,8 +428,8 @@ let s:filename_checks = {
     \ 'sqr': ['file.sqr', 'file.sqi'],
     \ 'squid': ['squid.conf'],
     \ 'srec': ['file.s19', 'file.s28', 'file.s37', 'file.mot', 'file.srec'],
-    \ 'sshconfig': ['ssh_config', '/.ssh/config'],
-    \ 'sshdconfig': ['sshd_config'],
+    \ 'sshconfig': ['ssh_config', '/.ssh/config', '/etc/ssh/ssh_config.d/file.conf', 'any/etc/ssh/ssh_config.d/file.conf'],
+    \ 'sshdconfig': ['sshd_config', '/etc/ssh/sshd_config.d/file.conf', 'any/etc/ssh/sshd_config.d/file.conf'],
     \ 'st': ['file.st'],
     \ 'stata': ['file.ado', 'file.do', 'file.imata', 'file.mata'],
     \ 'stp': ['file.stp'],
@@ -440,7 +440,7 @@ let s:filename_checks = {
     \ 'swiftgyb': ['file.swift.gyb'],
     \ 'sil': ['file.sil'],
     \ 'sysctl': ['/etc/sysctl.conf', '/etc/sysctl.d/file.conf'],
-    \ 'systemd': ['any/systemd/file.automount', 'any/systemd/file.mount', 'any/systemd/file.path', 'any/systemd/file.service', 'any/systemd/file.socket', 'any/systemd/file.swap', 'any/systemd/file.target', 'any/systemd/file.timer', '/etc/systemd/system/some.d/file.conf', '/etc/systemd/system/some.d/.#file', '/etc/systemd/system/.#otherfile', '/home/user/.config/systemd/user/some.d/mine.conf', '/home/user/.config/systemd/user/some.d/.#file', '/home/user/.config/systemd/user/.#otherfile'],
+    \ 'systemd': ['any/systemd/file.automount', 'any/systemd/file.dnssd', 'any/systemd/file.link', 'any/systemd/file.mount', 'any/systemd/file.netdev', 'any/systemd/file.network', 'any/systemd/file.nspawn', 'any/systemd/file.path', 'any/systemd/file.service', 'any/systemd/file.slice', 'any/systemd/file.socket', 'any/systemd/file.swap', 'any/systemd/file.target', 'any/systemd/file.timer', '/etc/systemd/some.conf.d/file.conf', '/etc/systemd/system/some.d/file.conf', '/etc/systemd/system/some.d/.#file', '/etc/systemd/system/.#otherfile', '/home/user/.config/systemd/user/some.d/mine.conf', '/home/user/.config/systemd/user/some.d/.#file', '/home/user/.config/systemd/user/.#otherfile'],
     \ 'systemverilog': ['file.sv', 'file.svh'],
     \ 'tags': ['tags'],
     \ 'tak': ['file.tak'],
@@ -607,9 +607,19 @@ let s:script_checks = {
       \ 'yaml': [['%YAML 1.2']],
       \ }
 
-func Test_script_detection()
+" Various forms of "env" optional arguments.
+let s:script_env_checks = {
+      \ 'perl': [['#!/usr/bin/env VAR=val perl']],
+      \ 'scala': [['#!/usr/bin/env VAR=val VVAR=vval scala']],
+      \ 'awk': [['#!/usr/bin/env VAR=val -i awk']],
+      \ 'scheme': [['#!/usr/bin/env VAR=val --ignore-environment scheme']],
+      \ 'python': [['#!/usr/bin/env VAR=val -S python -w -T']],
+      \ 'wml': [['#!/usr/bin/env VAR=val --split-string wml']],
+      \ }
+
+func Run_script_detection(test_dict)
   filetype on
-  for [ft, files] in items(s:script_checks)
+  for [ft, files] in items(a:test_dict)
     for file in files
       call writefile(file, 'Xtest')
       split Xtest
@@ -619,6 +629,11 @@ func Test_script_detection()
   endfor
   call delete('Xtest')
   filetype off
+endfunc
+
+func Test_script_detection()
+  call Run_script_detection(s:script_checks)
+  call Run_script_detection(s:script_env_checks)
 endfunc
 
 func Test_setfiletype_completion()
@@ -649,5 +664,23 @@ func Test_filetype_indent_off()
         \ execute('filetype')->split("\n"))
   close
 endfunc
+
+func Test_hook_file()
+  filetype on
+
+  call writefile(['[Trigger]', 'this is pacman config'], 'Xfile.hook')
+  split Xfile.hook
+  call assert_equal('dosini', &filetype)
+  bwipe!
+
+  call writefile(['not pacman'], 'Xfile.hook')
+  split Xfile.hook
+  call assert_notequal('dosini', &filetype)
+  bwipe!
+
+  call delete('Xfile.hook')
+  filetype off
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

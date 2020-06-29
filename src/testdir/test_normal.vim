@@ -754,8 +754,9 @@ func Test_normal17_z_scroll_hor2()
   bw!
 endfunc
 
-" Test for H, M and L commands with folds
-func Test_scroll_cmds()
+" Test for commands that scroll the window horizontally. Test with folds.
+"   H, M, L, CTRL-E, CTRL-Y, CTRL-U, CTRL-D, PageUp, PageDown commands
+func Test_vert_scroll_cmds()
   15new
   call setline(1, range(1, 100))
   exe "normal! 30ggz\<CR>"
@@ -764,6 +765,8 @@ func Test_scroll_cmds()
   40,43fold
   46,49fold
   let h = winheight(0)
+
+  " Test for H, M and L commands
   " Top of the screen = 30
   " Folded lines = 9
   " Bottom of the screen = 30 + h + 9 - 1
@@ -771,8 +774,102 @@ func Test_scroll_cmds()
   call assert_equal(35 + h, line('.'))
   normal! 4H
   call assert_equal(33, line('.'))
+
+  " Test for the CTRL-E and CTRL-Y commands with folds
+  %d
+  call setline(1, range(1, 10))
+  3,5fold
+  exe "normal 6G3\<C-E>"
+  call assert_equal(6, line('w0'))
+  exe "normal 2\<C-Y>"
+  call assert_equal(2, line('w0'))
+
+  " Test for CTRL-Y on a folded line
+  %d
+  call setline(1, range(1, 100))
+  exe (h + 2) .. "," .. (h + 4) .. "fold"
+  exe h + 5
+  normal z-
+  exe "normal \<C-Y>\<C-Y>"
+  call assert_equal(h + 1, line('w$'))
+
+  " Using <PageUp> and <PageDown> in an empty buffer should beep
+  %d
+  call assert_beeps('exe "normal \<PageUp>"')
+  call assert_beeps('exe "normal \<C-B>"')
+  call assert_beeps('exe "normal \<PageDown>"')
+  call assert_beeps('exe "normal \<C-F>"')
+
+  " Test for <C-U> and <C-D> with fold
+  %d
+  call setline(1, range(1, 100))
+  10,35fold
+  set scroll=10
+  exe "normal \<C-D>"
+  call assert_equal(36, line('.'))
+  exe "normal \<C-D>"
+  call assert_equal(46, line('.'))
+  exe "normal \<C-U>"
+  call assert_equal(36, line('.'))
+  exe "normal \<C-U>"
+  call assert_equal(10, line('.'))
+  exe "normal \<C-U>"
+  call assert_equal(1, line('.'))
+  set scroll&
+
+  " Test for scrolling to the top of the file with <C-U> and a fold
+  10
+  normal ztL
+  exe "normal \<C-U>\<C-U>"
+  call assert_equal(1, line('w0'))
+
+  " Test for CTRL-D on a folded line
+  %d
+  call setline(1, range(1, 100))
+  50,100fold
+  75
+  normal z-
+  exe "normal \<C-D>"
+  call assert_equal(50, line('.'))
+  call assert_equal(100, line('w$'))
+  normal z.
+  let lnum = winline()
+  exe "normal \<C-D>"
+  call assert_equal(lnum, winline())
+  call assert_equal(50, line('.'))
+  normal zt
+  exe "normal \<C-D>"
+  call assert_equal(50, line('w0'))
+
   set foldenable&
   close!
+endfunc
+
+" Test for the 'sidescroll' option
+func Test_sidescroll_opt()
+  new
+  20vnew
+
+  " scroll by 2 characters horizontally
+  set sidescroll=2 nowrap
+  call setline(1, repeat('a', 40))
+  normal g$l
+  call assert_equal(19, screenpos(0, 1, 21).col)
+  normal l
+  call assert_equal(20, screenpos(0, 1, 22).col)
+  normal g0h
+  call assert_equal(2, screenpos(0, 1, 2).col)
+  call assert_equal(20, screenpos(0, 1, 20).col)
+
+  " when 'sidescroll' is 0, cursor positioned at the center
+  set sidescroll=0
+  normal g$l
+  call assert_equal(11, screenpos(0, 1, 21).col)
+  normal g0h
+  call assert_equal(10, screenpos(0, 1, 10).col)
+
+  %bw!
+  set wrap& sidescroll&
 endfunc
 
 " basic tests for foldopen/folddelete
@@ -1170,6 +1267,7 @@ func Test_normal21_nv_hat()
   edit Xfoo | %bw
   call assert_fails(':buffer #', 'E86')
   call assert_fails(':execute "normal! \<C-^>"', 'E23')
+  call assert_fails("normal i\<C-R>#", 'E23:')
 
   " Test for the expected behavior when switching between two named buffers.
   edit Xfoo | edit Xbar
@@ -2242,7 +2340,6 @@ endfunc
 " Test for cw cW ce
 func Test_normal39_cw()
   " Test for cw and cW on whitespace
-  " and cpo+=w setting
   new
   set tw=0
   call append(0, 'here      are   some words')
@@ -2250,13 +2347,6 @@ func Test_normal39_cw()
   call assert_equal('hereZZZare   some words', getline('.'))
   norm! 1gg0elcWYYY
   call assert_equal('hereZZZareYYYsome words', getline('.'))
-  set cpo+=w
-  call setline(1, 'here      are   some words')
-  norm! 1gg0elcwZZZ
-  call assert_equal('hereZZZ     are   some words', getline('.'))
-  norm! 1gg2elcWYYY
-  call assert_equal('hereZZZ     areYYY  some words', getline('.'))
-  set cpo-=w
   norm! 2gg0cwfoo
   call assert_equal('foo', getline('.'))
 
@@ -2528,20 +2618,6 @@ func Test_normal52_rl()
 
   " cleanup
   set norl
-  bw!
-endfunc
-
-func Test_normal53_digraph()
-  CheckFeature digraphs
-  new
-  call setline(1, 'abcdefgh|')
-  exe "norm! 1gg0f\<c-k>!!"
-  call assert_equal(9, col('.'))
-  set cpo+=D
-  exe "norm! 1gg0f\<c-k>!!"
-  call assert_equal(1, col('.'))
-
-  set cpo-=D
   bw!
 endfunc
 
@@ -2866,44 +2942,6 @@ func Test_normal_gk_gj()
   set cpoptions& number& numberwidth& wrap&
 endfunc
 
-" Test for cursor movement with '-' in 'cpoptions'
-func Test_normal_cpo_minus()
-  new
-  call setline(1, ['foo', 'bar', 'baz'])
-  let save_cpo = &cpo
-  set cpo+=-
-  call assert_beeps('normal 10j')
-  call assert_equal(1, line('.'))
-  normal G
-  call assert_beeps('normal 10k')
-  call assert_equal(3, line('.'))
-  call assert_fails(10, 'E16:')
-  let &cpo = save_cpo
-  close!
-endfunc
-
-" Test for displaying dollar when changing text ('$' flag in 'cpoptions')
-func Test_normal_cpo_dollar()
-  new
-  let g:Line = ''
-  func SaveFirstLine()
-    let g:Line = Screenline(1)
-    return ''
-  endfunc
-  inoremap <expr> <buffer> <F2> SaveFirstLine()
-  call test_override('redraw_flag', 1)
-  set cpo+=$
-  call setline(1, 'one two three')
-  redraw!
-  exe "normal c2w\<F2>vim"
-  call assert_equal('one tw$ three', g:Line)
-  call assert_equal('vim three', getline(1))
-  set cpo-=$
-  call test_override('ALL', 0)
-  delfunc SaveFirstLine
-  %bw!
-endfunc
-
 " Test for using : to run a multi-line Ex command in operator pending mode
 func Test_normal_yank_with_excmd()
   new
@@ -2985,31 +3023,6 @@ func Test_normal_delete_cmd()
   close!
 endfunc
 
-" Test for the 'E' flag in 'cpo' with yank, change, delete, etc. operators
-func Test_empty_region_error()
-  new
-  call setline(1, '')
-  set cpo+=E
-  " yank an empty line
-  call assert_beeps('normal "ayl')
-  " change an empty line
-  call assert_beeps('normal lcTa')
-  " delete an empty line
-  call assert_beeps('normal D')
-  call assert_beeps('normal dl')
-  call assert_equal('', getline(1))
-  " change case of an empty line
-  call assert_beeps('normal gul')
-  call assert_beeps('normal gUl')
-  " replace a character
-  call assert_beeps('normal vrx')
-  " increment and decrement
-  call assert_beeps('exe "normal v\<C-A>"')
-  call assert_beeps('exe "normal v\<C-X>"')
-  set cpo-=E
-  close!
-endfunc
-
 " Test for 'w' and 'b' commands
 func Test_normal_word_move()
   new
@@ -3044,6 +3057,42 @@ func Test_normal_word_move()
   normal 3Gyb
   call assert_equal("two\n  ", @")
 
+  close!
+endfunc
+
+" Test for 'scrolloff' with a long line that doesn't fit in the screen
+func Test_normal_scroloff()
+  10new
+  80vnew
+  call setline(1, repeat('a', 1000))
+  set scrolloff=10
+  normal gg10gj
+  call assert_equal(8, winline())
+  normal 10gj
+  call assert_equal(10, winline())
+  normal 10gk
+  call assert_equal(3, winline())
+  set scrolloff&
+  close!
+endfunc
+
+" Test for vertical scrolling with CTRL-F and CTRL-B with a long line
+func Test_normal_vert_scroll_longline()
+  10new
+  80vnew
+  call setline(1, range(1, 10))
+  call append(5, repeat('a', 1000))
+  exe "normal gg\<C-F>"
+  call assert_equal(6, line('.'))
+  exe "normal \<C-F>\<C-F>"
+  call assert_equal(11, line('.'))
+  call assert_equal(1, winline())
+  exe "normal \<C-B>"
+  call assert_equal(10, line('.'))
+  call assert_equal(3, winline())
+  exe "normal \<C-B>\<C-B>"
+  call assert_equal(5, line('.'))
+  call assert_equal(5, winline())
   close!
 endfunc
 

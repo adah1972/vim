@@ -145,6 +145,7 @@ static struct vimvar
     {VV_NAME("versionlong",	 VAR_NUMBER), VV_RO},
     {VV_NAME("echospace",	 VAR_NUMBER), VV_RO},
     {VV_NAME("argv",		 VAR_LIST), VV_RO},
+    {VV_NAME("collate",		 VAR_STRING), VV_RO},
 };
 
 // shorthand
@@ -164,7 +165,6 @@ static dict_T		vimvardict;		// Dictionary with v: variables
 // for VIM_VERSION_ defines
 #include "version.h"
 
-static char_u *skip_var_one(char_u *arg, int include_type);
 static void list_glob_vars(int *first);
 static void list_buf_vars(int *first);
 static void list_win_vars(int *first);
@@ -435,7 +435,7 @@ eval_spell_expr(char_u *badword, char_u *expr)
     if (p_verbose == 0)
 	++emsg_off;
 
-    if (eval1(&p, &rettv, EVAL_EVALUATE) == OK)
+    if (eval1(&p, &rettv, &EVALARG_EVALUATE) == OK)
     {
 	if (rettv.v_type != VAR_LIST)
 	    clear_tv(&rettv);
@@ -709,7 +709,7 @@ ex_let(exarg_T *eap)
     if (eap->arg == eap->cmd)
 	flags |= LET_NO_COMMAND;
 
-    argend = skip_var_list(arg, TRUE, &var_count, &semicolon);
+    argend = skip_var_list(arg, TRUE, &var_count, &semicolon, FALSE);
     if (argend == NULL)
 	return;
     if (argend > arg && argend[-1] == '.')  // for var.='str'
@@ -728,8 +728,18 @@ ex_let(exarg_T *eap)
 	else if (expr[0] == '.')
 	    emsg(_("E985: .= is not supported with script version 2"));
 	else if (!ends_excmd2(eap->cmd, arg))
-	    // ":let var1 var2"
-	    arg = list_arg_vars(eap, arg, &first);
+	{
+	    if (current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+	    {
+		// Vim9 declaration ":let var: type"
+		arg = vim9_declare_scriptvar(eap, arg);
+	    }
+	    else
+	    {
+		// ":let var1 var2" - list values
+		arg = list_arg_vars(eap, arg, &first);
+	    }
+	}
 	else if (!eap->skip)
 	{
 	    // ":let"
@@ -764,7 +774,7 @@ ex_let(exarg_T *eap)
     }
     else
     {
-	int eval_flags;
+	evalarg_T   evalarg;
 
 	rettv.v_type = VAR_UNKNOWN;
 	i = FAIL;
@@ -787,14 +797,22 @@ ex_let(exarg_T *eap)
 
 	    if (eap->skip)
 		++emsg_skip;
-	    eval_flags = eap->skip ? 0 : EVAL_EVALUATE;
-	    i = eval0(expr, &rettv, &eap->nextcmd, eval_flags);
+	    CLEAR_FIELD(evalarg);
+	    evalarg.eval_flags = eap->skip ? 0 : EVAL_EVALUATE;
+	    if (getline_equal(eap->getline, eap->cookie, getsourceline))
+	    {
+		evalarg.eval_getline = eap->getline;
+		evalarg.eval_cookie = eap->cookie;
+	    }
+	    i = eval0(expr, &rettv, eap, &evalarg);
+	    if (eap->skip)
+		--emsg_skip;
+	    clear_evalarg(&evalarg, eap);
 	}
 	if (eap->skip)
 	{
 	    if (i != FAIL)
 		clear_tv(&rettv);
-	    --emsg_skip;
 	}
 	else if (i != FAIL)
 	{
@@ -906,7 +924,8 @@ ex_let_vars(
  * Skip over assignable variable "var" or list of variables "[var, var]".
  * Used for ":let varvar = expr" and ":for varvar in expr".
  * For "[var, var]" increment "*var_count" for each variable.
- * for "[var, var; var]" set "semicolon".
+ * for "[var, var; var]" set "semicolon" to 1.
+ * If "silent" is TRUE do not give an "invalid argument" error message.
  * Return NULL for an error.
  */
     char_u *
@@ -914,7 +933,8 @@ skip_var_list(
     char_u	*arg,
     int		include_type,
     int		*var_count,
-    int		*semicolon)
+    int		*semicolon,
+    int		silent)
 {
     char_u	*p, *s;
 
@@ -925,10 +945,11 @@ skip_var_list(
 	for (;;)
 	{
 	    p = skipwhite(p + 1);	// skip whites after '[', ';' or ','
-	    s = skip_var_one(p, TRUE);
+	    s = skip_var_one(p, FALSE);
 	    if (s == p)
 	    {
-		semsg(_(e_invarg2), p);
+		if (!silent)
+		    semsg(_(e_invarg2), p);
 		return NULL;
 	    }
 	    ++*var_count;
@@ -947,7 +968,8 @@ skip_var_list(
 	    }
 	    else if (*p != ',')
 	    {
-		semsg(_(e_invarg2), p);
+		if (!silent)
+		    semsg(_(e_invarg2), p);
 		return NULL;
 	    }
 	}
@@ -962,7 +984,7 @@ skip_var_list(
  * l[idx].
  * In Vim9 script also skip over ": type" if "include_type" is TRUE.
  */
-    static char_u *
+    char_u *
 skip_var_one(char_u *arg, int include_type)
 {
     char_u *end;
@@ -971,10 +993,13 @@ skip_var_one(char_u *arg, int include_type)
 	return arg + 2;
     end = find_name_end(*arg == '$' || *arg == '&' ? arg + 1 : arg,
 				   NULL, NULL, FNE_INCL_BR | FNE_CHECK_START);
-    if (include_type && current_sctx.sc_version == SCRIPT_VERSION_VIM9
-								&& *end == ':')
+    if (include_type && current_sctx.sc_version == SCRIPT_VERSION_VIM9)
     {
-	end = skip_type(skipwhite(end + 1));
+	// "a: type" is declaring variable "a" with a type, not "a:".
+	if (end == arg + 2 && end[-1] == ':')
+	    --end;
+	if (*end == ':')
+	    end = skip_type(skipwhite(end + 1));
     }
     return end;
 }
@@ -1105,8 +1130,8 @@ list_arg_vars(exarg_T *eap, char_u *arg, int *first)
 		{
 		    // handle d.key, l[idx], f(expr)
 		    arg_subsc = arg;
-		    if (handle_subscript(&arg, &tv, EVAL_EVALUATE, TRUE,
-							  name, &name) == FAIL)
+		    if (handle_subscript(&arg, &tv, &EVALARG_EVALUATE, TRUE)
+								       == FAIL)
 			error = TRUE;
 		    else
 		    {
@@ -1187,6 +1212,13 @@ ex_let_one(
 	    emsg(_("E996: Cannot lock an environment variable"));
 	    return NULL;
 	}
+	if (current_sctx.sc_version == SCRIPT_VERSION_VIM9
+		&& (flags & LET_NO_COMMAND) == 0)
+	{
+	    vim9_declare_error(arg);
+	    return NULL;
+	}
+
 	// Find the end of the name.
 	++arg;
 	name = arg;
@@ -2359,9 +2391,13 @@ get_var_tv(
 	    *dip = v;
     }
 
-    if (tv == NULL && current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+    if (tv == NULL && (current_sctx.sc_version == SCRIPT_VERSION_VIM9
+					       || STRNCMP(name, "s:", 2) == 0))
     {
-	imported_T *import = find_imported(name, 0, NULL);
+	imported_T  *import;
+	char_u	    *p = STRNCMP(name, "s:", 2) == 0 ? name + 2 : name;
+
+	import = find_imported(p, 0, NULL);
 
 	// imported variable from another script
 	if (import != NULL)
@@ -2530,7 +2566,7 @@ lookup_scriptvar(char_u *name, size_t len, cctx_T *dummy UNUSED)
     }
     else
     {
-	p = vim_strnsave(name, (int)len);
+	p = vim_strnsave(name, len);
 	if (p == NULL)
 	    return NULL;
     }
@@ -2607,7 +2643,7 @@ find_var_ht(char_u *name, char_u **varname)
     if (*name == 'v')				// v: variable
 	return &vimvarht;
     if (get_current_funccal() != NULL
-	       && get_current_funccal()->func->uf_dfunc_idx == UF_NOT_COMPILED)
+	       && get_current_funccal()->func->uf_def_status == UF_NOT_COMPILED)
     {
 	// a: and l: are only used in functions defined with ":function"
 	if (*name == 'a')			// a: function argument
@@ -2845,6 +2881,15 @@ set_var_const(
     }
     is_script_local = ht == get_script_local_ht();
 
+    if (current_sctx.sc_version == SCRIPT_VERSION_VIM9
+	    && !is_script_local
+	    && (flags & LET_NO_COMMAND) == 0
+	    && name[1] == ':')
+    {
+	vim9_declare_error(name);
+	return;
+    }
+
     di = find_var_in_ht(ht, 0, varname, TRUE);
 
     // Search in parent scope which is possible to reference from lambda
@@ -2865,17 +2910,23 @@ set_var_const(
 		return;
 	    }
 
+	    if (is_script_local
+			     && current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+	    {
+		if ((flags & LET_NO_COMMAND) == 0)
+		{
+		    semsg(_("E1041: Redefining script item %s"), name);
+		    return;
+		}
+
+		// check the type
+		if (check_script_var_type(&di->di_tv, tv, name) == FAIL)
+		    return;
+	    }
+
 	    if (var_check_ro(di->di_flags, name, FALSE)
 			       || var_check_lock(di->di_tv.v_lock, name, FALSE))
 		return;
-
-	    if ((flags & LET_NO_COMMAND) == 0
-		    && is_script_local
-		    && current_sctx.sc_version == SCRIPT_VERSION_VIM9)
-	    {
-		semsg(_("E1041: Redefining script item %s"), name);
-		return;
-	    }
 	}
 	else
 	    // can only redefine once
@@ -3295,8 +3346,7 @@ var_exists(char_u *var)
 	if (n)
 	{
 	    // handle d.key, l[idx], f(expr)
-	    n = (handle_subscript(&var, &tv, EVAL_EVALUATE,
-						    FALSE, name, &name) == OK);
+	    n = (handle_subscript(&var, &tv, &EVALARG_EVALUATE, FALSE) == OK);
 	    if (n)
 		clear_tv(&tv);
 	}
@@ -3809,81 +3859,6 @@ free_callback(callback_T *callback)
 	callback->cb_free_name = FALSE;
     }
     callback->cb_name = NULL;
-}
-
-/*
- * Process a function argument that can be a string expression or a function
- * reference.
- * "tv" must remain valid until calling evalarg_clean()!
- * Returns FAIL when the argument is invalid.
- */
-    int
-evalarg_get(typval_T *tv, evalarg_T *eva)
-{
-    if (tv->v_type == VAR_STRING
-	    || tv->v_type == VAR_NUMBER
-	    || tv->v_type == VAR_BOOL
-	    || tv->v_type == VAR_SPECIAL)
-    {
-	eva->eva_string = tv_get_string_buf(tv, eva->eva_buf);
-	return OK;
-    }
-
-    eva->eva_callback = get_callback(tv);
-    return eva->eva_callback.cb_name == NULL ? FAIL : OK;
-}
-
-/*
- * Return whether "eva" has a valid expression or callback.
- */
-    int
-evalarg_valid(evalarg_T *eva)
-{
-    return eva->eva_string != NULL || eva->eva_callback.cb_name != NULL;
-}
-
-/*
- * Invoke the expression or callback "eva" and return the result in "tv".
- * Returns FAIL if something failed
- */
-    int
-evalarg_call(evalarg_T *eva, typval_T *tv)
-{
-    typval_T	argv[1];
-
-    if (eva->eva_string != NULL)
-	return eval0(eva->eva_string, tv, NULL, EVAL_EVALUATE);
-
-    argv[0].v_type = VAR_UNKNOWN;
-    return call_callback(&eva->eva_callback, -1, tv, 0, argv);
-}
-
-/*
- * Like evalarg_call(), but just return TRUE of FALSE.
- * Sets "error" to TRUE if evaluation failed.
- */
-    int
-evalarg_call_bool(evalarg_T *eva, int *error)
-{
-    typval_T	tv;
-    int		r;
-
-    if (evalarg_call(eva, &tv) == FAIL)
-    {
-	*error = TRUE;
-	return FALSE;
-    }
-    r = tv_get_number(&tv);
-    clear_tv(&tv);
-    *error = FALSE;
-    return r;
-}
-
-    void
-evalarg_clean(evalarg_T *eva)
-{
-    if (eva->eva_string == NULL)
-	free_callback(&eva->eva_callback);
 }
 
 #endif // FEAT_EVAL

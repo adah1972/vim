@@ -731,6 +731,99 @@ list_insert(list_T *l, listitem_T *ni, listitem_T *item)
 }
 
 /*
+ * Flatten "list" to depth "maxdepth".
+ * It does nothing if "maxdepth" is 0.
+ * Returns FAIL when out of memory.
+ */
+    static int
+list_flatten(list_T *list, long maxdepth)
+{
+    listitem_T	*item;
+    listitem_T	*tofree;
+    int		n;
+
+    if (maxdepth == 0)
+	return OK;
+    CHECK_LIST_MATERIALIZE(list);
+
+    n = 0;
+    item = list->lv_first;
+    while (item != NULL)
+    {
+	fast_breakcheck();
+	if (got_int)
+	    return FAIL;
+
+	if (item->li_tv.v_type == VAR_LIST)
+	{
+	    listitem_T *next = item->li_next;
+
+	    vimlist_remove(list, item, item);
+	    if (list_extend(list, item->li_tv.vval.v_list, next) == FAIL)
+		return FAIL;
+	    clear_tv(&item->li_tv);
+	    tofree = item;
+
+	    if (item->li_prev == NULL)
+		item = list->lv_first;
+	    else
+		item = item->li_prev->li_next;
+	    list_free_item(list, tofree);
+
+	    if (++n >= maxdepth)
+	    {
+		n = 0;
+		item = next;
+	    }
+	}
+	else
+	{
+	    n = 0;
+	    item = item->li_next;
+	}
+    }
+
+    return OK;
+}
+
+/*
+ * "flatten(list[, {maxdepth}])" function
+ */
+    void
+f_flatten(typval_T *argvars, typval_T *rettv)
+{
+    list_T  *l;
+    long    maxdepth;
+    int	    error = FALSE;
+
+    if (argvars[0].v_type != VAR_LIST)
+    {
+	semsg(_(e_listarg), "flatten()");
+	return;
+    }
+
+    if (argvars[1].v_type == VAR_UNKNOWN)
+	maxdepth = 999999;
+    else
+    {
+	maxdepth = (long)tv_get_number_chk(&argvars[1], &error);
+	if (error)
+	    return;
+	if (maxdepth < 0)
+	{
+	    emsg(_("E900: maxdepth must be non-negative number"));
+	    return;
+	}
+    }
+
+    l = argvars[0].vval.v_list;
+    if (l != NULL && !var_check_lock(l->lv_lock,
+				      (char_u *)N_("flatten() argument"), TRUE)
+		 && list_flatten(l, maxdepth) == OK)
+	copy_tv(&argvars[0], rettv);
+}
+
+/*
  * Extend "l1" with "l2".
  * If "bef" is NULL append at the end, otherwise insert before this item.
  * Returns FAIL when out of memory.
@@ -773,6 +866,26 @@ list_concat(list_T *l1, list_T *l2, typval_T *tv)
 
     // append all items from the second list
     return list_extend(l, l2, NULL);
+}
+
+    list_T *
+list_slice(list_T *ol, long n1, long n2)
+{
+    listitem_T	*item;
+    list_T	*l = list_alloc();
+
+    if (l == NULL)
+	return NULL;
+    for (item = list_find(ol, n1); n1 <= n2; ++n1)
+    {
+	if (list_append_tv(l, &item->li_tv) == FAIL)
+	{
+	    list_free(l);
+	    return NULL;
+	}
+	item = item->li_next;
+    }
+    return l;
 }
 
 /*
@@ -1043,15 +1156,19 @@ f_join(typval_T *argvars, typval_T *rettv)
 
 /*
  * Allocate a variable for a List and fill it from "*arg".
+ * "*arg" points to the "[".
  * Return OK or FAIL.
  */
     int
-get_list_tv(char_u **arg, typval_T *rettv, int flags, int do_error)
+get_list_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int do_error)
 {
-    int		evaluate = flags & EVAL_EVALUATE;
+    int		evaluate = evalarg == NULL ? FALSE
+					 : evalarg->eval_flags & EVAL_EVALUATE;
     list_T	*l = NULL;
     typval_T	tv;
     listitem_T	*item;
+    int		vim9script = current_sctx.sc_version == SCRIPT_VERSION_VIM9;
+    int		had_comma;
 
     if (evaluate)
     {
@@ -1060,10 +1177,10 @@ get_list_tv(char_u **arg, typval_T *rettv, int flags, int do_error)
 	    return FAIL;
     }
 
-    *arg = skipwhite(*arg + 1);
+    *arg = skipwhite_and_linebreak(*arg + 1, evalarg);
     while (**arg != ']' && **arg != NUL)
     {
-	if (eval1(arg, &tv, flags) == FAIL)	// recursive!
+	if (eval1(arg, &tv, evalarg) == FAIL)	// recursive!
 	    goto failret;
 	if (evaluate)
 	{
@@ -1078,15 +1195,29 @@ get_list_tv(char_u **arg, typval_T *rettv, int flags, int do_error)
 		clear_tv(&tv);
 	}
 
+	// the comma must come after the value
+	had_comma = **arg == ',';
+	if (had_comma)
+	{
+	    if (vim9script && (*arg)[1] != NUL && !VIM_ISWHITE((*arg)[1]))
+	    {
+		semsg(_(e_white_after), ",");
+		goto failret;
+	    }
+	    *arg = skipwhite(*arg + 1);
+	}
+
+	// the "]" can be on the next line
+	*arg = skipwhite_and_linebreak(*arg, evalarg);
 	if (**arg == ']')
 	    break;
-	if (**arg != ',')
+
+	if (!had_comma)
 	{
 	    if (do_error)
 		semsg(_("E696: Missing comma in List: %s"), *arg);
 	    goto failret;
 	}
-	*arg = skipwhite(*arg + 1);
     }
 
     if (**arg != ']')
@@ -2344,6 +2475,8 @@ f_reduce(typval_T *argvars, typval_T *rettv)
 	list_T	    *l = argvars[0].vval.v_list;
 	listitem_T  *li = NULL;
 	int	    r;
+	int	    prev_locked = l->lv_lock;
+	int	    called_emsg_start = called_emsg;
 
 	CHECK_LIST_MATERIALIZE(l);
 	if (argvars[2].v_type == VAR_UNKNOWN)
@@ -2363,6 +2496,7 @@ f_reduce(typval_T *argvars, typval_T *rettv)
 		li = l->lv_first;
 	}
 
+	l->lv_lock = VAR_FIXED;  // disallow the list changing here
 	copy_tv(&initial, rettv);
 	for ( ; li != NULL; li = li->li_next)
 	{
@@ -2371,9 +2505,10 @@ f_reduce(typval_T *argvars, typval_T *rettv)
 	    rettv->v_type = VAR_UNKNOWN;
 	    r = call_func(func_name, -1, rettv, 2, argv, &funcexe);
 	    clear_tv(&argv[0]);
-	    if (r == FAIL)
-		return;
+	    if (r == FAIL || called_emsg != called_emsg_start)
+		break;
 	}
+	l->lv_lock = prev_locked;
     }
     else
     {

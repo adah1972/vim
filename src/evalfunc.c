@@ -94,6 +94,7 @@ static void f_getpid(typval_T *argvars, typval_T *rettv);
 static void f_getcurpos(typval_T *argvars, typval_T *rettv);
 static void f_getpos(typval_T *argvars, typval_T *rettv);
 static void f_getreg(typval_T *argvars, typval_T *rettv);
+static void f_getreginfo(typval_T *argvars, typval_T *rettv);
 static void f_getregtype(typval_T *argvars, typval_T *rettv);
 static void f_gettagstack(typval_T *argvars, typval_T *rettv);
 static void f_haslocaldir(typval_T *argvars, typval_T *rettv);
@@ -338,6 +339,14 @@ ret_job(int argcount UNUSED, type_T **argtypes UNUSED)
     return &t_job;
 }
 
+    static type_T *
+ret_first_arg(int argcount, type_T **argtypes)
+{
+    if (argcount > 0)
+	return argtypes[0];
+    return &t_void;
+}
+
 static type_T *ret_f_function(int argcount, type_T **argtypes);
 
 /*
@@ -540,6 +549,7 @@ static funcentry_T global_functions[] =
     {"filter",		2, 2, FEARG_1,	  ret_any,	f_filter},
     {"finddir",		1, 3, FEARG_1,	  ret_string,	f_finddir},
     {"findfile",	1, 3, FEARG_1,	  ret_string,	f_findfile},
+    {"flatten",		1, 2, FEARG_1,	  ret_list_any,	f_flatten},
     {"float2nr",	1, 1, FEARG_1,	  ret_number,	FLOAT_FUNC(f_float2nr)},
     {"floor",		1, 1, FEARG_1,	  ret_float,	FLOAT_FUNC(f_floor)},
     {"fmod",		2, 2, FEARG_1,	  ret_float,	FLOAT_FUNC(f_fmod)},
@@ -586,6 +596,7 @@ static funcentry_T global_functions[] =
     {"getpos",		1, 1, FEARG_1,	  ret_list_number,	f_getpos},
     {"getqflist",	0, 1, 0,	  ret_list_dict_any,	f_getqflist},
     {"getreg",		0, 3, FEARG_1,	  ret_string,	f_getreg},
+    {"getreginfo",	0, 1, FEARG_1,	  ret_dict_any,	f_getreginfo},
     {"getregtype",	0, 1, FEARG_1,	  ret_string,	f_getregtype},
     {"gettabinfo",	0, 1, FEARG_1,	  ret_list_dict_any,	f_gettabinfo},
     {"gettabvar",	2, 3, FEARG_1,	  ret_any,	f_gettabvar},
@@ -766,8 +777,8 @@ static funcentry_T global_functions[] =
 			},
     {"rand",		0, 1, FEARG_1,	  ret_number,	f_rand},
     {"range",		1, 3, FEARG_1,	  ret_list_number, f_range},
-    {"readdir",		1, 2, FEARG_1,	  ret_list_string, f_readdir},
-    {"readdirex",	1, 2, FEARG_1,	  ret_list_dict_any, f_readdirex},
+    {"readdir",		1, 3, FEARG_1,	  ret_list_string, f_readdir},
+    {"readdirex",	1, 3, FEARG_1,	  ret_list_dict_any, f_readdirex},
     {"readfile",	1, 3, FEARG_1,	  ret_any,	f_readfile},
     {"reduce",		2, 3, FEARG_1,	  ret_any,	f_reduce},
     {"reg_executing",	0, 0, 0,	  ret_string,	f_reg_executing},
@@ -846,7 +857,7 @@ static funcentry_T global_functions[] =
     {"simplify",	1, 1, FEARG_1,	  ret_string,	f_simplify},
     {"sin",		1, 1, FEARG_1,	  ret_float,	FLOAT_FUNC(f_sin)},
     {"sinh",		1, 1, FEARG_1,	  ret_float,	FLOAT_FUNC(f_sinh)},
-    {"sort",		1, 3, FEARG_1,	  ret_list_any,	f_sort},
+    {"sort",		1, 3, FEARG_1,	  ret_first_arg, f_sort},
     {"sound_clear",	0, 0, 0,	  ret_void,	SOUND_FUNC(f_sound_clear)},
     {"sound_playevent",	1, 2, FEARG_1,	  ret_number,	SOUND_FUNC(f_sound_playevent)},
     {"sound_playfile",	1, 2, FEARG_1,	  ret_number,	SOUND_FUNC(f_sound_playfile)},
@@ -941,6 +952,7 @@ static funcentry_T global_functions[] =
     {"term_setsize",	3, 3, FEARG_1,	  ret_void,	TERM_FUNC(f_term_setsize)},
     {"term_start",	1, 2, FEARG_1,	  ret_number,	TERM_FUNC(f_term_start)},
     {"term_wait",	1, 2, FEARG_1,	  ret_void,	TERM_FUNC(f_term_wait)},
+    {"terminalprops",	0, 0, 0,	  ret_dict_string, f_terminalprops},
     {"test_alloc_fail",	3, 3, FEARG_1,	  ret_void,	f_test_alloc_fail},
     {"test_autochdir",	0, 0, 0,	  ret_void,	f_test_autochdir},
     {"test_feedinput",	1, 1, FEARG_1,	  ret_void,	f_test_feedinput},
@@ -2072,7 +2084,7 @@ f_eval(typval_T *argvars, typval_T *rettv)
 	s = skipwhite(s);
 
     p = s;
-    if (s == NULL || eval1(&s, rettv, EVAL_EVALUATE) == FAIL)
+    if (s == NULL || eval1(&s, rettv, &EVALARG_EVALUATE) == FAIL)
     {
 	if (p != NULL && !aborting())
 	    semsg(_(e_invexpr2), p);
@@ -5519,7 +5531,7 @@ find_some_match(typval_T *argvars, typval_T *rettv, matchtype_T type)
 
 		vim_free(li1->li_tv.vval.v_string);
 		li1->li_tv.vval.v_string = vim_strnsave(regmatch.startp[0],
-				(int)(regmatch.endp[0] - regmatch.startp[0]));
+					regmatch.endp[0] - regmatch.startp[0]);
 		li3->li_tv.vval.v_number =
 				      (varnumber_T)(regmatch.startp[0] - expr);
 		li4->li_tv.vval.v_number =
@@ -5554,7 +5566,7 @@ find_some_match(typval_T *argvars, typval_T *rettv, matchtype_T type)
 		    copy_tv(&li->li_tv, rettv);
 		else
 		    rettv->vval.v_string = vim_strnsave(regmatch.startp[0],
-				(int)(regmatch.endp[0] - regmatch.startp[0]));
+					regmatch.endp[0] - regmatch.startp[0]);
 	    }
 	    else if (l != NULL)
 		rettv->vval.v_number = idx;
@@ -5990,11 +6002,11 @@ static int	srand_seed_for_testing_is_used = FALSE;
 f_test_srand_seed(typval_T *argvars, typval_T *rettv UNUSED)
 {
     if (argvars[0].v_type == VAR_UNKNOWN)
-        srand_seed_for_testing_is_used = FALSE;
+	srand_seed_for_testing_is_used = FALSE;
     else
     {
-        srand_seed_for_testing = (UINT32_T)tv_get_number(&argvars[0]);
-        srand_seed_for_testing_is_used = TRUE;
+	srand_seed_for_testing = (UINT32_T)tv_get_number(&argvars[0]);
+	srand_seed_for_testing_is_used = TRUE;
     }
 }
 
@@ -6007,7 +6019,7 @@ init_srand(UINT32_T *x)
 
     if (srand_seed_for_testing_is_used)
     {
-        *x = srand_seed_for_testing;
+	*x = srand_seed_for_testing;
 	return;
     }
 #ifndef MSWIN
@@ -6227,6 +6239,72 @@ range_list_materialize(list_T *list)
 	    break;
 }
 
+/*
+ * "getreginfo()" function
+ */
+    static void
+f_getreginfo(typval_T *argvars, typval_T *rettv)
+{
+    char_u	*strregname;
+    int		regname;
+    char_u	buf[NUMBUFLEN + 2];
+    long	reglen = 0;
+    dict_T	*dict;
+    list_T	*list;
+
+    if (argvars[0].v_type != VAR_UNKNOWN)
+    {
+	strregname = tv_get_string_chk(&argvars[0]);
+	if (strregname == NULL)
+	    return;
+    }
+    else
+	strregname = get_vim_var_str(VV_REG);
+
+    regname = (strregname == NULL ? '"' : *strregname);
+    if (regname == 0 || regname == '@')
+	regname = '"';
+
+    if (rettv_dict_alloc(rettv) == FAIL)
+	return;
+    dict = rettv->vval.v_dict;
+
+    list = (list_T *)get_reg_contents(regname, GREG_EXPR_SRC | GREG_LIST);
+    if (list == NULL)
+	return;
+    dict_add_list(dict, "regcontents", list);
+
+    buf[0] = NUL;
+    buf[1] = NUL;
+    switch (get_reg_type(regname, &reglen))
+    {
+	case MLINE: buf[0] = 'V'; break;
+	case MCHAR: buf[0] = 'v'; break;
+	case MBLOCK:
+		    vim_snprintf((char *)buf, sizeof(buf), "%c%ld", Ctrl_V,
+			    reglen + 1);
+		    break;
+    }
+    dict_add_string(dict, (char *)"regtype", buf);
+
+    buf[0] = get_register_name(get_unname_register());
+    buf[1] = NUL;
+    if (regname == '"')
+	dict_add_string(dict, (char *)"points_to", buf);
+    else
+    {
+	dictitem_T	*item = dictitem_alloc((char_u *)"isunnamed");
+
+	if (item != NULL)
+	{
+	    item->di_tv.v_type = VAR_SPECIAL;
+	    item->di_tv.vval.v_number = regname == buf[0]
+		? VVAL_TRUE : VVAL_FALSE;
+	    dict_add(dict, item);
+	}
+    }
+}
+
     static void
 return_register(int regname, typval_T *rettv)
 {
@@ -6399,10 +6477,8 @@ search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
     int		options = SEARCH_KEEP;
     int		subpatnum;
     searchit_arg_T sia;
-    evalarg_T	skip;
+    int		use_skip = FALSE;
     pos_T	firstpos;
-
-    CLEAR_FIELD(skip);
 
     pat = tv_get_string(&argvars[0]);
     dir = get_search_arg(&argvars[1], flagsp);	// may set p_ws
@@ -6429,9 +6505,7 @@ search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
 	    if (time_limit < 0)
 		goto theend;
 #endif
-	    if (argvars[4].v_type != VAR_UNKNOWN
-		    && evalarg_get(&argvars[4], &skip) == FAIL)
-		goto theend;
+	    use_skip = eval_expr_valid_arg(&argvars[4]);
 	}
     }
 
@@ -6471,19 +6545,20 @@ search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
 	if (firstpos.lnum != 0 && EQUAL_POS(pos, firstpos))
 	    subpatnum = FAIL;
 
-	if (subpatnum == FAIL || !evalarg_valid(&skip))
+	if (subpatnum == FAIL || !use_skip)
 	    // didn't find it or no skip argument
 	    break;
 	firstpos = pos;
 
-	// If the skip pattern matches, ignore this match.
+	// If the skip expression matches, ignore this match.
 	{
 	    int	    do_skip;
 	    int	    err;
 	    pos_T   save_pos = curwin->w_cursor;
 
 	    curwin->w_cursor = pos;
-	    do_skip = evalarg_call_bool(&skip, &err);
+	    err = FALSE;
+	    do_skip = eval_expr_to_bool(&argvars[4], &err);
 	    curwin->w_cursor = save_pos;
 	    if (err)
 	    {
@@ -6523,7 +6598,6 @@ search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
 	curwin->w_set_curswant = TRUE;
 theend:
     p_ws = save_p_ws;
-    evalarg_clean(&skip);
 
     return retval;
 }
@@ -6791,14 +6865,9 @@ searchpair_cmn(typval_T *argvars, pos_T *match_pos)
 	skip = NULL;
     else
     {
+	// Type is checked later.
 	skip = &argvars[4];
-	if (skip->v_type != VAR_FUNC && skip->v_type != VAR_PARTIAL
-	    && skip->v_type != VAR_STRING)
-	{
-	    // Type error
-	    semsg(_(e_invarg2), tv_get_string(&argvars[4]));
-	    goto theend;
-	}
+
 	if (argvars[5].v_type != VAR_UNKNOWN)
 	{
 	    lnum_stop = (long)tv_get_number_chk(&argvars[5], NULL);
@@ -6922,12 +6991,7 @@ do_searchpair(
 	options |= SEARCH_START;
 
     if (skip != NULL)
-    {
-	// Empty string means to not use the skip expression.
-	if (skip->v_type == VAR_STRING || skip->v_type == VAR_FUNC)
-	    use_skip = skip->vval.v_string != NULL
-						&& *skip->vval.v_string != NUL;
-    }
+	use_skip = eval_expr_valid_arg(skip);
 
     save_cursor = curwin->w_cursor;
     pos = curwin->w_cursor;
@@ -7205,6 +7269,37 @@ f_setpos(typval_T *argvars, typval_T *rettv)
 }
 
 /*
+ * Translate a register type string to the yank type and block length
+ */
+    static int
+get_yank_type(char_u **pp, char_u *yank_type, long *block_len)
+{
+    char_u *stropt = *pp;
+    switch (*stropt)
+    {
+	case 'v': case 'c':	// character-wise selection
+	    *yank_type = MCHAR;
+	    break;
+	case 'V': case 'l':	// line-wise selection
+	    *yank_type = MLINE;
+	    break;
+	case 'b': case Ctrl_V:	// block-wise selection
+	    *yank_type = MBLOCK;
+	    if (VIM_ISDIGIT(stropt[1]))
+	    {
+		++stropt;
+		*block_len = getdigits(&stropt) - 1;
+		--stropt;
+	    }
+	    break;
+	default:
+	    return FAIL;
+    }
+    *pp = stropt;
+    return OK;
+}
+
+/*
  * "setreg()" function
  */
     static void
@@ -7217,7 +7312,11 @@ f_setreg(typval_T *argvars, typval_T *rettv)
     int		append;
     char_u	yank_type;
     long	block_len;
+    typval_T	*regcontents;
+    int		pointreg;
 
+    pointreg = 0;
+    regcontents = NULL;
     block_len = -1;
     yank_type = MAUTO;
     append = FALSE;
@@ -7231,8 +7330,58 @@ f_setreg(typval_T *argvars, typval_T *rettv)
     if (regname == 0 || regname == '@')
 	regname = '"';
 
+    if (argvars[1].v_type == VAR_DICT)
+    {
+	dict_T	    *d = argvars[1].vval.v_dict;
+	dictitem_T  *di;
+
+	if (d == NULL || d->dv_hashtab.ht_used == 0)
+	{
+	    // Empty dict, clear the register (like setreg(0, []))
+	    char_u *lstval[2] = {NULL, NULL};
+	    write_reg_contents_lst(regname, lstval, 0, FALSE, MAUTO, -1);
+	    return;
+	}
+
+	di = dict_find(d, (char_u *)"regcontents", -1);
+	if (di != NULL)
+	    regcontents = &di->di_tv;
+
+	stropt = dict_get_string(d, (char_u *)"regtype", FALSE);
+	if (stropt != NULL)
+	{
+	    int ret = get_yank_type(&stropt, &yank_type, &block_len);
+
+	    if (ret == FAIL || *++stropt != NUL)
+	    {
+		semsg(_(e_invargval), "value");
+		return;
+	    }
+	}
+
+	if (regname == '"')
+	{
+	    stropt = dict_get_string(d, (char_u *)"points_to", FALSE);
+	    if (stropt != NULL)
+	    {
+		pointreg = *stropt;
+		regname = pointreg;
+	    }
+	}
+	else if (dict_get_number(d, (char_u *)"isunnamed"))
+	    pointreg = regname;
+    }
+    else
+	regcontents = &argvars[1];
+
     if (argvars[2].v_type != VAR_UNKNOWN)
     {
+	if (yank_type != MAUTO)
+	{
+	    semsg(_(e_toomanyarg), "setreg");
+	    return;
+	}
+
 	stropt = tv_get_string_chk(&argvars[2]);
 	if (stropt == NULL)
 	    return;		// type error
@@ -7242,32 +7391,19 @@ f_setreg(typval_T *argvars, typval_T *rettv)
 		case 'a': case 'A':	// append
 		    append = TRUE;
 		    break;
-		case 'v': case 'c':	// character-wise selection
-		    yank_type = MCHAR;
-		    break;
-		case 'V': case 'l':	// line-wise selection
-		    yank_type = MLINE;
-		    break;
-		case 'b': case Ctrl_V:	// block-wise selection
-		    yank_type = MBLOCK;
-		    if (VIM_ISDIGIT(stropt[1]))
-		    {
-			++stropt;
-			block_len = getdigits(&stropt) - 1;
-			--stropt;
-		    }
-		    break;
+		default:
+		    get_yank_type(&stropt, &yank_type, &block_len);
 	    }
     }
 
-    if (argvars[1].v_type == VAR_LIST)
+    if (regcontents && regcontents->v_type == VAR_LIST)
     {
 	char_u		**lstval;
 	char_u		**allocval;
 	char_u		buf[NUMBUFLEN];
 	char_u		**curval;
 	char_u		**curallocval;
-	list_T		*ll = argvars[1].vval.v_list;
+	list_T		*ll = regcontents->vval.v_list;
 	listitem_T	*li;
 	int		len;
 
@@ -7312,14 +7448,17 @@ free_lstval:
 	    vim_free(*--curallocval);
 	vim_free(lstval);
     }
-    else
+    else if (regcontents)
     {
-	strval = tv_get_string_chk(&argvars[1]);
+	strval = tv_get_string_chk(regcontents);
 	if (strval == NULL)
 	    return;
 	write_reg_contents_ex(regname, strval, -1,
 						append, yank_type, block_len);
     }
+    if (pointreg != 0)
+	get_yank_register(pointreg, TRUE);
+
     rettv->vval.v_number = 0;
 }
 
@@ -7491,9 +7630,30 @@ f_spellbadword(typval_T *argvars UNUSED, typval_T *rettv)
     char_u	*word = (char_u *)"";
     hlf_T	attr = HLF_COUNT;
     int		len = 0;
+#ifdef FEAT_SPELL
+    int		wo_spell_save = curwin->w_p_spell;
+
+    if (!curwin->w_p_spell)
+    {
+	did_set_spelllang(curwin);
+	curwin->w_p_spell = TRUE;
+    }
+
+    if (*curwin->w_s->b_p_spl == NUL)
+    {
+	emsg(_(e_no_spell));
+	curwin->w_p_spell = wo_spell_save;
+	return;
+    }
+#endif
 
     if (rettv_list_alloc(rettv) == FAIL)
+    {
+#ifdef FEAT_SPELL
+	curwin->w_p_spell = wo_spell_save;
+#endif
 	return;
+    }
 
 #ifdef FEAT_SPELL
     if (argvars[0].v_type == VAR_UNKNOWN)
@@ -7506,7 +7666,7 @@ f_spellbadword(typval_T *argvars UNUSED, typval_T *rettv)
 	    curwin->w_set_curswant = TRUE;
 	}
     }
-    else if (curwin->w_p_spell && *curbuf->b_s.b_p_spl != NUL)
+    else if (*curbuf->b_s.b_p_spl != NUL)
     {
 	char_u	*str = tv_get_string_chk(&argvars[0]);
 	int	capcol = -1;
@@ -7528,6 +7688,7 @@ f_spellbadword(typval_T *argvars UNUSED, typval_T *rettv)
 	    }
 	}
     }
+    curwin->w_p_spell = wo_spell_save;
 #endif
 
     list_append_string(rettv->vval.v_list, word, len);
@@ -7553,13 +7714,32 @@ f_spellsuggest(typval_T *argvars UNUSED, typval_T *rettv)
     int		i;
     listitem_T	*li;
     int		need_capital = FALSE;
+    int		wo_spell_save = curwin->w_p_spell;
+
+    if (!curwin->w_p_spell)
+    {
+	did_set_spelllang(curwin);
+	curwin->w_p_spell = TRUE;
+    }
+
+    if (*curwin->w_s->b_p_spl == NUL)
+    {
+	emsg(_(e_no_spell));
+	curwin->w_p_spell = wo_spell_save;
+	return;
+    }
 #endif
 
     if (rettv_list_alloc(rettv) == FAIL)
+    {
+#ifdef FEAT_SPELL
+	curwin->w_p_spell = wo_spell_save;
+#endif
 	return;
+    }
 
 #ifdef FEAT_SPELL
-    if (curwin->w_p_spell && *curwin->w_s->b_p_spl != NUL)
+    if (*curwin->w_s->b_p_spl != NUL)
     {
 	str = tv_get_string(&argvars[0]);
 	if (argvars[1].v_type != VAR_UNKNOWN)
@@ -7596,6 +7776,7 @@ f_spellsuggest(typval_T *argvars UNUSED, typval_T *rettv)
 	}
 	ga_clear(&ga);
     }
+    curwin->w_p_spell = wo_spell_save;
 #endif
 }
 
@@ -8757,7 +8938,7 @@ f_trim(typval_T *argvars, typval_T *rettv)
 	    }
 	}
     }
-    rettv->vval.v_string = vim_strnsave(head, (int)(tail - head));
+    rettv->vval.v_string = vim_strnsave(head, tail - head);
 }
 
 #ifdef FEAT_FLOAT
