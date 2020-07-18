@@ -3505,9 +3505,8 @@ mch_settmode(tmode_T tmode)
 	// ~IXON disables CTRL-S stopping output, so that it can be mapped.
 	tnew.c_iflag &= ~(ICRNL | IXON);
 	tnew.c_lflag &= ~(ICANON | ECHO | ISIG | ECHOE
-# if defined(IEXTEN) && !defined(__MINT__)
+# if defined(IEXTEN)
 		    | IEXTEN	    // IEXTEN enables typing ^V on SOLARIS
-				    // but it breaks function keys on MINT
 # endif
 				);
 # ifdef ONLCR
@@ -5922,6 +5921,8 @@ mch_create_pty_channel(job_T *job, jobopt_T *options)
     channel_T	*channel;
 
     open_pty(&pty_master_fd, &pty_slave_fd, &job->jv_tty_out, &job->jv_tty_in);
+    if (pty_master_fd < 0 || pty_slave_fd < 0)
+	return FAIL;
     close(pty_slave_fd);
 
     channel = add_channel();

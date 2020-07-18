@@ -3894,6 +3894,7 @@ E103	diff.txt	/*E103*
 E104	digraph.txt	/*E104*
 E1042	vim9.txt	/*E1042*
 E105	mbyte.txt	/*E105*
+E1050	vim9.txt	/*E1050*
 E107	eval.txt	/*E107*
 E108	eval.txt	/*E108*
 E109	eval.txt	/*E109*
@@ -4698,6 +4699,7 @@ E855	autocmd.txt	/*E855*
 E858	eval.txt	/*E858*
 E859	eval.txt	/*E859*
 E86	windows.txt	/*E86*
+E860	textprop.txt	/*E860*
 E861	popup.txt	/*E861*
 E862	eval.txt	/*E862*
 E863	popup.txt	/*E863*
@@ -8819,7 +8821,9 @@ setloclist()	eval.txt	/*setloclist()*
 setmatches()	eval.txt	/*setmatches()*
 setpos()	eval.txt	/*setpos()*
 setqflist()	eval.txt	/*setqflist()*
+setqflist-action	eval.txt	/*setqflist-action*
 setqflist-examples	quickfix.txt	/*setqflist-examples*
+setqflist-what	eval.txt	/*setqflist-what*
 setreg()	eval.txt	/*setreg()*
 settabvar()	eval.txt	/*settabvar()*
 settabwinvar()	eval.txt	/*settabwinvar()*
@@ -10002,6 +10006,7 @@ vim9-declaration	vim9.txt	/*vim9-declaration*
 vim9-declarations	usr_46.txt	/*vim9-declarations*
 vim9-differences	vim9.txt	/*vim9-differences*
 vim9-export	vim9.txt	/*vim9-export*
+vim9-gotchas	vim9.txt	/*vim9-gotchas*
 vim9-import	vim9.txt	/*vim9-import*
 vim9-rationale	vim9.txt	/*vim9-rationale*
 vim9-scopes	vim9.txt	/*vim9-scopes*

@@ -654,6 +654,9 @@ emsg_core(char_u *s)
 	    return TRUE;
 	}
 
+	if (emsg_assert_fails_used && emsg_assert_fails_msg == NULL)
+	    emsg_assert_fails_msg = vim_strsave(s);
+
 	// set "v:errmsg", also when using ":silent! cmd"
 	set_vim_var_string(VV_ERRMSG, s, -1);
 #endif
@@ -3652,6 +3655,7 @@ do_dialog(
     char_u	*hotkeys;
     int		c;
     int		i;
+    tmode_T	save_tmode;
 
 #ifndef NO_CONSOLE
     // Don't output anything in silent mode ("ex -s")
@@ -3682,6 +3686,10 @@ do_dialog(
     oldState = State;
     State = CONFIRM;
     setmouse();
+
+    // Ensure raw mode here.
+    save_tmode = cur_tmode;
+    settmode(TMODE_RAW);
 
     /*
      * Since we wait for a keypress, don't make the
@@ -3743,6 +3751,7 @@ do_dialog(
 	vim_free(hotkeys);
     }
 
+    settmode(save_tmode);
     State = oldState;
     setmouse();
     --no_wait_return;

@@ -268,7 +268,7 @@ func GetVimCommand(...)
 
   " If using valgrind, make sure every run uses a different log file.
   if cmd =~ 'valgrind.*--log-file='
-    let cmd = substitute(cmd, '--log-file=\(^\s*\)', '--log-file=\1.' . g:valgrind_cnt, '')
+    let cmd = substitute(cmd, '--log-file=\(\S*\)', '--log-file=\1.' . g:valgrind_cnt, '')
     let g:valgrind_cnt += 1
   endif
 
@@ -351,6 +351,21 @@ func GetMessages()
     return msg_list[1:]
   endif
   return msg_list
+endfunc
+
+" Run the list of commands in 'cmds' and look for 'errstr' in exception.
+" Note that assert_fails() cannot be used in some places and this function
+" can be used.
+func AssertException(cmds, errstr)
+  let save_exception = ''
+  try
+    for cmd in a:cmds
+      exe cmd
+    endfor
+  catch
+    let save_exception = v:exception
+  endtry
+  call assert_match(a:errstr, save_exception)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

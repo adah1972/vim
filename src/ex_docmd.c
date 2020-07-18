@@ -25,7 +25,6 @@ static char_u	*do_one_cmd(char_u **, int, cstack_T *, char_u *(*fgetline)(int, v
 static char_u	*do_one_cmd(char_u **, int, char_u *(*fgetline)(int, void *, int, int), void *cookie);
 static int	if_level = 0;		// depth in :if
 #endif
-static void	free_cmdmod(void);
 static void	append_command(char_u *cmd);
 
 #ifndef FEAT_MENU
@@ -1650,6 +1649,16 @@ current_tab_nr(tabpage_T *tab)
     return nr;
 }
 
+    static int
+comment_start(char_u *p, int starts_with_colon UNUSED)
+{
+#ifdef FEAT_EVAL
+    if (in_vim9script())
+	return p[0] == '#' && p[1] != '{' && !starts_with_colon;
+#endif
+    return *p == '"';
+}
+
 # define CURRENT_WIN_NR current_win_nr(curwin)
 # define LAST_WIN_NR current_win_nr(NULL)
 # define CURRENT_TAB_NR current_tab_nr(curtab)
@@ -1699,8 +1708,10 @@ do_one_cmd(
     int		save_reg_executing = reg_executing;
     int		ni;			// set when Not Implemented
     char_u	*cmd;
+    int		starts_with_colon = FALSE;
 #ifdef FEAT_EVAL
-    int		starts_with_colon;
+    int		starts_with_quote;
+    int		vim9script = in_vim9script();
 #endif
 
     CLEAR_FIELD(ea);
@@ -1761,12 +1772,16 @@ do_one_cmd(
  * We need the command to know what kind of range it uses.
  */
     cmd = ea.cmd;
-    ea.cmd = skip_range(ea.cmd, NULL);
+#ifdef FEAT_EVAL
+    starts_with_quote = vim9script && *ea.cmd == '\'';
+    if (!starts_with_quote)
+#endif
+	ea.cmd = skip_range(ea.cmd, NULL);
     if (*ea.cmd == '*' && vim_strchr(p_cpo, CPO_STAR) == NULL)
 	ea.cmd = skipwhite(ea.cmd + 1);
 
 #ifdef FEAT_EVAL
-    if (current_sctx.sc_version == SCRIPT_VERSION_VIM9 && !starts_with_colon)
+    if (vim9script && !starts_with_colon)
     {
 	if (ea.cmd > cmd)
 	{
@@ -1860,8 +1875,11 @@ do_one_cmd(
     }
 
     ea.cmd = cmd;
-    if (parse_cmd_address(&ea, &errormsg, FALSE) == FAIL)
-	goto doend;
+#ifdef FEAT_EVAL
+    if (!starts_with_quote)
+#endif
+	if (parse_cmd_address(&ea, &errormsg, FALSE) == FAIL)
+	    goto doend;
 
 /*
  * 5. Parse the command.
@@ -1878,12 +1896,8 @@ do_one_cmd(
      * If we got a line, but no command, then go to the line.
      * If we find a '|' or '\n' we set ea.nextcmd.
      */
-    if (*ea.cmd == NUL || *ea.cmd == '"'
-#ifdef FEAT_EVAL
-		|| (*ea.cmd == '#' && ea.cmd[1] != '{'
-				      && !starts_with_colon && in_vim9script())
-#endif
-		|| (ea.nextcmd = check_nextcmd(ea.cmd)) != NULL)
+    if (*ea.cmd == NUL || comment_start(ea.cmd, starts_with_colon)
+			       || (ea.nextcmd = check_nextcmd(ea.cmd)) != NULL)
     {
 	/*
 	 * strange vi behaviour:
@@ -2217,7 +2231,7 @@ do_one_cmd(
 	ea.do_ecmd_cmd = getargcmd(&ea.arg);
 
     /*
-     * Check for '|' to separate commands and '"' to start comments.
+     * Check for '|' to separate commands and '"' or '#' to start comments.
      * Don't do this for ":read !cmd" and ":write !cmd".
      */
     if ((ea.argt & EX_TRLBAR) && !ea.usefilter)
@@ -2611,31 +2625,9 @@ doend:
 			? cmdnames[(int)ea.cmdidx].cmd_name : (char_u *)NULL);
 #endif
 
-    if (ea.verbose_save >= 0)
-	p_verbose = ea.verbose_save;
-
-    free_cmdmod();
+    undo_cmdmod(&ea, save_msg_scroll);
     cmdmod = save_cmdmod;
     reg_executing = save_reg_executing;
-
-    if (ea.save_msg_silent != -1)
-    {
-	// messages could be enabled for a serious error, need to check if the
-	// counters don't become negative
-	if (!did_emsg || msg_silent > ea.save_msg_silent)
-	    msg_silent = ea.save_msg_silent;
-	emsg_silent -= ea.did_esilent;
-	if (emsg_silent < 0)
-	    emsg_silent = 0;
-	// Restore msg_scroll, it's set by file I/O commands, even when no
-	// message is actually displayed.
-	msg_scroll = save_msg_scroll;
-
-	// "silent reg" or "silent echo x" inside "redir" leaves msg_col
-	// somewhere in the line.  Put it back in the first column.
-	if (redirecting())
-	    msg_col = 0;
-    }
 
 #ifdef HAVE_SANDBOX
     if (ea.did_sandbox)
@@ -2673,7 +2665,8 @@ doend:
     int
 parse_command_modifiers(exarg_T *eap, char **errormsg, int skip_only)
 {
-    char_u *p;
+    char_u  *p;
+    int	    starts_with_colon = FALSE;
 
     CLEAR_FIELD(cmdmod);
     eap->verbose_save = -1;
@@ -2683,7 +2676,11 @@ parse_command_modifiers(exarg_T *eap, char **errormsg, int skip_only)
     for (;;)
     {
 	while (*eap->cmd == ' ' || *eap->cmd == '\t' || *eap->cmd == ':')
+	{
+	    if (*eap->cmd == ':')
+		starts_with_colon = TRUE;
 	    ++eap->cmd;
+	}
 
 	// in ex mode, an empty line works like :+
 	if (*eap->cmd == NUL && exmode_active
@@ -2697,7 +2694,7 @@ parse_command_modifiers(exarg_T *eap, char **errormsg, int skip_only)
 	}
 
 	// ignore comment and empty lines
-	if (*eap->cmd == '"')
+	if (comment_start(eap->cmd, starts_with_colon))
 	    return FAIL;
 	if (*eap->cmd == NUL)
 	{
@@ -2773,6 +2770,11 @@ parse_command_modifiers(exarg_T *eap, char **errormsg, int skip_only)
 				if (*p == NUL || ends_excmd(*p))
 				    break;
 			    }
+#ifdef FEAT_EVAL
+			    // Avoid that "filter(arg)" is recognized.
+			    if (in_vim9script() && !VIM_ISWHITE(*p))
+				break;
+#endif
 			    if (skip_only)
 				p = skip_vimgrep_pat(p, NULL, NULL);
 			    else
@@ -2927,11 +2929,14 @@ parse_command_modifiers(exarg_T *eap, char **errormsg, int skip_only)
 }
 
 /*
- * Free contents of "cmdmod".
+ * Undo and free contents of "cmdmod".
  */
-    static void
-free_cmdmod(void)
+    void
+undo_cmdmod(exarg_T *eap, int save_msg_scroll)
 {
+    if (eap->verbose_save >= 0)
+	p_verbose = eap->verbose_save;
+
     if (cmdmod.save_ei != NULL)
     {
 	// Restore 'eventignore' to the value before ":noautocmd".
@@ -2942,6 +2947,25 @@ free_cmdmod(void)
 
     if (cmdmod.filter_regmatch.regprog != NULL)
 	vim_regfree(cmdmod.filter_regmatch.regprog);
+
+    if (eap->save_msg_silent != -1)
+    {
+	// messages could be enabled for a serious error, need to check if the
+	// counters don't become negative
+	if (!did_emsg || msg_silent > eap->save_msg_silent)
+	    msg_silent = eap->save_msg_silent;
+	emsg_silent -= eap->did_esilent;
+	if (emsg_silent < 0)
+	    emsg_silent = 0;
+	// Restore msg_scroll, it's set by file I/O commands, even when no
+	// message is actually displayed.
+	msg_scroll = save_msg_scroll;
+
+	// "silent reg" or "silent echo x" inside "redir" leaves msg_col
+	// somewhere in the line.  Put it back in the first column.
+	if (redirecting())
+	    msg_col = 0;
+    }
 }
 
 /*
@@ -3219,32 +3243,57 @@ find_ex_command(
      * "lvar = value", "lvar(arg)", "[1, 2 3]->Func()"
      */
     p = eap->cmd;
-    if (lookup != NULL && (*p == '('
-	       || ((p = to_name_const_end(eap->cmd)) > eap->cmd && *p != NUL)))
+    if (lookup != NULL && (vim_strchr((char_u *)"{('[", *p) != NULL
+	       || ((p = to_name_const_end(eap->cmd)) > eap->cmd
+		   && *p != NUL)))
     {
 	int oplen;
 	int heredoc;
 
-	// "funcname(" is always a function call.
-	// "varname[]" is an expression.
-	// "g:varname" is an expression.
-	// "varname->expr" is an expression.
-	// "(..." is an expression.
-	if (*p == '('
-		|| *p == '['
-		|| p[1] == ':'
-		|| (*p == '-' && p[1] == '>'))
+	if (
+	    // "(..." is an expression.
+	    // "funcname(" is always a function call.
+	    *p == '('
+		|| (p == eap->cmd
+		    ? (
+			// "{..." is an dict expression.
+			*eap->cmd == '{'
+			// "'string'->func()" is an expression.
+		     || *eap->cmd == '\''
+			// "g:varname" is an expression.
+		     || eap->cmd[1] == ':'
+			)
+		    : (
+			// "varname[]" is an expression.
+			*p == '['
+			// "varname->func()" is an expression.
+		     || (*p == '-' && p[1] == '>')
+			// "varname.expr" is an expression.
+		     || (*p == '.' && ASCII_ISALPHA(p[1]))
+		     )))
 	{
 	    eap->cmdidx = CMD_eval;
 	    return eap->cmd;
 	}
 
+	// "[...]->Method()" is a list expression, but "[a, b] = Func()" is
+	// an assignment.
+	// If there is no line break inside the "[...]" then "p" is advanced to
+	// after the "]" by to_name_const_end(): check if a "=" follows.
+	// If "[...]" has a line break "p" still points at the "[" and it can't
+	// be an assignment.
+	if (*eap->cmd == '[' && (p == eap->cmd || *skipwhite(p) != '='))
+	{
+	    eap->cmdidx = CMD_eval;
+	    return eap->cmd;
+	}
+
+	// Recognize an assignment if we recognize the variable name:
+	// "g:var = expr"
+	// "var = expr"  where "var" is a local var name.
 	oplen = assignment_len(skipwhite(p), &heredoc);
 	if (oplen > 0)
 	{
-	    // Recognize an assignment if we recognize the variable name:
-	    // "g:var = expr"
-	    // "var = expr"  where "var" is a local var name.
 	    if (((p - eap->cmd) > 2 && eap->cmd[1] == ':')
 		    || lookup(eap->cmd, p - eap->cmd, cctx) != NULL)
 	    {
@@ -4483,14 +4532,20 @@ separate_nextcmd(exarg_T *eap)
 	// Check for '"': start of comment or '|': next command
 	// :@" and :*" do not start a comment!
 	// :redir @" doesn't either.
-	else if ((*p == '"' && !(eap->argt & EX_NOTRLCOM)
-		    && ((eap->cmdidx != CMD_at && eap->cmdidx != CMD_star)
-			|| p != eap->arg)
-		    && (eap->cmdidx != CMD_redir
-			|| p != eap->arg + 1 || p[-1] != '@'))
+	else if ((*p == '"'
 #ifdef FEAT_EVAL
-		|| (*p == '#' && in_vim9script()
-			  && p[1] != '{' && p > eap->cmd && VIM_ISWHITE(p[-1]))
+		    && !in_vim9script()
+#endif
+		    && !(eap->argt & EX_NOTRLCOM)
+		    && ((eap->cmdidx != CMD_at && eap->cmdidx != CMD_star)
+							      || p != eap->arg)
+		    && (eap->cmdidx != CMD_redir
+					 || p != eap->arg + 1 || p[-1] != '@'))
+#ifdef FEAT_EVAL
+		|| (*p == '#'
+		    && in_vim9script()
+		    && p[1] != '{'
+		    && p > eap->cmd && VIM_ISWHITE(p[-1]))
 #endif
 		|| *p == '|' || *p == '\n')
 	{
@@ -4829,11 +4884,13 @@ ex_blast(exarg_T *eap)
     int
 ends_excmd(int c)
 {
+    int comment_char = '"';
+
 #ifdef FEAT_EVAL
-    if (c == '#')
-	return in_vim9script();
+    if (in_vim9script())
+	comment_char = '#';
 #endif
-    return (c == NUL || c == '|' || c == '"' || c == '\n');
+    return (c == NUL || c == '|' || c == comment_char || c == '\n');
 }
 
 /*
@@ -4845,11 +4902,14 @@ ends_excmd2(char_u *cmd_start UNUSED, char_u *cmd)
 {
     int c = *cmd;
 
+    if (c == NUL || c == '|' || c == '\n')
+	return TRUE;
 #ifdef FEAT_EVAL
-    if (c == '#' && cmd[1] != '{' && (cmd == cmd_start || VIM_ISWHITE(cmd[-1])))
-	return in_vim9script();
+    if (in_vim9script())
+	return c == '#' && cmd[1] != '{'
+				 && (cmd == cmd_start || VIM_ISWHITE(cmd[-1]));
 #endif
-    return (c == NUL || c == '|' || c == '"' || c == '\n');
+    return c == '"';
 }
 
 #if defined(FEAT_SYN_HL) || defined(FEAT_SEARCH_EXTRA) || defined(FEAT_EVAL) \
@@ -6991,7 +7051,12 @@ ex_wincmd(exarg_T *eap)
 
     eap->nextcmd = check_nextcmd(p);
     p = skipwhite(p);
-    if (*p != NUL && *p != '"' && eap->nextcmd == NULL)
+    if (*p != NUL && *p != (
+#ifdef FEAT_EVAL
+	    in_vim9script() ? '#' :
+#endif
+		'"')
+	    && eap->nextcmd == NULL)
 	emsg(_(e_invarg));
     else if (!eap->skip)
     {

@@ -266,10 +266,20 @@ get_function_args(
 	    else if (any_default)
 	    {
 		emsg(_("E989: Non-default argument follows default argument"));
-		mustend = TRUE;
+		goto err_ret;
 	    }
 	    if (*p == ',')
+	    {
 		++p;
+		// Don't give this error when skipping, it makes the "->" not
+		// found in "{k,v -> x}" and give a confusing error.
+		if (!skip && in_vim9script()
+				      && !IS_WHITE_OR_NUL(*p) && *p != endchar)
+		{
+		    semsg(_(e_white_after), ",");
+		    goto err_ret;
+		}
+	    }
 	    else
 		mustend = TRUE;
 	}
@@ -350,16 +360,11 @@ get_lambda_name(void)
 register_cfunc(cfunc_T cb, cfunc_free_T cb_free, void *state)
 {
     char_u	*name = get_lambda_name();
-    ufunc_T	*fp = NULL;
-    garray_T	newargs;
-    garray_T	newlines;
-
-    ga_init(&newargs);
-    ga_init(&newlines);
+    ufunc_T	*fp;
 
     fp = alloc_clear(offsetof(ufunc_T, uf_name) + STRLEN(name) + 1);
     if (fp == NULL)
-        goto errret;
+	return NULL;
 
     fp->uf_dfunc_idx = UF_NOT_COMPILED;
     fp->uf_refcount = 1;
@@ -367,8 +372,6 @@ register_cfunc(cfunc_T cb, cfunc_free_T cb_free, void *state)
     fp->uf_flags = FC_CFUNC;
     fp->uf_calls = 0;
     fp->uf_script_ctx = current_sctx;
-    fp->uf_lines = newlines;
-    fp->uf_args = newargs;
     fp->uf_cb = cb;
     fp->uf_cb_free = cb_free;
     fp->uf_cb_state = state;
@@ -377,12 +380,6 @@ register_cfunc(cfunc_T cb, cfunc_free_T cb_free, void *state)
     hash_add(&func_hashtab, UF2HIKEY(fp));
 
     return name;
-
-errret:
-    ga_clear_strings(&newargs);
-    ga_clear_strings(&newlines);
-    vim_free(fp);
-    return NULL;
 }
 #endif
 
@@ -402,8 +399,8 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
     partial_T   *pt = NULL;
     int		varargs;
     int		ret;
-    char_u	*start;
-    char_u	*s, *e;
+    char_u	*s;
+    char_u	*start, *end;
     int		*old_eval_lavars = eval_lavars_used;
     int		eval_lavars = FALSE;
     char_u	*tofree = NULL;
@@ -412,10 +409,10 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
     ga_init(&newlines);
 
     // First, check if this is a lambda expression. "->" must exist.
-    start = skipwhite(*arg + 1);
-    ret = get_function_args(&start, '-', NULL, NULL, NULL, NULL, TRUE,
+    s = skipwhite(*arg + 1);
+    ret = get_function_args(&s, '-', NULL, NULL, NULL, NULL, TRUE,
 								   NULL, NULL);
-    if (ret == FAIL || *start != '>')
+    if (ret == FAIL || *s != '>')
 	return NOTDONE;
 
     // Parse the arguments again.
@@ -436,8 +433,8 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 
     // Get the start and the end of the expression.
     *arg = skipwhite_and_linebreak(*arg + 1, evalarg);
-    s = *arg;
-    ret = skip_expr_concatenate(&s, arg, evalarg);
+    start = *arg;
+    ret = skip_expr_concatenate(arg, &start, &end, evalarg);
     if (ret == FAIL)
 	goto errret;
     if (evalarg != NULL)
@@ -447,7 +444,6 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	evalarg->eval_tofree = NULL;
     }
 
-    e = *arg;
     *arg = skipwhite_and_linebreak(*arg, evalarg);
     if (**arg != '}')
     {
@@ -476,13 +472,13 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	    goto errret;
 
 	// Add "return " before the expression.
-	len = 7 + (int)(e - s) + 1;
+	len = 7 + (int)(end - start) + 1;
 	p = alloc(len);
 	if (p == NULL)
 	    goto errret;
 	((char_u **)(newlines.ga_data))[newlines.ga_len++] = p;
 	STRCPY(p, "return ");
-	vim_strncpy(p + 7, s, e - s);
+	vim_strncpy(p + 7, start, end - start);
 	if (strstr((char *)p + 7, "a:") == NULL)
 	    // No a: variables are used for sure.
 	    flags |= FC_NOARGS;
@@ -522,7 +518,10 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
     }
 
     eval_lavars_used = old_eval_lavars;
-    vim_free(tofree);
+    if (evalarg != NULL && evalarg->eval_tofree == NULL)
+	evalarg->eval_tofree = tofree;
+    else
+	vim_free(tofree);
     return OK;
 
 errret:
@@ -530,7 +529,10 @@ errret:
     ga_clear_strings(&newlines);
     vim_free(fp);
     vim_free(pt);
-    vim_free(tofree);
+    if (evalarg != NULL && evalarg->eval_tofree == NULL)
+	evalarg->eval_tofree = tofree;
+    else
+	vim_free(tofree);
     eval_lavars_used = old_eval_lavars;
     return FAIL;
 }
@@ -614,16 +616,13 @@ get_func_tv(
     int		len,		// length of "name" or -1 to use strlen()
     typval_T	*rettv,
     char_u	**arg,		// argument, pointing to the '('
+    evalarg_T	*evalarg,	// for line continuation
     funcexe_T	*funcexe)	// various values
 {
     char_u	*argp;
     int		ret = OK;
     typval_T	argvars[MAX_FUNC_ARGS + 1];	// vars for arguments
     int		argcount = 0;		// number of arguments found
-    evalarg_T	evalarg;
-
-    CLEAR_FIELD(evalarg);
-    evalarg.eval_flags = funcexe->evaluate ? EVAL_EVALUATE : 0;
 
     /*
      * Get the arguments.
@@ -632,10 +631,12 @@ get_func_tv(
     while (argcount < MAX_FUNC_ARGS - (funcexe->partial == NULL ? 0
 						  : funcexe->partial->pt_argc))
     {
-	argp = skipwhite(argp + 1);	    // skip the '(' or ','
+	// skip the '(' or ',' and possibly line breaks
+	argp = skipwhite_and_linebreak(argp + 1, evalarg);
+
 	if (*argp == ')' || *argp == ',' || *argp == NUL)
 	    break;
-	if (eval1(&argp, &argvars[argcount], &evalarg) == FAIL)
+	if (eval1(&argp, &argvars[argcount], evalarg) == FAIL)
 	{
 	    ret = FAIL;
 	    break;
@@ -644,6 +645,7 @@ get_func_tv(
 	if (*argp != ',')
 	    break;
     }
+    argp = skipwhite_and_linebreak(argp, evalarg);
     if (*argp == ')')
 	++argp;
     else
@@ -1082,10 +1084,7 @@ func_clear_items(ufunc_T *fp)
     VIM_CLEAR(fp->uf_arg_types);
     VIM_CLEAR(fp->uf_def_arg_idx);
     VIM_CLEAR(fp->uf_va_name);
-    while (fp->uf_type_list.ga_len > 0)
-	vim_free(((type_T **)fp->uf_type_list.ga_data)
-						  [--fp->uf_type_list.ga_len]);
-    ga_clear(&fp->uf_type_list);
+    clear_type_list(&fp->uf_type_list);
 
 #ifdef FEAT_LUA
     if (fp->uf_cb_free != NULL)
@@ -1713,7 +1712,7 @@ free_all_functions(void)
     ufunc_T	*fp;
     long_u	skipped = 0;
     long_u	todo = 1;
-    long_u	used;
+    int		changed;
 
     // Clean up the current_funccal chain and the funccal stack.
     while (current_funccal != NULL)
@@ -1744,9 +1743,9 @@ free_all_functions(void)
 		    ++skipped;
 		else
 		{
-		    used = func_hashtab.ht_used;
+		    changed = func_hashtab.ht_changed;
 		    func_clear(fp, TRUE);
-		    if (used != func_hashtab.ht_used)
+		    if (changed != func_hashtab.ht_changed)
 		    {
 			skipped = 0;
 			break;
@@ -2389,8 +2388,7 @@ trans_function_name(
     }
 
     // In Vim9 script a user function is script-local by default.
-    vim9script = ASCII_ISUPPER(*start)
-			     && current_sctx.sc_version == SCRIPT_VERSION_VIM9;
+    vim9script = ASCII_ISUPPER(*start) && in_vim9script();
 
     /*
      * Copy the function name to allocated memory.
@@ -2470,7 +2468,7 @@ untrans_function_name(char_u *name)
 {
     char_u *p;
 
-    if (*name == K_SPECIAL && current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+    if (*name == K_SPECIAL && in_vim9script())
     {
 	p = vim_strchr(name, '_');
 	if (p != NULL)
@@ -2486,12 +2484,11 @@ untrans_function_name(char_u *name)
     static void
 list_functions(regmatch_T *regmatch)
 {
-    long_u	used = func_hashtab.ht_used;
-    long_u	todo = used;
-    hashitem_T	*ht_array = func_hashtab.ht_array;
+    int		changed = func_hashtab.ht_changed;
+    long_u	todo = func_hashtab.ht_used;
     hashitem_T	*hi;
 
-    for (hi = ht_array; todo > 0 && !got_int; ++hi)
+    for (hi = func_hashtab.ht_array; todo > 0 && !got_int; ++hi)
     {
 	if (!HASHITEM_EMPTY(hi))
 	{
@@ -2506,8 +2503,7 @@ list_functions(regmatch_T *regmatch)
 			    && vim_regexec(regmatch, fp->uf_name, 0)))
 	    {
 		list_func_head(fp, FALSE);
-		if (used != func_hashtab.ht_used
-			|| ht_array != func_hashtab.ht_array)
+		if (changed != func_hashtab.ht_changed)
 		{
 		    emsg(_("E454: function list was modified"));
 		    return;
@@ -3446,8 +3442,8 @@ ex_function(exarg_T *eap)
     void
 ex_defcompile(exarg_T *eap UNUSED)
 {
-    long_u	ht_used = func_hashtab.ht_used;
-    int		todo = (int)ht_used;
+    long	todo = (long)func_hashtab.ht_used;
+    int		changed = func_hashtab.ht_changed;
     hashitem_T	*hi;
     ufunc_T	*ufunc;
 
@@ -3462,12 +3458,12 @@ ex_defcompile(exarg_T *eap UNUSED)
 	    {
 		compile_def_function(ufunc, FALSE, NULL);
 
-		if (func_hashtab.ht_used != ht_used)
+		if (func_hashtab.ht_changed != changed)
 		{
-		    // another function has been defined, need to start over
+		    // a function has been added or removed, need to start over
+		    todo = (long)func_hashtab.ht_used;
+		    changed = func_hashtab.ht_changed;
 		    hi = func_hashtab.ht_array;
-		    ht_used = func_hashtab.ht_used;
-		    todo = (int)ht_used;
 		    --hi;
 		}
 	    }
@@ -3566,6 +3562,7 @@ get_expanded_name(char_u *name, int check)
 get_user_func_name(expand_T *xp, int idx)
 {
     static long_u	done;
+    static int		changed;
     static hashitem_T	*hi;
     ufunc_T		*fp;
 
@@ -3573,8 +3570,9 @@ get_user_func_name(expand_T *xp, int idx)
     {
 	done = 0;
 	hi = func_hashtab.ht_array;
+	changed = func_hashtab.ht_changed;
     }
-    if (done < func_hashtab.ht_used)
+    if (changed == func_hashtab.ht_changed && done < func_hashtab.ht_used)
     {
 	if (done++ > 0)
 	    ++hi;
@@ -3845,16 +3843,19 @@ ex_call(exarg_T *eap)
     int		failed = FALSE;
     funcdict_T	fudi;
     partial_T	*partial = NULL;
+    evalarg_T	evalarg;
 
+    fill_evalarg_from_eap(&evalarg, eap, eap->skip);
     if (eap->skip)
     {
 	// trans_function_name() doesn't work well when skipping, use eval0()
 	// instead to skip to any following command, e.g. for:
 	//   :if 0 | call dict.foo().bar() | endif
 	++emsg_skip;
-	if (eval0(eap->arg, &rettv, eap, NULL) != FAIL)
+	if (eval0(eap->arg, &rettv, eap, &evalarg) != FAIL)
 	    clear_tv(&rettv);
 	--emsg_skip;
+	clear_evalarg(&evalarg, eap);
 	return;
     }
 
@@ -3931,7 +3932,7 @@ ex_call(exarg_T *eap)
 	funcexe.evaluate = !eap->skip;
 	funcexe.partial = partial;
 	funcexe.selfdict = fudi.fd_dict;
-	if (get_func_tv(name, -1, &rettv, &arg, &funcexe) == FAIL)
+	if (get_func_tv(name, -1, &rettv, &arg, &evalarg, &funcexe) == FAIL)
 	{
 	    failed = TRUE;
 	    break;
@@ -3960,6 +3961,7 @@ ex_call(exarg_T *eap)
     }
     if (eap->skip)
 	--emsg_skip;
+    clear_evalarg(&evalarg, eap);
 
     // When inside :try we need to check for following "| catch".
     if (!failed || eap->cstack->cs_trylevel > 0)

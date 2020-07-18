@@ -855,7 +855,7 @@ func Test_cmdline_search_range()
   call assert_equal('B', getline(2))
 
   let @/ = 'apple'
-  call assert_fails('\/print', 'E486:')
+  call assert_fails('\/print', ['E486:.*apple'])
 
   bwipe!
 endfunc
@@ -972,7 +972,7 @@ func Test_verbosefile()
   call assert_match("foo\nbar", join(log, "\n"))
   call delete('Xlog')
   call mkdir('Xdir')
-  call assert_fails('set verbosefile=Xdir', 'E474:')
+  call assert_fails('set verbosefile=Xdir', ['E484:.*Xdir', 'E474:'])
   call delete('Xdir', 'd')
 endfunc
 
@@ -1208,7 +1208,7 @@ func Test_cmdwin_jump_to_win()
   call assert_fails('call feedkeys("q:\<C-W>\<C-W>\<CR>", "xt")', 'E11:')
   new
   set modified
-  call assert_fails('call feedkeys("q/:qall\<CR>", "xt")', 'E162:')
+  call assert_fails('call feedkeys("q/:qall\<CR>", "xt")', ['E37:', 'E162:'])
   close!
   call feedkeys("q/:close\<CR>", "xt")
   call assert_equal(1, winnr('$'))
@@ -1593,8 +1593,11 @@ func Test_read_shellcmd()
     call feedkeys(":r! ++enc=utf-8 r\<c-a>\<c-b>\"\<cr>", 'tx')
     call assert_notmatch('^"r!.*\<runtest.vim\>', @:)
     call assert_match('^"r!.*\<rm\>', @:)
+
+    call feedkeys(":r ++enc=utf-8 !rm\<c-a>\<c-b>\"\<cr>", 'tx')
+    call assert_notmatch('^"r.*\<runtest.vim\>', @:)
+    call assert_match('^"r ++enc\S\+ !.*\<rm\>', @:)
   endif
 endfunc
-
 
 " vim: shiftwidth=2 sts=2 expandtab

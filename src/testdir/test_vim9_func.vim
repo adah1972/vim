@@ -3,6 +3,7 @@
 source check.vim
 source view_util.vim
 source vim9.vim
+source screendump.vim
 
 func Test_def_basic()
   def SomeFunc(): string
@@ -79,7 +80,7 @@ def Test_call_ufunc_count()
   Increment()
   Increment()
   Increment()
-  " works with and without :call
+  # works with and without :call
   assert_equal(4, g:counter)
   call assert_equal(4, g:counter)
   unlet g:counter
@@ -103,10 +104,18 @@ def MyDefaultArgs(name = 'string'): string
   return name
 enddef
 
+def MyDefaultSecond(name: string, second: bool  = true): string
+  return second ? name : 'none'
+enddef
+
 def Test_call_default_args()
   assert_equal('string', MyDefaultArgs())
   assert_equal('one', MyDefaultArgs('one'))
   assert_fails('call MyDefaultArgs("one", "two")', 'E118:')
+
+  assert_equal('test', MyDefaultSecond('test'))
+  assert_equal('test', MyDefaultSecond('test', true))
+  assert_equal('none', MyDefaultSecond('test', false))
 
   CheckScriptFailure(['def Func(arg: number = asdf)', 'enddef', 'defcompile'], 'E1001:')
   CheckScriptFailure(['def Func(arg: number = "text")', 'enddef', 'defcompile'], 'E1013: argument 1: type mismatch, expected number but got string')
@@ -227,7 +236,7 @@ def ListArg(arg: list<string>)
 enddef
 
 def Test_assign_to_argument()
-  " works for dict and list
+  # works for dict and list
   let d: dict<string> = {}
   DictArg(d)
   assert_equal('value', d['key'])
@@ -257,19 +266,19 @@ let SomeFunc = function('len')
 let NotAFunc = 'text'
 
 def CombineFuncrefTypes()
-  " same arguments, different return type
+  # same arguments, different return type
   let Ref1: func(bool): string
   let Ref2: func(bool): number
   let Ref3: func(bool): any
   Ref3 = g:cond ? Ref1 : Ref2
 
-  " different number of arguments
+  # different number of arguments
   let Refa1: func(bool): number
   let Refa2: func(bool, number): number
   let Refa3: func: number
   Refa3 = g:cond ? Refa1 : Refa2
 
-  " different argument types
+  # different argument types
   let Refb1: func(bool, string): number
   let Refb2: func(string, number): number
   let Refb3: func(any, any): number
@@ -285,15 +294,15 @@ def DefinedEvenLater(arg: string): string
 enddef
 
 def Test_error_in_nested_function()
-  " Error in called function requires unwinding the call stack.
-  assert_fails('call FuncWithForwardCall()', 'E1013')
+  # Error in called function requires unwinding the call stack.
+  assert_fails('call FuncWithForwardCall()', 'E1096')
 enddef
 
 def Test_return_type_wrong()
   CheckScriptFailure(['def Func(): number', 'return "a"', 'enddef', 'defcompile'], 'expected number but got string')
   CheckScriptFailure(['def Func(): string', 'return 1', 'enddef', 'defcompile'], 'expected string but got number')
-  CheckScriptFailure(['def Func(): void', 'return "a"', 'enddef', 'defcompile'], 'expected void but got string')
-  CheckScriptFailure(['def Func()', 'return "a"', 'enddef', 'defcompile'], 'expected void but got string')
+  CheckScriptFailure(['def Func(): void', 'return "a"', 'enddef', 'defcompile'], 'E1096: Returning a value in a function without a return type')
+  CheckScriptFailure(['def Func()', 'return "a"', 'enddef', 'defcompile'], 'E1096: Returning a value in a function without a return type')
 
   CheckScriptFailure(['def Func(): number', 'return', 'enddef', 'defcompile'], 'E1003:')
 
@@ -353,6 +362,31 @@ def Test_vim9script_call()
     assert_equal('text', var)
     ("some")->MyFunc()
     assert_equal('some', var)
+
+    'asdfasdf'->MyFunc()
+    assert_equal('asdfasdf', var)
+
+    def UseString()
+      'xyork'->MyFunc()
+    enddef
+    UseString()
+    assert_equal('xyork', var)
+
+    MyFunc(
+        'continued'
+        )
+    assert_equal('continued',
+            var
+            )
+
+    call MyFunc(
+        'more'
+          ..
+          'lines'
+        )
+    assert_equal(
+        'morelines',
+        var)
   END
   writefile(lines, 'Xcall.vim')
   source Xcall.vim
@@ -580,6 +614,29 @@ def Test_func_type()
   assert_equal(13, funcResult)
 enddef
 
+def Test_repeat_return_type()
+  let res = 0
+  for n in repeat([1], 3)
+    res += n
+  endfor
+  assert_equal(3, res)
+
+  res = 0
+  for n in add([1, 2], 3)
+    res += n
+  endfor
+  assert_equal(6, res)
+enddef
+
+def Test_argv_return_type()
+  next fileone filetwo
+  let res = ''
+  for name in argv()
+    res ..= name
+  endfor
+  assert_equal('fileonefiletwo', res)
+enddef
+
 def Test_func_type_part()
   let RefVoid: func: void
   RefVoid = FuncNoArgNoRet
@@ -706,7 +763,7 @@ enddef
 def Test_unknown_function()
   CheckDefExecFailure([
       'let Ref: func = function("NotExist")',
-      'delfunc g:NotExist'], 'E130:')
+      'delfunc g:NotExist'], 'E700:')
 enddef
 
 def RefFunc(Ref: func(string): string): string
@@ -837,6 +894,91 @@ def Test_sort_return_type()
   res = [1, 2, 3]->sort()
 enddef
 
+def Test_getqflist_return_type()
+  let l = getqflist()
+  assert_equal([], l)
+
+  let d = getqflist(#{items: 0})
+  assert_equal(#{items: []}, d)
+enddef
+
+def Test_getloclist_return_type()
+  let l = getloclist(1)
+  assert_equal([], l)
+
+  let d = getloclist(1, #{items: 0})
+  assert_equal(#{items: []}, d)
+enddef
+
+def Test_copy_return_type()
+  let l = copy([1, 2, 3])
+  let res = 0
+  for n in l
+    res += n
+  endfor
+  assert_equal(6, res)
+
+  let dl = deepcopy([1, 2, 3])
+  res = 0
+  for n in dl
+    res += n
+  endfor
+  assert_equal(6, res)
+enddef
+
+def Test_extend_return_type()
+  let l = extend([1, 2], [3])
+  let res = 0
+  for n in l
+    res += n
+  endfor
+  assert_equal(6, res)
+enddef
+
+def Test_insert_return_type()
+  let l = insert([2, 1], 3)
+  let res = 0
+  for n in l
+    res += n
+  endfor
+  assert_equal(6, res)
+enddef
+
+def Test_reverse_return_type()
+  let l = reverse([1, 2, 3])
+  let res = 0
+  for n in l
+    res += n
+  endfor
+  assert_equal(6, res)
+enddef
+
+def Test_remove_return_type()
+  let l = remove(#{one: [1, 2], two: [3, 4]}, 'one')
+  let res = 0
+  for n in l
+    res += n
+  endfor
+  assert_equal(3, res)
+enddef
+
+def Test_filter_return_type()
+  let l = filter([1, 2, 3], {-> 1})
+  let res = 0
+  for n in l
+    res += n
+  endfor
+  assert_equal(6, res)
+enddef
+
+def Wrong_dict_key_type(items: list<number>): list<number>
+  return filter(items, {_, val -> get({val: 1}, 'x')})
+enddef
+
+def Test_wrong_dict_key_type()
+  assert_fails('Wrong_dict_key_type([1, 2, 3])', 'E1029:')
+enddef
+
 def Line_continuation_in_def(dir: string = ''): string
     let path: string = empty(dir)
             \ ? 'empty'
@@ -846,6 +988,89 @@ enddef
 
 def Test_line_continuation_in_def()
   assert_equal('full', Line_continuation_in_def('.'))
+enddef
+
+def Line_continuation_in_lambda(): list<number>
+  let x = range(97, 100)
+      ->map({_, v -> nr2char(v)
+          ->toupper()})
+      ->reverse()
+  return x
+enddef
+
+def Test_line_continuation_in_lambda()
+  assert_equal(['D', 'C', 'B', 'A'], Line_continuation_in_lambda())
+enddef
+
+func Test_silent_echo()
+  CheckScreendump
+
+  let lines =<< trim END
+    vim9script
+    def EchoNothing()
+      silent echo ''
+    enddef
+    defcompile
+  END
+  call writefile(lines, 'XTest_silent_echo')
+
+  " Check that the balloon shows up after a mouse move
+  let buf = RunVimInTerminal('-S XTest_silent_echo', {'rows': 6})
+  call term_sendkeys(buf, ":abc")
+  call VerifyScreenDump(buf, 'Test_vim9_silent_echo', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XTest_silent_echo')
+endfunc
+
+def Fibonacci(n: number): number
+  if n < 2
+    return n
+  else
+    return Fibonacci(n - 1) + Fibonacci(n - 2)
+  endif
+enddef
+
+def Test_recursive_call()
+  assert_equal(6765, Fibonacci(20))
+enddef
+
+def TreeWalk(dir: string): list<any>
+  return readdir(dir)->map({_, val ->
+            fnamemodify(dir .. '/' .. val, ':p')->isdirectory()
+               ? {val : TreeWalk(dir .. '/' .. val)}
+               : val
+             })
+enddef
+
+def Test_closure_in_map()
+  mkdir('XclosureDir/tdir', 'p')
+  writefile(['111'], 'XclosureDir/file1')
+  writefile(['222'], 'XclosureDir/file2')
+  writefile(['333'], 'XclosureDir/tdir/file3')
+
+  assert_equal(['file1', 'file2', {'tdir': ['file3']}], TreeWalk('XclosureDir'))
+
+  delete('XclosureDir', 'rf')
+enddef
+
+def Test_partial_call()
+  let Xsetlist = function('setloclist', [0])
+  Xsetlist([], ' ', {'title': 'test'})
+  assert_equal({'title': 'test'}, getloclist(0, {'title': 1}))
+
+  Xsetlist = function('setloclist', [0, [], ' '])
+  Xsetlist({'title': 'test'})
+  assert_equal({'title': 'test'}, getloclist(0, {'title': 1}))
+
+  Xsetlist = function('setqflist')
+  Xsetlist([], ' ', {'title': 'test'})
+  assert_equal({'title': 'test'}, getqflist({'title': 1}))
+
+  Xsetlist = function('setqflist', [[], ' '])
+  Xsetlist({'title': 'test'})
+  assert_equal({'title': 'test'}, getqflist({'title': 1}))
 enddef
 
 

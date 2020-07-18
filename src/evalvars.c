@@ -729,7 +729,7 @@ ex_let(exarg_T *eap)
 	    emsg(_("E985: .= is not supported with script version 2"));
 	else if (!ends_excmd2(eap->cmd, arg))
 	{
-	    if (current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+	    if (in_vim9script())
 	    {
 		// Vim9 declaration ":let var: type"
 		arg = vim9_declare_scriptvar(eap, arg);
@@ -993,7 +993,7 @@ skip_var_one(char_u *arg, int include_type)
 	return arg + 2;
     end = find_name_end(*arg == '$' || *arg == '&' ? arg + 1 : arg,
 				   NULL, NULL, FNE_INCL_BR | FNE_CHECK_START);
-    if (include_type && current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+    if (include_type && in_vim9script())
     {
 	// "a: type" is declaring variable "a" with a type, not "a:".
 	if (end == arg + 2 && end[-1] == ':')
@@ -1124,7 +1124,7 @@ list_arg_vars(exarg_T *eap, char_u *arg, int *first)
 	    {
 		if (tofree != NULL)
 		    name = tofree;
-		if (get_var_tv(name, len, &tv, NULL, TRUE, FALSE) == FAIL)
+		if (eval_variable(name, len, &tv, NULL, TRUE, FALSE) == FAIL)
 		    error = TRUE;
 		else
 		{
@@ -1212,8 +1212,7 @@ ex_let_one(
 	    emsg(_("E996: Cannot lock an environment variable"));
 	    return NULL;
 	}
-	if (current_sctx.sc_version == SCRIPT_VERSION_VIM9
-		&& (flags & LET_NO_COMMAND) == 0)
+	if (in_vim9script() && (flags & LET_NO_COMMAND) == 0)
 	{
 	    vim9_declare_error(arg);
 	    return NULL;
@@ -1576,8 +1575,7 @@ do_unlet(char_u *name, int forceit)
     dict_T	*d;
     dictitem_T	*di;
 
-    if (current_sctx.sc_version == SCRIPT_VERSION_VIM9
-	    && check_vim9_unlet(name) == FAIL)
+    if (in_vim9script() && check_vim9_unlet(name) == FAIL)
 	return FAIL;
 
     ht = find_var_ht(name, &varname);
@@ -2365,7 +2363,7 @@ set_cmdarg(exarg_T *eap, char_u *oldarg)
  * Return OK or FAIL.  If OK is returned "rettv" must be cleared.
  */
     int
-get_var_tv(
+eval_variable(
     char_u	*name,
     int		len,		// length of "name"
     typval_T	*rettv,		// NULL when only checking existence
@@ -2375,6 +2373,7 @@ get_var_tv(
 {
     int		ret = OK;
     typval_T	*tv = NULL;
+    int		foundFunc = FALSE;
     dictitem_T	*v;
     int		cc;
 
@@ -2391,8 +2390,7 @@ get_var_tv(
 	    *dip = v;
     }
 
-    if (tv == NULL && (current_sctx.sc_version == SCRIPT_VERSION_VIM9
-					       || STRNCMP(name, "s:", 2) == 0))
+    if (tv == NULL && (in_vim9script() || STRNCMP(name, "s:", 2) == 0))
     {
 	imported_T  *import;
 	char_u	    *p = STRNCMP(name, "s:", 2) == 0 ? name + 2 : name;
@@ -2402,21 +2400,36 @@ get_var_tv(
 	// imported variable from another script
 	if (import != NULL)
 	{
-	    scriptitem_T    *si = SCRIPT_ITEM(import->imp_sid);
-	    svar_T	    *sv = ((svar_T *)si->sn_var_vals.ga_data)
+	    if (import->imp_funcname != NULL)
+	    {
+		foundFunc = TRUE;
+		if (rettv != NULL)
+		{
+		    rettv->v_type = VAR_FUNC;
+		    rettv->vval.v_string = vim_strsave(import->imp_funcname);
+		}
+	    }
+	    else
+	    {
+		scriptitem_T    *si = SCRIPT_ITEM(import->imp_sid);
+		svar_T	    *sv = ((svar_T *)si->sn_var_vals.ga_data)
 						    + import->imp_var_vals_idx;
-	    tv = sv->sv_tv;
+		tv = sv->sv_tv;
+	    }
 	}
     }
 
-    if (tv == NULL)
+    if (!foundFunc)
     {
-	if (rettv != NULL && verbose)
-	    semsg(_(e_undefvar), name);
-	ret = FAIL;
+	if (tv == NULL)
+	{
+	    if (rettv != NULL && verbose)
+		semsg(_(e_undefvar), name);
+	    ret = FAIL;
+	}
+	else if (rettv != NULL)
+	    copy_tv(tv, rettv);
     }
-    else if (rettv != NULL)
-	copy_tv(tv, rettv);
 
     name[len] = cc;
 
@@ -2618,7 +2631,7 @@ find_var_ht(char_u *name, char_u **varname)
 	    return ht;				// local variable
 
 	// in Vim9 script items at the script level are script-local
-	if (current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+	if (in_vim9script())
 	{
 	    ht = get_script_local_ht();
 	    if (ht != NULL)
@@ -2852,7 +2865,7 @@ set_var(
     typval_T	*tv,
     int		copy)	    // make copy of value in "tv"
 {
-    set_var_const(name, NULL, tv, copy, 0);
+    set_var_const(name, NULL, tv, copy, LET_NO_COMMAND);
 }
 
 /*
@@ -2881,7 +2894,7 @@ set_var_const(
     }
     is_script_local = ht == get_script_local_ht();
 
-    if (current_sctx.sc_version == SCRIPT_VERSION_VIM9
+    if (in_vim9script()
 	    && !is_script_local
 	    && (flags & LET_NO_COMMAND) == 0
 	    && name[1] == ':')
@@ -2910,8 +2923,7 @@ set_var_const(
 		return;
 	    }
 
-	    if (is_script_local
-			     && current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+	    if (is_script_local && in_vim9script())
 	    {
 		if ((flags & LET_NO_COMMAND) == 0)
 		{
@@ -3007,7 +3019,7 @@ set_var_const(
 	if (flags & LET_IS_CONST)
 	    di->di_flags |= DI_FLAGS_LOCK;
 
-	if (is_script_local && current_sctx.sc_version == SCRIPT_VERSION_VIM9)
+	if (is_script_local && in_vim9script())
 	{
 	    scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
 
@@ -3206,7 +3218,7 @@ getwinvar(
 			done = TRUE;
 		    }
 		}
-		else if (get_option_tv(&varname, rettv, 1) == OK)
+		else if (eval_option(&varname, rettv, 1) == OK)
 		    // window-local-option
 		    done = TRUE;
 	    }
@@ -3342,7 +3354,7 @@ var_exists(char_u *var)
     {
 	if (tofree != NULL)
 	    name = tofree;
-	n = (get_var_tv(name, len, &tv, NULL, FALSE, TRUE) == OK);
+	n = (eval_variable(name, len, &tv, NULL, FALSE, TRUE) == OK);
 	if (n)
 	{
 	    // handle d.key, l[idx], f(expr)
@@ -3372,8 +3384,7 @@ static char_u	*redir_varname = NULL;
     int
 var_redir_start(char_u *name, int append)
 {
-    int		save_emsg;
-    int		err;
+    int		called_emsg_before;
     typval_T	tv;
 
     // Catch a bad name early.
@@ -3416,8 +3427,7 @@ var_redir_start(char_u *name, int append)
 
     // check if we can write to the variable: set it to or append an empty
     // string
-    save_emsg = did_emsg;
-    did_emsg = FALSE;
+    called_emsg_before = called_emsg;
     tv.v_type = VAR_STRING;
     tv.vval.v_string = (char_u *)"";
     if (append)
@@ -3425,9 +3435,7 @@ var_redir_start(char_u *name, int append)
     else
 	set_var_lval(redir_lval, redir_endp, &tv, TRUE, 0, (char_u *)"=");
     clear_lval(redir_lval);
-    err = did_emsg;
-    did_emsg |= save_emsg;
-    if (err)
+    if (called_emsg > called_emsg_before)
     {
 	redir_endp = NULL;  // don't store a value, only cleanup
 	var_redir_stop();
@@ -3609,7 +3617,7 @@ f_getbufvar(typval_T *argvars, typval_T *rettv)
 		    done = TRUE;
 		}
 	    }
-	    else if (get_option_tv(&varname, rettv, TRUE) == OK)
+	    else if (eval_option(&varname, rettv, TRUE) == OK)
 		// buffer-local-option
 		done = TRUE;
 

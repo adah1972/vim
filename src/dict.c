@@ -787,8 +787,8 @@ get_literal_key(char_u **arg, typval_T *tv)
 
 /*
  * Allocate a variable for a Dictionary and fill it from "*arg".
+ * "*arg" points to the "{".
  * "literal" is TRUE for #{key: val}
- * "flags" can have EVAL_EVALUATE and other EVAL_ flags.
  * Return OK or FAIL.  Returns NOTDONE for {expr}.
  */
     int
@@ -803,7 +803,7 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
     dictitem_T	*item;
     char_u	*start = skipwhite(*arg + 1);
     char_u	buf[NUMBUFLEN];
-    int		vim9script = current_sctx.sc_version == SCRIPT_VERSION_VIM9;
+    int		vim9script = in_vim9script();
     int		had_comma;
 
     /*

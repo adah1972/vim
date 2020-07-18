@@ -120,6 +120,9 @@ static void luaV_call_lua_func_free(void *state);
 #define luaL_loadbufferx dll_luaL_loadbufferx
 #define luaL_argerror dll_luaL_argerror
 #endif
+#if LUA_VERSION_NUM >= 504
+#define luaL_typeerror dll_luaL_typeerror
+#endif
 #define luaL_checkany dll_luaL_checkany
 #define luaL_checklstring dll_luaL_checklstring
 #define luaL_checkinteger dll_luaL_checkinteger
@@ -216,6 +219,9 @@ void (*dll_luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
 int (*dll_luaL_loadfilex) (lua_State *L, const char *filename, const char *mode);
 int (*dll_luaL_loadbufferx) (lua_State *L, const char *buff, size_t sz, const char *name, const char *mode);
 int (*dll_luaL_argerror) (lua_State *L, int numarg, const char *extramsg);
+#endif
+#if LUA_VERSION_NUM >= 504
+int (*dll_luaL_typeerror) (lua_State *L, int narg, const char *tname);
 #endif
 void (*dll_luaL_checkany) (lua_State *L, int narg);
 const char *(*dll_luaL_checklstring) (lua_State *L, int numArg, size_t *l);
@@ -335,6 +341,9 @@ static const luaV_Reg luaV_dll[] = {
     {"luaL_loadfilex", (luaV_function) &dll_luaL_loadfilex},
     {"luaL_loadbufferx", (luaV_function) &dll_luaL_loadbufferx},
     {"luaL_argerror", (luaV_function) &dll_luaL_argerror},
+#endif
+#if LUA_VERSION_NUM >= 504
+    {"luaL_typeerror", (luaV_function) &dll_luaL_typeerror},
 #endif
     {"luaL_checkany", (luaV_function) &dll_luaL_checkany},
     {"luaL_checklstring", (luaV_function) &dll_luaL_checklstring},
@@ -457,7 +466,7 @@ lua_enabled(int verbose)
 }
 #endif
 
-#if LUA_VERSION_NUM > 501
+#if LUA_VERSION_NUM > 501 && LUA_VERSION_NUM < 504
     static int
 luaL_typeerror(lua_State *L, int narg, const char *tname)
 {
@@ -575,6 +584,8 @@ luaV_pushtypval(lua_State *L, typval_T *tv)
 luaV_totypval(lua_State *L, int pos, typval_T *tv)
 {
     int status = OK;
+
+    tv->v_lock = 0;
 
     switch (lua_type(L, pos))
     {
@@ -936,8 +947,7 @@ luaV_list_newindex(lua_State *L)
 	    typval_T v;
 	    luaV_checktypval(L, 3, &v, "setting list item");
 	    clear_tv(&li->li_tv);
-	    copy_tv(&v, &li->li_tv);
-	    clear_tv(&v);
+	    li->li_tv = v;
         }
     }
     return 0;
@@ -1084,7 +1094,7 @@ luaV_dict_newindex(lua_State *L)
     dict_T *d = luaV_unbox(L, luaV_Dict, 1);
     char_u *key = (char_u *) luaL_checkstring(L, 2);
     dictitem_T *di;
-    typval_T v;
+    typval_T tv;
 
     if (d->dv_lock)
 	luaL_error(L, "dict is locked");
@@ -1094,9 +1104,12 @@ luaV_dict_newindex(lua_State *L)
 	luaL_error(L, "empty key");
     if (!lua_isnil(L, 3)) // read value?
     {
-	luaV_checktypval(L, 3, &v, "setting dict item");
-	if (d->dv_scope == VAR_DEF_SCOPE && v.v_type == VAR_FUNC)
+	luaV_checktypval(L, 3, &tv, "setting dict item");
+	if (d->dv_scope == VAR_DEF_SCOPE && tv.v_type == VAR_FUNC)
+	{
+	    clear_tv(&tv);
 	    luaL_error(L, "cannot assign funcref to builtin scope");
+	}
     }
     di = dict_find(d, key, -1);
     if (di == NULL) // non-existing key?
@@ -1105,10 +1118,14 @@ luaV_dict_newindex(lua_State *L)
 	    return 0;
 	di = dictitem_alloc(key);
 	if (di == NULL)
+	{
+	    clear_tv(&tv);
 	    return 0;
+	}
 	if (dict_add(d, di) == FAIL)
 	{
 	    vim_free(di);
+	    clear_tv(&tv);
 	    return 0;
 	}
     }
@@ -1121,10 +1138,7 @@ luaV_dict_newindex(lua_State *L)
 	dictitem_free(di);
     }
     else
-    {
-	copy_tv(&v, &di->di_tv);
-	clear_tv(&v);
-    }
+	di->di_tv = tv;
     return 0;
 }
 
@@ -1441,7 +1455,8 @@ luaV_buffer_newindex(lua_State *L)
 			curwin->w_cursor.lnum -= 1;
 			check_cursor_col();
 		    }
-		    else check_cursor();
+		    else
+			check_cursor();
 		    changed_cline_bef_curs();
 		}
 		invalidate_botline();
@@ -1842,8 +1857,7 @@ luaV_dict(lua_State *L)
 		    lua_pushnil(L);
 		    return 1;
 		}
-		copy_tv(&v, &di->di_tv);
-		clear_tv(&v);
+		di->di_tv = v;
 		lua_pop(L, 2); // key copy and value
 	    }
 	}
@@ -2398,7 +2412,7 @@ ex_luado(exarg_T *eap)
     lua_replace(L, -2); // function -> body
     for (l = eap->line1; l <= eap->line2; l++)
     {
-	// Check the line number, the command my have deleted lines.
+	// Check the line number, the command may have deleted lines.
 	if (l > curbuf->b_ml.ml_line_count)
 	    break;
 
