@@ -258,6 +258,21 @@ func Test_terminal_scrape_multibyte()
   call delete('Xtext')
 endfunc
 
+func Test_terminal_one_column()
+  " This creates a terminal, displays a double-wide character and makes the
+  " window one column wide.  This used to cause a crash.
+  let width = &columns
+  botright vert term
+  let buf = bufnr('$')
+  call term_wait(buf, 100)
+  exe "set columns=" .. (width / 2)
+  redraw
+  call term_sendkeys(buf, "キ")
+  call term_wait(buf, 10)
+  exe "set columns=" .. width
+  exe buf . 'bwipe!'
+endfunc
+
 func Test_terminal_scroll()
   call writefile(range(1, 200), 'Xtext')
   if has('win32')
@@ -590,9 +605,7 @@ func Test_terminal_cwd_failure()
 endfunc
 
 func Test_terminal_servername()
-  if !has('clientserver')
-    return
-  endif
+  CheckFeature clientserver
   call s:test_environment("VIM_SERVERNAME", v:servername)
 endfunc
 
@@ -808,6 +821,13 @@ func Test_terminal_redir_file()
   endif
   let g:job = term_getjob(buf)
   call WaitForAssert({-> assert_equal("dead", job_status(g:job))})
+
+  if has('win32')
+    " On Windows we cannot delete a file being used by a process.  When
+    " job_status() returns "dead", the process remains for a short time.
+    " Just wait for a moment.
+    sleep 50m
+  endif
   call delete('Xfile')
   bwipe
 

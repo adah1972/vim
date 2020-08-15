@@ -56,7 +56,7 @@ static int disable_flush = 0;	// If > 0, gui_mch_flush() is disabled.
  * this makes the thumb indicate the part of the text that is shown.  Motif
  * can't do this.
  */
-#if defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_MAC)
+#if defined(FEAT_GUI_ATHENA)
 # define SCROLL_PAST_END
 #endif
 
@@ -846,7 +846,7 @@ gui_exit(int rc)
 }
 
 #if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_X11) || defined(FEAT_GUI_MSWIN) \
-	|| defined(FEAT_GUI_PHOTON) || defined(FEAT_GUI_MAC) || defined(PROTO)
+	|| defined(FEAT_GUI_PHOTON) || defined(PROTO)
 # define NEED_GUI_UPDATE_SCREEN 1
 /*
  * Called when the GUI shell is closed by the user.  If there are no changed
@@ -1377,7 +1377,7 @@ gui_position_components(int total_width UNUSED)
 #endif
 
 # if defined(FEAT_GUI_TABLINE) && (defined(FEAT_GUI_MSWIN) \
-	|| defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_MAC))
+	|| defined(FEAT_GUI_MOTIF))
     if (gui_has_tabline())
 	text_area_y += gui.tabline_height;
 #endif
@@ -5575,3 +5575,27 @@ gui_handle_drop(
     entered = FALSE;
 }
 #endif
+
+/*
+ * Check if "key" is to interrupt us.  Handles a key that has not had modifiers
+ * applied yet.
+ * Return the key with modifiers applied if so, NUL if not.
+ */
+    int
+check_for_interrupt(int key, int modifiers_arg)
+{
+    int modifiers = modifiers_arg;
+    int c = merge_modifyOtherKeys(key, &modifiers);
+
+    if ((c == Ctrl_C && ctrl_c_interrupts)
+#ifdef UNIX
+	    || (intr_char != Ctrl_C && c == intr_char)
+#endif
+	    )
+    {
+	got_int = TRUE;
+	return c;
+    }
+    return NUL;
+}
+

@@ -7,34 +7,26 @@
 NO_PLUGINS = --noplugin --not-a-term
 NO_INITS = -U NONE $(NO_PLUGINS)
 
-# The first script creates small.vim.
-SCRIPTS_FIRST = \
-	test1.out
+# Tests for tiny and small builds.
+SCRIPTS_TINY = \
+	test20 \
+	test21 \
+	test22 \
+	test23 \
+	test24 \
+	test25 \
+	test26 \
+	test27
 
-# Tests that run on all systems.
-SCRIPTS_ALL = \
-	test42.out \
-	test44.out \
-	test70.out \
-	test99.out
-
-# Tests that run on most systems, but not on Amiga.
-SCRIPTS_MORE1 = \
-	test52.out
-
-# Tests that run on most systems, but not on Amiga and DOS/Windows.
-SCRIPTS_MORE2 = \
-	test49.out
-
-# Tests that run on most systems, but not on VMS
-SCRIPTS_MORE4 = \
-	test59.out
-
-# Tests specifically for MS-Windows.
-SCRIPTS_WIN32 =
-
-# Tests for the GUI.
-SCRIPTS_GUI =
+SCRIPTS_TINY_OUT = \
+	test20.out \
+	test21.out \
+	test22.out \
+	test23.out \
+	test24.out \
+	test25.out \
+	test26.out \
+	test27.out
 
 # Tests for Vim9 script.
 TEST_VIM9 = \
@@ -50,6 +42,9 @@ TEST_VIM9_RES = \
 	test_vim9_expr.res \
 	test_vim9_func.res \
 	test_vim9_script.res
+
+# Benchmark scripts.
+SCRIPTS_BENCH = test_bench_regexp.res
 
 # Individual tests, including the ones part of test_alot.
 # Please keep sorted up to test_alot.
@@ -196,6 +191,7 @@ NEW_TESTS = \
 	test_modeless \
 	test_modeline \
 	test_move \
+	test_mzscheme \
 	test_nested_function \
 	test_netbeans \
 	test_normal \
@@ -249,6 +245,7 @@ NEW_TESTS = \
 	test_source \
 	test_source_utf8 \
 	test_spell \
+	test_spell_utf8 \
 	test_spellfile \
 	test_startup \
 	test_startup_utf8 \
@@ -428,6 +425,7 @@ NEW_TESTS_RES = \
 	test_mksession.res \
 	test_modeless.res \
 	test_modeline.res \
+	test_mzscheme.res \
 	test_nested_function.res \
 	test_netbeans.res \
 	test_normal.res \
@@ -470,6 +468,7 @@ NEW_TESTS_RES = \
 	test_sound.res \
 	test_source.res \
 	test_spell.res \
+	test_spell_utf8.res \
 	test_spellfile.res \
 	test_startup.res \
 	test_stat.res \

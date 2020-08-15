@@ -21,9 +21,13 @@ def s:ScriptFuncLoad(arg: string)
   echo v:version
   echo s:scriptvar
   echo g:globalvar
+  echo get(g:, "global")
   echo b:buffervar
+  echo get(b:, "buffer")
   echo w:windowvar
+  echo get(w:, "window")
   echo t:tabpagevar
+  echo get(t:, "tab")
   echo &tabstop
   echo $ENVVAR
   echo @z
@@ -47,9 +51,25 @@ def Test_disassemble_load()
         ' LOADV v:version.*' ..
         ' LOADS s:scriptvar from .*test_vim9_disassemble.vim.*' ..
         ' LOADG g:globalvar.*' ..
+        'echo get(g:, "global")\_s*' ..
+        '\d\+ LOAD g:\_s*' ..
+        '\d\+ PUSHS "global"\_s*' ..
+        '\d\+ BCALL get(argc 2).*' ..
         ' LOADB b:buffervar.*' ..
+        'echo get(b:, "buffer")\_s*' ..
+        '\d\+ LOAD b:\_s*' ..
+        '\d\+ PUSHS "buffer"\_s*' ..
+        '\d\+ BCALL get(argc 2).*' ..
         ' LOADW w:windowvar.*' ..
+        'echo get(w:, "window")\_s*' ..
+        '\d\+ LOAD w:\_s*' ..
+        '\d\+ PUSHS "window"\_s*' ..
+        '\d\+ BCALL get(argc 2).*' ..
         ' LOADT t:tabpagevar.*' ..
+        'echo get(t:, "tab")\_s*' ..
+        '\d\+ LOAD t:\_s*' ..
+        '\d\+ PUSHS "tab"\_s*' ..
+        '\d\+ BCALL get(argc 2).*' ..
         ' LOADENV $ENVVAR.*' ..
         ' LOADREG @z.*',
         res)
@@ -63,20 +83,37 @@ enddef
 
 def Test_disassemble_exec_expr()
   let res = execute('disass s:EditExpand')
-  assert_match('<SNR>\d*_EditExpand.*' ..
-        ' let filename = "file".*' ..
-        '\d PUSHS "file".*' ..
-        '\d STORE $0.*' ..
-        ' let filenr = 123.*' ..
-        '\d STORE 123 in $1.*' ..
-        ' edit the`=filename``=filenr`.txt.*' ..
-        '\d PUSHS "edit the".*' ..
-        '\d LOAD $0.*' ..
-        '\d LOAD $1.*' ..
-        '\d 2STRING stack\[-1\].*' ..
-        '\d PUSHS ".txt".*' ..
-        '\d EXECCONCAT 4.*' ..
-        '\d PUSHNR 0.*' ..
+  assert_match('<SNR>\d*_EditExpand\_s*' ..
+        ' let filename = "file"\_s*' ..
+        '\d PUSHS "file"\_s*' ..
+        '\d STORE $0\_s*' ..
+        ' let filenr = 123\_s*' ..
+        '\d STORE 123 in $1\_s*' ..
+        ' edit the`=filename``=filenr`.txt\_s*' ..
+        '\d PUSHS "edit the"\_s*' ..
+        '\d LOAD $0\_s*' ..
+        '\d LOAD $1\_s*' ..
+        '\d 2STRING stack\[-1\]\_s*' ..
+        '\d\+ PUSHS ".txt"\_s*' ..
+        '\d\+ EXECCONCAT 4\_s*' ..
+        '\d\+ PUSHNR 0\_s*' ..
+        '\d\+ RETURN',
+        res)
+enddef
+
+def s:YankRange()
+  norm! m[jjm]
+  :'[,']yank
+enddef
+
+def Test_disassemble_yank_range()
+  let res = execute('disass s:YankRange')
+  assert_match('<SNR>\d*_YankRange.*' ..
+        ' norm! m\[jjm\]\_s*' ..
+        '\d EXEC   norm! m\[jjm\]\_s*' ..
+        '  :''\[,''\]yank\_s*' ..
+        '\d EXEC   :''\[,''\]yank\_s*' ..
+        '\d PUSHNR 0\_s*' ..
         '\d RETURN',
         res)
 enddef
@@ -671,10 +708,28 @@ def Test_disassemble_lambda()
         'return "X" .. a .. "X"\_s*' ..
         '\d PUSHS "X"\_s*' ..
         '\d LOAD arg\[-1\]\_s*' ..
-        '\d 2STRING stack\[-1\]\_s*' ..
+        '\d 2STRING_ANY stack\[-1\]\_s*' ..
         '\d CONCAT\_s*' ..
         '\d PUSHS "X"\_s*' ..
         '\d CONCAT\_s*' ..
+        '\d RETURN',
+        instr)
+enddef
+
+def NestedOuter()
+  def g:Inner()
+    echomsg "inner"
+  enddef
+enddef
+
+def Test_nested_func()
+   let instr = execute('disassemble NestedOuter')
+   assert_match('NestedOuter\_s*' ..
+        'def g:Inner()\_s*' ..
+        'echomsg "inner"\_s*' ..
+        'enddef\_s*' ..
+        '\d NEWFUNC <lambda>\d\+ Inner\_s*' ..
+        '\d PUSHNR 0\_s*' ..
         '\d RETURN',
         instr)
 enddef
@@ -778,6 +833,24 @@ def Test_disassemble_for_loop_eval()
 enddef
 
 let g:number = 42
+
+def TypeCast()
+  let l: list<number> = [23, <number>g:number]
+enddef
+
+def Test_disassemble_typecast()
+  let instr = execute('disassemble TypeCast')
+  assert_match('TypeCast.*' ..
+        'let l: list<number> = \[23, <number>g:number\].*' ..
+        '\d PUSHNR 23\_s*' ..
+        '\d LOADG g:number\_s*' ..
+        '\d CHECKTYPE number stack\[-1\]\_s*' ..
+        '\d NEWLIST size 2\_s*' ..
+        '\d STORE $0\_s*' ..
+        '\d PUSHNR 0\_s*' ..
+        '\d RETURN\_s*',
+        instr)
+enddef
 
 def Computing()
   let nr = 3
@@ -891,11 +964,32 @@ def Test_disassemble_concat()
         'let res = g:aa .. "bb".*' ..
         '\d LOADG g:aa.*' ..
         '\d PUSHS "bb".*' ..
-        '\d 2STRING stack\[-2].*' ..
+        '\d 2STRING_ANY stack\[-2].*' ..
         '\d CONCAT.*' ..
         '\d STORE $.*',
         instr)
   assert_equal('aabb', ConcatString())
+enddef
+
+def StringIndex(): number
+  let s = "abcd"
+  let res = s[1]
+  return res
+enddef
+
+def Test_disassemble_string_index()
+  let instr = execute('disassemble StringIndex')
+  assert_match('StringIndex\_s*' ..
+        'let s = "abcd"\_s*' ..
+        '\d PUSHS "abcd"\_s*' ..
+        '\d STORE $0\_s*' ..
+        'let res = s\[1]\_s*' ..
+        '\d LOAD $0\_s*' ..
+        '\d PUSHNR 1\_s*' ..
+        '\d STRINDEX\_s*' ..
+        '\d STORE $1\_s*',
+        instr)
+  assert_equal('b', StringIndex())
 enddef
 
 def ListIndex(): number
@@ -916,7 +1010,7 @@ def Test_disassemble_list_index()
         'let res = l\[1]\_s*' ..
         '\d LOAD $0\_s*' ..
         '\d PUSHNR 1\_s*' ..
-        '\d INDEX\_s*' ..
+        '\d LISTINDEX\_s*' ..
         '\d STORE $1\_s*',
         instr)
   assert_equal(2, ListIndex())

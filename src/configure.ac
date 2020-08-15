@@ -263,15 +263,11 @@ if test "`(uname) 2>/dev/null`" = Darwin; then
     dnl Removed -no-cpp-precomp, only for very old compilers.
     CPPFLAGS="$CPPFLAGS -DMACOS_X_DARWIN"
 
-    dnl If Carbon is found, assume we don't want X11
-    dnl unless it was specifically asked for (--with-x)
-    dnl or Motif, Athena or GTK GUI is used.
-    AC_CHECK_HEADER(Carbon/Carbon.h, CARBON=yes)
-    if test "x$CARBON" = "xyes"; then
-      if test -z "$with_x" -a "X$enable_gui" != Xmotif -a "X$enable_gui" != Xathena -a "X$enable_gui" != Xgtk2 -a "X$enable_gui" != Xgtk3; then
-	with_x=no
-      fi
-    fi
+     dnl Assume we don't want X11 unless it was specifically asked for
+     dnl (--with-x) or Motif, Athena or GTK GUI is used.
+     if test -z "$with_x" -a "X$enable_gui" != Xmotif -a "X$enable_gui" != Xathena -a "X$enable_gui" != Xgtk2 -a "X$enable_gui" != Xgtk3; then
+      with_x=no
+     fi
   fi
 
   dnl Avoid a bug with -O2 with gcc 4.0.1.  Symptom: malloc() reports double
@@ -1820,8 +1816,10 @@ if test "$enable_tclinterp" = "yes" -o "$enable_tclinterp" = "dynamic"; then
       if test "x$MACOS_X" != "xyes"; then
 	tclinc="$tclloc/include $tclloc/include/tcl $tclloc/include/tcl$tclver /usr/local/include /usr/local/include/tcl$tclver /usr/include /usr/include/tcl$tclver"
       else
+	dnl For all macOS, use the value from TCL in case use of, say, homebrew
 	dnl For Mac OS X 10.3, use the OS-provided framework location
-	tclinc="/System/Library/Frameworks/Tcl.framework/Headers"
+	dnl For Mac OS X 10.14, the OS-provided framework location doesn't contain the headers, so also check the Xcode SDK
+	tclinc="$tclloc/include $tclloc/include/tcl $tclloc/include/tcl$tclver /System/Library/Frameworks/Tcl.framework/Headers `xcrun --show-sdk-path`/System/Library/Frameworks/Tcl.framework/Versions/Current/Headers"
       fi
       TCL_INC=
       for try in $tclinc; do
@@ -1841,8 +1839,11 @@ if test "$enable_tclinterp" = "yes" -o "$enable_tclinterp" = "dynamic"; then
 	  tclcnf=`echo $tclinc | sed s/include/lib/g`
 	  tclcnf="$tclcnf `echo $tclinc | sed s/include/lib64/g`"
 	else
+	  dnl For all macOS, use the value from TCL in case use of, say, homebrew
 	  dnl For Mac OS X 10.3, use the OS-provided framework location
-	  tclcnf="/System/Library/Frameworks/Tcl.framework"
+	  dnl For Mac OS X 10.14, the OS-provided framework location doesn't contain the headers, so also check the Xcode SDK
+	  tclcnf=`echo $tclinc | sed s/include/lib/g`
+	  tclcnf="$tclcnf /System/Library/Frameworks/Tcl.framework `xcrun --show-sdk-path`/System/Library/Frameworks/Tcl.framework"
 	fi
 	for try in $tclcnf; do
 	  if test -f "$try/tclConfig.sh"; then
@@ -2401,7 +2402,6 @@ SKIP_ATHENA=YES
 SKIP_NEXTAW=YES
 SKIP_PHOTON=YES
 SKIP_HAIKU=YES
-SKIP_CARBON=YES
 GUITYPE=NONE
 
 if test "x$HAIKU" = "xyes"; then
@@ -2428,19 +2428,13 @@ elif test "x$QNX" = "xyes" -a "x$with_x" = "xno" ; then
   esac
 
 elif test "x$MACOS_X" = "xyes" -a "x$with_x" = "xno" ; then
-  SKIP_CARBON=
   case "$enable_gui_canon" in
-    no)		AC_MSG_RESULT(no GUI support)
-		SKIP_CARBON=YES ;;
+    no)		AC_MSG_RESULT(no GUI support) ;;
     yes|"")	AC_MSG_RESULT(yes - automatic GUI support)
     		gui_auto=yes ;;
-    auto)	AC_MSG_RESULT(auto - Carbon GUI is outdated - disable GUI support)
-		SKIP_CARBON=YES ;;
-    carbon)	AC_MSG_RESULT(Carbon GUI support) ;;
-    *)		AC_MSG_RESULT([Sorry, $enable_gui GUI is not supported])
-		SKIP_CARBON=YES ;;
+    auto)	AC_MSG_RESULT(auto - disable GUI support for Mac OS) ;;
+    *)		AC_MSG_RESULT([Sorry, $enable_gui GUI is not supported]) ;;
   esac
-
 else
 
   case "$enable_gui_canon" in
@@ -2451,8 +2445,7 @@ else
 		SKIP_GNOME=
 		SKIP_MOTIF=
 		SKIP_ATHENA=
-		SKIP_NEXTAW=
-		SKIP_CARBON=;;
+		SKIP_NEXTAW=;;
     gtk2)	AC_MSG_RESULT(GTK+ 2.x GUI support)
 		SKIP_GTK2=;;
     gnome2)	AC_MSG_RESULT(GNOME 2.x GUI support)
@@ -2537,52 +2530,6 @@ if test "x$SKIP_NEXTAW" != "xYES" -a "$enable_gui_canon" != "nextaw"; then
   if test "x$enable_nextaw_check" = "xno"; then
     SKIP_NEXTAW=YES
   fi
-fi
-
-if test "x$SKIP_CARBON" != "xYES" -a "$enable_gui_canon" != "carbon"; then
-  AC_MSG_CHECKING(whether or not to look for Carbon)
-  AC_ARG_ENABLE(carbon-check,
-	[  --enable-carbon-check   If auto-select GUI, check for Carbon [default=yes]],
-	, enable_carbon_check="yes")
-  AC_MSG_RESULT($enable_carbon_check);
-  if test "x$enable_carbon_check" = "xno"; then
-    SKIP_CARBON=YES
-  fi
-fi
-
-
-if test "x$MACOS_X" = "xyes" -a -z "$SKIP_CARBON" -a "x$CARBON" = "xyes"; then
-  AC_MSG_CHECKING(for Carbon GUI)
-  dnl already did the check, just give the message
-  AC_MSG_RESULT(yes);
-  GUITYPE=CARBONGUI
-  if test "$VIMNAME" = "vim"; then
-    VIMNAME=Vim
-  fi
-
-  if test "x$MACARCH" = "xboth"; then
-    CPPFLAGS="$CPPFLAGS -I$DEVELOPER_DIR/SDKs/MacOSX10.4u.sdk/Developer/Headers/FlatCarbon"
-  else
-    CPPFLAGS="$CPPFLAGS -I$DEVELOPER_DIR/Headers/FlatCarbon"
-  fi
-
-  dnl Default install directory is not /usr/local
-  if test x$prefix = xNONE; then
-    prefix=/Applications
-  fi
-
-  dnl Sorry for the hard coded default
-  datadir='${prefix}/Vim.app/Contents/Resources'
-
-  dnl skip everything else
-  SKIP_GTK2=YES;
-  SKIP_GNOME=YES;
-  SKIP_MOTIF=YES;
-  SKIP_ATHENA=YES;
-  SKIP_NEXTAW=YES;
-  SKIP_PHOTON=YES;
-  SKIP_HAIKU=YES;
-  SKIP_CARBON=YES
 fi
 
 dnl define an autoconf function to check for a specified version of GTK, and
@@ -3510,7 +3457,7 @@ fi
 
 if test "x$olibs" = "x$LIBS"; then
   AC_MSG_CHECKING([for tgetent()])
-  AC_TRY_LINK([],
+  AC_TRY_LINK([int tgetent(char *, const char *);],
       [char s[10000]; int res = tgetent(s, "thisterminaldoesnotexist");],
 	AC_MSG_RESULT(yes),
 	AC_MSG_ERROR([NOT FOUND!
@@ -4449,10 +4396,7 @@ fi
 
 if test "$MACOS_X" = "yes"; then
   AC_MSG_CHECKING([whether we need macOS frameworks])
-  if test "$GUITYPE" = "CARBONGUI"; then
-    AC_MSG_RESULT([yes, we need Carbon])
-    LIBS="$LIBS -framework Carbon"
-  elif test "$MACOS_X_DARWIN" = "yes"; then
+  if test "$MACOS_X_DARWIN" = "yes"; then
     if test "$features" = "tiny"; then
       dnl Since no FEAT_CLIPBOARD, no longer need for os_macosx.m.
       OS_EXTRA_SRC=`echo "$OS_EXTRA_SRC" | sed -e 's+os_macosx.m++'`
@@ -4466,9 +4410,6 @@ if test "$MACOS_X" = "yes"; then
   else
     AC_MSG_RESULT([no])
   fi
-fi
-if test "x$MACARCH" = "xboth" && test "x$GUITYPE" = "xCARBONGUI"; then
-  LDFLAGS="$LDFLAGS -isysroot $DEVELOPER_DIR/SDKs/MacOSX10.4u.sdk -arch i386 -arch ppc"
 fi
 
 dnl gcc 3.1 changed the meaning of -MM.  The only solution appears to be to

@@ -26,6 +26,10 @@ typedef enum {
     ISN_LOADB,	    // push b: variable isn_arg.string
     ISN_LOADW,	    // push w: variable isn_arg.string
     ISN_LOADT,	    // push t: variable isn_arg.string
+    ISN_LOADGDICT,  // push g: dict
+    ISN_LOADBDICT,  // push b: dict
+    ISN_LOADWDICT,  // push w: dict
+    ISN_LOADTDICT,  // push t: dict
     ISN_LOADS,	    // push s: variable isn_arg.loadstore
     ISN_LOADOUTER,  // push variable from outer scope isn_arg.number
     ISN_LOADSCRIPT, // push script-local variable isn_arg.script.
@@ -75,6 +79,7 @@ typedef enum {
     ISN_PCALL_END,  // cleanup after ISN_PCALL with cpf_top set
     ISN_RETURN,	    // return, result is on top of stack
     ISN_FUNCREF,    // push a function ref to dfunc isn_arg.funcref
+    ISN_NEWFUNC,    // create a global function from a lambda function
 
     // expression operations
     ISN_JUMP,	    // jump if condition is matched isn_arg.jump
@@ -88,7 +93,7 @@ typedef enum {
     ISN_CATCH,	    // drop v:exception
     ISN_ENDTRY,	    // take entry off from ec_trystack
 
-    // moreexpression operations
+    // more expression operations
     ISN_ADDLIST,
     ISN_ADDBLOB,
 
@@ -111,13 +116,15 @@ typedef enum {
 
     // expression operations
     ISN_CONCAT,
-    ISN_INDEX,	    // [expr] list index
+    ISN_STRINDEX,   // [expr] string index
+    ISN_LISTINDEX,  // [expr] list index
     ISN_SLICE,	    // drop isn_arg.number items from start of list
     ISN_GETITEM,    // push list item, isn_arg.number is the index
     ISN_MEMBER,	    // dict[member]
     ISN_STRINGMEMBER, // dict.member using isn_arg.string
     ISN_2BOOL,	    // convert value to bool, invert if isn_arg.number != 0
     ISN_2STRING,    // convert value to string at isn_arg.number on stack
+    ISN_2STRING_ANY, // like ISN_2STRING but check type
     ISN_NEGATENR,   // apply "-" to number
 
     ISN_CHECKNR,    // check value can be used as a number
@@ -232,6 +239,12 @@ typedef struct {
     int		fr_var_idx;	// variable to store partial
 } funcref_T;
 
+// arguments to ISN_NEWFUNC
+typedef struct {
+    char_u	*nf_lambda;	// name of the lambda already defined
+    char_u	*nf_global;	// name of the global function to be created
+} newfunc_T;
+
 // arguments to ISN_CHECKLEN
 typedef struct {
     int		cl_min_len;	// minimum length
@@ -276,6 +289,7 @@ struct isn_S {
 	script_T	    script;
 	unlet_T		    unlet;
 	funcref_T	    funcref;
+	newfunc_T	    newfunc;
 	checklen_T	    checklen;
 	shuffle_T	    shuffle;
     } isn_arg;

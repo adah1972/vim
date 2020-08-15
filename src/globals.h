@@ -725,10 +725,12 @@ EXTERN frame_T	*topframe;	// top of the window frame tree
 
 /*
  * Tab pages are alternative topframes.  "first_tabpage" points to the first
- * one in the list, "curtab" is the current one.
+ * one in the list, "curtab" is the current one. "lastused_tabpage" is the
+ * last used one.
  */
 EXTERN tabpage_T    *first_tabpage;
 EXTERN tabpage_T    *curtab;
+EXTERN tabpage_T    *lastused_tabpage;
 EXTERN int	    redraw_tabline INIT(= FALSE);  // need to redraw tabline
 
 /*
@@ -1567,7 +1569,7 @@ EXTERN char e_failed[]	INIT(= N_("E472: Command failed"));
 #if defined(FEAT_GUI) && defined(FEAT_XFONTSET)
 EXTERN char e_fontset[]	INIT(= N_("E234: Unknown fontset: %s"));
 #endif
-#if defined(FEAT_GUI_X11) || defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MAC) \
+#if defined(FEAT_GUI_X11) || defined(FEAT_GUI_GTK) \
 	|| defined(FEAT_GUI_PHOTON) || defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_HAIKU)
 EXTERN char e_font[]		INIT(= N_("E235: Unknown font: %s"));
 #endif
@@ -1692,7 +1694,6 @@ EXTERN char e_toofewarg[]	INIT(= N_("E119: Not enough arguments for function: %s
 EXTERN char e_func_deleted[]	INIT(= N_("E933: Function was deleted: %s"));
 EXTERN char e_dictkey[]		INIT(= N_("E716: Key not present in Dictionary: %s"));
 EXTERN char e_listreq[]		INIT(= N_("E714: List required"));
-EXTERN char e_listdictblobreq[]	INIT(= N_("E1090: List, Dict or Blob required"));
 EXTERN char e_listblobreq[]	INIT(= N_("E897: List or Blob required"));
 EXTERN char e_list_end[]	INIT(= N_("E697: Missing end of List ']': %s"));
 EXTERN char e_listdictarg[]	INIT(= N_("E712: Argument of %s must be a List or Dictionary"));
@@ -1730,6 +1731,7 @@ EXTERN char e_longname[]	INIT(= N_("E75: Name too long"));
 EXTERN char e_toomsbra[]	INIT(= N_("E76: Too many ["));
 EXTERN char e_toomany[]	INIT(= N_("E77: Too many file names"));
 EXTERN char e_trailing[]	INIT(= N_("E488: Trailing characters"));
+EXTERN char e_trailing_arg[]	INIT(= N_("E488: Trailing characters: %s"));
 EXTERN char e_umark[]		INIT(= N_("E78: Unknown mark"));
 EXTERN char e_wildexpand[]	INIT(= N_("E79: Cannot expand wildcards"));
 EXTERN char e_winheight[]	INIT(= N_("E591: 'winheight' cannot be smaller than 'winminheight'"));
@@ -1786,23 +1788,11 @@ EXTERN char e_endif_without_if[] INIT(= N_("E580: :endif without :if"));
 EXTERN char e_continue[]	INIT(= N_("E586: :continue without :while or :for"));
 EXTERN char e_break[]		INIT(= N_("E587: :break without :while or :for"));
 EXTERN char e_nowhitespace[]	INIT(= N_("E274: No white space allowed before parenthesis"));
-EXTERN char e_white_both[]	INIT(= N_("E1004: white space required before and after '%s'"));
-EXTERN char e_white_after[]	INIT(= N_("E1069: white space required after '%s'"));
-EXTERN char e_no_white_before[] INIT(= N_("E1068: No white space allowed before '%s'"));
 
 EXTERN char e_lock_unlock[]	INIT(= N_("E940: Cannot lock or unlock variable %s"));
-EXTERN char e_const_req_value[] INIT(= N_("E1021: const requires a value"));
-EXTERN char e_type_req[]	INIT(= N_("E1022: type or initialization required"));
-EXTERN char e_declare_var[]	INIT(= N_("E1016: Cannot declare a %s variable: %s"));
-EXTERN char e_declare_env_var[]	INIT(= N_("E1016: Cannot declare an environment variable: %s"));
-EXTERN char e_colon_required[]	INIT(= N_("E1050: Colon required before a range"));
 #endif
 #if defined(FEAT_GUI) || defined(FEAT_TERMGUICOLORS)
 EXTERN char e_alloc_color[]	INIT(= N_("E254: Cannot allocate color %s"));
-#endif
-
-#ifdef FEAT_GUI_MAC
-EXTERN short disallow_gui	INIT(= FALSE);
 #endif
 
 EXTERN char top_bot_msg[] INIT(= N_("search hit TOP, continuing at BOTTOM"));

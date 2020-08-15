@@ -9,6 +9,7 @@ SRC_ALL =	\
 		.lgtm.yml \
 		.travis.yml \
 		.cirrus.yml \
+		.github/workflows/ci-windows.yaml \
 		appveyor.yml \
 		ci/appveyor.bat \
 		ci/if_ver*.vim \
@@ -44,6 +45,7 @@ SRC_ALL =	\
 		src/drawline.c \
 		src/drawscreen.c \
 		src/edit.c \
+		src/errors.h \
 		src/eval.c \
 		src/evalbuffer.c \
 		src/evalfunc.c \
@@ -68,6 +70,7 @@ SRC_ALL =	\
 		src/gui_beval.c \
 		src/hardcopy.c \
 		src/hashtab.c \
+		src/help.c \
 		src/highlight.c \
 		src/indent.c \
 		src/insexpand.c \
@@ -75,6 +78,7 @@ SRC_ALL =	\
 		src/json_test.c \
 		src/kword_test.c \
 		src/list.c \
+		src/locale.c \
 		src/keymap.h \
 		src/macros.h \
 		src/main.c \
@@ -146,6 +150,7 @@ SRC_ALL =	\
 		src/vim9compile.c \
 		src/vim9execute.c \
 		src/vim9script.c \
+		src/vim9type.c \
 		src/viminfo.c \
 		src/winclip.c \
 		src/window.c \
@@ -169,12 +174,12 @@ SRC_ALL =	\
 		src/testdir/setup_gui.vim \
 		src/testdir/shared.vim \
 		src/testdir/vim9.vim \
+		src/testdir/script_util.vim \
 		src/testdir/summarize.vim \
 		src/testdir/term_util.vim \
 		src/testdir/view_util.vim \
 		src/testdir/test[0-9]*.ok \
-		src/testdir/test[0-9]*a.ok \
-		src/testdir/test49.vim \
+		src/testdir/test77a.ok \
 		src/testdir/test83-tags? \
 		src/testdir/test77a.com \
 		src/testdir/test_*.vim \
@@ -240,11 +245,13 @@ SRC_ALL =	\
 		src/proto/gui_beval.pro \
 		src/proto/hardcopy.pro \
 		src/proto/hashtab.pro \
+		src/proto/help.pro \
 		src/proto/highlight.pro \
 		src/proto/indent.pro \
 		src/proto/insexpand.pro \
 		src/proto/json.pro \
 		src/proto/list.pro \
+		src/proto/locale.pro \
 		src/proto/main.pro \
 		src/proto/map.pro \
 		src/proto/mark.pro \
@@ -298,6 +305,7 @@ SRC_ALL =	\
 		src/proto/vim9compile.pro \
 		src/proto/vim9execute.pro \
 		src/proto/vim9script.pro \
+		src/proto/vim9type.pro \
 		src/proto/viminfo.pro \
 		src/proto/winclip.pro \
 		src/proto/window.pro \
@@ -633,13 +641,11 @@ SRC_HAIKU =	\
 SRC_MAC =	\
 		src/INSTALLmac.txt \
 		src/dehqx.py \
-		src/gui_mac.c \
 		src/os_mac_rsrc/*.icns \
 		src/os_mac.h \
 		src/os_mac.rsr.hqx \
 		src/os_mac_conv.c \
 		src/os_macosx.m \
-		src/proto/gui_mac.pro \
 		src/proto/os_mac_conv.pro \
 
 # source files for VMS (in the extra archive)

@@ -719,7 +719,7 @@ CFLAGS = $(CFLAGS) $(CFLAGS_DEPR)
 !include Make_all.mak
 !include testdir\Make_all.mak
 
-INCL =	vim.h alloc.h ascii.h ex_cmds.h feature.h globals.h \
+INCL =	vim.h alloc.h ascii.h ex_cmds.h feature.h errors.h globals.h \
 	keymap.h macros.h option.h os_dos.h os_win32.h proto.h regexp.h \
 	spell.h structs.h term.h beval.h $(NBDEBUG_INCL)
 
@@ -766,12 +766,14 @@ OBJ = \
 	$(OUTDIR)\gui_xim.obj \
 	$(OUTDIR)\hardcopy.obj \
 	$(OUTDIR)\hashtab.obj \
+	$(OUTDIR)\help.obj \
 	$(OUTDIR)\highlight.obj \
 	$(OBJDIR)\if_cscope.obj \
 	$(OUTDIR)\indent.obj \
 	$(OUTDIR)\insexpand.obj \
 	$(OUTDIR)\json.obj \
 	$(OUTDIR)\list.obj \
+	$(OUTDIR)\locale.obj \
 	$(OUTDIR)\main.obj \
 	$(OUTDIR)\map.obj \
 	$(OUTDIR)\mark.obj \
@@ -823,6 +825,7 @@ OBJ = \
 	$(OUTDIR)\vim9compile.obj \
 	$(OUTDIR)\vim9execute.obj \
 	$(OUTDIR)\vim9script.obj \
+	$(OUTDIR)\vim9type.obj \
 	$(OUTDIR)\viminfo.obj \
 	$(OUTDIR)\winclip.obj \
 	$(OUTDIR)\window.obj \
@@ -1024,6 +1027,9 @@ PYTHON_LIB = $(PYTHON)\libs\python$(PYTHON_VER).lib
 ! ifndef PYTHON3_VER
 PYTHON3_VER = 36
 ! endif
+! ifndef DYNAMIC_PYTHON3_DLL
+DYNAMIC_PYTHON3_DLL = python$(PYTHON3_VER).dll
+! endif
 ! message Python3 requested (version $(PYTHON3_VER)) - root dir is "$(PYTHON3)"
 ! if "$(DYNAMIC_PYTHON3)" == "yes"
 !  message Python3 DLL will be loaded dynamically
@@ -1033,9 +1039,10 @@ PYTHON3_OBJ = $(OUTDIR)\if_python3.obj
 PYTHON3_INC = /I "$(PYTHON3)\Include" /I "$(PYTHON3)\PC"
 ! if "$(DYNAMIC_PYTHON3)" == "yes"
 CFLAGS = $(CFLAGS) -DDYNAMIC_PYTHON3 \
-		-DDYNAMIC_PYTHON3_DLL=\"python$(PYTHON3_VER).dll\"
+		-DDYNAMIC_PYTHON3_DLL=\"$(DYNAMIC_PYTHON3_DLL)\"
 PYTHON3_LIB = /nodefaultlib:python$(PYTHON3_VER).lib
 ! else
+CFLAGS = $(CFLAGS) -DPYTHON3_DLL=\"$(DYNAMIC_PYTHON3_DLL)\"
 PYTHON3_LIB = $(PYTHON3)\libs\python$(PYTHON3_VER).lib
 ! endif
 !endif
@@ -1319,14 +1326,6 @@ MAIN_TARGET = $(VIM).exe
 # Target to run individual tests.
 VIMTESTTARGET = $(VIM).exe
 
-OLD_TEST_OUTFILES = \
-	$(SCRIPTS_FIRST) \
-	$(SCRIPTS_ALL) \
-	$(SCRIPTS_MORE1) \
-	$(SCRIPTS_MORE4) \
-	$(SCRIPTS_WIN32) \
-	$(SCRIPTS_GUI)
-
 all:	$(MAIN_TARGET) \
 	vimrun.exe \
 	install.exe \
@@ -1465,12 +1464,22 @@ cmdidxs: ex_cmds.h
 
 test:
 	cd testdir
-	$(MAKE) /NOLOGO -f Make_dos.mak win32
+	$(MAKE) /NOLOGO -f Make_dos.mak
 	cd ..
 
 testgvim:
 	cd testdir
-	$(MAKE) /NOLOGO -f Make_dos.mak VIMPROG=..\gvim win32
+	$(MAKE) /NOLOGO -f Make_dos.mak VIMPROG=..\gvim
+	cd ..
+
+testtiny:
+	cd testdir
+	$(MAKE) /NOLOGO -f Make_dos.mak tiny
+	cd ..
+
+testgvimtiny:
+	cd testdir
+	$(MAKE) /NOLOGO -f Make_dos.mak tiny VIMPROG=..\gvim
 	cd ..
 
 testclean:
@@ -1480,7 +1489,7 @@ testclean:
 
 # Run individual OLD style test.
 # These do not depend on the executable, compile it when needed.
-$(OLD_TEST_OUTFILES:.out=):
+$(SCRIPTS_TINY):
 	cd testdir
 	- if exist $@.out del $@.out
 	$(MAKE) /NOLOGO -f Make_dos.mak VIMPROG=..\$(VIMTESTTARGET) nolog
@@ -1608,6 +1617,8 @@ $(OUTDIR)/hardcopy.obj:	$(OUTDIR) hardcopy.c  $(INCL) version.h
 
 $(OUTDIR)/hashtab.obj:	$(OUTDIR) hashtab.c  $(INCL)
 
+$(OUTDIR)/help.obj:	$(OUTDIR) help.c  $(INCL)
+
 $(OUTDIR)/highlight.obj:	$(OUTDIR) highlight.c  $(INCL)
 
 $(OUTDIR)/indent.obj:	$(OUTDIR) indent.c  $(INCL)
@@ -1665,6 +1676,8 @@ $(OUTDIR)/iscygpty.obj:	$(OUTDIR) iscygpty.c $(CUI_INCL)
 $(OUTDIR)/json.obj:	$(OUTDIR) json.c  $(INCL)
 
 $(OUTDIR)/list.obj:	$(OUTDIR) list.c  $(INCL)
+
+$(OUTDIR)/locale.obj:	$(OUTDIR) locale.c  $(INCL)
 
 $(OUTDIR)/main.obj:	$(OUTDIR) main.c  $(INCL) $(CUI_INCL)
 
@@ -1788,6 +1801,8 @@ $(OUTDIR)/vim9compile.obj:	$(OUTDIR) vim9compile.c  $(INCL)
 $(OUTDIR)/vim9execute.obj:	$(OUTDIR) vim9execute.c  $(INCL)
 
 $(OUTDIR)/vim9script.obj:	$(OUTDIR) vim9script.c  $(INCL)
+
+$(OUTDIR)/vim9type.obj:	$(OUTDIR) vim9type.c  $(INCL)
 
 $(OUTDIR)/viminfo.obj:	$(OUTDIR) viminfo.c  $(INCL) version.h
 
@@ -1930,11 +1945,13 @@ proto.h: \
 	proto/gui_xim.pro \
 	proto/hardcopy.pro \
 	proto/hashtab.pro \
+	proto/help.pro \
 	proto/highlight.pro \
 	proto/indent.pro \
 	proto/insexpand.pro \
 	proto/json.pro \
 	proto/list.pro \
+	proto/locale.pro \
 	proto/main.pro \
 	proto/map.pro \
 	proto/mark.pro \
@@ -1986,6 +2003,7 @@ proto.h: \
 	proto/vim9compile.pro \
 	proto/vim9execute.pro \
 	proto/vim9script.pro \
+	proto/vim9type.pro \
 	proto/viminfo.pro \
 	proto/window.pro \
 	$(SOUND_PRO) \
