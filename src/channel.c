@@ -144,6 +144,7 @@ fd_close(sock_T fd)
 
 // Log file opened with ch_logfile().
 static FILE *log_fd = NULL;
+static char_u *log_name = NULL;
 #ifdef FEAT_RELTIME
 static proftime_T log_start;
 #endif
@@ -158,7 +159,7 @@ ch_logfile(char_u *fname, char_u *opt)
 	if (*fname != NUL)
 	    ch_log(NULL, "closing this logfile, opening %s", fname);
 	else
-	    ch_log(NULL, "closing logfile");
+	    ch_log(NULL, "closing logfile %s", log_name);
 	fclose(log_fd);
     }
 
@@ -170,6 +171,8 @@ ch_logfile(char_u *fname, char_u *opt)
 	    semsg(_(e_notopen), fname);
 	    return;
 	}
+	vim_free(log_name);
+	log_name = vim_strsave(fname);
     }
     log_fd = file;
 
@@ -904,7 +907,7 @@ channel_connect(
 	    *waittime -= elapsed_msec;
 	    if (waitnow > 0)
 	    {
-		mch_delay((long)waitnow, TRUE);
+		mch_delay((long)waitnow, MCH_DELAY_IGNOREINPUT);
 		ui_breakcheck();
 		*waittime -= waitnow;
 	    }
@@ -4922,7 +4925,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 	    {
 		if (!(supported & JO_MODE))
 		    break;
-		opt->jo_noblock = tv_get_number(item);
+		opt->jo_noblock = tv_get_bool(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "in_io") == 0
 		    || STRCMP(hi->hi_key, "out_io") == 0
@@ -4949,7 +4952,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 	    {
 		if (!(supported & JO_MODE))
 		    break;
-		opt->jo_pty = tv_get_number(item);
+		opt->jo_pty = tv_get_bool(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "in_buf") == 0
 		    || STRCMP(hi->hi_key, "out_buf") == 0
@@ -4980,7 +4983,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		if (!(supported & JO_OUT_IO))
 		    break;
 		opt->jo_set |= JO_OUT_MODIFIABLE << (part - PART_OUT);
-		opt->jo_modifiable[part] = tv_get_number(item);
+		opt->jo_modifiable[part] = tv_get_bool(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "out_msg") == 0
 		    || STRCMP(hi->hi_key, "err_msg") == 0)
@@ -4990,7 +4993,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		if (!(supported & JO_OUT_IO))
 		    break;
 		opt->jo_set2 |= JO2_OUT_MSG << (part - PART_OUT);
-		opt->jo_message[part] = tv_get_number(item);
+		opt->jo_message[part] = tv_get_bool(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "in_top") == 0
 		    || STRCMP(hi->hi_key, "in_bot") == 0)
@@ -5184,7 +5187,7 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		if (!(supported2 & JO2_VERTICAL))
 		    break;
 		opt->jo_set2 |= JO2_VERTICAL;
-		opt->jo_vertical = tv_get_number(item);
+		opt->jo_vertical = tv_get_bool(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "curwin") == 0)
 	    {
@@ -5224,14 +5227,14 @@ get_job_options(typval_T *tv, jobopt_T *opt, int supported, int supported2)
 		if (!(supported2 & JO2_HIDDEN))
 		    break;
 		opt->jo_set2 |= JO2_HIDDEN;
-		opt->jo_hidden = tv_get_number(item);
+		opt->jo_hidden = tv_get_bool(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "norestore") == 0)
 	    {
 		if (!(supported2 & JO2_NORESTORE))
 		    break;
 		opt->jo_set2 |= JO2_NORESTORE;
-		opt->jo_term_norestore = tv_get_number(item);
+		opt->jo_term_norestore = tv_get_bool(item);
 	    }
 	    else if (STRCMP(hi->hi_key, "term_kill") == 0)
 	    {

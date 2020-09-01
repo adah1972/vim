@@ -6747,7 +6747,7 @@ notsgr:
     void
 mch_delay(
     long    msec,
-    int	    ignoreinput UNUSED)
+    int	    flags UNUSED)
 {
 #if defined(FEAT_GUI_MSWIN) && !defined(VIMDLL)
     Sleep((int)msec);	    // never wait for input
@@ -6759,7 +6759,7 @@ mch_delay(
 	return;
     }
 # endif
-    if (ignoreinput)
+    if (flags & MCH_DELAY_IGNOREINPUT)
 # ifdef FEAT_MZSCHEME
 	if (mzthreads_allowed() && p_mzq > 0 && msec > p_mzq)
 	{

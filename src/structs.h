@@ -817,6 +817,7 @@ typedef struct sign_attrs_S {
     char_u	*sat_text;
     int		sat_texthl;
     int		sat_linehl;
+    int		sat_priority;
 } sign_attrs_T;
 
 #if defined(FEAT_SIGNS) || defined(PROTO)
@@ -1533,6 +1534,13 @@ struct blobvar_S
 typedef int (*cfunc_T)(int argcount, typval_T *argvars, typval_T *rettv, void *state);
 typedef void (*cfunc_free_T)(void *state);
 
+// type of getline() last argument
+typedef enum {
+    GETLINE_NONE,	    // do not concatenate any lines
+    GETLINE_CONCAT_CONT,    // concatenate continuation lines
+    GETLINE_CONCAT_ALL	    // concatenate continuation and Vim9 # comment lines
+} getline_opt_T;
+
 #if defined(FEAT_EVAL) || defined(PROTO)
 typedef struct funccall_S funccall_T;
 
@@ -1768,7 +1776,7 @@ typedef struct {
     int		eval_break_count;   // nr of line breaks consumed
 
     // copied from exarg_T when "getline" is "getsourceline". Can be NULL.
-    char_u	*(*eval_getline)(int, void *, int, int);
+    char_u	*(*eval_getline)(int, void *, int, getline_opt_T);
     void	*eval_cookie;	    // argument for eval_getline()
 
     // used when compiling a :def function, NULL otherwise

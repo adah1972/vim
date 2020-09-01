@@ -1,4 +1,4 @@
-*vim9.txt*	For Vim version 8.2.  Last change: 2020 Aug 01
+*vim9.txt*	For Vim version 8.2.  Last change: 2020 Aug 27
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -49,6 +49,7 @@ errors are handled.
 The Vim9 script syntax and semantics are used in:
 - a function defined with the `:def` command
 - a script file where the first command is `vim9script`
+- an autocommand defined in the context of these
 
 When using `:function` in a Vim9 script file the legacy syntax is used.
 However, this can be confusing and is therefore discouraged.
@@ -70,10 +71,10 @@ comments start with #. >
 	let count = 0  # number of occurrences
 
 The reason is that a double quote can also be the start of a string. In many
-places, especially halfway an expression with a line break, it's hard to tell
-what the meaning is, since both a string and a comment can be followed by
-arbitrary text.  To avoid confusion only # comments are recognized.  This is
-the same as in shell scripts and Python programs.
+places, especially halfway through an expression with a line break, it's hard
+to tell what the meaning is, since both a string and a comment can be followed
+by arbitrary text.  To avoid confusion only # comments are recognized.  This
+is the same as in shell scripts and Python programs.
 
 In Vi # is a command to list text with numbers.  In Vim9 script you can use
 `:number` for that. >
@@ -92,9 +93,13 @@ often 10x to 100x times.
 Many errors are already found when compiling, before the function is executed.
 The syntax is strict, to enforce code that is easy to read and understand.
 
-Compilation is done when the function is first called, or when the
-`:defcompile` command is encountered in the script where the function was
-defined. `:disassemble` also compiles the function.
+Compilation is done when:
+- the function is first called
+- when the `:defcompile` command is encountered in the script where the
+  function was defined
+- `:disassemble` is used for the function.
+- a function that is compiled calls the function or uses it as a function
+  reference
 
 `:def` has no options like `:function` does: "range", "abort", "dict" or
 "closure".  A `:def` function always aborts on an error, does not get a range
@@ -104,11 +109,11 @@ The argument types and return type need to be specified.  The "any" type can
 be used, type checking will then be done at runtime, like with legacy
 functions.
 
-Arguments are accessed by name, without "a:".  There is no "a:" dictionary or
-"a:000" list.  Just like any other language.
+Arguments are accessed by name, without "a:", just like any other language.
+There is no "a:" dictionary or "a:000" list.
 
 Variable arguments are defined as the last argument, with a name and have a
-list type, similar to Typescript.  For example, a list of numbers: >
+list type, similar to TypeScript.  For example, a list of numbers: >
   	def MyFunc(...itemlist: list<number>)
 	   for item in itemlist
 	     ...
@@ -142,7 +147,7 @@ The result is that functions and variables without a namespace can usually be
 found in the script, either defined there or imported.  Global functions and
 variables could be defined anywhere (good luck finding out where!).
 
-Global functions can be still be defined and deleted at nearly any time.  In
+Global functions can still be defined and deleted at nearly any time.  In
 Vim9 script script-local functions are defined once when the script is sourced
 and cannot be deleted or replaced.
 
@@ -232,7 +237,7 @@ identifier or can't be an Ex command.  Examples: >
 	'foobar'->Process()
 	('foobar')->Process()
 
-In rare case there is ambiguity between a function name and an Ex command,
+In the rare case there is ambiguity between a function name and an Ex command,
 prepend ":" to make clear you want to use the Ex command.  For example, there
 is both the `:substitute` command and the `substitute()` function.  When the
 line starts with `substitute(` this will use the function. Prepend a colon to
@@ -240,8 +245,8 @@ use the command instead: >
 	:substitute(pattern (replacement (
 
 Note that while variables need to be defined before they can be used,
-functions can be called before being defined.  This is required to be able
-have cyclic dependencies between functions.  It is slightly less efficient,
+functions can be called before being defined.  This is required to allow
+for cyclic dependencies between functions.  It is slightly less efficient,
 since the function has to be looked up by name.  And a typo in the function
 name will only be found when the function is called.
 
@@ -394,7 +399,7 @@ White space is not allowed:
 
 Conditions and expressions ~
 
-Conditions and expression are mostly working like they do in JavaScript.  A
+Conditions and expressions are mostly working like they do in JavaScript.  A
 difference is made where JavaScript does not work like most people expect.
 Specifically, an empty list is falsey.
 
@@ -429,12 +434,18 @@ The boolean operators "||" and "&&" do not change the value: >
 When using `..` for string concatenation arguments of simple types are always
 converted to string. >
 	'hello ' .. 123  == 'hello 123'
-	'hello ' .. v:true  == 'hello true'
+	'hello ' .. v:true  == 'hello v:true'
 
 Simple types are string, float, special and bool.  For other types |string()|
 can be used.
 
 In Vim9 script one can use "true" for v:true and "false" for v:false.
+
+Indexing a string with [idx] or [idx, idx] uses character indexes instead of
+byte indexes. Example: >
+	echo 'bár'[1]
+In legacy script this results in the character 0xc3 (an illegal byte), in Vim9
+script this results in the string 'á'.
 
 
 What to watch out for ~
@@ -486,6 +497,18 @@ For a workaround, split it in two functions: >
 	    use-feature
 	  enddef
 	endif
+Of put the unsupported code inside an `if` with a constant expression that
+evaluates to false: >
+	def Maybe()
+	  if has('feature')
+	    use-feature
+	  endif
+	enddef
+Note that for unrecognized commands there is no check for "|" and a following
+command.  This will give an error for missing `endif`: >
+	def Maybe()
+	  if has('feature') | use-feature | endif
+	enddef
 
 ==============================================================================
 
@@ -494,7 +517,7 @@ For a workaround, split it in two functions: >
 THIS IS STILL UNDER DEVELOPMENT - ANYTHING CAN BREAK - ANYTHING CAN CHANGE
 
 							*:def*
-:def[!] {name}([arguments])[: {return-type}
+:def[!] {name}([arguments])[: {return-type}]
 			Define a new function by the name {name}.  The body of
 			the function follows in the next lines, until the
 			matching `:enddef`.
@@ -533,7 +556,7 @@ If the script the function is defined in is Vim9 script, then script-local
 variables can be accessed without the "s:" prefix.  They must be defined
 before the function is compiled.  If the script the function is defined in is
 legacy script, then script-local variables must be accessed with the "s:"
-prefix.
+prefix and they do not need to exist (they can be deleted any time).
 
 						*:defc* *:defcompile*
 :defc[ompile]		Compile functions defined in the current script that
@@ -686,6 +709,22 @@ dictionary.  If there is a mix of types, the "any" type is used. >
 	['a', 'b', 'c']	list<string>
 	[1, 'x', 3]	list<any>
 
+
+Stricter type checking					*type-checking*
+
+In legacy Vim script, where a number was expected, a string would be
+automatically converted to a number.  This was convenient for an actual number
+such as "123", but leads to unexpected problems (but no error message) if the
+string doesn't start with a number.  Quite often this leads to hard-to-find
+bugs.
+
+In Vim9 script this has been made stricter.  In most places it works just as
+before, if the expected type was already.  There will sometimes be an error,
+thus breaking backwards compatibility.  For example:
+- Using a number other than 0 or 1 where a boolean is expected.  *E1023*
+- Using a string value when setting a number options.
+- Using a number where a string is expected.   *E1024*
+
 ==============================================================================
 
 5.  Namespace, Import and Export
@@ -696,6 +735,9 @@ THIS IS STILL UNDER DEVELOPMENT - ANYTHING CAN BREAK - ANYTHING CAN CHANGE
 A Vim9 script can be written to be imported.  This means that everything in
 the script is local, unless exported.  Those exported items, and only those
 items, can then be imported in another script.
+
+You can cheat by using the global namespace explicitly.  We will assume here
+that you don't do that.
 
 
 Namespace ~
@@ -789,7 +831,7 @@ actually needed.  A recommended mechanism:
 
 <   This goes in .../plugin/anyname.vim.  "anyname.vim" can be freely chosen.
 
-2. In the autocommand script do the actual work.  You can import items from
+2. In the autoload script do the actual work.  You can import items from
    other files to split up functionality in appropriate pieces. >
 	vim9script
         import FilterFunc from "../import/someother.vim"
@@ -824,7 +866,7 @@ namespace will be used for the imported item, even when "s:" is not specified.
 
 The :def command ~
 
-Plugin writers have asked for a much faster Vim script.  Investigation have
+Plugin writers have asked for a much faster Vim script.  Investigations have
 shown that keeping the existing semantics of function calls make this close to
 impossible, because of the overhead involved with calling a function, setting
 up the local function scope and executing lines.  There are many details that
@@ -854,7 +896,7 @@ an "add number" instruction can be used, which is faster.  The error can be
 given at compile time, no error handling is needed at runtime.
 
 The syntax for types is similar to Java, since it is easy to understand and
-widely used.  The type names are what was used in Vim before, with some
+widely used.  The type names are what were used in Vim before, with some
 additions such as "void" and "bool".
 
 
@@ -905,7 +947,7 @@ are doing.  Some details are unexpected and can be fixed.  For example how the
 	...
 	return result || 0	" returns 1
 
-Vim9 script works like JavaScript/Typescript, keep the value: >
+Vim9 script works like JavaScript/TypeScript, keep the value: >
 	let result = 44
 	...
 	return result || 0	" returns 44
@@ -922,7 +964,7 @@ A problem of legacy Vim script is that by default all functions and variables
 are global.  It is possible to make them script-local, but then they are not
 available in other scripts.
 
-In Vim9 script a mechanism very similar to the Javascript import and export
+In Vim9 script a mechanism very similar to the JavaScript import and export
 mechanism is supported.  It is a variant to the existing `:source` command
 that works like one would expect:
 - Instead of making everything global by default, everything is script-local,
