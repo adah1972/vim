@@ -107,7 +107,7 @@ func Test_syntime()
   call assert_notmatch('.* cppNumber*', a)
   call assert_notmatch('[1-9]', a)
 
-  call assert_fails('syntime abc', 'E475')
+  call assert_fails('syntime abc', 'E475:')
 
   syntax clear
   let a = execute('syntime report')
@@ -428,7 +428,11 @@ func Test_ownsyntax()
   call setline(1, '#define FOO')
   syntax on
   set filetype=c
+
   ownsyntax perl
+  " this should not crash
+  set
+
   call assert_equal('perlComment', synIDattr(synID(line('.'), col('.'), 1), 'name'))
   call assert_equal('c',    b:current_syntax)
   call assert_equal('perl', w:current_syntax)
@@ -718,8 +722,8 @@ func Test_syntax_foldlevel()
   syntax on
   set foldmethod=syntax
 
-  call assert_fails('syn foldlevel start start', 'E390')
-  call assert_fails('syn foldlevel not_an_option', 'E390')
+  call assert_fails('syn foldlevel start start', 'E390:')
+  call assert_fails('syn foldlevel not_an_option', 'E390:')
 
   set foldlevel=1
 

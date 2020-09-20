@@ -224,6 +224,7 @@ EXTERN int	emsg_severe INIT(= FALSE);  // use message of next of several
 EXTERN int	emsg_assert_fails_used INIT(= FALSE);
 EXTERN char_u	*emsg_assert_fails_msg INIT(= NULL);
 EXTERN long	emsg_assert_fails_lnum INIT(= 0);
+EXTERN char_u	*emsg_assert_fails_context INIT(= NULL);
 
 EXTERN int	did_endif INIT(= FALSE);    // just had ":endif"
 #endif
@@ -390,42 +391,41 @@ EXTERN sctx_T	current_sctx INIT4(0, 0, 0, 0);
 
 
 // Commonly used types.
-EXTERN type_T t_unknown INIT6(VAR_UNKNOWN, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_any INIT6(VAR_ANY, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_void INIT6(VAR_VOID, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_bool INIT6(VAR_BOOL, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_special INIT6(VAR_SPECIAL, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_number INIT6(VAR_NUMBER, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_float INIT6(VAR_FLOAT, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_string INIT6(VAR_STRING, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_blob INIT6(VAR_BLOB, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_job INIT6(VAR_JOB, 0, 0, 0, NULL, NULL);
-EXTERN type_T t_channel INIT6(VAR_CHANNEL, 0, 0, 0, NULL, NULL);
+EXTERN type_T t_unknown INIT6(VAR_UNKNOWN, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_any INIT6(VAR_ANY, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_void INIT6(VAR_VOID, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_bool INIT6(VAR_BOOL, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_special INIT6(VAR_SPECIAL, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_number INIT6(VAR_NUMBER, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_float INIT6(VAR_FLOAT, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_string INIT6(VAR_STRING, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_blob INIT6(VAR_BLOB, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_job INIT6(VAR_JOB, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_channel INIT6(VAR_CHANNEL, 0, 0, TTFLAG_STATIC, NULL, NULL);
 
-EXTERN type_T t_func_unknown INIT6(VAR_FUNC, -1, 0, 0, &t_unknown, NULL);
-EXTERN type_T t_func_void INIT6(VAR_FUNC, -1, 0, 0, &t_void, NULL);
-EXTERN type_T t_func_any INIT6(VAR_FUNC, -1, 0, 0, &t_any, NULL);
-EXTERN type_T t_func_number INIT6(VAR_FUNC, -1, 0, 0, &t_number, NULL);
-EXTERN type_T t_func_string INIT6(VAR_FUNC, -1, 0, 0, &t_string, NULL);
-EXTERN type_T t_func_0_void INIT6(VAR_FUNC, 0, 0, 0, &t_void, NULL);
-EXTERN type_T t_func_0_any INIT6(VAR_FUNC, 0, 0, 0, &t_any, NULL);
-EXTERN type_T t_func_0_number INIT6(VAR_FUNC, 0, 0, 0, &t_number, NULL);
-EXTERN type_T t_func_0_string INIT6(VAR_FUNC, 0, 0, 0, &t_string, NULL);
+EXTERN type_T t_func_unknown INIT6(VAR_FUNC, -1, 0, TTFLAG_STATIC, &t_unknown, NULL);
+EXTERN type_T t_func_void INIT6(VAR_FUNC, -1, 0, TTFLAG_STATIC, &t_void, NULL);
+EXTERN type_T t_func_any INIT6(VAR_FUNC, -1, 0, TTFLAG_STATIC, &t_any, NULL);
+EXTERN type_T t_func_number INIT6(VAR_FUNC, -1, 0, TTFLAG_STATIC, &t_number, NULL);
+EXTERN type_T t_func_string INIT6(VAR_FUNC, -1, 0, TTFLAG_STATIC, &t_string, NULL);
+EXTERN type_T t_func_0_void INIT6(VAR_FUNC, 0, 0, TTFLAG_STATIC, &t_void, NULL);
+EXTERN type_T t_func_0_any INIT6(VAR_FUNC, 0, 0, TTFLAG_STATIC, &t_any, NULL);
+EXTERN type_T t_func_0_number INIT6(VAR_FUNC, 0, 0, TTFLAG_STATIC, &t_number, NULL);
+EXTERN type_T t_func_0_string INIT6(VAR_FUNC, 0, 0, TTFLAG_STATIC, &t_string, NULL);
 
-EXTERN type_T t_list_any INIT6(VAR_LIST, 0, 0, 0, &t_any, NULL);
-EXTERN type_T t_dict_any INIT6(VAR_DICT, 0, 0, 0, &t_any, NULL);
-EXTERN type_T t_list_empty INIT6(VAR_LIST, 0, 0, 0, &t_unknown, NULL);
-EXTERN type_T t_dict_empty INIT6(VAR_DICT, 0, 0, 0, &t_unknown, NULL);
+EXTERN type_T t_list_any INIT6(VAR_LIST, 0, 0, TTFLAG_STATIC, &t_any, NULL);
+EXTERN type_T t_dict_any INIT6(VAR_DICT, 0, 0, TTFLAG_STATIC, &t_any, NULL);
+EXTERN type_T t_list_empty INIT6(VAR_LIST, 0, 0, TTFLAG_STATIC, &t_unknown, NULL);
+EXTERN type_T t_dict_empty INIT6(VAR_DICT, 0, 0, TTFLAG_STATIC, &t_unknown, NULL);
 
-EXTERN type_T t_list_bool INIT6(VAR_LIST, 0, 0, 0, &t_bool, NULL);
-EXTERN type_T t_list_number INIT6(VAR_LIST, 0, 0, 0, &t_number, NULL);
-EXTERN type_T t_list_string INIT6(VAR_LIST, 0, 0, 0, &t_string, NULL);
-EXTERN type_T t_list_dict_any INIT6(VAR_LIST, 0, 0, 0, &t_dict_any, NULL);
+EXTERN type_T t_list_bool INIT6(VAR_LIST, 0, 0, TTFLAG_STATIC, &t_bool, NULL);
+EXTERN type_T t_list_number INIT6(VAR_LIST, 0, 0, TTFLAG_STATIC, &t_number, NULL);
+EXTERN type_T t_list_string INIT6(VAR_LIST, 0, 0, TTFLAG_STATIC, &t_string, NULL);
+EXTERN type_T t_list_dict_any INIT6(VAR_LIST, 0, 0, TTFLAG_STATIC, &t_dict_any, NULL);
 
-EXTERN type_T t_dict_bool INIT6(VAR_DICT, 0, 0, 0, &t_bool, NULL);
-EXTERN type_T t_dict_number INIT6(VAR_DICT, 0, 0, 0, &t_number, NULL);
-EXTERN type_T t_dict_string INIT6(VAR_DICT, 0, 0, 0, &t_string, NULL);
-
+EXTERN type_T t_dict_bool INIT6(VAR_DICT, 0, 0, TTFLAG_STATIC, &t_bool, NULL);
+EXTERN type_T t_dict_number INIT6(VAR_DICT, 0, 0, TTFLAG_STATIC, &t_number, NULL);
+EXTERN type_T t_dict_string INIT6(VAR_DICT, 0, 0, TTFLAG_STATIC, &t_string, NULL);
 
 #endif
 
@@ -773,7 +773,8 @@ EXTERN int	ru_wid;		// 'rulerfmt' width of ruler when non-zero
 EXTERN int	sc_col;		// column for shown command
 
 #ifdef TEMPDIRNAMES
-# if defined(UNIX) && defined(HAVE_FLOCK) && defined(HAVE_DIRFD)
+# if defined(UNIX) && defined(HAVE_FLOCK) \
+	&& (defined(HAVE_DIRFD) || defined(__hpux))
 EXTERN DIR	*vim_tempdir_dp INIT(= NULL); // File descriptor of temp dir
 # endif
 EXTERN char_u	*vim_tempdir INIT(= NULL); // Name of Vim's own temp dir.
@@ -1896,6 +1897,13 @@ EXTERN HINSTANCE g_hinst INIT(= NULL);
 EXTERN int did_repeated_msg INIT(= 0);
 # define REPEATED_MSG_LOOKING	    1
 # define REPEATED_MSG_SAFESTATE	    2
+
+// This flag is set when outputting a terminal control code and reset in
+// out_flush() when characters have been written.
+EXTERN int ch_log_output INIT(= FALSE);
+
+// Whether a redraw is needed for appending a line to a buffer.
+EXTERN int channel_need_redraw INIT(= FALSE);
 
 #define FOR_ALL_CHANNELS(ch) \
     for ((ch) = first_channel; (ch) != NULL; (ch) = (ch)->ch_next)

@@ -1,4 +1,4 @@
-*eval.txt*	For Vim version 8.2.  Last change: 2020 aug 30
+*eval.txt*	For Vim version 8.2.  Last change: 2020 Sep 16
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -120,8 +120,9 @@ base, use |str2nr()|.
 
 						*TRUE* *FALSE* *Boolean*
 For boolean operators Numbers are used.  Zero is FALSE, non-zero is TRUE.
-You can also use |v:false| and |v:true|.  When TRUE is returned from a
-function it is the Number one, FALSE is the number zero.
+You can also use |v:false| and |v:true|.  In Vim9 script |false| and |true|. 
+When TRUE is returned from a function it is the Number one, FALSE is the
+number zero.
 
 Note that in the command: >
 	:if "foo"
@@ -2360,7 +2361,7 @@ assert_equalfile({fname-one}, {fname-two} [, {msg}])
 				Number	assert file contents are equal
 assert_exception({error} [, {msg}])
 				Number	assert {error} is in v:exception
-assert_fails({cmd} [, {error} [, {msg} [, {lnum}]]])
+assert_fails({cmd} [, {error} [, {msg} [, {lnum} [, {context}]]]])
 				Number	assert {cmd} fails
 assert_false({actual} [, {msg}])
 				Number	assert {actual} is false
@@ -2640,6 +2641,7 @@ matcharg({nr})			List	arguments of |:match|
 matchdelete({id} [, {win}])	Number	delete match identified by {id}
 matchend({expr}, {pat} [, {start} [, {count}]])
 				Number	position where {pat} ends in {expr}
+matchfuzzy({list}, {str})	List	fuzzy match {str} in {list}
 matchlist({expr}, {pat} [, {start} [, {count}]])
 				List	match and submatches of {pat} in {expr}
 matchstr({expr}, {pat} [, {start} [, {count}]])
@@ -2684,6 +2686,7 @@ popup_show({id})		none	unhide popup window {id}
 pow({x}, {y})			Float	{x} to the power of {y}
 prevnonblank({lnum})		Number	line nr of non-blank line <= {lnum}
 printf({fmt}, {expr1}...)	String	format text
+prompt_getprompt({buf})		String	get prompt text
 prompt_setcallback({buf}, {expr}) none	set prompt callback function
 prompt_setinterrupt({buf}, {text}) none	set prompt interrupt function
 prompt_setprompt({buf}, {text}) none	set prompt text
@@ -3361,7 +3364,7 @@ bufnr([{expr} [, {create}]])
 		above.
 
 		If the buffer doesn't exist, -1 is returned.  Or, if the
-		{create} argument is present and not zero, a new, unlisted,
+		{create} argument is present and TRUE, a new, unlisted,
 		buffer is created and its number is returned.  Example: >
 			let newbuf = bufnr('Scratch001', 1)
 <		Using an empty name uses the current buffer. To create a new
@@ -3512,7 +3515,7 @@ char2nr({expr} [, {utf8}])					*char2nr()*
 		Example for "utf-8": >
 			char2nr("á")		returns 225
 			char2nr("á"[0])		returns 195
-<		With {utf8} set to 1, always treat as utf-8 characters.
+<		With {utf8} set to TRUE, always treat as utf-8 characters.
 		A combining character is a separate character.
 		|nr2char()| does the opposite.
 		To turn a string into a list of character numbers: >
@@ -4299,6 +4302,7 @@ expand({expr} [, {nosuf} [, {list}]])				*expand()*
 			<afile>		autocmd file name
 			<abuf>		autocmd buffer number (as a String!)
 			<amatch>	autocmd matched name
+			<cexpr>		C expression under the cursor
 			<sfile>		sourced script file or function name
 			<slnum>		sourced script line number or function
 					line number
@@ -4306,6 +4310,7 @@ expand({expr} [, {nosuf} [, {list}]])				*expand()*
 					a function
 			<SID>		"<SNR>123_"  where "123" is the
 					current script ID  |<SID>|
+			<stack>		call stack
 			<cword>		word under the cursor
 			<cWORD>		WORD under the cursor
 			<client>	the {clientid} of the last received
@@ -5486,7 +5491,7 @@ getmarklist([{expr}])					*getmarklist()*
 		local marks defined in buffer {expr}.  For the use of {expr},
 		see |bufname()|.
 
-		Each item in the retuned List is a |Dict| with the following:
+		Each item in the returned List is a |Dict| with the following:
 		    name - name of the mark prefixed by "'"
 		    pos - a |List| with the position of the mark:
 				[bufnum, lnum, col, off]
@@ -7305,6 +7310,29 @@ matchend({expr}, {pat} [, {start} [, {count}]])			*matchend()*
 		Can also be used as a |method|: >
 			GetText()->matchend('word')
 
+
+matchfuzzy({list}, {str})			*matchfuzzy()*
+		Returns a list with all the strings in {list} that fuzzy
+		match {str}. The strings in the returned list are sorted
+		based on the matching score. {str} is treated as a literal
+		string and regular expression matching is NOT supported.
+		The maximum supported {str} length is 256.
+
+		If there are no matching strings or there is an error, then an
+		empty list is returned. If length of {str} is greater than
+		256, then returns an empty list.
+
+		Example: >
+		   :echo matchfuzzy(["clay", "crow"], "cay")
+<		results in ["clay"]. >
+		   :echo getbufinfo()->map({_, v -> v.name})->matchfuzzy("ndl")
+<		results in a list of buffer names fuzzy matching "ndl". >
+		   :echo v:oldfiles->matchfuzzy("test")
+<		results in a list of file names fuzzy matching "test". >
+		   :let l = readfile("buffer.c")->matchfuzzy("str")
+<		results in a list of lines in "buffer.c" fuzzy matching "str".
+
+
 matchlist({expr}, {pat} [, {start} [, {count}]])		*matchlist()*
 		Same as |match()|, but return a |List|.  The first item in the
 		list is the matched string, same as what matchstr() would
@@ -7607,7 +7635,7 @@ perleval({expr})					*perleval()*
 <		{only available when compiled with the |+perl| feature}
 
 
-popup_ functions are documented here: |popup-functions|.
+popup_ functions are documented here: |popup-functions|
 
 
 pow({x}, {y})						*pow()*
@@ -7835,6 +7863,17 @@ printf({fmt}, {expr1} ...)				*printf()*
 		arguments an error is given.  Up to 18 arguments can be used.
 
 
+prompt_getprompt({buf})					*prompt_getprompt()*
+		Returns the effective prompt text for buffer {buf}. {buf} can
+		be a buffer name or number. |prompt-buffer|.
+
+		If the buffer doesn't exist or isn't a prompt buffer, an empty
+		string is returned.
+
+		Can also be used as a |method|: >
+			GetBuffer()->prompt_getprompt()
+
+
 prompt_setcallback({buf}, {expr})			*prompt_setcallback()*
 		Set prompt callback for buffer {buf} to {expr}.  When {expr}
 		is an empty string the callback is removed.  This has only
@@ -7890,7 +7929,7 @@ prompt_setprompt({buf}, {text})				*prompt_setprompt()*
 		Can also be used as a |method|: >
 			GetBuffer()->prompt_setprompt('command: ')
 
-prop_ functions are documented here: |text-prop-functions|.
+prop_ functions are documented here: |text-prop-functions|
 
 pum_getpos()						*pum_getpos()*
 		If the popup menu (see |ins-completion-menu|) is not visible,
@@ -11028,7 +11067,8 @@ win_screenpos({nr})					*win_screenpos()*
 		Return the screen position of window {nr} as a list with two
 		numbers: [row, col].  The first window always has position
 		[1, 1], unless there is a tabline, then it is [2, 1].
-		{nr} can be the window number or the |window-ID|.
+		{nr} can be the window number or the |window-ID|.  Use zero
+		for the current window.
 		Return [0, 0] if the window cannot be found in the current
 		tabpage.
 
@@ -12326,7 +12366,9 @@ text...
 <			is equivalent to: >
 				:let x = 1
 				:lockvar! x
-<			This is useful if you want to make sure the variable
+<			NOTE: in Vim9 script `:const` works differently, see
+			|vim9-const|
+			This is useful if you want to make sure the variable
 			is not modified.  If the value is a List or Dictionary
 			literal then the items also cannot be changed: >
 				const ll = [1, 2, 3]
@@ -12366,6 +12408,8 @@ text...
 
 			[depth] is relevant when locking a |List| or
 			|Dictionary|.  It specifies how deep the locking goes:
+				0	Lock the variable {name} but not its
+					value.
 				1	Lock the |List| or |Dictionary| itself,
 					cannot add or remove items, but can
 					still change their values.
@@ -12379,7 +12423,14 @@ text...
 					|Dictionary|, one level deeper.
 			The default [depth] is 2, thus when {name} is a |List|
 			or |Dictionary| the values cannot be changed.
-								*E743*
+
+			Example with [depth] 0: >
+				let mylist = [1, 2, 3]
+				lockvar 0 mylist
+				let mylist[0] = 77   	" OK
+				call add(mylist, 4]  	" OK
+				let mylist = [7, 8, 9]  " Error!
+<								*E743*
 			For unlimited depth use [!] and omit [depth].
 			However, there is a maximum depth of 100 to catch
 			loops.

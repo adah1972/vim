@@ -207,14 +207,22 @@ endfunc
 func Test_lockvar()
   let x = 'hello'
   lockvar x
-  call assert_fails('let x = "there"', 'E741')
+  call assert_fails('let x = "there"', 'E741:')
   if 0 | unlockvar x | endif
-  call assert_fails('let x = "there"', 'E741')
+  call assert_fails('let x = "there"', 'E741:')
   unlockvar x
   let x = 'there'
 
   if 0 | lockvar x | endif
   let x = 'again'
+
+  let val = [1, 2, 3]
+  lockvar 0 val
+  let val[0] = 9
+  call assert_equal([9, 2, 3], val)
+  call add(val, 4)
+  call assert_equal([9, 2, 3, 4], val)
+  call assert_fails('let val = [4, 5, 6]', 'E1122:')
 endfunc
 
 

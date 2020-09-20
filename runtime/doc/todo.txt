@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 8.2.  Last change: 2020 Aug 29
+*todo.txt*      For Vim version 8.2.  Last change: 2020 Sep 19
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -40,16 +40,36 @@ browser use: https://github.com/vim/vim/issues/1234
 
 Why does Test_invalid_sid() not work in the GUI?
 
+Add matchfuzzy() and matchfuzzypos() Yegappan, #6947
+    should be ready now
+
 Making everything work:
-- Check :const works the same as in legacy script.
-- Run the same tests in :def and Vim9 script, like in Test_expr7_not()
-- :put with a "=" register argument doesn't work, need to find the expression
-  and compile it. (#6397)
+- Fix memory leak in test_vim9_func (through compile_nested_function and
+  get_lambda_tv())
+- Fix memory leaks in test_vim9_script
 - At the Vim9 script level, keep script variables local to the block they are
-  declared in?  Need to remember what variables were declared and delete them
-  when leaving the block.
-- Implement { } block at the script level.
-- Use the line number argument with assert_fails() in many more tests.
+  declared in, like in Javascript (using :let).
+  -> Need to remember what variables were declared and delete them when
+     leaving the block.
+  -> if a function is defined it may need to keep the block-locals
+  Then Implement { } block at the script level.
+- Recognize call to assert_fails() and execute it in the function context?
+  Won't work if the command itself fails, not an expression failure:
+	assert_fails("unknown", "E99:")
+  Use try/catch is complicated:
+    let did_catch = false
+    try
+	unknown
+    catch
+	assert_caught('E99:')
+	did_catch = true
+    endtry
+    assert_true('did_catch')
+  Add a new command, 
+    assertfail
+       unknown
+    endassertfail E99:.*unknown
+- Run the same tests in :def and Vim9 script, like in Test_expr7_not()
 - In autocmd: use legacy syntax, not whatever the current script uses?
 - need to check type when a declaration specifies a type: #6507
 	let nr: number = 'asdf'
@@ -57,6 +77,9 @@ Making everything work:
   the script-local function, not a global one.
 - Make sure that where a callback is expected a function can be used (without
   quotes). E.g. sort() and map().  Also at the script level.
+- assignment to more complex lval: list[1][2][3] = 8
+- ":put" with ISN_PUT does not handle range correctly, e.g. ":$-2put".
+  Add command to parse range at runtime?
 - Make map() give an error if the resulting type is wrong.
   Add mapnew() to create a new List/Dict for the result, which can have a
   different value type.
@@ -78,6 +101,9 @@ Making everything work:
 - Test that a function defined inside a :def function is local to that
   function, g: functions can be defined and script-local functions cannot be
   defined.
+- Does this work already: can use func as reference:
+	def SomeFunc() ...
+	map(list, SomeFunc)
 - Support passing v:none to use the default argument value. (#6504)
 - make 0 == 'string' fail on the script level, like inside :def.
 - Check that when using a user function name without prefix, it does not find
@@ -93,10 +119,6 @@ Making everything work:
 - Compile redir to local variable: var_redir_start().
 - Compile builtin functions that access local variables:
     islocked()
-- possible memory leak in test_vim9_func through compile_nested_function.
-- memory leaks in test_vim9_expr
-- memory leaks in test_vim9_script
-- memory leaks in test_vim9_cmd
 - When evaluating constants for script variables, some functions could work:
     has('asdf'), len('string')
 - Implement "as Name" in "import Item as Name from ..."
@@ -121,24 +143,23 @@ Also:
 - Make Foo.Bar() work to call the dict function. (#5676)
 - Error in any command in "vim9script" aborts sourcing.
 - Find a way to test expressions in legacy and Vim9 script without duplication
-- Fix memory leaks for test_vim9_disassemble, test_vim9_expr, test_vim9_script
 - Test each level of expressions properly, with type checking
 - Test try/catch and throw better, also nested.
   Test return inside try/finally jumps to finally and then returns.
-- can use func as reference:
-	def SomeFunc() ...
-	map(list, SomeFunc)
 - Test: Function declared inside a :def function is local, disappears at the
   end of the function.  Unless g: is used, just like with variables.
 - implement :type
 - import type declaration?
-- implement class
-- implement interface
-- predefined class: Promise<T>
+- Future work: See |vim9-classes|
 - implement enum
 - Make accessing varargs faster: arg[expr]
 	EVAL expr
 	LOADVARARG (varags idx)
+- Make debugging work - at least per function.  Need to recompile a function
+  to step through it line-by-line?  Evaluate the stack and variables on the
+  stack?
+- Make profiling work - Add ISN_PROFILE instructions after every line?
+- List commands when 'verbose' is set or :verbose is used.
 Further improvements:
 - compile options that are an expression, e.g. "expr:" in 'spellsuggest',
   'foldexpr', 'foldtext', 'printexpr', 'diffexpr', 'patchexpr', 'charconvert',
@@ -181,10 +202,8 @@ Text properties:
 - :goto does not go to the right place when text properties are present.
   (#5930)
 - "cc" does not call inserted_bytes(). (Axel Forsman, #5763)
-- Get E685 with a sequence of commands. (#5674)
 - Combining text property with 'cursorline' does not always work (Billie
   Cleek, #5533)
-- Text properties spanning more than one line.  #5683
 - See remarks at top of src/textprop.c
 
 'incsearch' with :s:
@@ -263,7 +282,8 @@ Terminal emulator window:
 
 Error numbers available: E653
 
-Remove "MacOS X installation"?  $APPDIR is no longer set.
+Patch to implement the vimtutor with a plugin: #6414
+Was originally written by Felipe Morales.
 
 Remove SPACE_IN_FILENAME ? It is only used for completion.
 
@@ -273,6 +293,9 @@ Add 'termguiattr' option, use "gui=" attributes in the terminal?  Would work
 with 'termguicolors'. #1740
 
 Patch for blockwise paste reporting changes: #6660.
+
+Expanding <mods> should put the tab number from cmdmod.tab before "tab".
+Any way to convert "$" back by using a special value? (#6901)
 
 Can we detect true color support?  https://gist.github.com/XVilka/8346728
 Try setting a color then request the current color, like using t_u7.
@@ -368,12 +391,12 @@ When 'fileignorecase' is set ":e testfile.c" works to edit TestFile.c, but
 ":find testfile.c" does not ignore case.
 Might be related to #6088.
 
+Error for reverse range when using :vimgrep in file "[id-01] file.txt".
+(#6919)
+
 When changing the crypt key the buffer should be considered modified.
 Like when changing 'fileformat'.  Save the old key in save_file_ff().
 (Ninu-Ciprian Marginean)
-
-Patch to implement the vimtutor with a plugin: #6414
-Was originally writtten by Felipe Morales.
 
 Strange sequence of BufWipeout and BufNew events while doing omni-complete.
 (Paul Jolly, #5656)
@@ -397,6 +420,7 @@ Undo puts cursor in wrong line after "cG<Esc>" undo.
 Implement completion for "breakadd".  Should expand the second argument, e.g.
 "func", and then function names after ":breakadd func".  Including
 script-local functions.
+Also for ":profile".
 
 :unmap <c-n> gives error but does remove the mapping. (Antony Scriven, 2019
 Dec 19)
@@ -487,7 +511,7 @@ Better: use the "z" prefix.  or ]t) and [t(.
 Modeless selection doesn't work in gvim. (#4783)
 Caused by patch 8.1.1534.
 
-Visual highlight not removed when 'dipslay' is "lastline" and line doesn't
+Visual highlight not removed when 'display' is "lastline" and line doesn't
 fit. (Kevin Lawler, #4457)
 
 Current position in the changelist should be local to the buffer. (#2173)
@@ -1222,8 +1246,6 @@ Suggestion to improve pt-br spell checking. (Marcelo D Montu, 2016 Dec 15,
 
 Error in test_startup_utf8 on Solaris. (Danek Duvall, 2016 Aug 17)
 
-Completion for :!cmd shows each match twice. #1435
-
 GTK: When adding a timer from 'balloonexpr' it won't fire, because
 g_main_context_iteration() doesn't return.  Need to trigger an event when the
 timer expires.
@@ -1421,9 +1443,6 @@ Feature request: Complete members of a dictionary. (Luc Hermitte, 2017 Jan 4,
 Undo message is not always properly displayed.  Patch by Ken Takata, 2013 oct
 3.  Doesn't work properly according to Yukihiro Nakadaira.
 Also see #1635.
-
-When 'keywordprg' starts with ":" the argument is still escaped as a shell
-command argument. (Romain Lafourcade, 2016 Oct 16, #1175)
 
 Idea from Sven: record sequence of keys.  Useful to show others what they are
 doing (look over the shoulder), and also to see what happened.

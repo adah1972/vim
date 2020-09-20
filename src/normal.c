@@ -897,6 +897,9 @@ getcount:
 #endif
 	    if ((State & INSERT) && !p_ek)
 	    {
+#ifdef FEAT_JOB_CHANNEL
+		ch_log_output = TRUE;
+#endif
 		// Disable bracketed paste and modifyOtherKeys here, we won't
 		// recognize the escape sequences with 'esckeys' off.
 		out_str(T_BD);
@@ -907,6 +910,9 @@ getcount:
 
 	    if ((State & INSERT) && !p_ek)
 	    {
+#ifdef FEAT_JOB_CHANNEL
+		ch_log_output = TRUE;
+#endif
 		// Re-enable bracketed paste mode and modifyOtherKeys
 		out_str(T_BE);
 		out_str(T_CTI);
@@ -7421,7 +7427,7 @@ nv_put_opt(cmdarg_T *cap, int fix_indent)
 	    // May have been reset in do_put().
 	    VIsual_active = TRUE;
 	}
-	do_put(cap->oap->regname, dir, cap->count1, flags);
+	do_put(cap->oap->regname, NULL, dir, cap->count1, flags);
 
 	// If a register was saved, put it back now.
 	if (reg2 != NULL)
@@ -7494,7 +7500,7 @@ nv_nbcmd(cmdarg_T *cap)
     static void
 nv_drop(cmdarg_T *cap UNUSED)
 {
-    do_put('~', BACKWARD, 1L, PUT_CURSEND);
+    do_put('~', NULL, BACKWARD, 1L, PUT_CURSEND);
 }
 #endif
 

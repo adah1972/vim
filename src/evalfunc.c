@@ -386,11 +386,14 @@ ret_argv(int argcount, type_T **argtypes UNUSED)
     static type_T *
 ret_remove(int argcount UNUSED, type_T **argtypes)
 {
-    if (argtypes[0]->tt_type == VAR_LIST
-	    || argtypes[0]->tt_type == VAR_DICT)
-	return argtypes[0]->tt_member;
-    if (argtypes[0]->tt_type == VAR_BLOB)
-	return &t_number;
+    if (argtypes != NULL)
+    {
+	if (argtypes[0]->tt_type == VAR_LIST
+		|| argtypes[0]->tt_type == VAR_DICT)
+	    return argtypes[0]->tt_member;
+	if (argtypes[0]->tt_type == VAR_BLOB)
+	    return &t_number;
+    }
     return &t_any;
 }
 
@@ -495,7 +498,7 @@ static funcentry_T global_functions[] =
     {"assert_equal",	2, 3, FEARG_2,	  ret_number,	f_assert_equal},
     {"assert_equalfile", 2, 3, FEARG_1,	  ret_number,	f_assert_equalfile},
     {"assert_exception", 1, 2, 0,	  ret_number,	f_assert_exception},
-    {"assert_fails",	1, 4, FEARG_1,	  ret_number,	f_assert_fails},
+    {"assert_fails",	1, 5, FEARG_1,	  ret_number,	f_assert_fails},
     {"assert_false",	1, 2, FEARG_1,	  ret_number,	f_assert_false},
     {"assert_inrange",	3, 4, FEARG_3,	  ret_number,	f_assert_inrange},
     {"assert_match",	2, 3, FEARG_2,	  ret_number,	f_assert_match},
@@ -750,6 +753,7 @@ static funcentry_T global_functions[] =
     {"matcharg",	1, 1, FEARG_1,	  ret_list_string, f_matcharg},
     {"matchdelete",	1, 2, FEARG_1,	  ret_number,	f_matchdelete},
     {"matchend",	2, 4, FEARG_1,	  ret_number,	f_matchend},
+    {"matchfuzzy",	2, 2, FEARG_1,	  ret_list_string,	f_matchfuzzy},
     {"matchlist",	2, 4, FEARG_1,	  ret_list_string, f_matchlist},
     {"matchstr",	2, 4, FEARG_1,	  ret_string,	f_matchstr},
     {"matchstrpos",	2, 4, FEARG_1,	  ret_list_any,	f_matchstrpos},
@@ -806,6 +810,7 @@ static funcentry_T global_functions[] =
     {"pow",		2, 2, FEARG_1,	  ret_float,	FLOAT_FUNC(f_pow)},
     {"prevnonblank",	1, 1, FEARG_1,	  ret_number,	f_prevnonblank},
     {"printf",		1, 19, FEARG_2,	  ret_string,	f_printf},
+    {"prompt_getprompt", 1, 1, FEARG_1,	  ret_string,	JOB_FUNC(f_prompt_getprompt)},
     {"prompt_setcallback", 2, 2, FEARG_1, ret_void,	JOB_FUNC(f_prompt_setcallback)},
     {"prompt_setinterrupt", 2, 2, FEARG_1,ret_void,	JOB_FUNC(f_prompt_setinterrupt)},
     {"prompt_setprompt", 2, 2, FEARG_1,	  ret_void,	JOB_FUNC(f_prompt_setprompt)},
@@ -1709,7 +1714,7 @@ f_char2nr(typval_T *argvars, typval_T *rettv)
 	int	utf8 = 0;
 
 	if (argvars[1].v_type != VAR_UNKNOWN)
-	    utf8 = (int)tv_get_number_chk(&argvars[1], NULL);
+	    utf8 = (int)tv_get_bool_chk(&argvars[1], NULL);
 
 	if (utf8)
 	    rettv->vval.v_number = utf_ptr2char(tv_get_string(&argvars[0]));
@@ -1974,7 +1979,7 @@ f_deepcopy(typval_T *argvars, typval_T *rettv)
     int		copyID;
 
     if (argvars[1].v_type != VAR_UNKNOWN)
-	noref = (int)tv_get_number_chk(&argvars[1], NULL);
+	noref = (int)tv_get_bool_chk(&argvars[1], NULL);
     if (noref < 0 || noref > 1)
 	emsg(_(e_invarg));
     else
@@ -2434,7 +2439,7 @@ f_expand(typval_T *argvars, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     if (argvars[1].v_type != VAR_UNKNOWN
 	    && argvars[2].v_type != VAR_UNKNOWN
-	    && tv_get_number_chk(&argvars[2], &error)
+	    && tv_get_bool_chk(&argvars[2], &error)
 	    && !error)
 	rettv_list_set(rettv, NULL);
 
@@ -2458,7 +2463,7 @@ f_expand(typval_T *argvars, typval_T *rettv)
 	// When the optional second argument is non-zero, don't remove matches
 	// for 'wildignore' and don't put matches for 'suffixes' at the end.
 	if (argvars[1].v_type != VAR_UNKNOWN
-				    && tv_get_number_chk(&argvars[1], &error))
+				    && tv_get_bool_chk(&argvars[1], &error))
 	    options |= WILD_KEEP_ALL;
 	if (!error)
 	{
@@ -2913,7 +2918,7 @@ ret_f_function(int argcount, type_T **argtypes)
 {
     if (argcount == 1 && argtypes[0]->tt_type == VAR_STRING)
 	return &t_func_any;
-    return &t_func_void;
+    return &t_func_unknown;
 }
 
 /*
@@ -2935,7 +2940,7 @@ f_garbagecollect(typval_T *argvars, typval_T *rettv UNUSED)
     // using Lists and Dicts internally.  E.g.: ":echo [garbagecollect()]".
     want_garbage_collect = TRUE;
 
-    if (argvars[0].v_type != VAR_UNKNOWN && tv_get_number(&argvars[0]) == 1)
+    if (argvars[0].v_type != VAR_UNKNOWN && tv_get_bool(&argvars[0]) == 1)
 	garbage_collect_at_exit = TRUE;
 }
 
@@ -3081,12 +3086,7 @@ f_getchangelist(typval_T *argvars, typval_T *rettv)
     if (argvars[0].v_type == VAR_UNKNOWN)
 	buf = curbuf;
     else
-    {
-	(void)tv_get_number(&argvars[0]);    // issue errmsg if type error
-	++emsg_off;
-	buf = tv_get_buf(&argvars[0], FALSE);
-	--emsg_off;
-    }
+	buf = tv_get_buf_from_arg(&argvars[0]);
     if (buf == NULL)
 	return;
 
@@ -3341,9 +3341,9 @@ f_getreg(typval_T *argvars, typval_T *rettv)
 	error = strregname == NULL;
 	if (argvars[1].v_type != VAR_UNKNOWN)
 	{
-	    arg2 = (int)tv_get_number_chk(&argvars[1], &error);
+	    arg2 = (int)tv_get_bool_chk(&argvars[1], &error);
 	    if (!error && argvars[2].v_type != VAR_UNKNOWN)
-		return_list = (int)tv_get_number_chk(&argvars[2], &error);
+		return_list = (int)tv_get_bool_chk(&argvars[2], &error);
 	}
     }
     else
@@ -4767,7 +4767,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 	}
     }
 
-    if (argvars[1].v_type != VAR_UNKNOWN && tv_get_number(&argvars[1]) != 0)
+    if (argvars[1].v_type != VAR_UNKNOWN && tv_get_bool(&argvars[1]))
 	// return whether feature could ever be enabled
 	rettv->vval.v_number = x;
     else
@@ -4813,7 +4813,7 @@ f_hasmapto(typval_T *argvars, typval_T *rettv)
     {
 	mode = tv_get_string_buf(&argvars[1], buf);
 	if (argvars[2].v_type != VAR_UNKNOWN)
-	    abbr = (int)tv_get_number(&argvars[2]);
+	    abbr = (int)tv_get_bool(&argvars[2]);
     }
 
     if (map_to_exists(name, mode, abbr))
@@ -4949,7 +4949,7 @@ f_index(typval_T *argvars, typval_T *rettv)
 	    item = list_find(l, (long)tv_get_number_chk(&argvars[2], &error));
 	    idx = l->lv_u.mat.lv_idx;
 	    if (argvars[3].v_type != VAR_UNKNOWN)
-		ic = (int)tv_get_number_chk(&argvars[3], &error);
+		ic = (int)tv_get_bool_chk(&argvars[3], &error);
 	    if (error)
 		item = NULL;
 	}
@@ -5878,7 +5878,7 @@ f_nr2char(typval_T *argvars, typval_T *rettv)
 	int	utf8 = 0;
 
 	if (argvars[1].v_type != VAR_UNKNOWN)
-	    utf8 = (int)tv_get_number_chk(&argvars[1], NULL);
+	    utf8 = (int)tv_get_bool_chk(&argvars[1], NULL);
 	if (utf8)
 	    buf[utf_char2bytes((int)tv_get_number(&argvars[0]), buf)] = NUL;
 	else
@@ -6880,8 +6880,8 @@ f_search(typval_T *argvars, typval_T *rettv)
     static void
 f_searchdecl(typval_T *argvars, typval_T *rettv)
 {
-    int		locally = 1;
-    int		thisblock = 0;
+    int		locally = TRUE;
+    int		thisblock = FALSE;
     int		error = FALSE;
     char_u	*name;
 
@@ -6890,9 +6890,9 @@ f_searchdecl(typval_T *argvars, typval_T *rettv)
     name = tv_get_string_chk(&argvars[0]);
     if (argvars[1].v_type != VAR_UNKNOWN)
     {
-	locally = (int)tv_get_number_chk(&argvars[1], &error) == 0;
+	locally = !(int)tv_get_bool_chk(&argvars[1], &error);
 	if (!error && argvars[2].v_type != VAR_UNKNOWN)
-	    thisblock = (int)tv_get_number_chk(&argvars[2], &error) != 0;
+	    thisblock = (int)tv_get_bool_chk(&argvars[2], &error);
     }
     if (!error && name != NULL)
 	rettv->vval.v_number = find_decl(name, (int)STRLEN(name),
@@ -7832,7 +7832,7 @@ f_spellsuggest(typval_T *argvars UNUSED, typval_T *rettv)
 		return;
 	    if (argvars[2].v_type != VAR_UNKNOWN)
 	    {
-		need_capital = (int)tv_get_number_chk(&argvars[2], &typeerr);
+		need_capital = (int)tv_get_bool_chk(&argvars[2], &typeerr);
 		if (typeerr)
 		    return;
 	    }
@@ -7888,7 +7888,7 @@ f_split(typval_T *argvars, typval_T *rettv)
 	if (pat == NULL)
 	    typeerr = TRUE;
 	if (argvars[2].v_type != VAR_UNKNOWN)
-	    keepempty = (int)tv_get_number_chk(&argvars[2], &typeerr);
+	    keepempty = (int)tv_get_bool_chk(&argvars[2], &typeerr);
     }
     if (pat == NULL || *pat == NUL)
 	pat = (char_u *)"[\\x01- ]\\+";
@@ -7986,7 +7986,7 @@ f_str2list(typval_T *argvars, typval_T *rettv)
 	return;
 
     if (argvars[1].v_type != VAR_UNKNOWN)
-	utf8 = (int)tv_get_number_chk(&argvars[1], NULL);
+	utf8 = (int)tv_get_bool_chk(&argvars[1], NULL);
 
     p = tv_get_string(&argvars[0]);
 
@@ -8034,7 +8034,7 @@ f_str2nr(typval_T *argvars, typval_T *rettv)
 	    emsg(_(e_invarg));
 	    return;
 	}
-	if (argvars[2].v_type != VAR_UNKNOWN && tv_get_number(&argvars[2]))
+	if (argvars[2].v_type != VAR_UNKNOWN && tv_get_bool(&argvars[2]))
 	    what |= STR2NR_QUOTE;
     }
 
@@ -8159,12 +8159,12 @@ f_strlen(typval_T *argvars, typval_T *rettv)
 f_strchars(typval_T *argvars, typval_T *rettv)
 {
     char_u		*s = tv_get_string(&argvars[0]);
-    int			skipcc = 0;
+    int			skipcc = FALSE;
     varnumber_T		len = 0;
     int			(*func_mb_ptr2char_adv)(char_u **pp);
 
     if (argvars[1].v_type != VAR_UNKNOWN)
-	skipcc = (int)tv_get_number_chk(&argvars[1], NULL);
+	skipcc = (int)tv_get_bool(&argvars[1]);
     if (skipcc < 0 || skipcc > 1)
 	emsg(_(e_invarg));
     else
@@ -8404,7 +8404,7 @@ f_submatch(typval_T *argvars, typval_T *rettv)
 	return;
     }
     if (argvars[1].v_type != VAR_UNKNOWN)
-	retList = (int)tv_get_number_chk(&argvars[1], &error);
+	retList = (int)tv_get_bool_chk(&argvars[1], &error);
     if (error)
 	return;
 
@@ -8491,7 +8491,7 @@ f_synID(typval_T *argvars UNUSED, typval_T *rettv)
 
     lnum = tv_get_lnum(argvars);		// -1 on type error
     col = (linenr_T)tv_get_number(&argvars[1]) - 1;	// -1 on type error
-    trans = (int)tv_get_number_chk(&argvars[2], &transerr);
+    trans = (int)tv_get_bool_chk(&argvars[2], &transerr);
 
     if (!transerr && lnum >= 1 && lnum <= curbuf->b_ml.ml_line_count
 	    && col >= 0 && col < (long)STRLEN(ml_get(lnum)))

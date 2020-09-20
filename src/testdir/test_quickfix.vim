@@ -261,13 +261,13 @@ func XwindowTests(cchar)
   " Open the window
   Xopen 5
   call assert_true(winnr('$') == 2 && getline('.') ==# '|| non-error 1'
-		      \  && winheight('.') == 5)
+		      \  && winheight(0) == 5)
 
   " Opening the window again, should move the cursor to that window
   wincmd t
   Xopen 7
   call assert_true(winnr('$') == 2 && winnr() == 2 &&
-	\ winheight('.') == 7 &&
+	\ winheight(0) == 7 &&
 	\ getline('.') ==# '|| non-error 1')
 
   " :cnext in quickfix window should move to the next entry
@@ -359,7 +359,7 @@ func XfileTests(cchar)
 	\ l[1].lnum == 800 && l[1].col == 15 && l[1].text ==# 'Line 800')
 
   " Test with a non existent file
-  call assert_fails('Xfile non_existent_file', 'E40')
+  call assert_fails('Xfile non_existent_file', 'E40:')
 
   " Run cfile/lfile from a modified buffer
   enew!
@@ -502,8 +502,8 @@ func Xtest_browse(cchar)
 
   Xfirst
   call assert_fails('-5Xcc', 'E16:')
-  call assert_fails('Xprev', 'E553')
-  call assert_fails('Xpfile', 'E553')
+  call assert_fails('Xprev', 'E553:')
+  call assert_fails('Xpfile', 'E553:')
   Xnfile
   call assert_equal('Xqftestfile2', @%)
   call assert_equal(10, line('.'))
@@ -526,8 +526,8 @@ func Xtest_browse(cchar)
   Xprev
   call assert_equal('Xqftestfile2', @%)
   call assert_equal(11, line('.'))
-  call assert_fails('Xnext', 'E553')
-  call assert_fails('Xnfile', 'E553')
+  call assert_fails('Xnext', 'E553:')
+  call assert_fails('Xnfile', 'E553:')
   " To process the range using quickfix list entries, directly use the
   " quickfix commands (don't use the user defined commands)
   if a:cchar == 'c'
@@ -1430,6 +1430,30 @@ func Test_quickfix_was_changed_by_autocmd()
   call XquickfixChangedByAutocmd('l')
 endfunc
 
+func Test_setloclist_in_autocommand()
+  call writefile(['test1', 'test2'], 'Xfile')
+  edit Xfile
+  let s:bufnr = bufnr()
+  call setloclist(1,
+        \ [{'bufnr' : s:bufnr, 'lnum' : 1, 'text' : 'test1'},
+        \  {'bufnr' : s:bufnr, 'lnum' : 2, 'text' : 'test2'}])
+
+  augroup Test_LocList
+    au!
+    autocmd BufEnter * call setloclist(1,
+          \ [{'bufnr' : s:bufnr, 'lnum' : 1, 'text' : 'test1'},
+          \  {'bufnr' : s:bufnr, 'lnum' : 2, 'text' : 'test2'}], 'r')
+  augroup END
+
+  lopen
+  call assert_fails('exe "normal j\<CR>"', 'E926:')
+
+  augroup Test_LocList
+    au!
+  augroup END
+  call delete('Xfile')
+endfunc
+
 func Test_caddbuffer_to_empty()
   helpgr quickfix
   call setqflist([], 'r')
@@ -1742,6 +1766,24 @@ endfunc
 func Test_long_lines()
   call s:long_lines_tests('c')
   call s:long_lines_tests('l')
+endfunc
+
+func Test_cgetfile_on_long_lines()
+  " Problematic values if the line is longer than 4096 bytes.  Then 1024 bytes
+  " are read at a time.
+  for len in [4078, 4079, 4080, 5102, 5103, 5104, 6126, 6127, 6128, 7150, 7151, 7152]
+    let lines = [
+      \ '/tmp/file1:1:1:aaa',
+      \ '/tmp/file2:1:1:%s',
+      \ '/tmp/file3:1:1:bbb',
+      \ '/tmp/file4:1:1:ccc',
+      \ ]
+    let lines[1] = substitute(lines[1], '%s', repeat('x', len), '')
+    call writefile(lines, 'Xcqetfile.txt')
+    cgetfile Xcqetfile.txt
+    call assert_equal(4, getqflist(#{size: v:true}).size, 'with length ' .. len)
+  endfor
+  call delete('Xcqetfile.txt')
 endfunc
 
 func s:create_test_file(filename)
@@ -2174,8 +2216,8 @@ func Xproperty_tests(cchar)
   endif
 
   " Invalid arguments
-  call assert_fails('call g:Xgetlist([])', 'E715')
-  call assert_fails('call g:Xsetlist([], "a", [])', 'E715')
+  call assert_fails('call g:Xgetlist([])', 'E715:')
+  call assert_fails('call g:Xsetlist([], "a", [])', 'E715:')
   let s = g:Xsetlist([], 'a', {'abc':1})
   call assert_equal(-1, s)
 
@@ -2978,7 +3020,7 @@ endfunc
 func Test_cclose_from_copen()
     augroup QF_Test
 	au!
-        au FileType qf :call assert_fails(':cclose', 'E788')
+        au FileType qf :call assert_fails(':cclose', 'E788:')
     augroup END
     copen
     augroup QF_Test
@@ -2993,7 +3035,7 @@ func Test_cclose_in_autocmd()
   call test_override('starting', 1)
   augroup QF_Test
     au!
-    au FileType qf :call assert_fails(':cclose', 'E788')
+    au FileType qf :call assert_fails(':cclose', 'E788:')
   augroup END
   copen
   augroup QF_Test
@@ -3021,7 +3063,7 @@ func Test_file_from_copen()
   " Fails with argument.
   augroup QF_Test
     au!
-    au FileType qf call assert_fails(':file foo', 'E788')
+    au FileType qf call assert_fails(':file foo', 'E788:')
   augroup END
   copen
   augroup QF_Test
@@ -3702,7 +3744,7 @@ endfunc
 func Test_lfile_crash()
   sp Xtest
   au QuickFixCmdPre * bw
-  call assert_fails('lfile', 'E40')
+  call assert_fails('lfile', 'E40:')
   au! QuickFixCmdPre
 endfunc
 
@@ -4235,7 +4277,7 @@ func Xview_result_split_tests(cchar)
   call g:Xsetlist([])
   Xopen
   let l:win_count = winnr('$')
-  call assert_fails('execute "normal! \<C-W>\<CR>"', 'E42')
+  call assert_fails('execute "normal! \<C-W>\<CR>"', 'E42:')
   call assert_equal(l:win_count, winnr('$'))
   Xclose
 endfunc

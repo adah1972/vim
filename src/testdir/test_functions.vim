@@ -1438,19 +1438,19 @@ func Test_setbufvar_options()
   let prev_id = win_getid()
 
   wincmd j
-  let wh = winheight('.')
+  let wh = winheight(0)
   let dummy_buf = bufnr('dummy_buf1', v:true)
   call setbufvar(dummy_buf, '&buftype', 'nofile')
   execute 'belowright vertical split #' . dummy_buf
-  call assert_equal(wh, winheight('.'))
+  call assert_equal(wh, winheight(0))
   let dum1_id = win_getid()
 
   wincmd h
-  let wh = winheight('.')
+  let wh = winheight(0)
   let dummy_buf = bufnr('dummy_buf2', v:true)
   eval 'nofile'->setbufvar(dummy_buf, '&buftype')
   execute 'belowright vertical split #' . dummy_buf
-  call assert_equal(wh, winheight('.'))
+  call assert_equal(wh, winheight(0))
 
   bwipe!
   call win_gotoid(prev_id)
@@ -2025,7 +2025,7 @@ func Test_readdir_sort()
   exe "lang collate" collate
 
   " 5) Errors
-  call assert_fails('call readdir(dir, 1, 1)', 'E715')
+  call assert_fails('call readdir(dir, 1, 1)', 'E715:')
   call assert_fails('call readdir(dir, 1, #{sorta: 1})')
   call assert_fails('call readdirex(dir, 1, #{sorta: 1})')
 
@@ -2552,6 +2552,30 @@ endfunc
 func Test_browsedir()
   CheckFeature browse
   call assert_fails('call browsedir("open", [])', 'E730:')
+endfunc
+
+" Test for matchfuzzy()
+func Test_matchfuzzy()
+  call assert_fails('call matchfuzzy(10, "abc")', 'E714:')
+  call assert_fails('call matchfuzzy(["abc"], [])', 'E730:')
+  call assert_equal([], matchfuzzy([], 'abc'))
+  call assert_equal([], matchfuzzy(['abc'], ''))
+  call assert_equal(['abc'], matchfuzzy(['abc', 10], 'ac'))
+  call assert_equal([], matchfuzzy([10, 20], 'ac'))
+  call assert_equal(['abc'], matchfuzzy(['abc'], 'abc'))
+  call assert_equal(['crayon', 'camera'], matchfuzzy(['camera', 'crayon'], 'cra'))
+  call assert_equal(['aabbaa', 'aaabbbaaa', 'aaaabbbbaaaa', 'aba'], matchfuzzy(['aba', 'aabbaa', 'aaabbbaaa', 'aaaabbbbaaaa'], 'aa'))
+  call assert_equal(['one'], matchfuzzy(['one', 'two'], 'one'))
+  call assert_equal(['oneTwo', 'onetwo'], matchfuzzy(['onetwo', 'oneTwo'], 'oneTwo'))
+  call assert_equal(['one_two', 'onetwo'], matchfuzzy(['onetwo', 'one_two'], 'oneTwo'))
+  call assert_equal(['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'], matchfuzzy(['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'], 'aa'))
+  call assert_equal([], matchfuzzy([repeat('a', 300)], repeat('a', 257)))
+
+  %bw!
+  eval ['somebuf', 'anotherone', 'needle', 'yetanotherone']->map({_, v -> bufadd(v) + bufload(v)})
+  let l = getbufinfo()->map({_, v -> v.name})->matchfuzzy('ndl')
+  call assert_equal(1, len(l))
+  call assert_match('needle', l[0])
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab
