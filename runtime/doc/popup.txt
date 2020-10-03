@@ -1,4 +1,4 @@
-*popup.txt*  For Vim version 8.2.  Last change: 2020 Sep 08
+*popup.txt*  For Vim version 8.2.  Last change: 2020 Sep 28
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -711,7 +711,7 @@ The second argument of |popup_create()| is a dictionary with options:
 			By default a double line is used all around when
 			'encoding' is "utf-8" and 'ambiwidth' is "single",
 			otherwise ASCII characters are used.
-	scrollbar	non-zero: show a scrollbar when the text doesn't fit.
+	scrollbar	1 or true: show a scrollbar when the text doesn't fit.
 			zero: do not show a scrollbar.  Default is non-zero.
 			Also see |popup-scrollbar|.
 	scrollbarhighlight  Highlight group name for the scrollbar. The
@@ -909,6 +909,11 @@ A mouse click arrives as <LeftMouse>.  The coordinates can be obtained with
 
 Vim provides standard filters |popup_filter_menu()| and
 |popup_filter_yesno()|.
+
+Keys coming from a `:normal` command do not pass through the filter.  This can
+be used to move the cursor in a popup where the "cursorline" option is set: >
+	call win_execute(winid, 'normal! 10Gzz')
+Keys coming from `feedkeys()` are passed through the filter.
 
 Note that "x" is the normal way to close a popup.  You may want to use Esc,
 but since many keys start with an Esc character, there may be a delay before

@@ -226,8 +226,8 @@ def Test_prop_find2()
     endfor
   endfor
   cursor(1, 8)
-  let expected = {'lnum': 1, 'id': 0, 'col': 14, 'end': 1, 'type': 'misspell', 'length': 2, 'start': 1}
-  let result = prop_find(#{type: 'misspell', skipstart: true}, 'f')
+  var expected = {'lnum': 1, 'id': 0, 'col': 14, 'end': 1, 'type': 'misspell', 'length': 2, 'start': 1}
+  var result = prop_find(#{type: 'misspell', skipstart: true}, 'f')
   assert_equal(expected, result)
 
   prop_type_delete('misspell')
@@ -1129,6 +1129,19 @@ func Test_proptype_substitute2()
   :1s/[a-z]\{3\}//g
   let expected = [{'id': 0, 'col': 10, 'end': 1, 'type': 'number', 'length': 3, 'start': 1}]
   call assert_equal(expected, prop_list(1))
+  bwipe!
+endfunc
+
+" This was causing property corruption.
+func Test_proptype_substitute3()
+  new
+  call setline(1, ['abcxxx', 'def'])
+  call prop_type_add("test", {"highlight": "Search"})
+  call prop_add(1, 2, {"end_lnum": 2, "end_col": 2, "type": "test"})
+  %s/x\+$//
+  redraw
+
+  call prop_type_delete('test')
   bwipe!
 endfunc
 

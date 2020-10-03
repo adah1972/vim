@@ -291,6 +291,7 @@ static void	ex_tag_cmd(exarg_T *eap, char_u *name);
 # define ex_function		ex_ni
 # define ex_if			ex_ni
 # define ex_let			ex_ni
+# define ex_var			ex_ni
 # define ex_lockvar		ex_ni
 # define ex_oldfiles		ex_ni
 # define ex_options		ex_ni
@@ -2421,6 +2422,7 @@ do_one_cmd(
 	    case CMD_eval:
 	    case CMD_execute:
 	    case CMD_filter:
+	    case CMD_final:
 	    case CMD_help:
 	    case CMD_hide:
 	    case CMD_ijump:
@@ -2442,9 +2444,9 @@ do_one_cmd(
 	    case CMD_noswapfile:
 	    case CMD_perl:
 	    case CMD_psearch:
-	    case CMD_python:
 	    case CMD_py3:
 	    case CMD_python3:
+	    case CMD_python:
 	    case CMD_return:
 	    case CMD_rightbelow:
 	    case CMD_ruby:
@@ -2460,6 +2462,7 @@ do_one_cmd(
 	    case CMD_topleft:
 	    case CMD_unlet:
 	    case CMD_unlockvar:
+	    case CMD_var:
 	    case CMD_verbose:
 	    case CMD_vertical:
 	    case CMD_wincmd:
@@ -3244,7 +3247,7 @@ find_ex_command(
 		if (skip_expr(&after) == OK
 				  && (*after == '='
 				      || (*after != NUL && after[1] == '=')))
-		    eap->cmdidx = CMD_let;
+		    eap->cmdidx = CMD_var;
 		else
 		    eap->cmdidx = CMD_eval;
 		--emsg_silent;
@@ -3268,7 +3271,7 @@ find_ex_command(
 		}
 		if (p > eap->cmd && *skipwhite(p) == '=')
 		{
-		    eap->cmdidx = CMD_let;
+		    eap->cmdidx = CMD_var;
 		    return eap->cmd;
 		}
 	    }
@@ -3287,7 +3290,7 @@ find_ex_command(
 			|| *eap->cmd == '@'
 			|| lookup(eap->cmd, p - eap->cmd, cctx) != NULL)
 		{
-		    eap->cmdidx = CMD_let;
+		    eap->cmdidx = CMD_var;
 		    return eap->cmd;
 		}
 	    }
@@ -3416,6 +3419,10 @@ find_ex_command(
 	if (p == eap->cmd)
 	    eap->cmdidx = CMD_SIZE;
     }
+
+    // ":fina" means ":finally" for backwards compatibility.
+    if (eap->cmdidx == CMD_final && p - eap->cmd == 4)
+	eap->cmdidx = CMD_finally;
 
     return p;
 }

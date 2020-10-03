@@ -1150,8 +1150,10 @@ EXTERN typebuf_T typebuf		// typeahead buffer
 		    = {NULL, NULL, 0, 0, 0, 0, 0, 0, 0}
 #endif
 		    ;
-EXTERN int	ex_normal_busy INIT(= 0); // recursiveness of ex_normal()
-EXTERN int	ex_normal_lock INIT(= 0); // forbid use of ex_normal()
+EXTERN int	ex_normal_busy INIT(= 0);   // recursiveness of ex_normal()
+EXTERN int	in_feedkeys INIT(= 0);	    // ex_normal_busy set in feedkeys()
+EXTERN int	ex_normal_lock INIT(= 0);   // forbid use of ex_normal()
+
 #ifdef FEAT_EVAL
 EXTERN int	ignore_script INIT(= FALSE);  // ignore script input
 #endif

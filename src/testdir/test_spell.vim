@@ -120,6 +120,66 @@ foobar/?
   set spell&
 endfunc
 
+func Test_spell_file_missing()
+  let s:spell_file_missing = 0
+  augroup TestSpellFileMissing
+    autocmd! SpellFileMissing * let s:spell_file_missing += 1
+  augroup END
+
+  set spell spelllang=ab_cd
+  let messages = GetMessages()
+  call assert_equal('Warning: Cannot find word list "ab.utf-8.spl" or "ab.ascii.spl"', messages[-1])
+  call assert_equal(1, s:spell_file_missing)
+
+  new XTestSpellFileMissing
+  augroup TestSpellFileMissing
+    autocmd! SpellFileMissing * bwipe
+  augroup END
+  call assert_fails('set spell spelllang=ab_cd', 'E797:')
+
+  augroup! TestSpellFileMissing
+  unlet s:spell_file_missing
+  set spell& spelllang&
+  %bwipe!
+endfunc
+
+func Test_spelllang_inv_region()
+  set spell spelllang=en_xx
+  let messages = GetMessages()
+  call assert_equal('Warning: region xx not supported', messages[-1])
+  set spell& spelllang&
+endfunc
+
+func Test_compl_with_CTRL_X_CTRL_K_using_spell()
+  " When spell checking is enabled and 'dictionary' is empty,
+  " CTRL-X CTRL-K in insert mode completes using the spelling dictionary.
+  new
+  set spell spelllang=en dictionary=
+
+  set ignorecase
+  call feedkeys("Senglis\<c-x>\<c-k>\<esc>", 'tnx')
+  call assert_equal(['English'], getline(1, '$'))
+  call feedkeys("SEnglis\<c-x>\<c-k>\<esc>", 'tnx')
+  call assert_equal(['English'], getline(1, '$'))
+
+  set noignorecase
+  call feedkeys("Senglis\<c-x>\<c-k>\<esc>", 'tnx')
+  call assert_equal(['englis'], getline(1, '$'))
+  call feedkeys("SEnglis\<c-x>\<c-k>\<esc>", 'tnx')
+  call assert_equal(['English'], getline(1, '$'))
+
+  set spelllang=en_us
+  call feedkeys("Stheat\<c-x>\<c-k>\<esc>", 'tnx')
+  call assert_equal(['theater'], getline(1, '$'))
+  set spelllang=en_gb
+  call feedkeys("Stheat\<c-x>\<c-k>\<esc>", 'tnx')
+  " FIXME: commented out, expected theatre bug got theater. See issue #7025.
+  " call assert_equal(['theatre'], getline(1, '$'))
+
+  bwipe!
+  set spell& spelllang& dictionary& ignorecase&
+endfunc
+
 func Test_spellreall()
   new
   set spell

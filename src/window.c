@@ -1273,13 +1273,11 @@ win_split_ins(
     if (flags & (WSP_TOP | WSP_BOT))
 	(void)win_comp_pos();
 
-    /*
-     * Both windows need redrawing
-     */
+     // Both windows need redrawing.  Update all status lines, in case they
+     // show something related to the window count or position.
     redraw_win_later(wp, NOT_VALID);
-    wp->w_redr_status = TRUE;
     redraw_win_later(oldwin, NOT_VALID);
-    oldwin->w_redr_status = TRUE;
+    status_redraw_all();
 
     if (need_status)
     {
@@ -2229,7 +2227,7 @@ leaving_window(win_T *win)
     }
 }
 
-    static void
+    void
 entering_window(win_T *win)
 {
     // Only matters for a prompt window.
@@ -2745,6 +2743,7 @@ win_free_mem(
 {
     frame_T	*frp;
     win_T	*wp;
+    tabpage_T	*win_tp = tp == NULL ? curtab : tp;
 
     // Remove the window and its frame from the tree of frames.
     frp = win->w_frame;
@@ -2752,10 +2751,10 @@ win_free_mem(
     vim_free(frp);
     win_free(win, tp);
 
-    // When deleting the current window of another tab page select a new
-    // current window.
-    if (tp != NULL && win == tp->tp_curwin)
-	tp->tp_curwin = wp;
+    // When deleting the current window in the tab, select a new current
+    // window.
+    if (win == win_tp->tp_curwin)
+	win_tp->tp_curwin = wp;
 
     return wp;
 }

@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2020 Aug 04
+" Last Change:	2020 Sep 28
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -317,7 +317,7 @@ au BufNewFile,BufRead *.css			setf css
 au BufNewFile,BufRead *.con			setf cterm
 
 " Changelog
-au BufNewFile,BufRead changelog.Debian,changelog.dch,NEWS.Debian,NEWS.dch
+au BufNewFile,BufRead changelog.Debian,changelog.dch,NEWS.Debian,NEWS.dch,*/debian/changelog
 					\	setf debchangelog
 
 au BufNewFile,BufRead [cC]hange[lL]og
@@ -1162,10 +1162,10 @@ au BufNewFile,BufRead *.papp,*.pxml,*.pxsl	setf papp
 au BufNewFile,BufRead */etc/passwd,*/etc/passwd-,*/etc/passwd.edit,*/etc/shadow,*/etc/shadow-,*/etc/shadow.edit,*/var/backups/passwd.bak,*/var/backups/shadow.bak setf passwd
 
 " Pascal (also *.p)
-au BufNewFile,BufRead *.pas			setf pascal
+au BufNewFile,BufRead *.pas,*.pp		setf pascal
 
-" Delphi project file
-au BufNewFile,BufRead *.dpr			setf pascal
+" Delphi or Lazarus program file
+au BufNewFile,BufRead *.dpr,*.lpr		setf pascal
 
 " PDF
 au BufNewFile,BufRead *.pdf			setf pdf
@@ -1203,7 +1203,7 @@ au BufNewFile,BufRead *.pod6			setf pod6
 au BufNewFile,BufRead *.php,*.php\d,*.phtml,*.ctp	setf php
 
 " PHP config
-au BufNewFile,BufRead php.ini,php.ini-*		setf dosini
+au BufNewFile,BufRead php.ini-*			setf dosini
 
 " Pike and Cmod
 au BufNewFile,BufRead *.pike,*.pmod		setf pike
@@ -1736,7 +1736,7 @@ au BufNewFile,BufRead *.texinfo,*.texi,*.txi	setf texinfo
 au BufNewFile,BufRead texmf.cnf			setf texmf
 
 " Tidy config
-au BufNewFile,BufRead .tidyrc,tidyrc		setf tidy
+au BufNewFile,BufRead .tidyrc,tidyrc,tidy.conf	setf tidy
 
 " TF mud client
 au BufNewFile,BufRead *.tf,.tfrc,tfrc		setf tf

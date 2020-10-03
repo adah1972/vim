@@ -1888,7 +1888,9 @@ vgetc(void)
     }
 #endif
 #ifdef FEAT_PROP_POPUP
-    if (popup_do_filter(c))
+    // Only filter keys that do not come from ":normal".  Keys from feedkeys()
+    // are filtered.
+    if ((!ex_normal_busy || in_feedkeys) && popup_do_filter(c))
     {
 	if (c == Ctrl_C)
 	    got_int = FALSE;  // avoid looping
@@ -3168,6 +3170,7 @@ vgetorpeek(int advance)
 			timedout = TRUE;
 			continue;
 		    }
+
 		    // When 'insertmode' is set, ESC just beeps in Insert
 		    // mode.  Use CTRL-L to make edit() return.
 		    // For the command line only CTRL-C always breaks it.
