@@ -54,11 +54,17 @@ func_tbl_get(void)
 /*
  * Get one function argument.
  * If "argtypes" is not NULL also get the type: "arg: type".
+ * If "types_optional" is TRUE a missing type is OK, use "any".
  * Return a pointer to after the type.
  * When something is wrong return "arg".
  */
     static char_u *
-one_function_arg(char_u *arg, garray_T *newargs, garray_T *argtypes, int skip)
+one_function_arg(
+	char_u	    *arg,
+	garray_T    *newargs,
+	garray_T    *argtypes,
+	int	    types_optional,
+	int	    skip)
 {
     char_u	*p = arg;
     char_u	*arg_copy = NULL;
@@ -105,7 +111,7 @@ one_function_arg(char_u *arg, garray_T *newargs, garray_T *argtypes, int skip)
     }
 
     // get any type from "arg: type"
-    if (argtypes != NULL && ga_grow(argtypes, 1) == OK)
+    if (argtypes != NULL && (skip || ga_grow(argtypes, 1) == OK))
     {
 	char_u *type = NULL;
 
@@ -118,22 +124,29 @@ one_function_arg(char_u *arg, garray_T *newargs, garray_T *argtypes, int skip)
 	if (*p == ':')
 	{
 	    ++p;
-	    if (!VIM_ISWHITE(*p))
+	    if (!skip && !VIM_ISWHITE(*p))
 	    {
 		semsg(_(e_white_space_required_after_str), ":");
 		return arg;
 	    }
 	    type = skipwhite(p);
 	    p = skip_type(type, TRUE);
-	    type = vim_strnsave(type, p - type);
+	    if (!skip)
+		type = vim_strnsave(type, p - type);
 	}
-	else if (*skipwhite(p) != '=')
+	else if (*skipwhite(p) != '=' && !types_optional)
 	{
 	    semsg(_(e_missing_argument_type_for_str),
 					    arg_copy == NULL ? arg : arg_copy);
 	    return arg;
 	}
-	((char_u **)argtypes->ga_data)[argtypes->ga_len++] = type;
+	if (!skip)
+	{
+	    if (type == NULL && types_optional)
+		// lambda arguments default to "any" type
+		type = vim_strsave((char_u *)"any");
+	    ((char_u **)argtypes->ga_data)[argtypes->ga_len++] = type;
+	}
     }
 
     return p;
@@ -148,6 +161,7 @@ get_function_args(
     char_u	endchar,
     garray_T	*newargs,
     garray_T	*argtypes,	// NULL unless using :def
+    int		types_optional,	// types optional if "argtypes" is not NULL
     int		*varargs,
     garray_T	*default_args,
     int		skip,
@@ -196,7 +210,7 @@ get_function_args(
 	{
 	    if (!skip)
 		semsg(_(e_invarg2), *argp);
-	    break;
+	    goto err_ret;
 	}
 	if (*p == endchar)
 	    break;
@@ -213,12 +227,14 @@ get_function_args(
 		// ...name: list<type>
 		if (!eval_isnamec1(*p))
 		{
-		    emsg(_(e_missing_name_after_dots));
-		    break;
+		    if (!skip)
+			emsg(_(e_missing_name_after_dots));
+		    goto err_ret;
 		}
 
 		arg = p;
-		p = one_function_arg(p, newargs, argtypes, skip);
+		p = one_function_arg(p, newargs, argtypes, types_optional,
+									 skip);
 		if (p == arg)
 		    break;
 	    }
@@ -226,7 +242,7 @@ get_function_args(
 	else
 	{
 	    arg = p;
-	    p = one_function_arg(p, newargs, argtypes, skip);
+	    p = one_function_arg(p, newargs, argtypes, types_optional, skip);
 	    if (p == arg)
 		break;
 
@@ -301,6 +317,63 @@ err_ret:
     if (default_args != NULL)
 	ga_clear_strings(default_args);
     return FAIL;
+}
+
+/*
+ * Parse the argument types, filling "fp->uf_arg_types".
+ * Return OK or FAIL.
+ */
+    static int
+parse_argument_types(ufunc_T *fp, garray_T *argtypes, int varargs)
+{
+    ga_init2(&fp->uf_type_list, sizeof(type_T *), 10);
+    if (argtypes->ga_len > 0)
+    {
+	// When "varargs" is set the last name/type goes into uf_va_name
+	// and uf_va_type.
+	int len = argtypes->ga_len - (varargs ? 1 : 0);
+
+	if (len > 0)
+	    fp->uf_arg_types = ALLOC_CLEAR_MULT(type_T *, len);
+	if (fp->uf_arg_types != NULL)
+	{
+	    int	i;
+	    type_T	*type;
+
+	    for (i = 0; i < len; ++ i)
+	    {
+		char_u *p = ((char_u **)argtypes->ga_data)[i];
+
+		if (p == NULL)
+		    // will get the type from the default value
+		    type = &t_unknown;
+		else
+		    type = parse_type(&p, &fp->uf_type_list);
+		if (type == NULL)
+		    return FAIL;
+		fp->uf_arg_types[i] = type;
+	    }
+	}
+	if (varargs)
+	{
+	    char_u *p;
+
+	    // Move the last argument "...name: type" to uf_va_name and
+	    // uf_va_type.
+	    fp->uf_va_name = ((char_u **)fp->uf_args.ga_data)
+						  [fp->uf_args.ga_len - 1];
+	    --fp->uf_args.ga_len;
+	    p = ((char_u **)argtypes->ga_data)[len];
+	    if (p == NULL)
+		// todo: get type from default value
+		fp->uf_va_type = &t_any;
+	    else
+		fp->uf_va_type = parse_type(&p, &fp->uf_type_list);
+	    if (fp->uf_va_type == NULL)
+		return FAIL;
+	}
+    }
+    return OK;
 }
 
 /*
@@ -386,16 +459,22 @@ register_cfunc(cfunc_T cb, cfunc_free_T cb_free, void *state)
 
 /*
  * Parse a lambda expression and get a Funcref from "*arg".
+ * When "types_optional" is TRUE optionally take argument types.
  * Return OK or FAIL.  Returns NOTDONE for dict or {expr}.
  */
     int
-get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
+get_lambda_tv(
+	char_u	    **arg,
+	typval_T    *rettv,
+	int	    types_optional,
+	evalarg_T   *evalarg)
 {
     int		evaluate = evalarg != NULL
 				      && (evalarg->eval_flags & EVAL_EVALUATE);
     garray_T	newargs;
     garray_T	newlines;
     garray_T	*pnewargs;
+    garray_T	argtypes;
     ufunc_T	*fp = NULL;
     partial_T   *pt = NULL;
     int		varargs;
@@ -411,8 +490,9 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 
     // First, check if this is a lambda expression. "->" must exist.
     s = skipwhite(*arg + 1);
-    ret = get_function_args(&s, '-', NULL, NULL, NULL, NULL, TRUE,
-								   NULL, NULL);
+    ret = get_function_args(&s, '-', NULL,
+	    types_optional ? &argtypes : NULL, types_optional,
+						 NULL, NULL, TRUE, NULL, NULL);
     if (ret == FAIL || *s != '>')
 	return NOTDONE;
 
@@ -422,9 +502,9 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
     else
 	pnewargs = NULL;
     *arg = skipwhite(*arg + 1);
-    // TODO: argument types
-    ret = get_function_args(arg, '-', pnewargs, NULL, &varargs, NULL, FALSE,
-								   NULL, NULL);
+    ret = get_function_args(arg, '-', pnewargs,
+	    types_optional ? &argtypes : NULL, types_optional,
+					    &varargs, NULL, FALSE, NULL, NULL);
     if (ret == FAIL || **arg != '>')
 	goto errret;
 
@@ -489,6 +569,10 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	hash_add(&func_hashtab, UF2HIKEY(fp));
 	fp->uf_args = newargs;
 	ga_init(&fp->uf_def_args);
+	if (types_optional
+			 && parse_argument_types(fp, &argtypes, FALSE) == FAIL)
+	    goto errret;
+
 	fp->uf_lines = newlines;
 	if (current_funccal != NULL && eval_lavars)
 	{
@@ -523,11 +607,15 @@ get_lambda_tv(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	evalarg->eval_tofree = tofree;
     else
 	vim_free(tofree);
+    if (types_optional)
+	ga_clear_strings(&argtypes);
     return OK;
 
 errret:
     ga_clear_strings(&newargs);
     ga_clear_strings(&newlines);
+    if (types_optional)
+	ga_clear_strings(&argtypes);
     vim_free(fp);
     vim_free(pt);
     if (evalarg != NULL && evalarg->eval_tofree == NULL)
@@ -1134,6 +1222,7 @@ func_clear_items(ufunc_T *fp)
     ga_clear_strings(&(fp->uf_lines));
     VIM_CLEAR(fp->uf_arg_types);
     VIM_CLEAR(fp->uf_def_arg_idx);
+    VIM_CLEAR(fp->uf_block_ids);
     VIM_CLEAR(fp->uf_va_name);
     clear_type_list(&fp->uf_type_list);
 
@@ -1284,6 +1373,50 @@ failed:
     func_clear_free(fp, TRUE);
 }
 
+static int	funcdepth = 0;
+
+/*
+ * Increment the function call depth count.
+ * Return FAIL when going over 'maxfuncdepth'.
+ * Otherwise return OK, must call funcdepth_decrement() later!
+ */
+    int
+funcdepth_increment(void)
+{
+    if (funcdepth >= p_mfd)
+    {
+	emsg(_("E132: Function call depth is higher than 'maxfuncdepth'"));
+	return FAIL;
+    }
+    ++funcdepth;
+    return OK;
+}
+
+    void
+funcdepth_decrement(void)
+{
+    --funcdepth;
+}
+
+/*
+ * Get the current function call depth.
+ */
+    int
+funcdepth_get(void)
+{
+    return funcdepth;
+}
+
+/*
+ * Restore the function call depth.  This is for cases where there is no
+ * garantee funcdepth_decrement() can be called exactly the same number of
+ * times as funcdepth_increment().
+ */
+    void
+funcdepth_restore(int depth)
+{
+    funcdepth = depth;
+}
 
 /*
  * Call a user function.
@@ -1302,7 +1435,6 @@ call_user_func(
     funccall_T	*fc;
     int		save_did_emsg;
     int		default_arg_err = FALSE;
-    static int	depth = 0;
     dictitem_T	*v;
     int		fixvar_idx = 0;	// index in fixvar[]
     int		i;
@@ -1317,15 +1449,13 @@ call_user_func(
 #endif
     ESTACK_CHECK_DECLARATION
 
-    // If depth of calling is getting too high, don't execute the function
-    if (depth >= p_mfd)
+    // If depth of calling is getting too high, don't execute the function.
+    if (funcdepth_increment() == FAIL)
     {
-	emsg(_("E132: Function call depth is higher than 'maxfuncdepth'"));
 	rettv->v_type = VAR_NUMBER;
 	rettv->vval.v_number = -1;
 	return;
     }
-    ++depth;
 
     line_breakcheck();		// check for CTRL-C hit
 
@@ -1348,7 +1478,7 @@ call_user_func(
     {
 	// Execute the function, possibly compiling it first.
 	call_def_function(fp, argcount, argvars, funcexe->partial, rettv);
-	--depth;
+	funcdepth_decrement();
 	current_funccal = fc->caller;
 	free_funccal(fc);
 	return;
@@ -1694,8 +1824,7 @@ call_user_func(
     }
 
     did_emsg |= save_did_emsg;
-    --depth;
-
+    funcdepth_decrement();
     cleanup_function_call(fc);
 }
 
@@ -2374,6 +2503,7 @@ trans_function_name(
     int		extra = 0;
     lval_T	lv;
     int		vim9script;
+    static char *e_function_name = N_("E129: Function name required");
 
     if (fdp != NULL)
 	CLEAR_POINTER(fdp);
@@ -2401,7 +2531,7 @@ trans_function_name(
     if (end == start)
     {
 	if (!skip)
-	    emsg(_("E129: Function name required"));
+	    emsg(_(e_function_name));
 	goto theend;
     }
     if (end == NULL || (lv.ll_tv != NULL && (lead > 2 || lv.ll_range)))
@@ -2517,6 +2647,12 @@ trans_function_name(
 	}
 	len = (int)(end - lv.ll_name);
     }
+    if (len <= 0)
+    {
+	if (!skip)
+	    emsg(_(e_function_name));
+	goto theend;
+    }
 
     // In Vim9 script a user function is script-local by default.
     vim9script = ASCII_ISUPPER(*start) && in_vim9script();
@@ -2612,7 +2748,7 @@ untrans_function_name(char_u *name)
  * List functions.  When "regmatch" is NULL all of then.
  * Otherwise functions matching "regmatch".
  */
-    static void
+    void
 list_functions(regmatch_T *regmatch)
 {
     int		changed = func_hashtab.ht_changed;
@@ -2651,7 +2787,7 @@ list_functions(regmatch_T *regmatch)
  * Returns a pointer to the function or NULL if no function defined.
  */
     ufunc_T *
-def_function(exarg_T *eap, char_u *name_arg)
+define_function(exarg_T *eap, char_u *name_arg)
 {
     char_u	*theline;
     char_u	*line_to_free = NULL;
@@ -2899,7 +3035,7 @@ def_function(exarg_T *eap, char_u *name_arg)
     // This may get more lines and make the pointers into the first line
     // invalid.
     if (get_function_args(&p, ')', &newargs,
-			eap->cmdidx == CMD_def ? &argtypes : NULL,
+			eap->cmdidx == CMD_def ? &argtypes : NULL, FALSE,
 			 &varargs, &default_args, eap->skip,
 			 eap, &line_to_free) == FAIL)
 	goto errret_2;
@@ -3049,7 +3185,9 @@ def_function(exarg_T *eap, char_u *name_arg)
 	    lines_left = Rows - 1;
 	if (theline == NULL)
 	{
-	    if (eap->cmdidx == CMD_def)
+	    if (skip_until != NULL)
+		semsg(_(e_missing_heredoc_end_marker_str), skip_until);
+	    else if (eap->cmdidx == CMD_def)
 		emsg(_(e_missing_enddef));
 	    else
 		emsg(_("E126: Missing :endfunction"));
@@ -3216,18 +3354,24 @@ def_function(exarg_T *eap, char_u *name_arg)
 
 	    // Check for ":cmd v =<< [trim] EOF"
 	    //       and ":cmd [a, b] =<< [trim] EOF"
+	    //       and "lines =<< [trim] EOF" for Vim9
 	    // Where "cmd" can be "let", "var", "final" or "const".
 	    arg = skipwhite(skiptowhite(p));
 	    if (*arg == '[')
 		arg = vim_strchr(arg, ']');
 	    if (arg != NULL)
 	    {
-		arg = skipwhite(skiptowhite(arg));
-		if (arg[0] == '=' && arg[1] == '<' && arg[2] =='<'
+		int found = (eap->cmdidx == CMD_def && arg[0] == '='
+					     && arg[1] == '<' && arg[2] =='<');
+
+		if (!found)
+		    // skip over the argument after "cmd"
+		    arg = skipwhite(skiptowhite(arg));
+		if (found || (arg[0] == '=' && arg[1] == '<' && arg[2] =='<'
 			&& (checkforcmd(&p, "let", 2)
 			    || checkforcmd(&p, "var", 3)
 			    || checkforcmd(&p, "final", 5)
-			    || checkforcmd(&p, "const", 5)))
+			    || checkforcmd(&p, "const", 5))))
 		{
 		    p = skipwhite(arg + 3);
 		    if (STRNCMP(p, "trim", 4) == 0)
@@ -3463,66 +3607,43 @@ def_function(exarg_T *eap, char_u *name_arg)
 
     if (eap->cmdidx == CMD_def)
     {
-	int	lnum_save = SOURCING_LNUM;
+	int	    lnum_save = SOURCING_LNUM;
+	cstack_T    *cstack = eap->cstack;
 
 	fp->uf_def_status = UF_TO_BE_COMPILED;
 
 	// error messages are for the first function line
 	SOURCING_LNUM = sourcing_lnum_top;
 
-	// parse the argument types
-	ga_init2(&fp->uf_type_list, sizeof(type_T *), 10);
-
-	if (argtypes.ga_len > 0)
+	if (cstack != NULL && cstack->cs_idx >= 0)
 	{
-	    // When "varargs" is set the last name/type goes into uf_va_name
-	    // and uf_va_type.
-	    int len = argtypes.ga_len - (varargs ? 1 : 0);
+	    int	    count = cstack->cs_idx + 1;
+	    int	    i;
 
-	    if (len > 0)
-		fp->uf_arg_types = ALLOC_CLEAR_MULT(type_T *, len);
-	    if (fp->uf_arg_types != NULL)
+	    // The block context may be needed for script variables declared in
+	    // a block that is visible now but not when the function is called
+	    // later.
+	    fp->uf_block_ids = ALLOC_MULT(int, count);
+	    if (fp->uf_block_ids != NULL)
 	    {
-		int	i;
-		type_T	*type;
+		mch_memmove(fp->uf_block_ids, cstack->cs_block_id,
+							  sizeof(int) * count);
+		fp->uf_block_depth = count;
+	    }
 
-		for (i = 0; i < len; ++ i)
-		{
-		    p = ((char_u **)argtypes.ga_data)[i];
-		    if (p == NULL)
-			// will get the type from the default value
-			type = &t_unknown;
-		    else
-			type = parse_type(&p, &fp->uf_type_list);
-		    if (type == NULL)
-		    {
-			SOURCING_LNUM = lnum_save;
-			goto errret_2;
-		    }
-		    fp->uf_arg_types[i] = type;
-		}
-	    }
-	    if (varargs)
-	    {
-		// Move the last argument "...name: type" to uf_va_name and
-		// uf_va_type.
-		fp->uf_va_name = ((char_u **)fp->uf_args.ga_data)
-						      [fp->uf_args.ga_len - 1];
-		--fp->uf_args.ga_len;
-		p = ((char_u **)argtypes.ga_data)[len];
-		if (p == NULL)
-		    // todo: get type from default value
-		    fp->uf_va_type = &t_any;
-		else
-		    fp->uf_va_type = parse_type(&p, &fp->uf_type_list);
-		if (fp->uf_va_type == NULL)
-		{
-		    SOURCING_LNUM = lnum_save;
-		    goto errret_2;
-		}
-	    }
-	    varargs = FALSE;
+	    // Set flag in each block to indicate a function was defined.  This
+	    // is used to keep the variable when leaving the block, see
+	    // hide_script_var().
+	    for (i = 0; i <= cstack->cs_idx; ++i)
+		cstack->cs_flags[i] |= CSF_FUNC_DEF;
 	}
+
+	if (parse_argument_types(fp, &argtypes, varargs) == FAIL)
+	{
+	    SOURCING_LNUM = lnum_save;
+	    goto errret_2;
+	}
+	varargs = FALSE;
 
 	// parse the return type, if any
 	if (ret_type == NULL)
@@ -3584,6 +3705,7 @@ errret_2:
 ret_free:
     ga_clear_strings(&argtypes);
     vim_free(skip_until);
+    vim_free(heredoc_trimmed);
     vim_free(line_to_free);
     vim_free(fudi.fd_newkey);
     if (name != name_arg)
@@ -3601,7 +3723,7 @@ ret_free:
     void
 ex_function(exarg_T *eap)
 {
-    (void)def_function(eap, NULL);
+    (void)define_function(eap, NULL);
 }
 
 /*

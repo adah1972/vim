@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2020 Sep 28
+" Last Change:	2020 Dec 07
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -696,12 +696,15 @@ au BufNewFile,BufRead .gtkrc,gtkrc		setf gtkrc
 au BufNewFile,BufRead *.haml			setf haml
 
 " Hamster Classic | Playground files
-au BufNewFile,BufRead *.hsc,*.hsm		setf hamster
+au BufNewFile,BufRead *.hsm	  		setf hamster
 
 " Haskell
-au BufNewFile,BufRead *.hs,*.hs-boot		setf haskell
+au BufNewFile,BufRead *.hs,*.hsc,*.hs-boot	setf haskell
 au BufNewFile,BufRead *.lhs			setf lhaskell
 au BufNewFile,BufRead *.chs			setf chaskell
+au BufNewFile,BufRead cabal.project		setf cabalproject
+au BufNewFile,BufRead $HOME/.cabal/config	setf cabalconfig
+au BufNewFile,BufRead cabal.config		setf cabalconfig
 
 " Haste
 au BufNewFile,BufRead *.ht			setf haste
@@ -1305,6 +1308,7 @@ au BufNewFile,BufRead *.pml			setf promela
 
 " Google protocol buffers
 au BufNewFile,BufRead *.proto			setf proto
+au BufNewFile,BufRead *.pbtxt			setf pbtxt
 
 " Protocols
 au BufNewFile,BufRead */etc/protocols		setf protocols
@@ -1341,13 +1345,6 @@ au BufNewFile,BufRead *.rego			setf rego
 
 " Rexx
 au BufNewFile,BufRead *.rex,*.orx,*.rxo,*.rxj,*.jrexx,*.rexxj,*.rexx,*.testGroup,*.testUnit	setf rexx
-
-" R (Splus)
-if has("fname_case")
-  au BufNewFile,BufRead *.s,*.S			setf r
-else
-  au BufNewFile,BufRead *.s			setf r
-endif
 
 " R Help file
 if has("fname_case")
@@ -1513,9 +1510,10 @@ au BufNewFile,BufRead *.decl,*.dcl,*.dec
 au BufNewFile,BufRead catalog			setf catalog
 
 " Shell scripts (sh, ksh, bash, bash2, csh); Allow .profile_foo etc.
-" Gentoo ebuilds and Arch Linux PKGBUILDs are actually bash scripts
+" Gentoo ebuilds, Arch Linux PKGBUILDs and Alpine Linux APKBUILDs are actually
+" bash scripts.
 " NOTE: Patterns ending in a star are further down, these have lower priority.
-au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,bash-fc[-.],*.bash,*/{,.}bash[_-]completion{,.d,.sh}{,/*},*.ebuild,*.eclass,PKGBUILD call dist#ft#SetFileTypeSH("bash")
+au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,bash-fc[-.],*.bash,*/{,.}bash[_-]completion{,.d,.sh}{,/*},*.ebuild,*.eclass,PKGBUILD,APKBUILD call dist#ft#SetFileTypeSH("bash")
 au BufNewFile,BufRead .kshrc,*.ksh call dist#ft#SetFileTypeSH("ksh")
 au BufNewFile,BufRead */etc/profile,.profile,*.sh,*.env call dist#ft#SetFileTypeSH(getline(1))
 
@@ -1727,7 +1725,7 @@ au BufNewFile,BufRead *.latex,*.sty,*.dtx,*.ltx,*.bbl	setf tex
 au BufNewFile,BufRead *.tex			call dist#ft#FTtex()
 
 " ConTeXt
-au BufNewFile,BufRead *.mkii,*.mkiv,*.mkvi   setf context
+au BufNewFile,BufRead *.mkii,*.mkiv,*.mkvi,*.mkxl,*.mklx   setf context
 
 " Texinfo
 au BufNewFile,BufRead *.texinfo,*.texi,*.txi	setf texinfo
@@ -1743,6 +1741,9 @@ au BufNewFile,BufRead *.tf,.tfrc,tfrc		setf tf
 
 " tmux configuration
 au BufNewFile,BufRead {.,}tmux*.conf		setf tmux
+
+" TOML
+au BufNewFile,BufRead *.toml			setf toml
 
 " TPP - Text Presentation Program
 au BufNewFile,BufReadPost *.tpp			setf tpp
@@ -1765,8 +1766,13 @@ au BufNewFile,BufReadPost *.tsscl		setf tsscl
 " TWIG files
 au BufNewFile,BufReadPost *.twig		setf twig
 
-" Typescript
-au BufNewFile,BufReadPost *.ts			setf typescript
+" Typescript or Qt translation file (which is XML)
+au BufNewFile,BufReadPost *.ts
+	\ if getline(1) =~ '<?xml' |
+	\   setf xml |
+	\ else |
+	\   setf typescript |
+	\ endif
 
 " TypeScript with React
 au BufNewFile,BufRead *.tsx			setf typescriptreact
@@ -2042,11 +2048,13 @@ au BufNewFile,BufRead bzr_log.*			setf bzr
 
 " Bazel build file
 if !has("fname_case")
-  au BufNewFile,BufRead *.BUILD,BUILD			setf bzl
+  au BufNewFile,BufRead *.BUILD,BUILD		setf bzl
 endif
 
 " BIND zone
 au BufNewFile,BufRead */named/db.*,*/bind/db.*	call s:StarSetf('bindzone')
+
+au BufNewFile,BufRead cabal.project.*		call s:StarSetf('cabalproject')
 
 " Calendar
 au BufNewFile,BufRead */.calendar/*,
@@ -2170,7 +2178,7 @@ au BufNewFile,BufRead .reminders*		call s:StarSetf('remind')
 au BufNewFile,BufRead sgml.catalog*		call s:StarSetf('catalog')
 
 " Shell scripts ending in a star
-au BufNewFile,BufRead .bashrc*,.bash[_-]profile*,.bash[_-]logout*,.bash[_-]aliases*,bash-fc[-.]*,,PKGBUILD* call dist#ft#SetFileTypeSH("bash")
+au BufNewFile,BufRead .bashrc*,.bash[_-]profile*,.bash[_-]logout*,.bash[_-]aliases*,bash-fc[-.]*,PKGBUILD*,APKBUILD* call dist#ft#SetFileTypeSH("bash")
 au BufNewFile,BufRead .kshrc* call dist#ft#SetFileTypeSH("ksh")
 au BufNewFile,BufRead .profile* call dist#ft#SetFileTypeSH(getline(1))
 

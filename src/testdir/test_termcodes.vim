@@ -1896,14 +1896,14 @@ endfunc
 
 func Test_list_builtin_terminals()
   CheckRunVimInTerminal
-  let buf = RunVimInTerminal('', #{rows: 14})
-  call term_sendkeys(buf, ":set cmdheight=3\<CR>")
-  call TermWait(buf, 100)
-  call term_sendkeys(buf, ":set term=xxx\<CR>")
-  call TermWait(buf, 100)
-  call assert_match('builtin_dumb', term_getline(buf, 11))
-  call assert_match('Not found in termcap', term_getline(buf, 12))
-  call StopVimInTerminal(buf)
+  call RunVimInTerminal('', #{rows: 14})
+  call term_sendkeys('', ":set cmdheight=3\<CR>")
+  call TermWait('', 100)
+  call term_sendkeys('', ":set term=xxx\<CR>")
+  call TermWait('', 100)
+  call assert_match('builtin_dumb', term_getline('', 11))
+  call assert_match('Not found in termcap', term_getline('', 12))
+  call StopVimInTerminal('')
 endfunc
 
 func GetEscCodeCSI27(key, modifier)
@@ -1966,6 +1966,16 @@ func RunTest_modifyOtherKeys(func)
   bwipe aaa
   bwipe bbb
 
+  " Ctrl-V X 33 is 3
+  call setline(1, '')
+  call feedkeys("a\<C-V>" .. a:func('X', 2) .. "33\<Esc>", 'Lx!')
+  call assert_equal("3", getline(1))
+
+  " Ctrl-V U 12345 is Unicode 12345
+  call setline(1, '')
+  call feedkeys("a\<C-V>" .. a:func('U', 2) .. "12345\<Esc>", 'Lx!')
+  call assert_equal("\U12345", getline(1))
+
   bwipe!
   set timeoutlen&
 endfunc
@@ -2027,6 +2037,23 @@ func Test_modifyOtherKeys_mapped()
   iunmap '
   iunmap <C-W><C-A>
   set timeoutlen&
+endfunc
+
+" Whether Shift-Tab sends "ESC [ Z" or "ESC [ 27 ; 2 ; 9 ~" is unpredictable,
+" both should work.
+func Test_modifyOtherKeys_shift_tab()
+  set timeoutlen=10
+
+  call setline(1, '')
+  call feedkeys("a\<C-K>" .. GetEscCodeCSI27("\t", '2') .. "\<Esc>", 'Lx!')
+  eval getline(1)->assert_equal('<S-Tab>')
+
+  call setline(1, '')
+  call feedkeys("a\<C-K>\<Esc>[Z\<Esc>", 'Lx!')
+  eval getline(1)->assert_equal('<S-Tab>')
+
+  set timeoutlen&
+  bwipe!
 endfunc
 
 func RunTest_mapping_works_with_shift(func)
@@ -2103,11 +2130,47 @@ endfunc
 func Test_mapping_works_with_ctrl()
   call RunTest_mapping_works_with_mods(function('GetEscCodeCSI27'), 'C', 5)
   call RunTest_mapping_works_with_mods(function('GetEscCodeCSIu'), 'C', 5)
+
+  new
+  set timeoutlen=10
+
+  " CTRL-@ actually produces the code for CTRL-2, which is converted
+  call RunTest_mapping_mods('<C-@>', '2', function('GetEscCodeCSI27'), 5)
+  call RunTest_mapping_mods('<C-@>', '2', function('GetEscCodeCSIu'), 5)
+
+  " CTRL-^ actually produces the code for CTRL-6, which is converted
+  call RunTest_mapping_mods('<C-^>', '6', function('GetEscCodeCSI27'), 5)
+  call RunTest_mapping_mods('<C-^>', '6', function('GetEscCodeCSIu'), 5)
+
+  " CTRL-_ actually produces the code for CTRL--, which is converted
+  call RunTest_mapping_mods('<C-_>', '-', function('GetEscCodeCSI27'), 5)
+  call RunTest_mapping_mods('<C-_>', '-', function('GetEscCodeCSIu'), 5)
+
+  bwipe!
+  set timeoutlen&
 endfunc
 
 func Test_mapping_works_with_shift_ctrl()
   call RunTest_mapping_works_with_mods(function('GetEscCodeCSI27'), 'C-S', 6)
   call RunTest_mapping_works_with_mods(function('GetEscCodeCSIu'), 'C-S', 6)
+
+  new
+  set timeoutlen=10
+
+  " Ctrl-Shift-[ actually produces CTRL-Shift-{ which is mapped as <C-{>
+  call RunTest_mapping_mods('<C-{>', '{', function('GetEscCodeCSI27'), 6)
+  call RunTest_mapping_mods('<C-{>', '{', function('GetEscCodeCSIu'), 6)
+
+  " Ctrl-Shift-] actually produces CTRL-Shift-} which is mapped as <C-}>
+  call RunTest_mapping_mods('<C-{>', '{', function('GetEscCodeCSI27'), 6)
+  call RunTest_mapping_mods('<C-{>', '{', function('GetEscCodeCSIu'), 6)
+
+  " Ctrl-Shift-\ actually produces CTRL-Shift-| which is mapped as <C-|>
+  call RunTest_mapping_mods('<C-\|>', '|', function('GetEscCodeCSI27'), 6)
+  call RunTest_mapping_mods('<C-\|>', '|', function('GetEscCodeCSIu'), 6)
+
+  bwipe!
+  set timeoutlen&
 endfunc
 
 " Below we also test the "u" code with Alt, This works, but libvterm would not

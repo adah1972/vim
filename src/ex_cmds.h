@@ -55,6 +55,7 @@
 #define EX_LOCK_OK  0x1000000	// command can be executed when textlock is
 				// set; when missing disallows editing another
 				// buffer when curbuf_lock is set
+#define EX_NONWHITE_OK 0x2000000  // command can be followed by non-white
 
 #define EX_FILES (EX_XFILE | EX_EXTRA)	// multiple extra files allowed
 #define EX_FILE1 (EX_FILES | EX_NOSPC)	// 1 file, defaults to current file
@@ -176,6 +177,9 @@ EXCMD(CMD_ball,		"ball",		ex_buffer_all,
 	EX_RANGE|EX_COUNT|EX_TRLBAR,
 	ADDR_OTHER),
 EXCMD(CMD_badd,		"badd",		ex_edit,
+	EX_NEEDARG|EX_FILE1|EX_CMDARG|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK,
+	ADDR_NONE),
+EXCMD(CMD_balt,		"balt",		ex_edit,
 	EX_NEEDARG|EX_FILE1|EX_CMDARG|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK,
 	ADDR_NONE),
 EXCMD(CMD_bdelete,	"bdelete",	ex_bunload,
@@ -629,7 +633,7 @@ EXCMD(CMD_function,	"function",	ex_function,
 	EX_EXTRA|EX_BANG|EX_SBOXOK|EX_CMDWIN|EX_LOCK_OK,
 	ADDR_NONE),
 EXCMD(CMD_global,	"global",	ex_global,
-	EX_RANGE|EX_WHOLEFOLD|EX_BANG|EX_EXTRA|EX_DFLALL|EX_SBOXOK|EX_CMDWIN|EX_LOCK_OK,
+	EX_RANGE|EX_WHOLEFOLD|EX_BANG|EX_EXTRA|EX_DFLALL|EX_SBOXOK|EX_CMDWIN|EX_LOCK_OK|EX_NONWHITE_OK,
 	ADDR_LINES),
 EXCMD(CMD_goto,		"goto",		ex_goto,
 	EX_RANGE|EX_COUNT|EX_TRLBAR|EX_SBOXOK|EX_CMDWIN|EX_LOCK_OK,
@@ -926,10 +930,10 @@ EXCMD(CMD_luafile,	"luafile",	ex_luafile,
 	EX_RANGE|EX_FILE1|EX_NEEDARG|EX_CMDWIN|EX_LOCK_OK|EX_RESTRICT,
 	ADDR_LINES),
 EXCMD(CMD_lvimgrep,	"lvimgrep",	ex_vimgrep,
-	EX_RANGE|EX_BANG|EX_NEEDARG|EX_EXTRA|EX_NOTRLCOM|EX_TRLBAR|EX_XFILE,
+	EX_RANGE|EX_BANG|EX_NEEDARG|EX_EXTRA|EX_NOTRLCOM|EX_TRLBAR|EX_XFILE|EX_LOCK_OK,
 	ADDR_OTHER),
 EXCMD(CMD_lvimgrepadd,	"lvimgrepadd",	ex_vimgrep,
-	EX_RANGE|EX_BANG|EX_NEEDARG|EX_EXTRA|EX_NOTRLCOM|EX_TRLBAR|EX_XFILE,
+	EX_RANGE|EX_BANG|EX_NEEDARG|EX_EXTRA|EX_NOTRLCOM|EX_TRLBAR|EX_XFILE|EX_LOCK_OK,
 	ADDR_OTHER),
 EXCMD(CMD_lwindow,	"lwindow",	ex_cwindow,
 	EX_RANGE|EX_COUNT|EX_TRLBAR,
@@ -1274,7 +1278,7 @@ EXCMD(CMD_rviminfo,	"rviminfo",	ex_viminfo,
 	EX_BANG|EX_FILE1|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK,
 	ADDR_NONE),
 EXCMD(CMD_substitute,	"substitute",	ex_substitute,
-	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_CMDWIN|EX_LOCK_OK,
+	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_CMDWIN|EX_LOCK_OK|EX_NONWHITE_OK,
 	ADDR_LINES),
 EXCMD(CMD_sNext,	"sNext",	ex_previous,
 	EX_EXTRA|EX_RANGE|EX_COUNT|EX_BANG|EX_CMDARG|EX_ARGOPT|EX_TRLBAR,
@@ -1649,7 +1653,7 @@ EXCMD(CMD_update,	"update",	ex_update,
 	EX_RANGE|EX_WHOLEFOLD|EX_BANG|EX_FILE1|EX_ARGOPT|EX_DFLALL|EX_TRLBAR,
 	ADDR_LINES),
 EXCMD(CMD_vglobal,	"vglobal",	ex_global,
-	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_DFLALL|EX_CMDWIN|EX_LOCK_OK,
+	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_DFLALL|EX_CMDWIN|EX_LOCK_OK|EX_NONWHITE_OK,
 	ADDR_LINES),
 EXCMD(CMD_var,		"var",		ex_var,
 	EX_EXTRA|EX_NOTRLCOM|EX_SBOXOK|EX_CMDWIN|EX_LOCK_OK,
@@ -1670,10 +1674,10 @@ EXCMD(CMD_view,		"view",		ex_edit,
 	EX_BANG|EX_FILE1|EX_CMDARG|EX_ARGOPT|EX_TRLBAR,
 	ADDR_NONE),
 EXCMD(CMD_vimgrep,	"vimgrep",	ex_vimgrep,
-	EX_RANGE|EX_BANG|EX_NEEDARG|EX_EXTRA|EX_NOTRLCOM|EX_TRLBAR|EX_XFILE,
+	EX_RANGE|EX_BANG|EX_NEEDARG|EX_EXTRA|EX_NOTRLCOM|EX_TRLBAR|EX_XFILE|EX_LOCK_OK,
 	ADDR_OTHER),
 EXCMD(CMD_vimgrepadd,	"vimgrepadd",	ex_vimgrep,
-	EX_RANGE|EX_BANG|EX_NEEDARG|EX_EXTRA|EX_NOTRLCOM|EX_TRLBAR|EX_XFILE,
+	EX_RANGE|EX_BANG|EX_NEEDARG|EX_EXTRA|EX_NOTRLCOM|EX_TRLBAR|EX_XFILE|EX_LOCK_OK,
 	ADDR_OTHER),
 EXCMD(CMD_vim9script,	"vim9script",	ex_vim9script,
 	EX_CMDWIN|EX_LOCK_OK,
@@ -1789,16 +1793,16 @@ EXCMD(CMD_z,		"z",		ex_z,
 
 // commands that don't start with a letter
 EXCMD(CMD_bang,		"!",		ex_bang,
-	EX_RANGE|EX_WHOLEFOLD|EX_BANG|EX_FILES|EX_CMDWIN|EX_LOCK_OK,
+	EX_RANGE|EX_WHOLEFOLD|EX_BANG|EX_FILES|EX_CMDWIN|EX_LOCK_OK|EX_NONWHITE_OK,
 	ADDR_LINES),
 EXCMD(CMD_pound,	"#",		ex_print,
 	EX_RANGE|EX_WHOLEFOLD|EX_COUNT|EX_FLAGS|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK,
 	ADDR_LINES),
 EXCMD(CMD_and,		"&",		ex_substitute,
-	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_CMDWIN|EX_LOCK_OK|EX_MODIFY,
+	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_CMDWIN|EX_LOCK_OK|EX_MODIFY|EX_NONWHITE_OK,
 	ADDR_LINES),
 EXCMD(CMD_star,		"*",		ex_at,
-	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK,
+	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK|EX_NONWHITE_OK,
 	ADDR_LINES),
 EXCMD(CMD_lshift,	"<",		ex_operators,
 	EX_RANGE|EX_WHOLEFOLD|EX_COUNT|EX_FLAGS|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK|EX_MODIFY,
@@ -1810,10 +1814,16 @@ EXCMD(CMD_rshift,	">",		ex_operators,
 	EX_RANGE|EX_WHOLEFOLD|EX_COUNT|EX_FLAGS|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK|EX_MODIFY,
 	ADDR_LINES),
 EXCMD(CMD_at,		"@",		ex_at,
-	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK,
+	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK|EX_NONWHITE_OK,
 	ADDR_LINES),
+EXCMD(CMD_block,	"{{{{{{{{",	ex_block,  // not found normally
+	0,
+	ADDR_NONE),
+EXCMD(CMD_endblock,	"}",		ex_endblock,
+	EX_TRLBAR|EX_CMDWIN|EX_LOCK_OK,
+	ADDR_NONE),
 EXCMD(CMD_tilde,	"~",		ex_substitute,
-	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_CMDWIN|EX_LOCK_OK|EX_MODIFY,
+	EX_RANGE|EX_WHOLEFOLD|EX_EXTRA|EX_CMDWIN|EX_LOCK_OK|EX_MODIFY|EX_NONWHITE_OK,
 	ADDR_LINES),
 
 // commands that start with an uppercase letter
@@ -1877,12 +1887,6 @@ struct exarg
     void	*cookie;	// argument for getline()
 #ifdef FEAT_EVAL
     cstack_T	*cstack;	// condition stack for ":if" etc.
-#endif
-    long	verbose_save;	 // saved value of p_verbose
-    int		save_msg_silent; // saved value of msg_silent
-    int		did_esilent;	 // how many times emsg_silent was incremented
-#ifdef HAVE_SANDBOX
-    int		did_sandbox;	// when TRUE did ++sandbox
 #endif
 };
 

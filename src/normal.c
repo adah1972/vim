@@ -375,6 +375,7 @@ static const struct nv_cmd
 #endif
     {K_CURSORHOLD, nv_cursorhold, NV_KEEPREG,		0},
     {K_PS,	nv_edit,	0,			0},
+    {K_COMMAND,	nv_colon,	0,			0},
 };
 
 // Number of commands in nv_cmds[].
@@ -1154,6 +1155,7 @@ getcount:
 	    && stuff_empty()
 	    && typebuf_typed()
 	    && emsg_silent == 0
+	    && !in_assert_fails
 	    && !did_wait_return
 	    && oap->op_type == OP_NOP)
     {
@@ -1323,6 +1325,26 @@ check_visual_highlight(void)
     }
 }
 
+#if defined(FEAT_CLIPBOARD) && defined(FEAT_EVAL)
+/*
+ * Call yank_do_autocmd() for "regname".
+ */
+    static void
+call_yank_do_autocmd(int regname)
+{
+    oparg_T	oa;
+    yankreg_T	*reg;
+
+    clear_oparg(&oa);
+    oa.regname = regname;
+    oa.op_type = OP_YANK;
+    oa.is_VIsual = TRUE;
+    reg = get_register(regname, TRUE);
+    yank_do_autocmd(&oa, reg);
+    free_register(reg);
+}
+#endif
+
 /*
  * End Visual mode.
  * This function should ALWAYS be called to end Visual mode, except from
@@ -1340,6 +1362,18 @@ end_visual_mode(void)
      */
     if (clip_star.available && clip_star.owned)
 	clip_auto_select();
+
+# if defined(FEAT_EVAL)
+    // Emit a TextYankPost for the automatic copy of the selection into the
+    // star and/or plus register.
+    if (has_textyankpost())
+    {
+	if (clip_isautosel_star())
+	    call_yank_do_autocmd('*');
+	if (clip_isautosel_plus())
+	    call_yank_do_autocmd('+');
+    }
+# endif
 #endif
 
     VIsual_active = FALSE;
@@ -3311,10 +3345,11 @@ nv_exmode(cmdarg_T *cap)
     static void
 nv_colon(cmdarg_T *cap)
 {
-    int	    old_p_im;
-    int	    cmd_result;
+    int	old_p_im;
+    int	cmd_result;
+    int	is_cmdkey = cap->cmdchar == K_COMMAND;
 
-    if (VIsual_active)
+    if (VIsual_active && !is_cmdkey)
 	nv_operator(cap);
     else
     {
@@ -3324,7 +3359,7 @@ nv_colon(cmdarg_T *cap)
 	    cap->oap->motion_type = MCHAR;
 	    cap->oap->inclusive = FALSE;
 	}
-	else if (cap->count0)
+	else if (cap->count0 && !is_cmdkey)
 	{
 	    // translate "count:" into ":.,.+(count - 1)"
 	    stuffcharReadbuff('.');
@@ -3342,7 +3377,7 @@ nv_colon(cmdarg_T *cap)
 	old_p_im = p_im;
 
 	// get a command line and execute it
-	cmd_result = do_cmdline(NULL, getexline, NULL,
+	cmd_result = do_cmdline(NULL, is_cmdkey ? getcmdkeycmd : getexline, NULL,
 			    cap->oap->op_type != OP_NOP ? DOCMD_KEEPLINE : 0);
 
 	// If 'insertmode' changed, enter or exit Insert mode
@@ -4892,7 +4927,7 @@ nv_replace(cmdarg_T *cap)
     if (cap->nchar == Ctrl_V)
     {
 	had_ctrl_v = Ctrl_V;
-	cap->nchar = get_literal();
+	cap->nchar = get_literal(FALSE);
 	// Don't redo a multibyte character with CTRL-V.
 	if (cap->nchar > DEL)
 	    had_ctrl_v = NUL;
@@ -5173,7 +5208,7 @@ nv_vreplace(cmdarg_T *cap)
 	else
 	{
 	    if (cap->extra_char == Ctrl_V)	// get another character
-		cap->extra_char = get_literal();
+		cap->extra_char = get_literal(FALSE);
 	    stuffcharReadbuff(cap->extra_char);
 	    stuffcharReadbuff(ESC);
 	    if (virtual_active())
@@ -5752,7 +5787,7 @@ nv_suspend(cmdarg_T *cap)
     clearop(cap->oap);
     if (VIsual_active)
 	end_visual_mode();		// stop Visual mode
-    do_cmdline_cmd((char_u *)"st");
+    do_cmdline_cmd((char_u *)"stop");
 }
 
 /*

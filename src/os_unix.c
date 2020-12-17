@@ -585,6 +585,7 @@ mch_total_mem(int special UNUSED)
 mch_delay(long msec, int flags)
 {
     tmode_T	old_tmode;
+    int		call_settmode;
 #ifdef FEAT_MZSCHEME
     long	total = msec; // remember original value
 #endif
@@ -596,10 +597,13 @@ mch_delay(long msec, int flags)
 	// shell may produce SIGQUIT).
 	// Only do this if sleeping for more than half a second.
 	in_mch_delay = TRUE;
-	old_tmode = mch_cur_tmode;
-	if (mch_cur_tmode == TMODE_RAW
-			       && (msec > 500 || (flags & MCH_DELAY_SETTMODE)))
+	call_settmode = mch_cur_tmode == TMODE_RAW
+			       && (msec > 500 || (flags & MCH_DELAY_SETTMODE));
+	if (call_settmode)
+	{
+	    old_tmode = mch_cur_tmode;
 	    settmode(TMODE_SLEEP);
+	}
 
 	/*
 	 * Everybody sleeps in a different way...
@@ -653,7 +657,7 @@ mch_delay(long msec, int flags)
 	while (total > 0);
 #endif
 
-	if (msec > 500 || (flags & MCH_DELAY_SETTMODE))
+	if (call_settmode)
 	    settmode(old_tmode);
 	in_mch_delay = FALSE;
     }
@@ -2828,8 +2832,10 @@ mch_copy_sec(char_u *from_file, char_u *to_file)
 
     if (selinux_enabled > 0)
     {
-	security_context_t from_context = NULL;
-	security_context_t to_context = NULL;
+	// Use "char *" instead of "security_context_t" to avoid a deprecation
+	// warning.
+	char *from_context = NULL;
+	char *to_context = NULL;
 
 	if (getfilecon((char *)from_file, &from_context) < 0)
 	{
@@ -5267,8 +5273,10 @@ finished:
 	    {
 		long delay_msec = 1;
 
-		out_str(T_CTE);	// possibly disables modifyOtherKeys, so that
-				// the system can recognize CTRL-C
+		if (tmode == TMODE_RAW)
+		    // possibly disables modifyOtherKeys, so that the system
+		    // can recognize CTRL-C
+		    out_str(T_CTE);
 
 		/*
 		 * Similar to the loop above, but only handle X events, no
@@ -5310,7 +5318,9 @@ finished:
 			delay_msec = 10;
 		}
 
-		out_str(T_CTI);	// possibly enables modifyOtherKeys again
+		if (tmode == TMODE_RAW)
+		    // possibly enables modifyOtherKeys again
+		    out_str(T_CTI);
 	    }
 # endif
 
@@ -7862,15 +7872,15 @@ clip_xterm_set_selection(Clipboard_T *cbd)
     static void
 xsmp_handle_interaction(SmcConn smc_conn, SmPointer client_data UNUSED)
 {
-    cmdmod_T	save_cmdmod;
+    int		save_cmod_flags;
     int		cancel_shutdown = False;
 
-    save_cmdmod = cmdmod;
-    cmdmod.confirm = TRUE;
+    save_cmod_flags = cmdmod.cmod_flags;
+    cmdmod.cmod_flags |= CMOD_CONFIRM;
     if (check_changed_any(FALSE, FALSE))
 	// Mustn't logout
 	cancel_shutdown = True;
-    cmdmod = save_cmdmod;
+    cmdmod.cmod_flags = save_cmod_flags;
     setcursor();		// position cursor
     out_flush();
 
@@ -8062,10 +8072,13 @@ xsmp_init(void)
 	    errorstring);
     if (xsmp.smcconn == NULL)
     {
-	char errorreport[132];
-
 	if (p_verbose > 0)
 	{
+	    char errorreport[132];
+
+	    // If the message is too long it might not be NUL terminated.  Add
+	    // a NUL at the end to make sure we don't go over the end.
+	    errorstring[sizeof(errorstring) - 1] = NUL;
 	    vim_snprintf(errorreport, sizeof(errorreport),
 			 _("XSMP SmcOpenConnection failed: %s"), errorstring);
 	    verb_msg(errorreport);

@@ -146,7 +146,7 @@ static struct vimvar
     {VV_NAME("echospace",	 VAR_NUMBER), VV_RO},
     {VV_NAME("argv",		 VAR_LIST), VV_RO},
     {VV_NAME("collate",		 VAR_STRING), VV_RO},
-    {VV_NAME("disallow_let",	 VAR_NUMBER), 0}, // TODO: remove
+    {VV_NAME("exiting",		 VAR_SPECIAL), VV_RO},
 };
 
 // shorthand
@@ -174,7 +174,6 @@ static char_u *list_arg_vars(exarg_T *eap, char_u *arg, int *first);
 static char_u *ex_let_one(char_u *arg, typval_T *tv, int copy, int flags, char_u *endchars, char_u *op);
 static int do_unlet_var(lval_T *lp, char_u *name_end, exarg_T *eap, int deep, void *cookie);
 static int do_lock_var(lval_T *lp, char_u *name_end, exarg_T *eap, int deep, void *cookie);
-static void delete_var(hashtab_T *ht, hashitem_T *hi);
 static void list_one_var(dictitem_T *v, char *prefix, int *first);
 static void list_one_var_a(char *prefix, char_u *name, int type, char_u *string, int *first);
 
@@ -215,11 +214,12 @@ evalvars_init(void)
 	    // add to compat scope dict
 	    hash_add(&compat_hashtab, p->vv_di.di_key);
     }
-    vimvars[VV_VERSION].vv_nr = VIM_VERSION_100;
-    vimvars[VV_VERSIONLONG].vv_nr = VIM_VERSION_100 * 10000 + highest_patch();
+    set_vim_var_nr(VV_VERSION, VIM_VERSION_100);
+    set_vim_var_nr(VV_VERSIONLONG, VIM_VERSION_100 * 10000 + highest_patch());
 
     set_vim_var_nr(VV_SEARCHFORWARD, 1L);
     set_vim_var_nr(VV_HLSEARCH, 1L);
+    set_vim_var_nr(VV_EXITING, VVAL_NULL);
     set_vim_var_dict(VV_COMPLETED_ITEM, dict_alloc_lock(VAR_FIXED));
     set_vim_var_list(VV_ERRORS, list_alloc());
     set_vim_var_dict(VV_EVENT, dict_alloc_lock(VAR_FIXED));
@@ -301,11 +301,23 @@ garbage_collect_vimvars(int copyID)
     int
 garbage_collect_scriptvars(int copyID)
 {
-    int		i;
-    int		abort = FALSE;
+    int		    i;
+    int		    idx;
+    int		    abort = FALSE;
+    scriptitem_T    *si;
 
     for (i = 1; i <= script_items.ga_len; ++i)
+    {
 	abort = abort || set_ref_in_ht(&SCRIPT_VARS(i), copyID, NULL);
+
+	si = SCRIPT_ITEM(i);
+	for (idx = 0; idx < si->sn_var_vals.ga_len; ++idx)
+	{
+	    svar_T    *sv = ((svar_T *)si->sn_var_vals.ga_data) + idx;
+
+	    abort = abort || set_ref_in_item(sv->sv_tv, copyID, NULL, NULL);
+	}
+    }
 
     return abort;
 }
@@ -735,8 +747,7 @@ ex_let(exarg_T *eap)
 	    ex_finally(eap);
 	    return;
     }
-    if (get_vim_var_nr(VV_DISALLOW_LET)
-				      && eap->cmdidx == CMD_let && vim9script)
+    if (eap->cmdidx == CMD_let && vim9script)
     {
 	emsg(_(e_cannot_use_let_in_vim9_script));
 	return;
@@ -1972,7 +1983,13 @@ get_user_var_name(expand_T *xp, int idx)
     }
 
     // b: variables
-    ht = &curbuf->b_vars->dv_hashtab;
+    ht =
+#ifdef FEAT_CMDWIN
+	// In cmdwin, the alternative buffer should be used.
+	(cmdwin_type != 0 && get_cmdline_type() == NUL) ?
+	&prevwin->w_buffer->b_vars->dv_hashtab :
+#endif
+	&curbuf->b_vars->dv_hashtab;
     if (bdone < ht->ht_used)
     {
 	if (bdone++ == 0)
@@ -1985,7 +2002,13 @@ get_user_var_name(expand_T *xp, int idx)
     }
 
     // w: variables
-    ht = &curwin->w_vars->dv_hashtab;
+    ht =
+#ifdef FEAT_CMDWIN
+	// In cmdwin, the alternative window should be used.
+	(cmdwin_type != 0 && get_cmdline_type() == NUL) ?
+	&prevwin->w_vars->dv_hashtab :
+#endif
+	&curwin->w_vars->dv_hashtab;
     if (wdone < ht->ht_used)
     {
 	if (wdone++ == 0)
@@ -2532,7 +2555,22 @@ eval_variable(
 	    ret = FAIL;
 	}
 	else if (rettv != NULL)
+	{
+	    // If a list or dict variable wasn't initialized, do it now.
+	    if (tv->v_type == VAR_DICT && tv->vval.v_dict == NULL)
+	    {
+		tv->vval.v_dict = dict_alloc();
+		if (tv->vval.v_dict != NULL)
+		    ++tv->vval.v_dict->dv_refcount;
+	    }
+	    else if (tv->v_type == VAR_LIST && tv->vval.v_list == NULL)
+	    {
+		tv->vval.v_list = list_alloc();
+		if (tv->vval.v_list != NULL)
+		    ++tv->vval.v_list->lv_refcount;
+	    }
 	    copy_tv(tv, rettv);
+	}
     }
 
     name[len] = cc;
@@ -2592,7 +2630,28 @@ find_var(char_u *name, hashtab_T **htp, int no_autoload)
 	return ret;
 
     // Search in parent scope for lambda
-    return find_var_in_scoped_ht(name, no_autoload || htp != NULL);
+    ret = find_var_in_scoped_ht(name, no_autoload || htp != NULL);
+    if (ret != NULL)
+	return ret;
+
+    // in Vim9 script items without a scope can be script-local
+    if (in_vim9script() && name[0] != NUL && name[1] != ':')
+    {
+	ht = get_script_local_ht();
+	if (ht != NULL)
+	{
+	    ret = find_var_in_ht(ht, *name, varname,
+						   no_autoload || htp != NULL);
+	    if (ret != NULL)
+	    {
+		if (htp != NULL)
+		    *htp = ht;
+		return ret;
+	    }
+	}
+    }
+
+    return NULL;
 }
 
 /*
@@ -2650,7 +2709,7 @@ find_var_in_ht(
 /*
  * Get the script-local hashtab.  NULL if not in a script context.
  */
-    static hashtab_T *
+    hashtab_T *
 get_script_local_ht(void)
 {
     scid_T sid = current_sctx.sc_sid;
@@ -2662,19 +2721,23 @@ get_script_local_ht(void)
 
 /*
  * Look for "name[len]" in script-local variables.
- * Return a non-NULL pointer when found, NULL when not found.
+ * Return OK when found, FAIL when not found.
  */
-    void *
-lookup_scriptvar(char_u *name, size_t len, cctx_T *dummy UNUSED)
+    int
+lookup_scriptvar(
+	char_u	*name,
+	size_t	len,
+	void	*lvar UNUSED,
+	cctx_T	*dummy UNUSED)
 {
     hashtab_T	*ht = get_script_local_ht();
     char_u	buffer[30];
     char_u	*p;
-    void	*res;
+    int		res;
     hashitem_T	*hi;
 
     if (ht == NULL)
-	return NULL;
+	return FAIL;
     if (len < sizeof(buffer) - 1)
     {
 	// avoid an alloc/free for short names
@@ -2685,20 +2748,19 @@ lookup_scriptvar(char_u *name, size_t len, cctx_T *dummy UNUSED)
     {
 	p = vim_strnsave(name, len);
 	if (p == NULL)
-	    return NULL;
+	    return FAIL;
     }
 
     hi = hash_find(ht, p);
-    res = HASHITEM_EMPTY(hi) ? NULL : hi;
+    res = HASHITEM_EMPTY(hi) ? FAIL : OK;
 
     // if not script-local, then perhaps imported
-    if (res == NULL && find_imported(p, 0, NULL) != NULL)
-	res = p;
+    if (res == FAIL && find_imported(p, 0, NULL) != NULL)
+	res = OK;
 
     if (p != buffer)
 	vim_free(p);
-    // Don't return "buffer", gcc complains.
-    return res == NULL ? NULL : IObuff;
+    return res;
 }
 
 /*
@@ -2880,14 +2942,14 @@ vars_clear_ext(hashtab_T *ht, int free_val)
 	}
     }
     hash_clear(ht);
-    ht->ht_used = 0;
+    hash_init(ht);
 }
 
 /*
  * Delete a variable from hashtab "ht" at item "hi".
  * Clear the variable value and free the dictitem.
  */
-    static void
+    void
 delete_var(hashtab_T *ht, hashitem_T *hi)
 {
     dictitem_T	*di = HI2DI(hi);
@@ -3140,30 +3202,10 @@ set_var_const(
 	if (flags & ASSIGN_CONST)
 	    di->di_flags |= DI_FLAGS_LOCK;
 
+	// A Vim9 script-local variable is also added to sn_all_vars and
+	// sn_var_vals.
 	if (is_script_local && vim9script)
-	{
-	    scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
-
-	    // Store a pointer to the typval_T, so that it can be found by
-	    // index instead of using a hastab lookup.
-	    if (ga_grow(&si->sn_var_vals, 1) == OK)
-	    {
-		svar_T *sv = ((svar_T *)si->sn_var_vals.ga_data)
-						      + si->sn_var_vals.ga_len;
-		sv->sv_name = di->di_key;
-		sv->sv_tv = &di->di_tv;
-		if (type == NULL)
-		    sv->sv_type = typval2type(tv, &si->sn_type_list);
-		else
-		    sv->sv_type = type;
-		sv->sv_const = (flags & ASSIGN_CONST);
-		sv->sv_export = is_export;
-		++si->sn_var_vals.ga_len;
-
-		// let ex_export() know the export worked.
-		is_export = FALSE;
-	    }
-	}
+	    add_vim9_script_var(di, tv, type);
     }
 
     if (copy || tv->v_type == VAR_NUMBER || tv->v_type == VAR_FLOAT)
@@ -3588,9 +3630,11 @@ var_redir_start(char_u *name, int append)
     tv.v_type = VAR_STRING;
     tv.vval.v_string = (char_u *)"";
     if (append)
-	set_var_lval(redir_lval, redir_endp, &tv, TRUE, 0, (char_u *)".");
+	set_var_lval(redir_lval, redir_endp, &tv, TRUE,
+						ASSIGN_NO_DECL, (char_u *)".");
     else
-	set_var_lval(redir_lval, redir_endp, &tv, TRUE, 0, (char_u *)"=");
+	set_var_lval(redir_lval, redir_endp, &tv, TRUE,
+						ASSIGN_NO_DECL, (char_u *)"=");
     clear_lval(redir_lval);
     if (called_emsg > called_emsg_before)
     {

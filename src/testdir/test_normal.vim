@@ -118,6 +118,39 @@ func Test_normal01_keymodel()
   call feedkeys("Vkk\<Up>yy", 'tx')
   call assert_equal(['47', '48', '49', '50'], getreg(0, 0, 1))
 
+  " Test for using special keys to start visual selection
+  %d
+  call setline(1, ['red fox tail', 'red fox tail', 'red fox tail'])
+  set keymodel=startsel
+  " Test for <S-PageUp> and <S-PageDown>
+  call cursor(1, 1)
+  call feedkeys("\<S-PageDown>y", 'xt')
+  call assert_equal([0, 1, 1, 0], getpos("'<"))
+  call assert_equal([0, 3, 1, 0], getpos("'>"))
+  call feedkeys("Gz\<CR>8|\<S-PageUp>y", 'xt')
+  call assert_equal([0, 2, 1, 0], getpos("'<"))
+  call assert_equal([0, 3, 8, 0], getpos("'>"))
+  " Test for <S-C-Home> and <S-C-End>
+  call cursor(2, 12)
+  call feedkeys("\<S-C-Home>y", 'xt')
+  call assert_equal([0, 1, 1, 0], getpos("'<"))
+  call assert_equal([0, 2, 12, 0], getpos("'>"))
+  call cursor(1, 4)
+  call feedkeys("\<S-C-End>y", 'xt')
+  call assert_equal([0, 1, 4, 0], getpos("'<"))
+  call assert_equal([0, 3, 13, 0], getpos("'>"))
+  " Test for <S-C-Left> and <S-C-Right>
+  call cursor(2, 5)
+  call feedkeys("\<S-C-Right>y", 'xt')
+  call assert_equal([0, 2, 5, 0], getpos("'<"))
+  call assert_equal([0, 2, 9, 0], getpos("'>"))
+  call cursor(2, 9)
+  call feedkeys("\<S-C-Left>y", 'xt')
+  call assert_equal([0, 2, 5, 0], getpos("'<"))
+  call assert_equal([0, 2, 9, 0], getpos("'>"))
+
+  set keymodel&
+
   " clean up
   bw!
 endfunc
@@ -409,6 +442,14 @@ func Test_normal10_expand()
     call assert_equal(expected[i], expand('<cexpr>'), 'i == ' . i)
   endfor
 
+  " Test for <cexpr> in state.val and ptr->val
+  call setline(1, 'x = state.val;')
+  call cursor(1, 10)
+  call assert_equal('state.val', expand('<cexpr>'))
+  call setline(1, 'x = ptr->val;')
+  call cursor(1, 9)
+  call assert_equal('ptr->val', expand('<cexpr>'))
+
   if executable('echo')
     " Test expand(`...`) i.e. backticks command expansion.
     call assert_equal('abcde', expand('`echo abcde`'))
@@ -419,6 +460,19 @@ func Test_normal10_expand()
   call assert_equal('3.14', expand('`=3.14`'))
 
   " clean up
+  bw!
+endfunc
+
+" Test for expand() in latin1 encoding
+func Test_normal_expand_latin1()
+  new
+  let save_enc = &encoding
+  set encoding=latin1
+  call setline(1, 'val = item->color;')
+  call cursor(1, 11)
+  call assert_equal('color', expand("<cword>"))
+  call assert_equal('item->color', expand("<cexpr>"))
+  let &encoding = save_enc
   bw!
 endfunc
 
@@ -434,6 +488,25 @@ func Test_normal11_showcmd()
   call assert_equal(3, line('$'))
   exe "norm! 0d3\<del>2l"
   call assert_equal('obar2foobar3', getline('.'))
+  " test for the visual block size displayed in the status line
+  call setline(1, ['aaaaa', 'bbbbb', 'ccccc'])
+  call feedkeys("ggl\<C-V>lljj", 'xt')
+  redraw!
+  call assert_match('3x3$', Screenline(&lines))
+  call feedkeys("\<C-V>", 'xt')
+  " test for visually selecting a multi-byte character
+  call setline(1, ["\U2206"])
+  call feedkeys("ggv", 'xt')
+  redraw!
+  call assert_match('1-3$', Screenline(&lines))
+  call feedkeys("v", 'xt')
+  " test for visually selecting the end of line
+  call setline(1, ["foobar"])
+  call feedkeys("$vl", 'xt')
+  redraw!
+  call assert_match('2$', Screenline(&lines))
+  call feedkeys("y", 'xt')
+  call assert_equal("r\n", @")
   bw!
 endfunc
 
@@ -838,6 +911,18 @@ func Test_vert_scroll_cmds()
   exe "normal \<C-Y>\<C-Y>"
   call assert_equal(h + 1, line('w$'))
 
+  " Test for CTRL-Y from the first line and CTRL-E from the last line
+  %d
+  set scrolloff=2
+  call setline(1, range(1, 4))
+  exe "normal gg\<C-Y>"
+  call assert_equal(1, line('w0'))
+  call assert_equal(1, line('.'))
+  exe "normal G4\<C-E>\<C-E>"
+  call assert_equal(4, line('w$'))
+  call assert_equal(4, line('.'))
+  set scrolloff&
+
   " Using <PageUp> and <PageDown> in an empty buffer should beep
   %d
   call assert_beeps('exe "normal \<PageUp>"')
@@ -885,6 +970,18 @@ func Test_vert_scroll_cmds()
   normal zt
   exe "normal \<C-D>"
   call assert_equal(50, line('w0'))
+
+  " Test for <S-CR>. Page down.
+  %d
+  call setline(1, range(1, 100))
+  call feedkeys("\<S-CR>", 'xt')
+  call assert_equal(14, line('w0'))
+  call assert_equal(28, line('w$'))
+
+  " Test for <S-->. Page up.
+  call feedkeys("\<S-->", 'xt')
+  call assert_equal(1, line('w0'))
+  call assert_equal(15, line('w$'))
 
   set foldenable&
   close!
@@ -1856,7 +1953,7 @@ func Test_normal_section()
   close!
 endfunc
 
-" Test for ~ command
+" Test for changing case using u, U, gu, gU and ~ (tilde) commands
 func Test_normal30_changecase()
   new
   call append(0, 'This is a simple test: äüöß')
@@ -1876,6 +1973,9 @@ func Test_normal30_changecase()
   call assert_equal('this is a SIMPLE TEST: ÄÜÖSS', getline('.'))
   norm! V~
   call assert_equal('THIS IS A simple test: äüöss', getline('.'))
+  call assert_beeps('norm! c~')
+  %d
+  call assert_beeps('norm! ~')
 
   " Test for changing case across lines using 'whichwrap'
   call setline(1, ['aaaaaa', 'aaaaaa'])
@@ -1981,6 +2081,13 @@ func Test_normal31_r_cmd()
   call setline(1, ["a\tb", "c\td", "e\tf"])
   normal gglvjjrx
   call assert_equal(['axx', 'xxx', 'xxf'], getline(1, '$'))
+
+  " replace with a multibyte character (with multiple composing characters)
+  %d
+  new
+  call setline(1, 'aaa')
+  exe "normal $ra\u0328\u0301"
+  call assert_equal("aaa\u0328\u0301", getline(1))
 
   " clean up
   set noautoindent

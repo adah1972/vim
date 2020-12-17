@@ -605,6 +605,7 @@ func Test_popup_drag_termwin()
 	endfor
 	%foldclose
 	set shell=/bin/sh noruler
+	unlet $PROMPT_COMMAND
 	let $PS1 = 'vim> '
         terminal ++rows=4
 	$wincmd w
@@ -1765,6 +1766,16 @@ func Test_popup_title()
   call term_sendkeys(buf, ":\<CR>")
   call VerifyScreenDump(buf, 'Test_popupwin_longtitle_2', {})
 
+  call term_sendkeys(buf, ":call popup_clear()\<CR>")
+  call term_sendkeys(buf, ":call popup_create(['aaa', 'bbb'], #{title: 'Title', minwidth: 12, padding: [2, 2, 2, 2]})\<CR>")
+  call term_sendkeys(buf, ":\<CR>")
+  call VerifyScreenDump(buf, 'Test_popupwin_longtitle_3', {})
+
+  call term_sendkeys(buf, ":call popup_clear()\<CR>")
+  call term_sendkeys(buf, ":call popup_create(['aaa', 'bbb'], #{title: 'Title', minwidth: 12, border: [], padding: [2, 2, 2, 2]})\<CR>")
+  call term_sendkeys(buf, ":\<CR>")
+  call VerifyScreenDump(buf, 'Test_popupwin_longtitle_4', {})
+
   " clean up
   call StopVimInTerminal(buf)
   call delete('XtestPopupTitle')
@@ -2158,6 +2169,7 @@ func Test_popup_scrollbar()
     endfunc
     func Popup_filter(winid, key)
       if a:key == 'j'
+	silent! this_throws_an_error_but_is_ignored
 	let line = popup_getoptions(a:winid).firstline
 	let nlines = line('$', a:winid)
 	let newline = line < nlines ? (line + 1) : nlines
@@ -2170,7 +2182,7 @@ func Test_popup_scrollbar()
     endfunc
 
     def CreatePopup(text: list<string>)
-      popup_create(text, #{
+      popup_create(text, {
 	    \ minwidth: 30,
 	    \ maxwidth: 30,
 	    \ minheight: 4,
@@ -2360,6 +2372,16 @@ func Test_popup_settext_getline()
   let id = popup_create('', #{ tabpage: -1 })
   call popup_settext(id, ['a','b'])
   call assert_equal(2, line('$', id)) " Fails :(
+  call popup_close(id)
+endfunc
+
+func Test_popup_settext_null()
+  let id = popup_create('', #{ tabpage: 0 })
+  call popup_settext(id, test_null_list())
+  call popup_close(id)
+
+  let id = popup_create('', #{ tabpage: 0 })
+  call popup_settext(id, test_null_string())
   call popup_close(id)
 endfunc
 
@@ -2645,11 +2667,23 @@ func Test_popupwin_terminal_buffer()
   let g:test_is_flaky = 1
 
   let origwin = win_getid()
+
+  " open help window to test that :help below fails
+  help
+
   let termbuf = term_start(&shell, #{hidden: 1})
-  let winid = popup_create(termbuf, #{minwidth: 40, minheight: 10})
-  " Wait for shell to start
+  let winid = popup_create(termbuf, #{minwidth: 40, minheight: 10, border: []})
+  " Wait for shell to start and show a prompt
   call WaitForAssert({-> assert_equal("run", job_status(term_getjob(termbuf)))})
-  sleep 100m
+  sleep 20m
+
+  " When typing a character, the cursor is after it.
+  call feedkeys("x", 'xt')
+  sleep 10m
+  redraw
+  call WaitForAssert({ -> assert_equal('x', screenstring(screenrow(), screencol() - 1))})
+  call feedkeys("\<BS>", 'xt')
+
   " Check this doesn't crash
   call assert_equal(winnr(), winnr('j'))
   call assert_equal(winnr(), winnr('k'))
@@ -2666,6 +2700,7 @@ func Test_popupwin_terminal_buffer()
 
   " Cannot escape from terminal window
   call assert_fails('tab drop xxx', 'E863:')
+  call assert_fails('help', 'E994:')
 
   " Cannot open a second one.
   let termbuf2 = term_start(&shell, #{hidden: 1})
@@ -2677,6 +2712,7 @@ func Test_popupwin_terminal_buffer()
   " Wait for shell to exit
   call WaitForAssert({-> assert_equal("dead", job_status(term_getjob(termbuf)))})
 
+  helpclose
   call feedkeys(":quit\<CR>", 'xt')
   call assert_equal(origwin, win_getid())
 endfunc
@@ -2691,7 +2727,7 @@ def Popupwin_close_prevwin()
   split
   wincmd b
   assert_equal(2, winnr())
-  var buf = term_start(&shell, #{hidden: 1})
+  var buf = term_start(&shell, {hidden: 1})
   popup_create(buf, {})
   TermWait(buf, 100)
   popup_clear(true)
@@ -3189,6 +3225,9 @@ func Get_popupmenu_lines()
       call setline(1, 'text text text text text text text ')
       func ChangeColor()
 	let id = popup_findinfo()
+	if buflisted(winbufnr(id))
+	  call setline(1, 'buffer is listed')
+	endif
 	eval id->popup_setoptions(#{highlight: 'InfoPopup'})
       endfunc
 
@@ -3226,6 +3265,10 @@ func Get_popupmenu_lines()
 	  call popup_show(id)
 	endif
       endfunc
+
+      " Check that no autocommands are triggered for the info popup
+      au WinEnter * if win_gettype() == 'popup' | call setline(2, 'WinEnter') | endif
+      au WinLeave * if win_gettype() == 'popup' | call setline(2, 'WinLeave') | endif
   END
   return lines
 endfunc
@@ -3668,6 +3711,28 @@ func Test_popupwin_filter_close_three_errors()
   call delete('XtestPopupThreeErrors')
 endfunc
 
+func Test_popupwin_latin1_encoding()
+  CheckScreendump
+  CheckUnix
+
+  " When 'encoding' is a single-byte encoding a terminal window will mess up
+  " the display.  Check that showing a popup on top of that doesn't crash.
+  let lines =<< trim END
+      set encoding=latin1
+      terminal cat Xmultibyte
+      call popup_create(['one', 'two', 'three', 'four'], #{line: 1, col: 10})
+  END
+  call writefile(lines, 'XtestPopupLatin')
+  call writefile([repeat("\u3042 ", 120)], 'Xmultibyte')
+
+  let buf = RunVimInTerminal('-S XtestPopupLatin', #{rows: 10})
+
+  call term_sendkeys(buf, ":q\<CR>")
+  call StopVimInTerminal(buf)
+  call delete('XtestPopupLatin')
+  call delete('Xmultibyte')
+endfunc
+
 func Test_popupwin_atcursor_far_right()
   new
 
@@ -3698,5 +3763,26 @@ func Test_popupwin_splitmove()
   bwipe
 endfunc
 
+func Test_popupwin_exiting_terminal()
+  CheckFeature terminal
+
+  " Tests that when creating a popup right after closing a terminal window does
+  " not make the popup the current window.
+  let winid = win_getid()
+  try
+    augroup Test_popupwin_exiting_terminal
+      autocmd!
+      autocmd WinEnter * :call popup_create('test', {})
+    augroup END
+    let bnr = term_start(&shell, #{term_finish: 'close'})
+    call term_sendkeys(bnr, "exit\r\n")
+    call WaitForAssert({-> assert_equal(winid, win_getid())})
+  finally
+    call popup_clear(1)
+    augroup Test_popupwin_exiting_terminal
+      autocmd!
+    augroup END
+  endtry
+endfunc
 
 " vim: shiftwidth=2 sts=2

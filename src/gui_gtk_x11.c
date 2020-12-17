@@ -1236,11 +1236,10 @@ key_press_event(GtkWidget *widget UNUSED,
     }
     else
     {
-	// <C-H> and <C-h> mean the same thing, always use "H"
-	if ((modifiers & MOD_MASK_CTRL) && ASCII_ISALPHA(key))
-	    key = TOUPPER_ASC(key);
+	// Some keys need adjustment when the Ctrl modifier is used.
+	key = may_adjust_key_for_ctrl(modifiers, key);
 
-	// May remove the shift modifier if it's included in the key.
+	// May remove the Shift modifier if it's included in the key.
 	modifiers = may_remove_shift_modifier(modifiers, key);
 
 	len = mb_char2bytes(key, string);
@@ -2227,10 +2226,10 @@ sm_client_check_changed_any(GnomeClient	    *client UNUSED,
     save_cmdmod = cmdmod;
 
 # ifdef FEAT_BROWSE
-    cmdmod.browse = TRUE;
+    cmdmod.cmod_flags |= CMOD_BROWSE;
 # endif
 # if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
-    cmdmod.confirm = TRUE;
+    cmdmod.cmod_flags |= CMOD_CONFIRM;
 # endif
     /*
      * If there are changed buffers, present the user with
@@ -3812,16 +3811,16 @@ gui_mch_init(void)
 	    G_CALLBACK(on_tabline_menu), G_OBJECT(tabline_menu));
 #endif // FEAT_GUI_TABLINE
 
-    gui.formwin = gtk_form_new();
+    gui.formwin = gui_gtk_form_new();
     gtk_container_set_border_width(GTK_CONTAINER(gui.formwin), 0);
 #if !GTK_CHECK_VERSION(3,0,0)
     gtk_widget_set_events(gui.formwin, GDK_EXPOSURE_MASK);
 #endif
+#if GTK_CHECK_VERSION(3,22,2)
+    gtk_widget_set_name(gui.formwin, "vim-gtk-form");
+#endif
 
     gui.drawarea = gtk_drawing_area_new();
-#if GTK_CHECK_VERSION(3,22,2)
-    gtk_widget_set_name(gui.drawarea, "vim-gui-drawarea");
-#endif
 #if GTK_CHECK_VERSION(3,0,0)
     gui.surface = NULL;
     gui.by_signal = FALSE;
@@ -3841,7 +3840,7 @@ gui_mch_init(void)
 			  GDK_POINTER_MOTION_HINT_MASK);
 
     gtk_widget_show(gui.drawarea);
-    gtk_form_put(GTK_FORM(gui.formwin), gui.drawarea, 0, 0);
+    gui_gtk_form_put(GTK_FORM(gui.formwin), gui.drawarea, 0, 0);
     gtk_widget_show(gui.formwin);
     gtk_box_pack_start(GTK_BOX(vbox), gui.formwin, TRUE, TRUE, 0);
 
@@ -4032,18 +4031,21 @@ set_cairo_source_rgba_from_color(cairo_t *cr, guicolor_T color)
     void
 gui_mch_new_colors(void)
 {
-    if (gui.drawarea != NULL && gtk_widget_get_window(gui.drawarea) != NULL)
+    if (gui.drawarea != NULL
+#if GTK_CHECK_VERSION(3,22,2)
+	    && gui.formwin != NULL
+#endif
+	    && gtk_widget_get_window(gui.drawarea) != NULL)
     {
 #if !GTK_CHECK_VERSION(3,22,2)
 	GdkWindow * const da_win = gtk_widget_get_window(gui.drawarea);
 #endif
-
 #if GTK_CHECK_VERSION(3,22,2)
-	GtkStyleContext * const context
-	    = gtk_widget_get_style_context(gui.drawarea);
+	GtkStyleContext * const context =
+				     gtk_widget_get_style_context(gui.formwin);
 	GtkCssProvider * const provider = gtk_css_provider_new();
 	gchar * const css = g_strdup_printf(
-		"widget#vim-gui-drawarea {\n"
+		"widget#vim-gtk-form {\n"
 		"  background-color: #%.2lx%.2lx%.2lx;\n"
 		"}\n",
 		 (gui.back_pixel >> 16) & 0xff,
@@ -4120,9 +4122,9 @@ form_configure_event(GtkWidget *widget UNUSED,
     if (gtk_socket_id != 0)
 	usable_height -= (gui.char_height - (gui.char_height/2)); // sic.
 
-    gtk_form_freeze(GTK_FORM(gui.formwin));
+    gui_gtk_form_freeze(GTK_FORM(gui.formwin));
     gui_resize_shell(event->width, usable_height);
-    gtk_form_thaw(GTK_FORM(gui.formwin));
+    gui_gtk_form_thaw(GTK_FORM(gui.formwin));
 
     return TRUE;
 }
@@ -4727,9 +4729,10 @@ gui_mch_adjust_charheight(void)
 
     pango_font_metrics_unref(metrics);
 
-    // Round up, but not when the value is very close (e.g. 15.0009).
-    gui.char_height = (ascent + descent + PANGO_SCALE - 3) / PANGO_SCALE
-								+ p_linespace;
+    // Round up when the value is more than about 1/16 of a pixel above a whole
+    // pixel (12.0624 becomes 12, 12.07 becomes 13).  Then add 'linespace'.
+    gui.char_height = (ascent + descent + (PANGO_SCALE * 15) / 16)
+						   / PANGO_SCALE + p_linespace;
     // LINTED: avoid warning: bitwise operation on signed value
     gui.char_ascent = PANGO_PIXELS(ascent + p_linespace * PANGO_SCALE / 2);
 

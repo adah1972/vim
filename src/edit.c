@@ -1031,6 +1031,15 @@ doESCkey:
 	case K_IGNORE:	// Something mapped to nothing
 	    break;
 
+	case K_COMMAND:		// <Cmd>command<CR>
+	    do_cmdline(NULL, getcmdkeycmd, NULL, 0);
+#ifdef FEAT_TERMINAL
+	    if (term_use_loop())
+		// Started a terminal that gets the input, exit Insert mode.
+		goto doESCkey;
+#endif
+	    break;
+
 	case K_CURSORHOLD:	// Didn't type something for a while.
 	    ins_apply_autocmds(EVENT_CURSORHOLDI);
 	    did_cursorhold = TRUE;
@@ -1525,7 +1534,6 @@ ins_ctrl_v(void)
 {
     int		c;
     int		did_putchar = FALSE;
-    int		prev_mod_mask = mod_mask;
 
     // may need to redraw when no more chars available now
     ins_redraw(FALSE);
@@ -1541,7 +1549,9 @@ ins_ctrl_v(void)
     add_to_showcmd_c(Ctrl_V);
 #endif
 
-    c = get_literal();
+    // Do not change any modifyOtherKeys ESC sequence to a normal key for
+    // CTRL-SHIFT-V.
+    c = get_literal(mod_mask & MOD_MASK_SHIFT);
     if (did_putchar)
 	// when the line fits in 'columns' the '^' is at the start of the next
 	// line and will not removed by the redraw
@@ -1549,11 +1559,6 @@ ins_ctrl_v(void)
 #ifdef FEAT_CMDL_INFO
     clear_showcmd();
 #endif
-
-    if ((c == ESC || c == CSI) && !(prev_mod_mask & MOD_MASK_SHIFT))
-	// Using CTRL-V: Change any modifyOtherKeys ESC sequence to a normal
-	// key.  Don't do this for CTRL-SHIFT-V.
-	c = decodeModifyOtherKeys(c);
 
     insert_special(c, FALSE, TRUE);
 #ifdef FEAT_RIGHTLEFT
@@ -1836,9 +1841,11 @@ del_char_after_col(int limit_col UNUSED)
  * A one, two or three digit decimal number is interpreted as its byte value.
  * If one or two digits are entered, the next character is given to vungetc().
  * For Unicode a character > 255 may be returned.
+ * If "noReduceKeys" is TRUE do not change any modifyOtherKeys ESC sequence
+ * into a normal key, return ESC.
  */
     int
-get_literal(void)
+get_literal(int noReduceKeys)
 {
     int		cc;
     int		nc;
@@ -1869,6 +1876,9 @@ get_literal(void)
     for (;;)
     {
 	nc = plain_vgetc();
+	if ((nc == ESC || nc == CSI) && !noReduceKeys)
+	    nc = decodeModifyOtherKeys(nc);
+
 #ifdef FEAT_CMDL_INFO
 	if (!(State & CMDLINE) && MB_BYTE2LEN_CHECK(nc) == 1)
 	    add_to_showcmd(nc);
@@ -3607,13 +3617,16 @@ ins_esc(
 	undisplay_dollar();
     }
 
+    if (cmdchar != 'r' && cmdchar != 'v')
+	ins_apply_autocmds(EVENT_INSERTLEAVEPRE);
+
     // When an autoindent was removed, curswant stays after the
     // indent
     if (restart_edit == NUL && (colnr_T)temp == curwin->w_cursor.col)
 	curwin->w_set_curswant = TRUE;
 
     // Remember the last Insert position in the '^ mark.
-    if (!cmdmod.keepjumps)
+    if ((cmdmod.cmod_flags & CMOD_KEEPJUMPS) == 0)
 	curbuf->b_last_insert = curwin->w_cursor;
 
     /*
@@ -3800,8 +3813,7 @@ ins_ctrl_o(void)
 {
     if (State & VREPLACE_FLAG)
 	restart_edit = 'V';
-    else
-	if (State & REPLACE_FLAG)
+    else if (State & REPLACE_FLAG)
 	restart_edit = 'R';
     else
 	restart_edit = 'I';
@@ -3943,8 +3955,11 @@ ins_bs(
 #endif
 		((curwin->w_cursor.lnum == 1 && curwin->w_cursor.col == 0)
 		    || (!can_bs(BS_START)
-			&& (arrow_used
-			    || (curwin->w_cursor.lnum == Insstart_orig.lnum
+			&& ((arrow_used
+#ifdef FEAT_JOB_CHANNEL
+				&& !bt_prompt(curbuf)
+#endif
+			) || (curwin->w_cursor.lnum == Insstart_orig.lnum
 				&& curwin->w_cursor.col <= Insstart_orig.col)))
 		    || (!can_bs(BS_INDENT) && !arrow_used && ai_col > 0
 					 && curwin->w_cursor.col <= ai_col)

@@ -298,7 +298,7 @@ has_compl_option(int dict_opt)
 	msg_attr(dict_opt ? _("'dictionary' option is empty")
 			  : _("'thesaurus' option is empty"),
 							      HL_ATTR(HLF_E));
-	if (emsg_silent == 0)
+	if (emsg_silent == 0 && !in_assert_fails)
 	{
 	    vim_beep(BO_COMPL);
 	    setcursor();
@@ -1298,6 +1298,7 @@ ins_compl_files(
 	fp = mch_fopen((char *)files[i], "r");  // open dictionary file
 	if (flags != DICT_EXACT)
 	{
+	    msg_hist_off = TRUE;	// reset in msg_trunc_attr()
 	    vim_snprintf((char *)IObuff, IOSIZE,
 			      _("Scanning dictionary: %s"), (char *)files[i]);
 	    (void)msg_trunc_attr((char *)IObuff, TRUE, HL_ATTR(HLF_R));
@@ -1822,7 +1823,7 @@ ins_compl_prep(int c)
 
     // Ignore end of Select mode mapping and mouse scroll buttons.
     if (c == K_SELECT || c == K_MOUSEDOWN || c == K_MOUSEUP
-	    || c == K_MOUSELEFT || c == K_MOUSERIGHT)
+	    || c == K_MOUSELEFT || c == K_MOUSERIGHT || c == K_COMMAND)
 	return retval;
 
 #ifdef FEAT_PROP_POPUP
@@ -2498,6 +2499,56 @@ ins_compl_mode(void)
     return (char_u *)"";
 }
 
+    static void
+ins_compl_update_sequence_numbers()
+{
+    int		number = 0;
+    compl_T	*match;
+
+    if (compl_direction == FORWARD)
+    {
+	// search backwards for the first valid (!= -1) number.
+	// This should normally succeed already at the first loop
+	// cycle, so it's fast!
+	for (match = compl_curr_match->cp_prev; match != NULL
+		&& match != compl_first_match;
+					   match = match->cp_prev)
+	    if (match->cp_number != -1)
+	    {
+		number = match->cp_number;
+		break;
+	    }
+	if (match != NULL)
+	    // go up and assign all numbers which are not assigned
+	    // yet
+	    for (match = match->cp_next;
+		    match != NULL && match->cp_number == -1;
+					   match = match->cp_next)
+		match->cp_number = ++number;
+    }
+    else // BACKWARD
+    {
+	// search forwards (upwards) for the first valid (!= -1)
+	// number.  This should normally succeed already at the
+	// first loop cycle, so it's fast!
+	for (match = compl_curr_match->cp_next; match != NULL
+		&& match != compl_first_match;
+					   match = match->cp_next)
+	    if (match->cp_number != -1)
+	    {
+		number = match->cp_number;
+		break;
+	    }
+	if (match != NULL)
+	    // go down and assign all numbers which are not
+	    // assigned yet
+	    for (match = match->cp_prev; match
+		    && match->cp_number == -1;
+					   match = match->cp_prev)
+		match->cp_number = ++number;
+    }
+}
+
 /*
  * Get complete information
  */
@@ -2584,8 +2635,12 @@ get_complete_info(list_T *what_list, dict_T *retdict)
     }
 
     if (ret == OK && (what_flag & CI_WHAT_SELECTED))
-	ret = dict_add_number(retdict, "selected", (compl_curr_match != NULL) ?
-			compl_curr_match->cp_number - 1 : -1);
+    {
+	if (compl_curr_match != NULL && compl_curr_match->cp_number == -1)
+	    ins_compl_update_sequence_numbers();
+	ret = dict_add_number(retdict, "selected", compl_curr_match != NULL
+				      ? compl_curr_match->cp_number - 1 : -1);
+    }
 
     // TODO
     // if (ret == OK && (what_flag & CI_WHAT_INSERTED))
@@ -2724,6 +2779,7 @@ ins_compl_get_exp(pos_T *ini)
 		    dict = ins_buf->b_fname;
 		    dict_f = DICT_EXACT;
 		}
+		msg_hist_off = TRUE;	// reset in msg_trunc_attr()
 		vim_snprintf((char *)IObuff, IOSIZE, _("Scanning: %s"),
 			ins_buf->b_fname == NULL
 			    ? buf_spname(ins_buf)
@@ -2758,6 +2814,7 @@ ins_compl_get_exp(pos_T *ini)
 #endif
 		else if (*e_cpt == ']' || *e_cpt == 't')
 		{
+		    msg_hist_off = TRUE;	// reset in msg_trunc_attr()
 		    type = CTRL_X_TAGS;
 		    vim_snprintf((char *)IObuff, IOSIZE, _("Scanning tags."));
 		    (void)msg_trunc_attr((char *)IObuff, TRUE, HL_ATTR(HLF_R));
@@ -3369,9 +3426,11 @@ ins_compl_next(
 		    MB_PTR_ADV(s);
 		}
 	    }
+	    msg_hist_off = TRUE;
 	    vim_snprintf((char *)IObuff, IOSIZE, "%s %s%s", lead,
 				s > compl_shown_match->cp_fname ? "<" : "", s);
 	    msg((char *)IObuff);
+	    msg_hist_off = FALSE;
 	    redraw_cmdline = FALSE;	    // don't overwrite!
 	}
     }
@@ -4009,60 +4068,15 @@ ins_complete(int c, int enable_pum)
 	{
 	    edit_submode_extra = (char_u *)_("The only match");
 	    edit_submode_highl = HLF_COUNT;
-	    compl_curr_match->cp_number = 0;
+	    compl_curr_match->cp_number = 1;
 	}
 	else
 	{
+#if defined(FEAT_COMPL_FUNC) || defined(FEAT_EVAL)
 	    // Update completion sequence number when needed.
 	    if (compl_curr_match->cp_number == -1)
-	    {
-		int		number = 0;
-		compl_T		*match;
-
-		if (compl_direction == FORWARD)
-		{
-		    // search backwards for the first valid (!= -1) number.
-		    // This should normally succeed already at the first loop
-		    // cycle, so it's fast!
-		    for (match = compl_curr_match->cp_prev; match != NULL
-			    && match != compl_first_match;
-						       match = match->cp_prev)
-			if (match->cp_number != -1)
-			{
-			    number = match->cp_number;
-			    break;
-			}
-		    if (match != NULL)
-			// go up and assign all numbers which are not assigned
-			// yet
-			for (match = match->cp_next;
-				match != NULL && match->cp_number == -1;
-						       match = match->cp_next)
-			    match->cp_number = ++number;
-		}
-		else // BACKWARD
-		{
-		    // search forwards (upwards) for the first valid (!= -1)
-		    // number.  This should normally succeed already at the
-		    // first loop cycle, so it's fast!
-		    for (match = compl_curr_match->cp_next; match != NULL
-			    && match != compl_first_match;
-						       match = match->cp_next)
-			if (match->cp_number != -1)
-			{
-			    number = match->cp_number;
-			    break;
-			}
-		    if (match != NULL)
-			// go down and assign all numbers which are not
-			// assigned yet
-			for (match = match->cp_prev; match
-				&& match->cp_number == -1;
-						       match = match->cp_prev)
-			    match->cp_number = ++number;
-		}
-	    }
-
+		ins_compl_update_sequence_numbers();
+#endif
 	    // The match should always have a sequence number now, this is
 	    // just a safety check.
 	    if (compl_curr_match->cp_number != -1)
@@ -4096,9 +4110,13 @@ ins_complete(int c, int enable_pum)
 	    if (edit_submode_extra != NULL)
 	    {
 		if (!p_smd)
+		{
+		    msg_hist_off = TRUE;
 		    msg_attr((char *)edit_submode_extra,
 			    edit_submode_highl < HLF_COUNT
 			    ? HL_ATTR(edit_submode_highl) : 0);
+		    msg_hist_off = FALSE;
+		}
 	    }
 	    else
 		msg_clr_cmdline();	// necessary for "noshowmode"

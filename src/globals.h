@@ -221,7 +221,6 @@ EXTERN int	emsg_skip INIT(= 0);	    // don't display errors for
 EXTERN int	emsg_severe INIT(= FALSE);  // use message of next of several
 					    // emsg() calls for throw
 // used by assert_fails()
-EXTERN int	emsg_assert_fails_used INIT(= FALSE);
 EXTERN char_u	*emsg_assert_fails_msg INIT(= NULL);
 EXTERN long	emsg_assert_fails_lnum INIT(= 0);
 EXTERN char_u	*emsg_assert_fails_context INIT(= NULL);
@@ -231,6 +230,10 @@ EXTERN int	did_endif INIT(= FALSE);    // just had ":endif"
 EXTERN int	did_emsg;		    // set by emsg() when the message
 					    // is displayed or thrown
 #ifdef FEAT_EVAL
+EXTERN int	did_emsg_def;		    // set by emsg() when emsg_silent
+					    // is set before calling a function
+EXTERN int	did_emsg_cumul;		    // cumulative did_emsg, increased
+					    // when did_emsg is reset.
 EXTERN int	called_vim_beep;	    // set if vim_beep() is called
 EXTERN int	did_uncaught_emsg;	    // emsg() was called and did not
 					    // cause an exception
@@ -288,6 +291,9 @@ EXTERN garray_T	exestack INIT5(0, 0, sizeof(estack_T), 50, NULL);
 #define SOURCING_LNUM (((estack_T *)exestack.ga_data)[exestack.ga_len - 1].es_lnum)
 
 #ifdef FEAT_EVAL
+// whether inside compile_def_function()
+EXTERN int	estack_compiling INIT(= FALSE);
+
 EXTERN int	ex_nesting_level INIT(= 0);	// nesting level
 EXTERN int	debug_break_level INIT(= -1);	// break below this level
 EXTERN int	debug_did_msg INIT(= FALSE);	// did "debug mode" message
@@ -578,6 +584,12 @@ EXTERN int	diff_need_scrollbind INIT(= FALSE);
 // While redrawing the screen this flag is set.  It means the screen size
 // ('lines' and 'rows') must not be changed.
 EXTERN int	updating_screen INIT(= FALSE);
+
+#ifdef MESSAGE_QUEUE
+// While closing windows or buffers messages should not be handled to avoid
+// using invalid windows or buffers.
+EXTERN int	dont_parse_messages INIT(= FALSE);
+#endif
 
 #ifdef FEAT_MENU
 // The root of the menu hierarchy.
@@ -1124,8 +1136,14 @@ EXTERN int	is_export INIT(= FALSE);    // :export {cmd}
 
 EXTERN int	msg_silent INIT(= 0);	// don't print messages
 EXTERN int	emsg_silent INIT(= 0);	// don't print error messages
+#ifdef FEAT_EVAL
+EXTERN int	emsg_silent_def INIT(= 0);  // value of emsg_silent when a :def
+					    // function is called
+#endif
 EXTERN int	emsg_noredir INIT(= 0);	// don't redirect error messages
 EXTERN int	cmd_silent INIT(= FALSE); // don't echo the command line
+
+EXTERN int	in_assert_fails INIT(= FALSE);	// assert_fails() active
 
 EXTERN int	swap_exists_action INIT(= SEA_NONE);
 					// For dialog when swap file already
@@ -1695,7 +1713,7 @@ EXTERN char e_invalblob[]	INIT(= N_("E978: Invalid operation for Blob"));
 EXTERN char e_toomanyarg[]	INIT(= N_("E118: Too many arguments for function: %s"));
 EXTERN char e_toofewarg[]	INIT(= N_("E119: Not enough arguments for function: %s"));
 EXTERN char e_func_deleted[]	INIT(= N_("E933: Function was deleted: %s"));
-EXTERN char e_dictkey[]		INIT(= N_("E716: Key not present in Dictionary: %s"));
+EXTERN char e_dictkey[]		INIT(= N_("E716: Key not present in Dictionary: \"%s\""));
 EXTERN char e_listreq[]		INIT(= N_("E714: List required"));
 EXTERN char e_listblobreq[]	INIT(= N_("E897: List or Blob required"));
 EXTERN char e_list_end[]	INIT(= N_("E697: Missing end of List ']': %s"));

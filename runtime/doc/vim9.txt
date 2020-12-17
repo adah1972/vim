@@ -1,4 +1,4 @@
-*vim9.txt*	For Vim version 8.2.  Last change: 2020 Sep 26
+*vim9.txt*	For Vim version 8.2.  Last change: 2020 Dec 05
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -112,8 +112,7 @@ In Vi # is a command to list text with numbers.  In Vim9 script you can use
 	101 number
 
 To improve readability there must be a space between a command and the #
-that starts a comment.  Note that #{ is the start of a dictionary, therefore
-it does not start a comment.
+that starts a comment.
 
 
 Vim9 functions ~
@@ -124,8 +123,8 @@ often 10x to 100x times.
 Many errors are already found when compiling, before the function is executed.
 The syntax is strict, to enforce code that is easy to read and understand.
 
-Compilation is done when:
-- the function is first called
+Compilation is done when either of these is encountered:
+- the first time the function is called
 - when the `:defcompile` command is encountered in the script where the
   function was defined
 - `:disassemble` is used for the function.
@@ -133,8 +132,9 @@ Compilation is done when:
   reference
 
 `:def` has no options like `:function` does: "range", "abort", "dict" or
-"closure".  A `:def` function always aborts on an error, does not get a range
-passed and cannot be a "dict" function.
+"closure".  A `:def` function always aborts on an error (unless `:silent!` was
+used for the command or inside a `:try` block), does not get a range passed
+and cannot be a "dict" function.
 
 The argument types and return type need to be specified.  The "any" type can
 be used, type checking will then be done at runtime, like with legacy
@@ -154,25 +154,30 @@ Functions and variables are script-local by default ~
 							*vim9-scopes*
 When using `:function` or `:def` to specify a new function at the script level
 in a Vim9 script, the function is local to the script, as if "s:" was
-prefixed.  Using the "s:" prefix is optional.  To define or use a global
-function or variable the "g:" prefix should be used.  For functions in an
-autoload script the "name#" prefix is sufficient. >
+prefixed.  Using the "s:" prefix is optional.  To define a global function or
+variable the "g:" prefix must be used.  For functions in an autoload script
+the "name#" prefix is sufficient. >
 	def ThisFunction()          # script-local
 	def s:ThisFunction()        # script-local
 	def g:ThatFunction()        # global
-	def ThatFunction()          # global if no local ThatFunction()
 	def scriptname#function()   # autoload
 
-When using `:function` or `:def` to specify a new function inside a function,
-the function is local to the function.  It is not possible to define a
-script-local function inside a function. It is possible to define a global
-function, using the "g:" prefix.
+When using `:function` or `:def` to specify a nested function inside a `:def`
+function, this nested function is local to the code block it is defined in.
+In a `:def` function it is not possible to define a script-local function.  It
+is possible to define a global function by using the "g:" prefix.
 
 When referring to a function and no "s:" or "g:" prefix is used, Vim will
-prefer using a local function (in the function scope, script scope or
-imported) before looking for a global function.
+search for the function:
+- in the function scope, in block scopes
+- in the script scope, possibly imported
+- in the list of global functions
+However, it is recommended to always use "g:" to refer to a global function
+for clarity.
+
 In all cases the function must be defined before used.  That is when it is
-first called or when `:defcompile` causes the call to be compiled.
+called, when `:defcompile` causes it to be compiled, or when code that calls
+it is being compiled (to figure out the return type).
 
 The result is that functions and variables without a namespace can usually be
 found in the script, either defined there or imported.  Global functions and
@@ -184,7 +189,7 @@ and cannot be deleted or replaced.
 
 
 Variable declarations with :var, :final and :const ~
-							*vim9-declaration*
+						*vim9-declaration* *:var*
 Local variables need to be declared with `:var`.  Local constants need to be
 declared with `:final` or `:const`.  We refer to both as "variables" in this
 section.
@@ -261,7 +266,7 @@ Example: >
 	myList = [3, 4]		# Error!
 	myList[0] = 9		# Error!
 	muList->add(3)		# Error!
-
+<							*:final*
 `:final` is used for making only the variable a constant, the value can be
 changed.  This is well known from Java.  Example: >
 	final myList = [1, 2]
@@ -298,8 +303,7 @@ identifier or can't be an Ex command.  Examples: >
 	myList->add(123)
 	g:myList->add(123)
 	[1, 2, 3]->Process()
-	#{a: 1, b: 2}->Process()
-	{'a': 1, 'b': 2}->Process()
+	{a: 1, b: 2}->Process()
 	"foobar"->Process()
 	("foobar")->Process()
 	'foobar'->Process()
@@ -341,7 +345,7 @@ those cases there is no need to prefix the line with a backslash
 		'two',
 		]
 And when a dict spans multiple lines: >
-	var mydict = #{
+	var mydict = {
 		one: 1,
 		two: 2,
 		}
@@ -385,6 +389,9 @@ This will assign "start" and print a line: >
 	var result = start
 	:+ print
 
+Note that the colon is not required for the |+cmd| argument: >
+	edit +6 fname
+
 It is also possible to split a function header over multiple lines, in between
 arguments: >
 	def MyFunc(
@@ -423,6 +430,33 @@ Notes:
 No curly braces expansion ~
 
 |curly-braces-names| cannot be used.
+
+
+Dictionary literals ~
+
+Traditionally Vim has supported dictionary literals with a {} syntax: >
+	let dict = {'key': value}
+
+Later it became clear that using a simple text key is very common, thus
+literal dictionaries were introduced in a backwards compatible way: >
+	let dict = #{key: value}
+
+However, this #{} syntax is unlike any existing language.  As it turns out
+that using a literal key is much more common than using an expression, and
+considering that JavaScript uses this syntax, using the {} form for dictionary
+literals is considered a much more useful syntax.  In Vim9 script the {} form
+uses literal keys: >
+	let dict = {key: value}
+
+This works for alphanumeric characters, underscore and dash.  If you want to
+use another character, use a single or double quoted string: >
+	let dict = {'key with space': value}
+	let dict = {"key\twith\ttabs": value}
+	let dict = {'': value}  		# empty key
+
+In case the key needs to be an expression, square brackets can be used, just
+like in JavaScript: >
+	let dict = {["key" .. nr]: value}
 
 
 No :xit, :t, :append, :change or :insert ~
@@ -467,15 +501,21 @@ White space is not allowed:
 
 Conditions and expressions ~
 
-Conditions and expressions are mostly working like they do in JavaScript.  A
-difference is made where JavaScript does not work like most people expect.
-Specifically, an empty list is falsy.
+Conditions and expressions are mostly working like they do in other languages.
+Some values are different from legacy Vim script:
+	value		legacy Vim script	Vim9 script ~
+	0		falsy			falsy
+	1		truthy			truthy
+	99		truthy			Error!
+	"0"		falsy			Error!
+	"99"		truthy			Error!
+	"text"		falsy			Error!
 
-Any type of variable can be used as a condition, there is no error, not even
-for using a list or job.  This is very much like JavaScript, but there are a
-few exceptions.
+For the "??" operator and when using "!" then there is no error, every value
+is either falsy or truthy.  This is mostly like JavaScript, except that an
+empty list and dict is falsy:
 
-	type		TRUE when ~
+	type		truthy when ~
 	bool		v:true or 1
 	number		non-zero
 	float		non-zero
@@ -490,17 +530,25 @@ few exceptions.
 	class		when not NULL
 	object		when not NULL (TODO: when isTrue() returns v:true)
 
-The boolean operators "||" and "&&" do not change the value: >
-	8 || 2   == 8
-	0 || 2   == 2
-	0 || ''  == ''
-	8 && 2   == 2
-	0 && 2   == 0
-	2 && 0   == 0
-	[] && 2  == []
+The boolean operators "||" and "&&" expect the values to be boolean, zero or
+one: >
+	1 || false   == true
+	0 || 1       == true
+	0 || false   == false
+	1 && true    == true
+	0 && 1       == false
+	8 || 0	     Error!
+	'yes' && 0   Error!
+	[] || 99     Error!
 
-When using `..` for string concatenation arguments of simple types are always
-converted to string. >
+When using "!" for inverting, there is no error for using any type and the
+result is a boolean.  "!!" can be used to turn any value into boolean: >
+	!'yes'	    		== false
+	!![]			== false
+	!![1, 2, 3]    		== true
+
+When using "`.."` for string concatenation arguments of simple types are
+always converted to string: >
 	'hello ' .. 123  == 'hello 123'
 	'hello ' .. v:true  == 'hello v:true'
 
@@ -882,7 +930,7 @@ The script name after `import` can be:
   location of the script file itself.  This is useful to split up a large
   plugin into several files.
 - An absolute path, starting with "/" on Unix or "D:/" on MS-Windows.  This
-  will be rarely used.
+  will rarely be used.
 - A path not being relative or absolute.  This will be found in the
   "import" subdirectories of 'runtimepath' entries.  The name will usually be
   longer and unique, to avoid loading the wrong file.
@@ -1084,7 +1132,7 @@ are used.  That is different, thus it's good to use a different command:
 `:var`.  This is used in many languages.  The semantics might be slightly
 different, but it's easily recognized as a declaration.
 
-Using `:const`  for constants is common, but the semantics vary.  Some
+Using `:const`  for constants is common, but the semantics varies.  Some
 languages only make the variable immutable, others also make the value
 immutable.  Since "final" is well known from Java for only making the variable
 immutable we decided to use that.  And then `:const` can be used for making
@@ -1121,7 +1169,7 @@ Two alternatives were considered:
 	def Func(arg1 number, arg2 string) bool
 
 The first is more familiar for anyone used to C or Java.  The second one
-doesn't really has an advantage over the first, so let's discard the second.
+doesn't really have an advantage over the first, so let's discard the second.
 
 Since we use type inference the type can be left out when it can be inferred
 from the value.  This means that after `var` we don't know if a type or a name
@@ -1136,19 +1184,35 @@ declaration.
 
 Expressions ~
 
-Expression evaluation was already close to what JavaScript and other languages
-are doing.  Some details are unexpected and can be fixed.  For example how the
-|| and && operators work.  Legacy Vim script: >
-	var value = 44
-	...
-	var result = value || 0  # result == 1
+Expression evaluation was already close to what other languages are doing.
+Some details are unexpected and can be improved.  For example a boolean
+condition would accept a string, convert it to a number and check if the
+number is non-zero.  This is unexpected and often leads to mistakes, since
+text not starting with a number would be converted to zero, which is
+considered false.  Thus using a string for a condition would often not give an
+error and be considered false.  That is confusing.
 
-Vim9 script works like JavaScript/TypeScript, keep the value: >
-	var value = 44
-	...
-	var result = value || 0  # result == 44
+In Vim9 type checking is stricter to avoid mistakes.  Where a condition is
+used, e.g. with the `:if` command and the `||` operator, only boolean-like
+values are accepted:
+	true:  `true`, `v:true`, `1`, `0 < 9`
+	false: `false`, `v:false`, `0`, `0 > 9`
+Note that the number zero is false and the number one is true.  This is more
+permissive than most other languages.  It was done because many builtin
+functions return these values.
 
-TODO: the semantics of || and && need to be reconsidered.
+If you have any type of value and want to use it as a boolean, use the `!!`
+operator:
+	true: !`!'text'`, `!![99]`, `!!{'x': 1}`, `!!99`
+	false: `!!''`, `!![]`, `!!{}`
+
+From a language like JavaScript we have this handy construct: >
+	GetName() || 'unknown'
+However, this conflicts with only allowing a boolean for a condition.
+Therefore the "??" operator was added: >
+	GetName() ?? 'unknown'
+Here you can explicitly express your intention to use the value as-is and not
+result in a boolean. This is called the |falsy-operator|.
 
 
 Import and Export ~

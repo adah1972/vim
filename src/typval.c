@@ -196,7 +196,7 @@ tv_get_bool_or_number_chk(typval_T *varp, int *denote, int want_bool)
 	case VAR_STRING:
 	    if (in_vim9script())
 	    {
-		emsg(_(e_using_string_as_number));
+		emsg_using_string_as(varp, !want_bool);
 		break;
 	    }
 	    if (varp->vval.v_string != NULL)
@@ -213,7 +213,10 @@ tv_get_bool_or_number_chk(typval_T *varp, int *denote, int want_bool)
 	case VAR_SPECIAL:
 	    if (!want_bool && in_vim9script())
 	    {
-		emsg(_("E611: Using a Special as a Number"));
+		if (varp->v_type == VAR_BOOL)
+		    emsg(_(e_using_bool_as_number));
+		else
+		    emsg(_("E611: Using a Special as a Number"));
 		break;
 	    }
 	    return varp->vval.v_number == VVAL_TRUE ? 1 : 0;
@@ -336,6 +339,36 @@ tv_get_float(typval_T *varp)
     return 0;
 }
 #endif
+
+/*
+ * Give an error and return FAIL unless "tv" is a string.
+ */
+    int
+check_for_string(typval_T *tv)
+{
+    if (tv->v_type != VAR_STRING)
+    {
+	emsg(_(e_stringreq));
+	return FAIL;
+    }
+    return OK;
+}
+
+/*
+ * Give an error and return FAIL unless "tv" is a non-empty string.
+ */
+    int
+check_for_nonempty_string(typval_T *tv)
+{
+    if (check_for_string(tv) == FAIL)
+	return FAIL;
+    if (tv->vval.v_string == NULL || *tv->vval.v_string == NUL)
+    {
+	emsg(_(e_non_empty_string_required));
+	return FAIL;
+    }
+    return OK;
+}
 
 /*
  * Get the string value of a variable.

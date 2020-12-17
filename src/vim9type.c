@@ -108,7 +108,7 @@ get_list_type(type_T *member_type, garray_T *type_gap)
     type_T *type;
 
     // recognize commonly used types
-    if (member_type->tt_type == VAR_ANY)
+    if (member_type == NULL || member_type->tt_type == VAR_ANY)
 	return &t_list_any;
     if (member_type->tt_type == VAR_VOID
 	    || member_type->tt_type == VAR_UNKNOWN)
@@ -137,7 +137,7 @@ get_dict_type(type_T *member_type, garray_T *type_gap)
     type_T *type;
 
     // recognize commonly used types
-    if (member_type->tt_type == VAR_ANY)
+    if (member_type == NULL || member_type->tt_type == VAR_ANY)
 	return &t_dict_any;
     if (member_type->tt_type == VAR_VOID
 	    || member_type->tt_type == VAR_UNKNOWN)
@@ -360,13 +360,12 @@ typval2type_int(typval_T *tv, garray_T *type_gap)
 need_convert_to_bool(type_T *type, typval_T *tv)
 {
     return type != NULL && type == &t_bool && tv->v_type != VAR_BOOL
-	    && ((tv->v_lock & VAR_BOOL_OK)
-		|| (tv->v_type == VAR_NUMBER
-		       && (tv->vval.v_number == 0 || tv->vval.v_number == 1)));
+	    && (tv->v_type == VAR_NUMBER
+		       && (tv->vval.v_number == 0 || tv->vval.v_number == 1));
 }
 
 /*
- * Get a type_T for a typval_T and handle VAR_BOOL_OK.
+ * Get a type_T for a typval_T.
  * "type_list" is used to temporarily create types in.
  */
     type_T *
@@ -375,9 +374,8 @@ typval2type(typval_T *tv, garray_T *type_gap)
     type_T *type = typval2type_int(tv, type_gap);
 
     if (type != NULL && type != &t_bool
-	    && ((tv->v_type == VAR_NUMBER
-		    && (tv->vval.v_number == 0 || tv->vval.v_number == 1))
-		|| (tv->v_lock & VAR_BOOL_OK)))
+	    && (tv->v_type == VAR_NUMBER
+		    && (tv->vval.v_number == 0 || tv->vval.v_number == 1)))
     {
 	type_T *newtype = get_type_ptr(type_gap);
 
@@ -410,6 +408,7 @@ typval2type_vimvar(typval_T *tv, garray_T *type_gap)
 
 /*
  * Return FAIL if "expected" and "actual" don't match.
+ * When "argidx" > 0 it is included in the error message.
  */
     int
 check_typval_type(type_T *expected, typval_T *actual_tv, int argidx)
@@ -515,6 +514,20 @@ check_type(type_T *expected, type_T *actual, int give_msg, int argidx)
 	    arg_type_mismatch(expected, actual, argidx);
     }
     return ret;
+}
+
+/*
+ * Like check_type() but also allow for a runtime type check. E.g. "any" can be
+ * used for "number".
+ */
+    int
+check_arg_type(type_T *expected, type_T *actual, int argidx)
+{
+    if (check_type(expected, actual, FALSE, 0) == OK
+					    || use_typecheck(actual, expected))
+	return OK;
+    // TODO: should generate a TYPECHECK instruction.
+    return check_type(expected, actual, TRUE, argidx);
 }
 
 /*
@@ -924,6 +937,10 @@ common_type(type_T *type1, type_T *type2, type_T **dest, garray_T *type_gap)
 	    }
 	    else
 		*dest = alloc_func_type(common, -1, type_gap);
+	    // Use the minimum of min_argcount.
+	    (*dest)->tt_min_argcount =
+			type1->tt_min_argcount < type2->tt_min_argcount
+			     ? type1->tt_min_argcount : type2->tt_min_argcount;
 	    return;
 	}
     }

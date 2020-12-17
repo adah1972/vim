@@ -5823,6 +5823,9 @@ $as_echo "not found" >&6; }
 	  MZSCHEME_CFLAGS="-DMZ_PRECISE_GC"
 	elif test -f "${path}/libracket3m.a"; then
 	  MZSCHEME_LIBS="${path}/libracket3m.a"
+	  if test -f "${path}/librktio.a"; then
+	    MZSCHEME_LIBS="${MZSCHEME_LIBS} ${path}/librktio.a"
+	  fi
 	  MZSCHEME_CFLAGS="-DMZ_PRECISE_GC"
 	elif test -f "${path}/libracket.a"; then
 	  MZSCHEME_LIBS="${path}/libracket.a ${path}/libmzgc.a"
@@ -7614,8 +7617,7 @@ $as_echo "$rubyhdrdir" >&6; }
 	librubyarg=`$vi_cv_path_ruby -r rbconfig -e "print $ruby_rbconfig.expand($ruby_rbconfig::CONFIG['LIBRUBYARG'])"`
 	librubya=`$vi_cv_path_ruby -r rbconfig -e "print $ruby_rbconfig.expand($ruby_rbconfig::CONFIG['LIBRUBY_A'])"`
 	rubylibdir=`$vi_cv_path_ruby -r rbconfig -e "print $ruby_rbconfig.expand($ruby_rbconfig::CONFIG['libdir'])"`
-	if test -f "$rubylibdir/$librubya"; then
-	  librubyarg="$librubyarg"
+	if test -f "$rubylibdir/$librubya" || expr "$librubyarg" : "-lruby"; then
 	  RUBY_LIBS="$RUBY_LIBS -L$rubylibdir"
 	elif test "$librubyarg" = "libruby.a"; then
 	  	  librubyarg="-lruby"
@@ -12347,10 +12349,18 @@ if test -c /dev/ptmx ; then
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
+// These should be in stdlib.h, but it depends on _XOPEN_SOURCE.
+char *ptsname(int);
+int unlockpt(int);
+int grantpt(int);
+
 int
 main ()
 {
-ptsname(0);grantpt(0);unlockpt(0);
+
+		ptsname(0);
+		grantpt(0);
+		unlockpt(0);
   ;
   return 0;
 }
@@ -14849,6 +14859,8 @@ else
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 fi
+
+LDFLAGS=`echo "$LDFLAGS" | sed -e 's/-L /-L/g'`
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking linker --as-needed support" >&5
 $as_echo_n "checking linker --as-needed support... " >&6; }

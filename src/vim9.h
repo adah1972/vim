@@ -18,6 +18,7 @@ typedef enum {
     ISN_EXECUTE,    // execute Ex commands isn_arg.number items on top of stack
     ISN_ECHOMSG,    // echo Ex commands isn_arg.number items on top of stack
     ISN_ECHOERR,    // echo Ex commands isn_arg.number items on top of stack
+    ISN_RANGE,	    // compute range from isn_arg.string, push to stack
 
     // get and set variables
     ISN_LOAD,	    // push local variable isn_arg.number
@@ -82,6 +83,7 @@ typedef enum {
     ISN_RETURN,	    // return, result is on top of stack
     ISN_FUNCREF,    // push a function ref to dfunc isn_arg.funcref
     ISN_NEWFUNC,    // create a global function from a lambda function
+    ISN_DEF,	    // list functions
 
     // expression operations
     ISN_JUMP,	    // jump if condition is matched isn_arg.jump
@@ -96,8 +98,8 @@ typedef enum {
     ISN_ENDTRY,	    // take entry off from ec_trystack
 
     // more expression operations
-    ISN_ADDLIST,
-    ISN_ADDBLOB,
+    ISN_ADDLIST,    // add two lists
+    ISN_ADDBLOB,    // add two blobs
 
     // operation with two arguments; isn_arg.op.op_type is exptype_T
     ISN_OPNR,
@@ -120,15 +122,18 @@ typedef enum {
     ISN_CONCAT,
     ISN_STRINDEX,   // [expr] string index
     ISN_STRSLICE,   // [expr:expr] string slice
+    ISN_LISTAPPEND, // append to a list, like add()
     ISN_LISTINDEX,  // [expr] list index
     ISN_LISTSLICE,  // [expr:expr] list slice
     ISN_ANYINDEX,   // [expr] runtime index
     ISN_ANYSLICE,   // [expr:expr] runtime slice
     ISN_SLICE,	    // drop isn_arg.number items from start of list
+    ISN_BLOBAPPEND, // append to a blob, like add()
     ISN_GETITEM,    // push list item, isn_arg.number is the index
     ISN_MEMBER,	    // dict[member]
     ISN_STRINGMEMBER, // dict.member using isn_arg.string
-    ISN_2BOOL,	    // convert value to bool, invert if isn_arg.number != 0
+    ISN_2BOOL,	    // falsy/truthy to bool, invert if isn_arg.number != 0
+    ISN_COND2BOOL,  // convert value to bool
     ISN_2STRING,    // convert value to string at isn_arg.number on stack
     ISN_2STRING_ANY, // like ISN_2STRING but check type
     ISN_NEGATENR,   // apply "-" to number
@@ -139,6 +144,10 @@ typedef enum {
 
     ISN_PUT,	    // ":put", uses isn_arg.put
 
+    ISN_CMDMOD,	    // set cmdmod
+    ISN_CMDMOD_REV, // undo ISN_CMDMOD
+
+    ISN_UNPACK,	    // unpack list into items, uses isn_arg.unpack
     ISN_SHUFFLE,    // move item on stack up or down
     ISN_DROP	    // pop stack and discard value
 } isntype_T;
@@ -171,8 +180,10 @@ typedef struct {
 typedef enum {
     JUMP_ALWAYS,
     JUMP_IF_FALSE,		// pop and jump if false
-    JUMP_AND_KEEP_IF_TRUE,	// jump if top of stack is true, drop if not
-    JUMP_AND_KEEP_IF_FALSE,	// jump if top of stack is false, drop if not
+    JUMP_AND_KEEP_IF_TRUE,	// jump if top of stack is truthy, drop if not
+    JUMP_AND_KEEP_IF_FALSE,	// jump if top of stack is falsy, drop if not
+    JUMP_IF_COND_TRUE,		// jump if top of stack is true, drop if not
+    JUMP_IF_COND_FALSE,		// jump if top of stack is false, drop if not
 } jumpwhen_T;
 
 // arguments to ISN_JUMP
@@ -270,6 +281,17 @@ typedef struct {
     linenr_T	put_lnum;	// line number to put below
 } put_T;
 
+// arguments to ISN_CMDMOD
+typedef struct {
+    cmdmod_T	*cf_cmdmod;	// allocated
+} cmod_T;
+
+// arguments to ISN_UNPACK
+typedef struct {
+    int		unp_count;	// number of items to produce
+    int		unp_semicolon;	// last item gets list of remainder
+} unpack_T;
+
 /*
  * Instruction
  */
@@ -306,6 +328,8 @@ struct isn_S {
 	checklen_T	    checklen;
 	shuffle_T	    shuffle;
 	put_T		    put;
+	cmod_T		    cmdmod;
+	unpack_T	    unpack;
     } isn_arg;
 };
 
@@ -343,3 +367,8 @@ garray_T def_functions = {0, 0, sizeof(dfunc_T), 50, NULL};
 extern garray_T def_functions;
 #endif
 
+// Used for "lnum" when a range is to be taken from the stack.
+#define LNUM_VARIABLE_RANGE -999
+
+// Used for "lnum" when a range is to be taken from the stack and "!" is used.
+#define LNUM_VARIABLE_RANGE_ABOVE -888

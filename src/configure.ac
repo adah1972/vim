@@ -880,6 +880,9 @@ if test "$enable_mzschemeinterp" = "yes"; then
 	  MZSCHEME_CFLAGS="-DMZ_PRECISE_GC"
 	elif test -f "${path}/libracket3m.a"; then
 	  MZSCHEME_LIBS="${path}/libracket3m.a"
+	  if test -f "${path}/librktio.a"; then
+	    MZSCHEME_LIBS="${MZSCHEME_LIBS} ${path}/librktio.a"
+	  fi
 	  MZSCHEME_CFLAGS="-DMZ_PRECISE_GC"
 	elif test -f "${path}/libracket.a"; then
 	  MZSCHEME_LIBS="${path}/libracket.a ${path}/libmzgc.a"
@@ -1962,8 +1965,7 @@ if test "$enable_rubyinterp" = "yes" -o "$enable_rubyinterp" = "dynamic"; then
 	librubyarg=`$vi_cv_path_ruby -r rbconfig -e "print $ruby_rbconfig.expand($ruby_rbconfig::CONFIG[['LIBRUBYARG']])"`
 	librubya=`$vi_cv_path_ruby -r rbconfig -e "print $ruby_rbconfig.expand($ruby_rbconfig::CONFIG[['LIBRUBY_A']])"`
 	rubylibdir=`$vi_cv_path_ruby -r rbconfig -e "print $ruby_rbconfig.expand($ruby_rbconfig::CONFIG[['libdir']])"`
-	if test -f "$rubylibdir/$librubya"; then
-	  librubyarg="$librubyarg"
+	if test -f "$rubylibdir/$librubya" || expr "$librubyarg" : "-lruby"; then
 	  RUBY_LIBS="$RUBY_LIBS -L$rubylibdir"
 	elif test "$librubyarg" = "libruby.a"; then
 	  dnl required on Mac OS 10.3 where libruby.a doesn't exist
@@ -3590,7 +3592,15 @@ fi
 
 AC_MSG_CHECKING(for SVR4 ptys)
 if test -c /dev/ptmx ; then
-  AC_TRY_LINK([], [ptsname(0);grantpt(0);unlockpt(0);],
+  AC_TRY_LINK([
+// These should be in stdlib.h, but it depends on _XOPEN_SOURCE.
+char *ptsname(int);
+int unlockpt(int);
+int grantpt(int);
+	       ], [
+		ptsname(0);
+		grantpt(0);
+		unlockpt(0);],
 	AC_MSG_RESULT(yes); AC_DEFINE(HAVE_SVR4_PTYS),
 	AC_MSG_RESULT(no))
 else
@@ -4455,6 +4465,10 @@ if echo "$CFLAGS $LUA_CFLAGS $MZSCHEME_CFLAGS $PERL_CFLAGS $PYTHON_CFLAGS $PYTHO
 else
   AC_MSG_RESULT(no)
 fi
+
+dnl $LDFLAGS is passed to glibtool in libvterm, it doesn't like a space
+dnl between "-L" and the path that follows.
+LDFLAGS=`echo "$LDFLAGS" | sed -e 's/-L /-L/g'`
 
 dnl link.sh tries to avoid overlinking in a hackish way.
 dnl At least GNU ld supports --as-needed which provides the same functionality
