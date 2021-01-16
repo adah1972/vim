@@ -6600,6 +6600,14 @@ func Test_type()
     call ChangeYourMind()
 endfunc
 
+func Test_typename()
+  call assert_equal('number', typename(123))
+  call assert_equal('string', typename('x'))
+  call assert_equal('list<number>', typename([123]))
+  call assert_equal('dict<number>', typename(#{key: 123}))
+  call assert_equal('list<dict<number>>', typename([#{key: 123}]))
+endfunc
+
 "-------------------------------------------------------------------------------
 " Test 92:  skipping code					    {{{1
 "-------------------------------------------------------------------------------
@@ -7374,7 +7382,7 @@ func Test_invalid_function_names()
   endtry
   call assert_equal(1, caught_e884)
 
-  " function name folowed by #
+  " function name followed by #
   let caught_e128 = 0
   try
     func! test2() "#

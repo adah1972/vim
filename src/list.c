@@ -270,6 +270,7 @@ list_free_list(list_T  *l)
     if (l->lv_used_next != NULL)
 	l->lv_used_next->lv_used_prev = l->lv_used_prev;
 
+    free_type(l->lv_type);
     vim_free(l);
 }
 
@@ -689,13 +690,17 @@ list_append_number(list_T *l, varnumber_T n)
 /*
  * Insert typval_T "tv" in list "l" before "item".
  * If "item" is NULL append at the end.
- * Return FAIL when out of memory.
+ * Return FAIL when out of memory or the type is wrong.
  */
     int
 list_insert_tv(list_T *l, typval_T *tv, listitem_T *item)
 {
-    listitem_T	*ni = listitem_alloc();
+    listitem_T	*ni;
 
+    if (l->lv_type != NULL && l->lv_type->tt_member != NULL
+		    && check_typval_type(l->lv_type->tt_member, tv, 0) == FAIL)
+	return FAIL;
+    ni = listitem_alloc();
     if (ni == NULL)
 	return FAIL;
     copy_tv(tv, &ni->li_tv);
@@ -900,14 +905,15 @@ list_slice(list_T *ol, long n1, long n2)
 list_slice_or_index(
 	    list_T	*list,
 	    int		range,
-	    long	n1_arg,
-	    long	n2_arg,
+	    varnumber_T	n1_arg,
+	    varnumber_T	n2_arg,
+	    int		exclusive,
 	    typval_T	*rettv,
 	    int		verbose)
 {
     long	len = list_len(list);
-    long	n1 = n1_arg;
-    long	n2 = n2_arg;
+    varnumber_T	n1 = n1_arg;
+    varnumber_T	n2 = n2_arg;
     typval_T	var1;
 
     if (n1 < 0)
@@ -919,7 +925,7 @@ list_slice_or_index(
 	if (!range)
 	{
 	    if (verbose)
-		semsg(_(e_listidx), n1);
+		semsg(_(e_listidx), n1_arg);
 	    return FAIL;
 	}
 	n1 = n1 < 0 ? 0 : len;
@@ -931,7 +937,9 @@ list_slice_or_index(
 	if (n2 < 0)
 	    n2 = len + n2;
 	else if (n2 >= len)
-	    n2 = len - 1;
+	    n2 = len - (exclusive ? 0 : 1);
+	if (exclusive)
+	    --n2;
 	if (n2 < 0 || n2 + 1 < n1)
 	    n2 = -1;
 	l = list_slice(list, n1, n2);
@@ -2183,10 +2191,13 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 		int		stride = l->lv_u.nonmat.lv_stride;
 
 		// List from range(): loop over the numbers
-		l->lv_first = NULL;
-		l->lv_u.mat.lv_last = NULL;
-		l->lv_len = 0;
-		l->lv_u.mat.lv_idx_item = NULL;
+		if (filtermap != FILTERMAP_MAPNEW)
+		{
+		    l->lv_first = NULL;
+		    l->lv_u.mat.lv_last = NULL;
+		    l->lv_len = 0;
+		    l->lv_u.mat.lv_idx_item = NULL;
+		}
 
 		for (idx = 0; idx < len; ++idx)
 		{
@@ -2446,14 +2457,11 @@ f_count(typval_T *argvars, typval_T *rettv)
 }
 
 /*
- * "extend(list, list [, idx])" function
- * "extend(dict, dict [, action])" function
+ * "extend()" or "extendnew()" function.  "is_new" is TRUE for extendnew().
  */
-    void
-f_extend(typval_T *argvars, typval_T *rettv)
+    static void
+extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
 {
-    char_u      *arg_errmsg = (char_u *)N_("extend() argument");
-
     if (argvars[0].v_type == VAR_LIST && argvars[1].v_type == VAR_LIST)
     {
 	list_T		*l1, *l2;
@@ -2468,8 +2476,16 @@ f_extend(typval_T *argvars, typval_T *rettv)
 	    return;
 	}
 	l2 = argvars[1].vval.v_list;
-	if (!value_check_lock(l1->lv_lock, arg_errmsg, TRUE) && l2 != NULL)
+	if ((is_new || !value_check_lock(l1->lv_lock, arg_errmsg, TRUE))
+								 && l2 != NULL)
 	{
+	    if (is_new)
+	    {
+		l1 = list_copy(l1, FALSE, get_copyID());
+		if (l1 == NULL)
+		    return;
+	    }
+
 	    if (argvars[2].v_type != VAR_UNKNOWN)
 	    {
 		before = (long)tv_get_number_chk(&argvars[2], &error);
@@ -2492,7 +2508,14 @@ f_extend(typval_T *argvars, typval_T *rettv)
 		item = NULL;
 	    list_extend(l1, l2, item);
 
-	    copy_tv(&argvars[0], rettv);
+	    if (is_new)
+	    {
+		rettv->v_type = VAR_LIST;
+		rettv->vval.v_list = l1;
+		rettv->v_lock = FALSE;
+	    }
+	    else
+		copy_tv(&argvars[0], rettv);
 	}
     }
     else if (argvars[0].v_type == VAR_DICT && argvars[1].v_type == VAR_DICT)
@@ -2508,8 +2531,16 @@ f_extend(typval_T *argvars, typval_T *rettv)
 	    return;
 	}
 	d2 = argvars[1].vval.v_dict;
-	if (!value_check_lock(d1->dv_lock, arg_errmsg, TRUE) && d2 != NULL)
+	if ((is_new || !value_check_lock(d1->dv_lock, arg_errmsg, TRUE))
+								 && d2 != NULL)
 	{
+	    if (is_new)
+	    {
+		d1 = dict_copy(d1, FALSE, get_copyID());
+		if (d1 == NULL)
+		    return;
+	    }
+
 	    // Check the third argument.
 	    if (argvars[2].v_type != VAR_UNKNOWN)
 	    {
@@ -2532,11 +2563,42 @@ f_extend(typval_T *argvars, typval_T *rettv)
 
 	    dict_extend(d1, d2, action);
 
-	    copy_tv(&argvars[0], rettv);
+	    if (is_new)
+	    {
+		rettv->v_type = VAR_DICT;
+		rettv->vval.v_dict = d1;
+		rettv->v_lock = FALSE;
+	    }
+	    else
+		copy_tv(&argvars[0], rettv);
 	}
     }
     else
-	semsg(_(e_listdictarg), "extend()");
+	semsg(_(e_listdictarg), is_new ? "extendnew()" : "extend()");
+}
+
+/*
+ * "extend(list, list [, idx])" function
+ * "extend(dict, dict [, action])" function
+ */
+    void
+f_extend(typval_T *argvars, typval_T *rettv)
+{
+    char_u      *errmsg = (char_u *)N_("extend() argument");
+
+    extend(argvars, rettv, errmsg, FALSE);
+}
+
+/*
+ * "extendnew(list, list [, idx])" function
+ * "extendnew(dict, dict [, action])" function
+ */
+    void
+f_extendnew(typval_T *argvars, typval_T *rettv)
+{
+    char_u      *errmsg = (char_u *)N_("extendnew() argument");
+
+    extend(argvars, rettv, errmsg, TRUE);
 }
 
 /*
@@ -2693,7 +2755,7 @@ f_reverse(typval_T *argvars, typval_T *rettv)
 }
 
 /*
- * "reduce(list, { accumlator, element -> value } [, initial])" function
+ * "reduce(list, { accumulator, element -> value } [, initial])" function
  */
     void
 f_reduce(typval_T *argvars, typval_T *rettv)
