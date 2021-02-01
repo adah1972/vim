@@ -196,6 +196,10 @@ edit(
 #endif
 	ins_apply_autocmds(EVENT_INSERTENTER);
 
+	// Check for changed highlighting, e.g. for ModeMsg.
+	if (need_highlight_changed)
+	    highlight_changed();
+
 	// Make sure the cursor didn't move.  Do call check_cursor_col() in
 	// case the text was modified.  Since Insert mode was not started yet
 	// a call to check_cursor_col() may move the cursor, especially with
@@ -1586,7 +1590,7 @@ decodeModifyOtherKeys(int c)
     // Recognize:
     // form 0: {lead}{key};{modifier}u
     // form 1: {lead}27;{modifier};{key}~
-    if ((c == CSI || (c == ESC && *p == '[')) && typebuf.tb_len >= 4)
+    if (typebuf.tb_len >= 4 && (c == CSI || (c == ESC && *p == '[')))
     {
 	idx = (*p == '[');
 	if (p[idx] == '2' && p[idx + 1] == '7' && p[idx + 2] == ';')

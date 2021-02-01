@@ -44,6 +44,7 @@ struct endlabel_S {
  */
 typedef struct {
     int		is_seen_else;
+    int		is_seen_skip_not;   // a block was unconditionally executed
     int		is_had_return;	    // every block ends in :return
     int		is_if_label;	    // instruction idx at IF or ELSEIF
     endlabel_T	*is_end_label;	    // instructions to set end label
@@ -122,6 +123,8 @@ struct cctx_S {
     int		ctx_lnum;	    // line number in current function
     char_u	*ctx_line_start;    // start of current line or NULL
     garray_T	ctx_instr;	    // generated instructions
+
+    int		ctx_profiling;	    // when TRUE generate ISN_PROF_START
 
     garray_T	ctx_locals;	    // currently visible local variables
     int		ctx_locals_count;   // total number of local variables
@@ -816,7 +819,8 @@ generate_COND2BOOL(cctx_T *cctx)
 generate_TYPECHECK(
 	cctx_T	    *cctx,
 	type_T	    *expected,
-	int	    offset)
+	int	    offset,
+	int	    argidx)
 {
     isn_T	*isn;
     garray_T	*stack = &cctx->ctx_type_stack;
@@ -825,7 +829,8 @@ generate_TYPECHECK(
     if ((isn = generate_instr(cctx, ISN_CHECKTYPE)) == NULL)
 	return FAIL;
     isn->isn_arg.type.ct_type = alloc_type(expected);
-    isn->isn_arg.type.ct_off = offset;
+    isn->isn_arg.type.ct_off = (int8_T)offset;
+    isn->isn_arg.type.ct_arg_idx = (int8_T)argidx;
 
     // type becomes expected
     ((type_T **)stack->ga_data)[stack->ga_len + offset] = expected;
@@ -878,11 +883,12 @@ use_typecheck(type_T *actual, type_T *expected)
  * If "actual_is_const" is TRUE then the type won't change at runtime, do not
  * generate a TYPECHECK.
  */
-    static int
+    int
 need_type(
 	type_T	*actual,
 	type_T	*expected,
 	int	offset,
+	int	arg_idx,
 	cctx_T	*cctx,
 	int	silent,
 	int	actual_is_const)
@@ -896,19 +902,19 @@ need_type(
 	return OK;
     }
 
-    if (check_type(expected, actual, FALSE, 0) == OK)
+    if (check_type(expected, actual, FALSE, arg_idx) == OK)
 	return OK;
 
     // If the actual type can be the expected type add a runtime check.
     // If it's a constant a runtime check makes no sense.
     if (!actual_is_const && use_typecheck(actual, expected))
     {
-	generate_TYPECHECK(cctx, expected, offset);
+	generate_TYPECHECK(cctx, expected, offset, arg_idx);
 	return OK;
     }
 
     if (!silent)
-	type_mismatch(expected, actual);
+	arg_type_mismatch(expected, actual, arg_idx);
     return FAIL;
 }
 
@@ -931,7 +937,7 @@ bool_on_stack(cctx_T *cctx)
 	// This requires a runtime type check.
 	return generate_COND2BOOL(cctx);
 
-    return need_type(type, &t_bool, -1, cctx, FALSE, FALSE);
+    return need_type(type, &t_bool, -1, 0, cctx, FALSE, FALSE);
 }
 
 /*
@@ -1613,7 +1619,8 @@ generate_BCALL(cctx_T *cctx, int func_idx, int argcount, int method_call)
     {
 	// Check the types of the arguments.
 	argtypes = ((type_T **)stack->ga_data) + stack->ga_len - argcount;
-	if (internal_func_check_arg_types(argtypes, func_idx, argcount) == FAIL)
+	if (internal_func_check_arg_types(argtypes, func_idx, argcount,
+								 cctx) == FAIL)
 	    return FAIL;
 	if (internal_func_is_map(func_idx))
 	    maptype = *argtypes;
@@ -1635,7 +1642,7 @@ generate_BCALL(cctx_T *cctx, int func_idx, int argcount, int method_call)
     if (maptype != NULL && maptype->tt_member != NULL
 					       && maptype->tt_member != &t_any)
 	// Check that map() didn't change the item types.
-	generate_TYPECHECK(cctx, maptype, -1);
+	generate_TYPECHECK(cctx, maptype, -1, 1);
 
     return OK;
 }
@@ -1656,7 +1663,7 @@ generate_LISTAPPEND(cctx_T *cctx)
     list_type = ((type_T **)stack->ga_data)[stack->ga_len - 2];
     item_type = ((type_T **)stack->ga_data)[stack->ga_len - 1];
     expected = list_type->tt_member;
-    if (need_type(item_type, expected, -1, cctx, FALSE, FALSE) == FAIL)
+    if (need_type(item_type, expected, -1, 0, cctx, FALSE, FALSE) == FAIL)
 	return FAIL;
 
     if (generate_instr(cctx, ISN_LISTAPPEND) == NULL)
@@ -1678,7 +1685,7 @@ generate_BLOBAPPEND(cctx_T *cctx)
 
     // Caller already checked that blob_type is a blob.
     item_type = ((type_T **)stack->ga_data)[stack->ga_len - 1];
-    if (need_type(item_type, &t_number, -1, cctx, FALSE, FALSE) == FAIL)
+    if (need_type(item_type, &t_number, -1, 0, cctx, FALSE, FALSE) == FAIL)
 	return FAIL;
 
     if (generate_instr(cctx, ISN_BLOBAPPEND) == NULL)
@@ -1686,6 +1693,34 @@ generate_BLOBAPPEND(cctx_T *cctx)
 
     --stack->ga_len;	    // drop the argument
     return OK;
+}
+
+/*
+ * Return TRUE if "ufunc" should be compiled, taking into account whether
+ * "profile" indicates profiling is to be done.
+ */
+    int
+func_needs_compiling(ufunc_T *ufunc, int profile UNUSED)
+{
+    switch (ufunc->uf_def_status)
+    {
+	case UF_NOT_COMPILED: break;
+	case UF_TO_BE_COMPILED: return TRUE;
+	case UF_COMPILED:
+	{
+#ifdef FEAT_PROFILE
+	    dfunc_T *dfunc = ((dfunc_T *)def_functions.ga_data)
+							 + ufunc->uf_dfunc_idx;
+
+	    return profile ? dfunc->df_instr_prof == NULL
+			   : dfunc->df_instr == NULL;
+#else
+	    break;
+#endif
+	}
+	case UF_COMPILING: break;
+    }
+    return FALSE;
 }
 
 /*
@@ -1733,17 +1768,17 @@ generate_CALL(cctx_T *cctx, ufunc_T *ufunc, int pushed_argcount)
 	    else
 		expected = ufunc->uf_va_type->tt_member;
 	    actual = ((type_T **)stack->ga_data)[stack->ga_len - argcount + i];
-	    if (need_type(actual, expected, -argcount + i, cctx,
+	    if (need_type(actual, expected, -argcount + i, i + 1, cctx,
 							  TRUE, FALSE) == FAIL)
 	    {
 		arg_type_mismatch(expected, actual, i + 1);
 		return FAIL;
 	    }
 	}
-	if (ufunc->uf_def_status == UF_TO_BE_COMPILED)
-	    if (compile_def_function(ufunc, ufunc->uf_ret_type == NULL, NULL)
-								       == FAIL)
-		return FAIL;
+	if (func_needs_compiling(ufunc, PROFILING(ufunc))
+		&& compile_def_function(ufunc, ufunc->uf_ret_type == NULL,
+					       PROFILING(ufunc), NULL) == FAIL)
+	    return FAIL;
     }
 
     if ((isn = generate_instr(cctx,
@@ -1850,7 +1885,7 @@ generate_PCALL(
 					     type->tt_argcount - 1]->tt_member;
 		    else
 			expected = type->tt_args[i];
-		    if (need_type(actual, expected, offset,
+		    if (need_type(actual, expected, offset, i + 1,
 						    cctx, TRUE, FALSE) == FAIL)
 		    {
 			arg_type_mismatch(expected, actual, i + 1);
@@ -2058,6 +2093,15 @@ generate_undo_cmdmods(cctx_T *cctx)
     cctx->ctx_has_cmdmod = FALSE;
     return OK;
 }
+
+#ifdef FEAT_PROFILE
+    static void
+may_generate_prof_end(cctx_T *cctx, int prof_lnum)
+{
+    if (cctx->ctx_profiling && prof_lnum >= 0)
+	generate_instr(cctx, ISN_PROF_END);
+}
+#endif
 
 /*
  * Reserve space for a local variable.
@@ -2571,9 +2615,10 @@ generate_funcref(cctx_T *cctx, char_u *name)
 	return FAIL;
 
     // Need to compile any default values to get the argument types.
-    if (ufunc->uf_def_status == UF_TO_BE_COMPILED)
-	if (compile_def_function(ufunc, TRUE, NULL) == FAIL)
-	    return FAIL;
+    if (func_needs_compiling(ufunc, PROFILING(ufunc))
+	    && compile_def_function(ufunc, TRUE, PROFILING(ufunc), NULL)
+								       == FAIL)
+	return FAIL;
     return generate_PUSHFUNC(cctx, ufunc->uf_name, ufunc->uf_func_type);
 }
 
@@ -3066,7 +3111,7 @@ compile_lambda(char_u **arg, cctx_T *cctx)
     clear_tv(&rettv);
 
     // Compile the function into instructions.
-    compile_def_function(ufunc, TRUE, cctx);
+    compile_def_function(ufunc, TRUE, PROFILING(ufunc), cctx);
 
     clear_evalarg(&evalarg, NULL);
 
@@ -3135,7 +3180,7 @@ compile_dict(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
 	    {
 		type_T *keytype = ((type_T **)stack->ga_data)
 						       [stack->ga_len - 1];
-		if (need_type(keytype, &t_string, -1, cctx,
+		if (need_type(keytype, &t_string, -1, 0, cctx,
 						     FALSE, FALSE) == FAIL)
 		    return FAIL;
 	    }
@@ -3808,13 +3853,13 @@ compile_subscript(
 		vtype = VAR_DICT;
 	    if (vtype == VAR_STRING || vtype == VAR_LIST || vtype == VAR_BLOB)
 	    {
-		if (need_type(valtype, &t_number, -1, cctx,
+		if (need_type(valtype, &t_number, -1, 0, cctx,
 							 FALSE, FALSE) == FAIL)
 		    return FAIL;
 		if (is_slice)
 		{
 		    valtype = ((type_T **)stack->ga_data)[stack->ga_len - 2];
-		    if (need_type(valtype, &t_number, -2, cctx,
+		    if (need_type(valtype, &t_number, -2, 0, cctx,
 							 FALSE, FALSE) == FAIL)
 			return FAIL;
 		}
@@ -3836,7 +3881,7 @@ compile_subscript(
 		}
 		else
 		{
-		    if (need_type(*typep, &t_dict_any, -2, cctx,
+		    if (need_type(*typep, &t_dict_any, -2, 0, cctx,
 							 FALSE, FALSE) == FAIL)
 			return FAIL;
 		    *typep = &t_any;
@@ -4076,13 +4121,17 @@ compile_expr7(
 	/*
 	 * List: [expr, expr]
 	 */
-	case '[':   ret = compile_list(arg, cctx, ppconst);
+	case '[':   if (generate_ppconst(cctx, ppconst) == FAIL)
+			return FAIL;
+		    ret = compile_list(arg, cctx, ppconst);
 		    break;
 
 	/*
 	 * Dictionary: {'key': val, 'key': val}
 	 */
-	case '{':   ret = compile_dict(arg, cctx, ppconst);
+	case '{':   if (generate_ppconst(cctx, ppconst) == FAIL)
+			return FAIL;
+		    ret = compile_dict(arg, cctx, ppconst);
 		    break;
 
 	/*
@@ -4235,7 +4284,7 @@ compile_expr7t(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
 	actual = ((type_T **)stack->ga_data)[stack->ga_len - 1];
 	if (check_type(want_type, actual, FALSE, 0) == FAIL)
 	{
-	    if (need_type(actual, want_type, -1, cctx, FALSE, FALSE) == FAIL)
+	    if (need_type(actual, want_type, -1, 0, cctx, FALSE, FALSE) == FAIL)
 		return FAIL;
 	}
     }
@@ -4289,20 +4338,25 @@ compile_expr6(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
 		&& ppconst->pp_tv[ppconst_used].v_type == VAR_NUMBER
 		&& ppconst->pp_tv[ppconst_used + 1].v_type == VAR_NUMBER)
 	{
-	    typval_T *tv1 = &ppconst->pp_tv[ppconst_used];
-	    typval_T *tv2 = &ppconst->pp_tv[ppconst_used + 1];
-	    varnumber_T res = 0;
+	    typval_T	    *tv1 = &ppconst->pp_tv[ppconst_used];
+	    typval_T	    *tv2 = &ppconst->pp_tv[ppconst_used + 1];
+	    varnumber_T	    res = 0;
+	    int		    failed = FALSE;
 
 	    // both are numbers: compute the result
 	    switch (*op)
 	    {
 		case '*': res = tv1->vval.v_number * tv2->vval.v_number;
 			  break;
-		case '/': res = tv1->vval.v_number / tv2->vval.v_number;
+		case '/': res = num_divide(tv1->vval.v_number,
+						  tv2->vval.v_number, &failed);
 			  break;
-		case '%': res = tv1->vval.v_number % tv2->vval.v_number;
+		case '%': res = num_modulus(tv1->vval.v_number,
+						  tv2->vval.v_number, &failed);
 			  break;
 	    }
+	    if (failed)
+		return FAIL;
 	    tv1->vval.v_number = res;
 	    --ppconst->pp_used;
 	}
@@ -4917,7 +4971,7 @@ compile_return(char_u *arg, int check_return_type, cctx_T *cctx)
 		    return NULL;
 		}
 		if (need_type(stack_type, cctx->ctx_ufunc->uf_ret_type, -1,
-						   cctx, FALSE, FALSE) == FAIL)
+						0, cctx, FALSE, FALSE) == FAIL)
 		    return NULL;
 	    }
 	}
@@ -5038,8 +5092,9 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx)
 	r = eap->skip ? OK : FAIL;
 	goto theend;
     }
-    if (ufunc->uf_def_status == UF_TO_BE_COMPILED
-	    && compile_def_function(ufunc, TRUE, cctx) == FAIL)
+    if (func_needs_compiling(ufunc, PROFILING(ufunc))
+	    && compile_def_function(ufunc, TRUE, PROFILING(ufunc), cctx)
+								       == FAIL)
     {
 	func_ptr_unref(ufunc);
 	goto theend;
@@ -5800,12 +5855,9 @@ compile_assign_unlet(
 	if (dest_type == VAR_DICT && may_generate_2STRING(-1, cctx) == FAIL)
 	    return FAIL;
 	if (dest_type == VAR_LIST
-		     && ((type_T **)stack->ga_data)[stack->ga_len - 1]->tt_type
-								 != VAR_NUMBER)
-	{
-	    emsg(_(e_number_exp));
+		&& need_type(((type_T **)stack->ga_data)[stack->ga_len - 1],
+				 &t_number, -1, 0, cctx, FALSE, FALSE) == FAIL)
 	    return FAIL;
-	}
     }
 
     // Load the dict or list.  On the stack we then have:
@@ -5831,7 +5883,7 @@ compile_assign_unlet(
 		  : ((type_T **)stack->ga_data)[stack->ga_len - 1];
 	// now we can properly check the type
 	if (lhs->lhs_type->tt_member != NULL && rhs_type != &t_void
-		&& need_type(rhs_type, lhs->lhs_type->tt_member, -2, cctx,
+		&& need_type(rhs_type, lhs->lhs_type->tt_member, -2, 0, cctx,
 							 FALSE, FALSE) == FAIL)
 	    return FAIL;
     }
@@ -5976,7 +6028,7 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
 		emsg(_(e_cannot_use_void_value));
 		goto theend;
 	    }
-	    if (need_type(stacktype, &t_list_any, -1, cctx,
+	    if (need_type(stacktype, &t_list_any, -1, 0, cctx,
 							 FALSE, FALSE) == FAIL)
 		goto theend;
 	    // TODO: check the length of a constant list here
@@ -6123,13 +6175,13 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
 			// without operator check type here, otherwise below
 			if (lhs.lhs_has_index)
 			    use_type = lhs.lhs_member_type;
-			if (need_type(rhs_type, use_type, -1, cctx,
+			if (need_type(rhs_type, use_type, -1, 0, cctx,
 						      FALSE, is_const) == FAIL)
 			    goto theend;
 		    }
 		}
 		else if (*p != '=' && need_type(rhs_type, lhs.lhs_member_type,
-					       -1, cctx, FALSE, FALSE) == FAIL)
+					    -1, 0, cctx, FALSE, FALSE) == FAIL)
 		    goto theend;
 	    }
 	    else if (cmdidx == CMD_final)
@@ -6216,7 +6268,7 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
 		// If variable is float operation with number is OK.
 		!(expected == &t_float && stacktype == &t_number) &&
 #endif
-		    need_type(stacktype, expected, -1, cctx,
+		    need_type(stacktype, expected, -1, 0, cctx,
 							 FALSE, FALSE) == FAIL)
 		goto theend;
 
@@ -6518,7 +6570,7 @@ compile_jump_to_end(endlabel_T **el, jumpwhen_T when, cctx_T *cctx)
 }
 
     static void
-compile_fill_jump_to_end(endlabel_T **el, cctx_T *cctx)
+compile_fill_jump_to_end(endlabel_T **el, int jump_where, cctx_T *cctx)
 {
     garray_T	*instr = &cctx->ctx_instr;
 
@@ -6528,7 +6580,7 @@ compile_fill_jump_to_end(endlabel_T **el, cctx_T *cctx)
 	isn_T	    *isn;
 
 	isn = ((isn_T *)instr->ga_data) + cur->el_end_label;
-	isn->isn_arg.jump.jump_where = instr->ga_len;
+	isn->isn_arg.jump.jump_where = jump_where;
 	*el = cur->el_next;
 	vim_free(cur);
     }
@@ -6682,6 +6734,18 @@ compile_if(char_u *arg, cctx_T *cctx)
     else
 	scope->se_u.se_if.is_if_label = -1;
 
+#ifdef FEAT_PROFILE
+    if (cctx->ctx_profiling && cctx->ctx_skip == SKIP_YES
+						      && skip_save != SKIP_YES)
+    {
+	// generated a profile start, need to generate a profile end, since it
+	// won't be done after returning
+	cctx->ctx_skip = SKIP_NOT;
+	generate_instr(cctx, ISN_PROF_END);
+	cctx->ctx_skip = SKIP_YES;
+    }
+#endif
+
     return p;
 }
 
@@ -6705,6 +6769,25 @@ compile_elseif(char_u *arg, cctx_T *cctx)
     if (!cctx->ctx_had_return)
 	scope->se_u.se_if.is_had_return = FALSE;
 
+    if (cctx->ctx_skip == SKIP_NOT)
+    {
+	// previous block was executed, this one and following will not
+	cctx->ctx_skip = SKIP_YES;
+	scope->se_u.se_if.is_seen_skip_not = TRUE;
+    }
+    if (scope->se_u.se_if.is_seen_skip_not)
+    {
+	// A previous block was executed, skip over expression and bail out.
+	// Do not count the "elseif" for profiling.
+#ifdef FEAT_PROFILE
+	if (cctx->ctx_profiling && ((isn_T *)instr->ga_data)[instr->ga_len - 1]
+						   .isn_type == ISN_PROF_START)
+	    --instr->ga_len;
+#endif
+	skip_expr_cctx(&p, cctx);
+	return p;
+    }
+
     if (cctx->ctx_skip == SKIP_UNKNOWN)
     {
 	if (compile_jump_to_end(&scope->se_u.se_if.is_end_label,
@@ -6718,7 +6801,17 @@ compile_elseif(char_u *arg, cctx_T *cctx)
     // compile "expr"; if we know it evaluates to FALSE skip the block
     CLEAR_FIELD(ppconst);
     if (cctx->ctx_skip == SKIP_YES)
+    {
 	cctx->ctx_skip = SKIP_UNKNOWN;
+#ifdef FEAT_PROFILE
+	if (cctx->ctx_profiling)
+	{
+	    // the previous block was skipped, need to profile this line
+	    generate_instr(cctx, ISN_PROF_START);
+	    instr_count = instr->ga_len;
+	}
+#endif
+    }
     if (compile_expr1(&p, cctx, &ppconst) == FAIL)
     {
 	clear_ppconst(&ppconst);
@@ -6776,7 +6869,27 @@ compile_else(char_u *arg, cctx_T *cctx)
 	scope->se_u.se_if.is_had_return = FALSE;
     scope->se_u.se_if.is_seen_else = TRUE;
 
-    if (scope->se_skip_save != SKIP_YES)
+#ifdef FEAT_PROFILE
+    if (cctx->ctx_profiling)
+    {
+	if (cctx->ctx_skip == SKIP_NOT
+		&& ((isn_T *)instr->ga_data)[instr->ga_len - 1]
+						   .isn_type == ISN_PROF_START)
+	    // the previous block was executed, do not count "else" for profiling
+	    --instr->ga_len;
+	if (cctx->ctx_skip == SKIP_YES && !scope->se_u.se_if.is_seen_skip_not)
+	{
+	    // the previous block was not executed, this one will, do count the
+	    // "else" for profiling
+	    cctx->ctx_skip = SKIP_NOT;
+	    generate_instr(cctx, ISN_PROF_END);
+	    generate_instr(cctx, ISN_PROF_START);
+	    cctx->ctx_skip = SKIP_YES;
+	}
+    }
+#endif
+
+    if (!scope->se_u.se_if.is_seen_skip_not && scope->se_skip_save != SKIP_YES)
     {
 	// jump from previous block to the end, unless the else block is empty
 	if (cctx->ctx_skip == SKIP_UNKNOWN)
@@ -6830,7 +6943,18 @@ compile_endif(char_u *arg, cctx_T *cctx)
 	isn->isn_arg.jump.jump_where = instr->ga_len;
     }
     // Fill in the "end" label in jumps at the end of the blocks.
-    compile_fill_jump_to_end(&ifscope->is_end_label, cctx);
+    compile_fill_jump_to_end(&ifscope->is_end_label, instr->ga_len, cctx);
+
+#ifdef FEAT_PROFILE
+    // even when skipping we count the endif as executed, unless the block it's
+    // in is skipped
+    if (cctx->ctx_profiling && cctx->ctx_skip == SKIP_YES
+					    && scope->se_skip_save != SKIP_YES)
+    {
+	cctx->ctx_skip = SKIP_NOT;
+	generate_instr(cctx, ISN_PROF_START);
+    }
+#endif
     cctx->ctx_skip = scope->se_skip_save;
 
     // If all the blocks end in :return and there is an :else then the
@@ -6882,6 +7006,8 @@ compile_for(char_u *arg_start, cctx_T *cctx)
     int		idx;
 
     p = skip_var_list(arg_start, TRUE, &var_count, &semicolon, FALSE);
+    if (p == NULL)
+	return NULL;
     if (var_count == 0)
 	var_count = 1;
 
@@ -6925,7 +7051,7 @@ compile_for(char_u *arg_start, cctx_T *cctx)
     // Now that we know the type of "var", check that it is a list, now or at
     // runtime.
     vartype = ((type_T **)stack->ga_data)[stack->ga_len - 1];
-    if (need_type(vartype, &t_list_any, -1, cctx, FALSE, FALSE) == FAIL)
+    if (need_type(vartype, &t_list_any, -1, 0, cctx, FALSE, FALSE) == FAIL)
     {
 	drop_scope(cctx);
 	return NULL;
@@ -7016,6 +7142,8 @@ compile_for(char_u *arg_start, cctx_T *cctx)
 	    generate_STORE(cctx, ISN_STORE, var_lvar->lv_idx, NULL);
 	}
 
+	if (*p == ':')
+	    p = skip_type(skipwhite(p + 1), FALSE);
 	if (*p == ',' || *p == ';')
 	    ++p;
 	arg = skipwhite(p);
@@ -7058,7 +7186,7 @@ compile_endfor(char_u *arg, cctx_T *cctx)
     isn->isn_arg.forloop.for_end = instr->ga_len;
 
     // Fill in the "end" label any BREAK statements
-    compile_fill_jump_to_end(&forscope->fs_end_label, cctx);
+    compile_fill_jump_to_end(&forscope->fs_end_label, instr->ga_len, cctx);
 
     // Below the ":for" scope drop the "expr" list from the stack.
     if (generate_instr_drop(cctx, ISN_DROP, 1) == NULL)
@@ -7091,7 +7219,13 @@ compile_while(char_u *arg, cctx_T *cctx)
     if (scope == NULL)
 	return NULL;
 
+    // "endwhile" jumps back here, one before when profiling
     scope->se_u.se_while.ws_top_label = instr->ga_len;
+#ifdef FEAT_PROFILE
+    if (cctx->ctx_profiling && ((isn_T *)instr->ga_data)[instr->ga_len - 1]
+						   .isn_type == ISN_PROF_START)
+	--scope->se_u.se_while.ws_top_label;
+#endif
 
     // compile "expr"
     if (compile_expr0(&p, cctx) == FAIL)
@@ -7115,6 +7249,7 @@ compile_while(char_u *arg, cctx_T *cctx)
 compile_endwhile(char_u *arg, cctx_T *cctx)
 {
     scope_T	*scope = cctx->ctx_scope;
+    garray_T	*instr = &cctx->ctx_instr;
 
     if (scope == NULL || scope->se_type != WHILE_SCOPE)
     {
@@ -7124,12 +7259,18 @@ compile_endwhile(char_u *arg, cctx_T *cctx)
     cctx->ctx_scope = scope->se_outer;
     unwind_locals(cctx, scope->se_local_count);
 
+#ifdef FEAT_PROFILE
+    // count the endwhile before jumping
+    may_generate_prof_end(cctx, cctx->ctx_lnum);
+#endif
+
     // At end of ":for" scope jump back to the FOR instruction.
     generate_JUMP(cctx, JUMP_ALWAYS, scope->se_u.se_while.ws_top_label);
 
     // Fill in the "end" label in the WHILE statement so it can jump here.
     // And in any jumps for ":break"
-    compile_fill_jump_to_end(&scope->se_u.se_while.ws_end_label, cctx);
+    compile_fill_jump_to_end(&scope->se_u.se_while.ws_end_label,
+							  instr->ga_len, cctx);
 
     vim_free(scope);
 
@@ -7311,6 +7452,12 @@ compile_catch(char_u *arg, cctx_T *cctx UNUSED)
 
     if (cctx->ctx_skip != SKIP_YES)
     {
+#ifdef FEAT_PROFILE
+	// the profile-start should be after the jump
+	if (cctx->ctx_profiling && ((isn_T *)instr->ga_data)[instr->ga_len - 1]
+						   .isn_type == ISN_PROF_START)
+	    --instr->ga_len;
+#endif
 	// Jump from end of previous block to :finally or :endtry
 	if (compile_jump_to_end(&scope->se_u.se_try.ts_end_label,
 						    JUMP_ALWAYS, cctx) == FAIL)
@@ -7326,6 +7473,15 @@ compile_catch(char_u *arg, cctx_T *cctx UNUSED)
 	    isn = ((isn_T *)instr->ga_data) + scope->se_u.se_try.ts_catch_label;
 	    isn->isn_arg.jump.jump_where = instr->ga_len;
 	}
+#ifdef FEAT_PROFILE
+	if (cctx->ctx_profiling)
+	{
+	    // a "throw" that jumps here needs to be counted
+	    generate_instr(cctx, ISN_PROF_END);
+	    // the "catch" is also counted
+	    generate_instr(cctx, ISN_PROF_START);
+	}
+#endif
     }
 
     p = skipwhite(arg);
@@ -7386,6 +7542,7 @@ compile_finally(char_u *arg, cctx_T *cctx)
     scope_T	*scope = cctx->ctx_scope;
     garray_T	*instr = &cctx->ctx_instr;
     isn_T	*isn;
+    int		this_instr;
 
     // end block scope from :try or :catch
     if (scope != NULL && scope->se_type == BLOCK_SCOPE)
@@ -7407,15 +7564,24 @@ compile_finally(char_u *arg, cctx_T *cctx)
 	return NULL;
     }
 
-    // Fill in the "end" label in jumps at the end of the blocks.
-    compile_fill_jump_to_end(&scope->se_u.se_try.ts_end_label, cctx);
+    this_instr = instr->ga_len;
+#ifdef FEAT_PROFILE
+    if (cctx->ctx_profiling && ((isn_T *)instr->ga_data)[instr->ga_len - 1]
+						   .isn_type == ISN_PROF_START)
+	// jump to the profile start of the "finally"
+	--this_instr;
+#endif
 
-    isn->isn_arg.try.try_finally = instr->ga_len;
+    // Fill in the "end" label in jumps at the end of the blocks.
+    compile_fill_jump_to_end(&scope->se_u.se_try.ts_end_label,
+							     this_instr, cctx);
+
+    isn->isn_arg.try.try_finally = this_instr;
     if (scope->se_u.se_try.ts_catch_label != 0)
     {
 	// Previous catch without match jumps here
 	isn = ((isn_T *)instr->ga_data) + scope->se_u.se_try.ts_catch_label;
-	isn->isn_arg.jump.jump_where = instr->ga_len;
+	isn->isn_arg.jump.jump_where = this_instr;
 	scope->se_u.se_try.ts_catch_label = 0;
     }
 
@@ -7460,9 +7626,18 @@ compile_endtry(char_u *arg, cctx_T *cctx)
 	    return NULL;
 	}
 
+#ifdef FEAT_PROFILE
+    if (cctx->ctx_profiling && ((isn_T *)instr->ga_data)[instr->ga_len - 1]
+						   .isn_type == ISN_PROF_START)
+	// move the profile start after "endtry" so that it's not counted when
+	// the exception is rethrown.
+	--instr->ga_len;
+#endif
+
 	// Fill in the "end" label in jumps at the end of the blocks, if not
 	// done by ":finally".
-	compile_fill_jump_to_end(&scope->se_u.se_try.ts_end_label, cctx);
+	compile_fill_jump_to_end(&scope->se_u.se_try.ts_end_label,
+							  instr->ga_len, cctx);
 
 	// End :catch or :finally scope: set value in ISN_TRY instruction
 	if (isn->isn_arg.try.try_catch == 0)
@@ -7482,6 +7657,10 @@ compile_endtry(char_u *arg, cctx_T *cctx)
 
     if (cctx->ctx_skip != SKIP_YES && generate_instr(cctx, ISN_ENDTRY) == NULL)
 	return NULL;
+#ifdef FEAT_PROFILE
+	if (cctx->ctx_profiling)
+	    generate_instr(cctx, ISN_PROF_START);
+#endif
     return arg;
 }
 
@@ -7784,13 +7963,18 @@ add_def_function(ufunc_T *ufunc)
  * When "check_return_type" is set then set ufunc->uf_ret_type to the type of
  * the return statement (used for lambda).  When uf_ret_type is already set
  * then check that it matches.
+ * When "profiling" is true add ISN_PROF_START instructions.
  * "outer_cctx" is set for a nested function.
  * This can be used recursively through compile_lambda(), which may reallocate
  * "def_functions".
  * Returns OK or FAIL.
  */
     int
-compile_def_function(ufunc_T *ufunc, int check_return_type, cctx_T *outer_cctx)
+compile_def_function(
+	ufunc_T	    *ufunc,
+	int	    check_return_type,
+	int	    profiling UNUSED,
+	cctx_T	    *outer_cctx)
 {
     char_u	*line = NULL;
     char_u	*p;
@@ -7803,6 +7987,9 @@ compile_def_function(ufunc_T *ufunc, int check_return_type, cctx_T *outer_cctx)
     int		save_estack_compiling = estack_compiling;
     int		do_estack_push;
     int		new_def_function = FALSE;
+#ifdef FEAT_PROFILE
+    int		prof_lnum = -1;
+#endif
 
     // When using a function that was compiled before: Free old instructions.
     // The index is reused.  Otherwise add a new entry in "def_functions".
@@ -7822,6 +8009,10 @@ compile_def_function(ufunc_T *ufunc, int check_return_type, cctx_T *outer_cctx)
     ufunc->uf_def_status = UF_COMPILING;
 
     CLEAR_FIELD(cctx);
+
+#ifdef FEAT_PROFILE
+    cctx.ctx_profiling = profiling;
+#endif
     cctx.ctx_ufunc = ufunc;
     cctx.ctx_lnum = -1;
     cctx.ctx_outer = outer_cctx;
@@ -7922,22 +8113,41 @@ compile_def_function(ufunc_T *ufunc, int check_return_type, cctx_T *outer_cctx)
 	{
 	    line = next_line_from_context(&cctx, FALSE);
 	    if (cctx.ctx_lnum >= ufunc->uf_lines.ga_len)
+	    {
 		// beyond the last line
+#ifdef FEAT_PROFILE
+		if (cctx.ctx_skip != SKIP_YES)
+		    may_generate_prof_end(&cctx, prof_lnum);
+#endif
 		break;
+	    }
 	}
 
 	CLEAR_FIELD(ea);
 	ea.cmdlinep = &line;
 	ea.cmd = skipwhite(line);
 
+	if (*ea.cmd == '#')
+	{
+	    // "#" starts a comment
+	    line = (char_u *)"";
+	    continue;
+	}
+
+#ifdef FEAT_PROFILE
+	if (cctx.ctx_profiling && cctx.ctx_lnum != prof_lnum &&
+						     cctx.ctx_skip != SKIP_YES)
+	{
+	    may_generate_prof_end(&cctx, prof_lnum);
+
+	    prof_lnum = cctx.ctx_lnum;
+	    generate_instr(&cctx, ISN_PROF_START);
+	}
+#endif
+
 	// Some things can be recognized by the first character.
 	switch (*ea.cmd)
 	{
-	    case '#':
-		// "#" starts a comment
-		line = (char_u *)"";
-		continue;
-
 	    case '}':
 		{
 		    // "}" ends a block scope
@@ -8298,8 +8508,18 @@ nextline:
 							 + ufunc->uf_dfunc_idx;
 	dfunc->df_deleted = FALSE;
 	dfunc->df_script_seq = current_sctx.sc_seq;
-	dfunc->df_instr = instr->ga_data;
-	dfunc->df_instr_count = instr->ga_len;
+#ifdef FEAT_PROFILE
+	if (cctx.ctx_profiling)
+	{
+	    dfunc->df_instr_prof = instr->ga_data;
+	    dfunc->df_instr_prof_count = instr->ga_len;
+	}
+	else
+#endif
+	{
+	    dfunc->df_instr = instr->ga_data;
+	    dfunc->df_instr_count = instr->ga_len;
+	}
 	dfunc->df_varcount = cctx.ctx_locals_count;
 	dfunc->df_has_closure = cctx.ctx_has_closure;
 	if (cctx.ctx_outer_used)
@@ -8576,6 +8796,8 @@ delete_instr(isn_T *isn)
 	case ISN_OPNR:
 	case ISN_PCALL:
 	case ISN_PCALL_END:
+	case ISN_PROF_END:
+	case ISN_PROF_START:
 	case ISN_PUSHBOOL:
 	case ISN_PUSHF:
 	case ISN_PUSHNR:
@@ -8619,6 +8841,15 @@ delete_def_function_contents(dfunc_T *dfunc, int mark_deleted)
 	VIM_CLEAR(dfunc->df_instr);
 	dfunc->df_instr = NULL;
     }
+#ifdef FEAT_PROFILE
+    if (dfunc->df_instr_prof != NULL)
+    {
+	for (idx = 0; idx < dfunc->df_instr_prof_count; ++idx)
+	    delete_instr(dfunc->df_instr_prof + idx);
+	VIM_CLEAR(dfunc->df_instr_prof);
+	dfunc->df_instr_prof = NULL;
+    }
+#endif
 
     if (mark_deleted)
 	dfunc->df_deleted = TRUE;

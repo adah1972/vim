@@ -115,6 +115,21 @@ def Test_add_blob()
   CheckDefExecFailure(lines, 'E1131:', 2)
 enddef
 
+def Test_append()
+  new
+  setline(1, range(3))
+  var res1: number = append(1, 'one')
+  assert_equal(0, res1)
+  var res2: bool = append(3, 'two')
+  assert_equal(false, res2)
+  assert_equal(['0', 'one', '1', 'two', '2'], getline(1, 6))
+enddef
+
+def Test_buflisted()
+  var res: bool = buflisted('asdf')
+  assert_equal(false, res)
+enddef
+
 def Test_bufname()
   split SomeFile
   bufname('%')->assert_equal('SomeFile')
@@ -199,6 +214,11 @@ def Test_cursor()
   CheckDefExecAndScriptFailure(lines, 'E475:')
 enddef
 
+def Test_delete()
+  var res: bool = delete('doesnotexist')
+  assert_equal(true, res)
+enddef
+
 def Test_executable()
   assert_false(executable(""))
   assert_false(executable(test_null_string()))
@@ -220,19 +240,24 @@ def Test_expand()
 enddef
 
 def Test_extend_arg_types()
-  assert_equal([1, 2, 3], extend([1, 2], [3]))
-  assert_equal([3, 1, 2], extend([1, 2], [3], 0))
-  assert_equal([1, 3, 2], extend([1, 2], [3], 1))
-  assert_equal([1, 3, 2], extend([1, 2], [3], s:number_one))
+  g:number_one = 1
+  g:string_keep = 'keep'
+  var lines =<< trim END
+      assert_equal([1, 2, 3], extend([1, 2], [3]))
+      assert_equal([3, 1, 2], extend([1, 2], [3], 0))
+      assert_equal([1, 3, 2], extend([1, 2], [3], 1))
+      assert_equal([1, 3, 2], extend([1, 2], [3], g:number_one))
 
-  assert_equal({a: 1, b: 2, c: 3}, extend({a: 1, b: 2}, {c: 3}))
-  assert_equal({a: 1, b: 4}, extend({a: 1, b: 2}, {b: 4}))
-  assert_equal({a: 1, b: 2}, extend({a: 1, b: 2}, {b: 4}, 'keep'))
-  assert_equal({a: 1, b: 2}, extend({a: 1, b: 2}, {b: 4}, s:string_keep))
+      assert_equal({a: 1, b: 2, c: 3}, extend({a: 1, b: 2}, {c: 3}))
+      assert_equal({a: 1, b: 4}, extend({a: 1, b: 2}, {b: 4}))
+      assert_equal({a: 1, b: 2}, extend({a: 1, b: 2}, {b: 4}, 'keep'))
+      assert_equal({a: 1, b: 2}, extend({a: 1, b: 2}, {b: 4}, g:string_keep))
 
-  var res: list<dict<any>>
-  extend(res, mapnew([1, 2], (_, v) => ({})))
-  assert_equal([{}, {}], res)
+      var res: list<dict<any>>
+      extend(res, mapnew([1, 2], (_, v) => ({})))
+      assert_equal([{}, {}], res)
+  END
+  CheckDefAndScriptSuccess(lines)
 
   CheckDefFailure(['extend([1, 2], 3)'], 'E1013: Argument 2: type mismatch, expected list<number> but got number')
   CheckDefFailure(['extend([1, 2], ["x"])'], 'E1013: Argument 2: type mismatch, expected list<number> but got list<string>')
@@ -241,6 +266,9 @@ def Test_extend_arg_types()
   CheckDefFailure(['extend({a: 1}, 42)'], 'E1013: Argument 2: type mismatch, expected dict<number> but got number')
   CheckDefFailure(['extend({a: 1}, {b: "x"})'], 'E1013: Argument 2: type mismatch, expected dict<number> but got dict<string>')
   CheckDefFailure(['extend({a: 1}, {b: 2}, 1)'], 'E1013: Argument 3: type mismatch, expected string but got number')
+
+  CheckDefFailure(['extend([1], ["b"])'], 'E1013: Argument 2: type mismatch, expected list<number> but got list<string>')
+  CheckDefExecFailure(['extend([1], ["b", 1])'], 'E1013: Argument 2: type mismatch, expected list<number> but got list<any>')
 enddef
 
 def Test_extendnew()
@@ -277,8 +305,7 @@ def Test_extend_dict_item_type()
        var d: dict<number> = {a: 1}
        extend(d, {b: 'x'})
   END
-  CheckDefFailure(lines, 'E1013: Argument 2: type mismatch, expected dict<number> but got dict<string>', 2)
-  CheckScriptFailure(['vim9script'] + lines, 'E1012:', 3)
+  CheckDefAndScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected dict<number> but got dict<string>', 2)
 
   lines =<< trim END
        var d: dict<number> = {a: 1}
@@ -303,8 +330,7 @@ def Test_extend_list_item_type()
        var l: list<number> = [1]
        extend(l, ['x'])
   END
-  CheckDefFailure(lines, 'E1013: Argument 2: type mismatch, expected list<number> but got list<string>', 2)
-  CheckScriptFailure(['vim9script'] + lines, 'E1012:', 3)
+  CheckDefAndScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected list<number> but got list<string>', 2)
 
   lines =<< trim END
        var l: list<number> = [1]
@@ -326,27 +352,6 @@ enddef
 
 def Wrong_dict_key_type(items: list<number>): list<number>
   return filter(items, (_, val) => get({[val]: 1}, 'x'))
-enddef
-
-def Test_map_function_arg()
-  var lines =<< trim END
-      def MapOne(i: number, v: string): string
-        return i .. ':' .. v
-      enddef
-      var l = ['a', 'b', 'c']
-      map(l, MapOne)
-      assert_equal(['0:a', '1:b', '2:c'], l)
-  END
-  CheckDefAndScriptSuccess(lines)
-enddef
-
-def Test_map_item_type()
-  var lines =<< trim END
-      var l = ['a', 'b', 'c']
-      map(l, (k, v) => k .. '/' .. v )
-      assert_equal(['0/a', '1/b', '2/c'], l)
-  END
-  CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_filereadable()
@@ -581,6 +586,45 @@ def SID(): number
           ->str2nr()
 enddef
 
+def Test_map_function_arg()
+  var lines =<< trim END
+      def MapOne(i: number, v: string): string
+        return i .. ':' .. v
+      enddef
+      var l = ['a', 'b', 'c']
+      map(l, MapOne)
+      assert_equal(['0:a', '1:b', '2:c'], l)
+  END
+  CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_map_item_type()
+  var lines =<< trim END
+      var l = ['a', 'b', 'c']
+      map(l, (k, v) => k .. '/' .. v )
+      assert_equal(['0/a', '1/b', '2/c'], l)
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+    var l: list<number> = [0]
+    echo map(l, (_, v) => [])
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1012: Type mismatch; expected number but got list<unknown>', 2)
+
+  lines =<< trim END
+    var l: list<number> = range(2)
+    echo map(l, (_, v) => [])
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1012: Type mismatch; expected number but got list<unknown>', 2)
+
+  lines =<< trim END
+    var d: dict<number> = {key: 0}
+    echo map(d, (_, v) => [])
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1012: Type mismatch; expected number but got list<unknown>', 2)
+enddef
+
 def Test_maparg()
   var lnum = str2nr(expand('<sflnum>'))
   map foo bar
@@ -612,6 +656,34 @@ def Test_maparg_mapset()
   mapset('n', false, mapsave)
 
   nunmap <F3>
+enddef
+
+def Test_max()
+  g:flag = true
+  var l1: list<number> = g:flag
+          ? [1, max([2, 3])]
+          : [4, 5]
+  assert_equal([1, 3], l1)
+
+  g:flag = false
+  var l2: list<number> = g:flag
+          ? [1, max([2, 3])]
+          : [4, 5]
+  assert_equal([4, 5], l2)
+enddef
+
+def Test_min()
+  g:flag = true
+  var l1: list<number> = g:flag
+          ? [1, min([2, 3])]
+          : [4, 5]
+  assert_equal([1, 2], l1)
+
+  g:flag = false
+  var l2: list<number> = g:flag
+          ? [1, min([2, 3])]
+          : [4, 5]
+  assert_equal([4, 5], l2)
 enddef
 
 def Test_nr2char()
@@ -696,6 +768,54 @@ def Test_searchcount()
           maxcount: 99,
           incomplete: 0})
   bwipe!
+enddef
+
+def Test_set_get_bufline()
+  # similar to Test_setbufline_getbufline()
+  var lines =<< trim END
+      new
+      var b = bufnr('%')
+      hide
+      assert_equal(0, setbufline(b, 1, ['foo', 'bar']))
+      assert_equal(['foo'], getbufline(b, 1))
+      assert_equal(['bar'], getbufline(b, '$'))
+      assert_equal(['foo', 'bar'], getbufline(b, 1, 2))
+      exe "bd!" b
+      assert_equal([], getbufline(b, 1, 2))
+
+      split Xtest
+      setline(1, ['a', 'b', 'c'])
+      b = bufnr('%')
+      wincmd w
+
+      assert_equal(1, setbufline(b, 5, 'x'))
+      assert_equal(1, setbufline(b, 5, ['x']))
+      assert_equal(1, setbufline(b, 5, []))
+      assert_equal(1, setbufline(b, 5, test_null_list()))
+
+      assert_equal(1, 'x'->setbufline(bufnr('$') + 1, 1))
+      assert_equal(1, ['x']->setbufline(bufnr('$') + 1, 1))
+      assert_equal(1, []->setbufline(bufnr('$') + 1, 1))
+      assert_equal(1, test_null_list()->setbufline(bufnr('$') + 1, 1))
+
+      assert_equal(['a', 'b', 'c'], getbufline(b, 1, '$'))
+
+      assert_equal(0, setbufline(b, 4, ['d', 'e']))
+      assert_equal(['c'], b->getbufline(3))
+      assert_equal(['d'], getbufline(b, 4))
+      assert_equal(['e'], getbufline(b, 5))
+      assert_equal([], getbufline(b, 6))
+      assert_equal([], getbufline(b, 2, 1))
+
+      setbufline(b, 2, [function('eval'), {key: 123}, test_null_job()])
+      assert_equal(["function('eval')",
+                      "{'key': 123}",
+                      "no process"],
+                      getbufline(b, 2, 4))
+
+      exe 'bwipe! ' .. b
+  END
+  CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_searchdecl()
@@ -796,8 +916,27 @@ def Test_split()
   split('  aa  bb  ', '\W\+', true)->assert_equal(['', 'aa', 'bb', ''])
 enddef
 
+def Run_str2float()
+  if !has('float')
+    MissingFeature 'float'
+  endif
+    str2float("1.00")->assert_equal(1.00)
+    str2float("2e-2")->assert_equal(0.02)
+
+    CheckDefFailure(['echo str2float(123)'], 'E1013:')
+    CheckScriptFailure(['vim9script', 'echo str2float(123)'], 'E1024:')
+  endif
+enddef
+
 def Test_str2nr()
   str2nr("1'000'000", 10, true)->assert_equal(1000000)
+
+  CheckDefFailure(['echo str2nr(123)'], 'E1013:')
+  CheckScriptFailure(['vim9script', 'echo str2nr(123)'], 'E1024:')
+  CheckDefFailure(['echo str2nr("123", "x")'], 'E1013:')
+  CheckScriptFailure(['vim9script', 'echo str2nr("123", "x")'], 'E1030:')
+  CheckDefFailure(['echo str2nr("123", 10, "x")'], 'E1013:')
+  CheckScriptFailure(['vim9script', 'echo str2nr("123", 10, "x")'], 'E1135:')
 enddef
 
 def Test_strchars()

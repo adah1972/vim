@@ -1577,7 +1577,7 @@ typedef struct svar_S svar_T;
 #if defined(FEAT_EVAL) || defined(PROTO)
 typedef struct funccall_S funccall_T;
 
-// values used for "uf_dfunc_idx"
+// values used for "uf_def_status"
 typedef enum {
     UF_NOT_COMPILED,
     UF_TO_BE_COMPILED,
@@ -1649,8 +1649,8 @@ typedef struct
 
     char_u	*uf_name_exp;	// if "uf_name[]" starts with SNR the name with
 				// "<SNR>" as a string, otherwise NULL
-    char_u	uf_name[1];	// name of function (actually longer); can
-				// start with <SNR>123_ (<SNR> is K_SPECIAL
+    char_u	uf_name[4];	// name of function (actual size equals name);
+				// can start with <SNR>123_ (<SNR> is K_SPECIAL
 				// KS_EXTRA KE_SNR)
 } ufunc_T;
 
@@ -1899,6 +1899,18 @@ typedef struct sn_prl_S
 } sn_prl_T;
 
 #  define PRL_ITEM(si, idx)	(((sn_prl_T *)(si)->sn_prl_ga.ga_data)[(idx)])
+
+typedef struct {
+    int		pi_started_profiling;
+    proftime_T	pi_wait_start;
+    proftime_T	pi_call_start;
+} profinfo_T;
+
+# else
+typedef struct
+{
+    int	    dummy;
+} profinfo_T;
 # endif
 #else
 // dummy typedefs for use in function prototypes

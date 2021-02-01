@@ -925,7 +925,7 @@ list_slice_or_index(
 	if (!range)
 	{
 	    if (verbose)
-		semsg(_(e_listidx), n1_arg);
+		semsg(_(e_listidx), (long)n1_arg);
 	    return FAIL;
 	}
 	n1 = n1 < 0 ? 0 : len;
@@ -1452,7 +1452,7 @@ list_remove(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg)
     listitem_T	*item, *item2;
     listitem_T	*li;
     int		error = FALSE;
-    int		idx;
+    long	idx;
 
     if ((l = argvars[0].vval.v_list) == NULL
 			     || value_check_lock(l->lv_lock, arg_errmsg, TRUE))
@@ -1475,7 +1475,7 @@ list_remove(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg)
 	else
 	{
 	    // Remove range of items, return list with values.
-	    int end = (long)tv_get_number_chk(&argvars[2], &error);
+	    long end = (long)tv_get_number_chk(&argvars[2], &error);
 
 	    if (error)
 		;		// type error: do nothing
@@ -1985,10 +1985,18 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 						    : N_("filter() argument"));
     int		save_did_emsg;
     int		idx = 0;
+    type_T	*type = NULL;
+    garray_T	type_list;
 
     // map() and filter() return the first argument, also on failure.
     if (filtermap != FILTERMAP_MAPNEW)
 	copy_tv(&argvars[0], rettv);
+    if (filtermap == FILTERMAP_MAP && in_vim9script())
+    {
+	// Check that map() does not change the type of the dict.
+	ga_init2(&type_list, sizeof(type_T *), 10);
+	type = typval2type(argvars, &type_list);
+    }
 
     if (argvars[0].v_type == VAR_BLOB)
     {
@@ -1998,7 +2006,7 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 	    rettv->vval.v_blob = NULL;
 	}
 	if ((b = argvars[0].vval.v_blob) == NULL)
-	    return;
+	    goto theend;
     }
     else if (argvars[0].v_type == VAR_LIST)
     {
@@ -2010,7 +2018,7 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 	if ((l = argvars[0].vval.v_list) == NULL
 	      || (filtermap == FILTERMAP_FILTER
 			    && value_check_lock(l->lv_lock, arg_errmsg, TRUE)))
-	    return;
+	    goto theend;
     }
     else if (argvars[0].v_type == VAR_DICT)
     {
@@ -2022,12 +2030,12 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 	if ((d = argvars[0].vval.v_dict) == NULL
 	      || (filtermap == FILTERMAP_FILTER
 			    && value_check_lock(d->dv_lock, arg_errmsg, TRUE)))
-	    return;
+	    goto theend;
     }
     else
     {
 	semsg(_(e_listdictblobarg), ermsg);
-	return;
+	goto theend;
     }
 
     expr = &argvars[1];
@@ -2055,7 +2063,7 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 	    if (filtermap == FILTERMAP_MAPNEW)
 	    {
 		if (rettv_dict_alloc(rettv) == FAIL)
-		    return;
+		    goto theend;
 		d_ret = rettv->vval.v_dict;
 	    }
 
@@ -2090,6 +2098,12 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 		    }
 		    if (filtermap == FILTERMAP_MAP)
 		    {
+			if (type != NULL && check_typval_type(type->tt_member,
+							    &newtv, 0) == FAIL)
+			{
+			    clear_tv(&newtv);
+			    break;
+			}
 			// map(): replace the dict item value
 			clear_tv(&di->di_tv);
 			newtv.v_lock = 0;
@@ -2126,7 +2140,7 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 	    if (filtermap == FILTERMAP_MAPNEW)
 	    {
 		if (blob_copy(b, rettv) == FAIL)
-		    return;
+		    goto theend;
 		b_ret = rettv->vval.v_blob;
 	    }
 
@@ -2175,7 +2189,7 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 	    if (filtermap == FILTERMAP_MAPNEW)
 	    {
 		if (rettv_list_alloc(rettv) == FAIL)
-		    return;
+		    goto theend;
 		l_ret = rettv->vval.v_list;
 	    }
 	    // set_vim_var_nr() doesn't set the type
@@ -2218,6 +2232,13 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 		    }
 		    if (filtermap != FILTERMAP_FILTER)
 		    {
+			if (filtermap == FILTERMAP_MAP && type != NULL
+					  && check_typval_type(type->tt_member,
+							    &newtv, 0) == FAIL)
+			{
+			    clear_tv(&newtv);
+			    break;
+			}
 			// map(), mapnew(): always append the new value to the
 			// list
 			if (list_append_tv_move(filtermap == FILTERMAP_MAP
@@ -2256,6 +2277,12 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 		    }
 		    if (filtermap == FILTERMAP_MAP)
 		    {
+			if (type != NULL && check_typval_type(type->tt_member,
+							    &newtv, 0) == FAIL)
+			{
+			    clear_tv(&newtv);
+			    break;
+			}
 			// map(): replace the list item value
 			clear_tv(&li->li_tv);
 			newtv.v_lock = 0;
@@ -2281,6 +2308,10 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 
 	did_emsg |= save_did_emsg;
     }
+
+theend:
+    if (type != NULL)
+	clear_type_list(&type_list);
 }
 
 /*
@@ -2462,6 +2493,16 @@ f_count(typval_T *argvars, typval_T *rettv)
     static void
 extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
 {
+    type_T	*type = NULL;
+    garray_T	type_list;
+
+    if (!is_new && in_vim9script())
+    {
+	// Check that map() does not change the type of the dict.
+	ga_init2(&type_list, sizeof(type_T *), 10);
+	type = typval2type(argvars, &type_list);
+    }
+
     if (argvars[0].v_type == VAR_LIST && argvars[1].v_type == VAR_LIST)
     {
 	list_T		*l1, *l2;
@@ -2473,7 +2514,7 @@ extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
 	if (l1 == NULL)
 	{
 	    emsg(_(e_cannot_extend_null_list));
-	    return;
+	    goto theend;
 	}
 	l2 = argvars[1].vval.v_list;
 	if ((is_new || !value_check_lock(l1->lv_lock, arg_errmsg, TRUE))
@@ -2483,14 +2524,14 @@ extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
 	    {
 		l1 = list_copy(l1, FALSE, get_copyID());
 		if (l1 == NULL)
-		    return;
+		    goto theend;
 	    }
 
 	    if (argvars[2].v_type != VAR_UNKNOWN)
 	    {
 		before = (long)tv_get_number_chk(&argvars[2], &error);
 		if (error)
-		    return;		// type error; errmsg already given
+		    goto theend;	// type error; errmsg already given
 
 		if (before == l1->lv_len)
 		    item = NULL;
@@ -2500,12 +2541,14 @@ extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
 		    if (item == NULL)
 		    {
 			semsg(_(e_listidx), before);
-			return;
+			goto theend;
 		    }
 		}
 	    }
 	    else
 		item = NULL;
+	    if (type != NULL && check_typval_type(type, &argvars[1], 2) == FAIL)
+		goto theend;
 	    list_extend(l1, l2, item);
 
 	    if (is_new)
@@ -2528,7 +2571,7 @@ extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
 	if (d1 == NULL)
 	{
 	    emsg(_(e_cannot_extend_null_dict));
-	    return;
+	    goto theend;
 	}
 	d2 = argvars[1].vval.v_dict;
 	if ((is_new || !value_check_lock(d1->dv_lock, arg_errmsg, TRUE))
@@ -2538,7 +2581,7 @@ extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
 	    {
 		d1 = dict_copy(d1, FALSE, get_copyID());
 		if (d1 == NULL)
-		    return;
+		    goto theend;
 	    }
 
 	    // Check the third argument.
@@ -2548,19 +2591,21 @@ extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
 
 		action = tv_get_string_chk(&argvars[2]);
 		if (action == NULL)
-		    return;		// type error; errmsg already given
+		    goto theend;	// type error; errmsg already given
 		for (i = 0; i < 3; ++i)
 		    if (STRCMP(action, av[i]) == 0)
 			break;
 		if (i == 3)
 		{
 		    semsg(_(e_invarg2), action);
-		    return;
+		    goto theend;
 		}
 	    }
 	    else
 		action = (char_u *)"force";
 
+	    if (type != NULL && check_typval_type(type, &argvars[1], 2) == FAIL)
+		goto theend;
 	    dict_extend(d1, d2, action);
 
 	    if (is_new)
@@ -2575,6 +2620,10 @@ extend(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg, int is_new)
     }
     else
 	semsg(_(e_listdictarg), is_new ? "extendnew()" : "extend()");
+
+theend:
+    if (type != NULL)
+	clear_type_list(&type_list);
 }
 
 /*
