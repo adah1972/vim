@@ -350,10 +350,6 @@ def Test_job_info_return_type()
   endif
 enddef
 
-def Wrong_dict_key_type(items: list<number>): list<number>
-  return filter(items, (_, val) => get({[val]: 1}, 'x'))
-enddef
-
 def Test_filereadable()
   assert_false(filereadable(""))
   assert_false(filereadable(test_null_string()))
@@ -382,6 +378,23 @@ def Test_findfile()
   CheckDefExecFailure(['echo findfile("")'], 'E1142:')
 enddef
 
+def Test_flattennew()
+  var lines =<< trim END
+      var l = [1, [2, [3, 4]], 5]
+      call assert_equal([1, 2, 3, 4, 5], flattennew(l))
+      call assert_equal([1, [2, [3, 4]], 5], l)
+
+      call assert_equal([1, 2, [3, 4], 5], flattennew(l, 1))
+      call assert_equal([1, [2, [3, 4]], 5], l)
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      echo flatten([1, 2, 3])
+  END
+  CheckDefAndScriptFailure(lines, 'E1158:')
+enddef
+
 def Test_fnamemodify()
   CheckDefSuccess(['echo fnamemodify(test_null_string(), ":p")'])
   CheckDefSuccess(['echo fnamemodify("", ":p")'])
@@ -393,8 +406,12 @@ def Test_fnamemodify()
   CheckDefExecFailure(['echo fnamemodify("file", true)'], 'E928:')
 enddef
 
+def Wrong_dict_key_type(items: list<number>): list<number>
+  return filter(items, (_, val) => get({[val]: 1}, 'x'))
+enddef
+
 def Test_filter_wrong_dict_key_type()
-  assert_fails('Wrong_dict_key_type([1, 2, 3])', 'E1012:')
+  assert_fails('Wrong_dict_key_type([1, v:null, 3])', 'E1013:')
 enddef
 
 def Test_filter_return_type()
@@ -514,12 +531,27 @@ def Test_getreg()
   var lines = ['aaa', 'bbb', 'ccc']
   setreg('a', lines)
   getreg('a', true, true)->assert_equal(lines)
+  assert_fails('getreg("ab")', 'E1162:')
 enddef
 
 def Test_getreg_return_type()
   var s1: string = getreg('"')
   var s2: string = getreg('"', 1)
   var s3: list<string> = getreg('"', 1, 1)
+enddef
+
+def Test_getreginfo()
+  var text = 'abc'
+  setreg('a', text)
+  getreginfo('a')->assert_equal({regcontents: [text], regtype: 'v', isunnamed: false})
+  assert_fails('getreginfo("ab")', 'E1162:')
+enddef
+
+def Test_getregtype()
+  var lines = ['aaa', 'bbb', 'ccc']
+  setreg('a', lines)
+  getregtype('a')->assert_equal('V')
+  assert_fails('getregtype("ab")', 'E1162:')
 enddef
 
 def Test_glob()
@@ -807,11 +839,13 @@ def Test_set_get_bufline()
       assert_equal([], getbufline(b, 6))
       assert_equal([], getbufline(b, 2, 1))
 
-      setbufline(b, 2, [function('eval'), {key: 123}, test_null_job()])
-      assert_equal(["function('eval')",
-                      "{'key': 123}",
-                      "no process"],
-                      getbufline(b, 2, 4))
+      if has('job')
+        setbufline(b, 2, [function('eval'), {key: 123}, test_null_job()])
+        assert_equal(["function('eval')",
+                        "{'key': 123}",
+                        "no process"],
+                        getbufline(b, 2, 4))
+      endif
 
       exe 'bwipe! ' .. b
   END
@@ -859,6 +893,7 @@ def Test_setreg()
   var reginfo = getreginfo('a')
   setreg('a', reginfo)
   getreginfo('a')->assert_equal(reginfo)
+  assert_fails('setreg("ab", 0)', 'E1162:')
 enddef 
 
 def Test_slice()

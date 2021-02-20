@@ -23,7 +23,8 @@ in_vim9script(void)
     // Do not go up the stack, a ":function" inside vim9script uses legacy
     // syntax.  "sc_version" is also set when compiling a ":def" function in
     // legacy script.
-    return current_sctx.sc_version == SCRIPT_VERSION_VIM9;
+    return current_sctx.sc_version == SCRIPT_VERSION_VIM9
+		|| (cmdmod.cmod_flags & CMOD_VIM9CMD);
 }
 
 /*
@@ -94,6 +95,7 @@ not_in_vim9(exarg_T *eap)
 	    case CMD_append:
 	    case CMD_change:
 	    case CMD_insert:
+	    case CMD_k:
 	    case CMD_t:
 	    case CMD_xit:
 		semsg(_(e_command_not_supported_in_vim9_script_missing_var_str), eap->cmd);
@@ -629,7 +631,7 @@ vim9_declare_scriptvar(exarg_T *eap, char_u *arg)
     }
     if (!VIM_ISWHITE(p[1]))
     {
-	semsg(_(e_white_space_required_after_str), ":");
+	semsg(_(e_white_space_required_after_str_str), ":", p);
 	return arg + STRLEN(arg);
     }
     name = vim_strnsave(arg, p - arg);
@@ -650,7 +652,7 @@ vim9_declare_scriptvar(exarg_T *eap, char_u *arg)
 	init_tv.v_type = VAR_NUMBER;
     else
 	init_tv.v_type = type->tt_type;
-    set_var_const(name, type, &init_tv, FALSE, 0);
+    set_var_const(name, type, &init_tv, FALSE, 0, 0);
 
     vim_free(name);
     return p;
@@ -855,7 +857,7 @@ find_typval_in_script(typval_T *dest)
 	if (sv->sv_name != NULL && sv->sv_tv == dest)
 	    return sv;
     }
-    iemsg("check_script_var_type(): not found");
+    iemsg("find_typval_in_script(): not found");
     return NULL;
 }
 
@@ -864,7 +866,11 @@ find_typval_in_script(typval_T *dest)
  * If needed convert "value" to a bool.
  */
     int
-check_script_var_type(typval_T *dest, typval_T *value, char_u *name)
+check_script_var_type(
+	typval_T    *dest,
+	typval_T    *value,
+	char_u	    *name,
+	where_T	    where)
 {
     svar_T  *sv = find_typval_in_script(dest);
     int	    ret;
@@ -876,7 +882,7 @@ check_script_var_type(typval_T *dest, typval_T *value, char_u *name)
 	    semsg(_(e_readonlyvar), name);
 	    return FAIL;
 	}
-	ret = check_typval_type(sv->sv_type, value, 0);
+	ret = check_typval_type(sv->sv_type, value, where);
 	if (ret == OK && need_convert_to_bool(sv->sv_type, value))
 	{
 	    int	val = tv2bool(value);

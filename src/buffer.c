@@ -595,6 +595,7 @@ close_buffer(
     if (buf->b_nwindows == 1)
     {
 	++buf->b_locked;
+	++buf->b_locked_split;
 	if (apply_autocmds(EVENT_BUFWINLEAVE, buf->b_fname, buf->b_fname,
 								  FALSE, buf)
 		&& !bufref_valid(&bufref))
@@ -605,6 +606,7 @@ aucmd_abort:
 	    return FALSE;
 	}
 	--buf->b_locked;
+	--buf->b_locked_split;
 	if (abort_if_last && one_window())
 	    // Autocommands made this the only window.
 	    goto aucmd_abort;
@@ -614,12 +616,14 @@ aucmd_abort:
 	if (!unload_buf)
 	{
 	    ++buf->b_locked;
+	    ++buf->b_locked_split;
 	    if (apply_autocmds(EVENT_BUFHIDDEN, buf->b_fname, buf->b_fname,
 								  FALSE, buf)
 		    && !bufref_valid(&bufref))
 		// Autocommands deleted the buffer.
 		goto aucmd_abort;
 	    --buf->b_locked;
+	    --buf->b_locked_split;
 	    if (abort_if_last && one_window())
 		// Autocommands made this the only window.
 		goto aucmd_abort;
@@ -800,6 +804,7 @@ buf_freeall(buf_T *buf, int flags)
 
     // Make sure the buffer isn't closed by autocommands.
     ++buf->b_locked;
+    ++buf->b_locked_split;
     set_bufref(&bufref, buf);
     if (buf->b_ml.ml_mfp != NULL)
     {
@@ -826,6 +831,7 @@ buf_freeall(buf_T *buf, int flags)
 	    return;
     }
     --buf->b_locked;
+    --buf->b_locked_split;
 
     // If the buffer was in curwin and the window has changed, go back to that
     // window, if it still exists.  This avoids that ":edit x" triggering a
@@ -1718,8 +1724,8 @@ set_curbuf(buf_T *buf, int action)
     set_bufref(&prevbufref, prevbuf);
     set_bufref(&newbufref, buf);
 
-    // Autocommands may delete the current buffer and/or the buffer we want to go
-    // to.  In those cases don't close the buffer.
+    // Autocommands may delete the current buffer and/or the buffer we want to
+    // go to.  In those cases don't close the buffer.
     if (!apply_autocmds(EVENT_BUFLEAVE, NULL, NULL, FALSE, curbuf)
 	    || (bufref_valid(&prevbufref)
 		&& bufref_valid(&newbufref)
@@ -4543,7 +4549,7 @@ build_stl_str_hl(
 	case STL_VIRTCOL_ALT:
 	    // In list mode virtcol needs to be recomputed
 	    virtcol = wp->w_virtcol;
-	    if (wp->w_p_list && lcs_tab1 == NUL)
+	    if (wp->w_p_list && wp->w_lcs_chars.tab1 == NUL)
 	    {
 		wp->w_p_list = FALSE;
 		getvcol(wp, &wp->w_cursor, NULL, &virtcol, NULL);

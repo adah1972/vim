@@ -461,7 +461,7 @@ apply_move_options(win_T *wp, dict_T *d)
 	    if (di != NULL)
 	    {
 		wp->w_popup_prop_win = find_win_by_nr_or_id(&di->di_tv);
-		if (!win_valid(wp->w_popup_prop_win))
+		if (!win_valid_any_tab(wp->w_popup_prop_win))
 		    wp->w_popup_prop_win = curwin;
 	    }
 
@@ -1193,6 +1193,12 @@ popup_adjust_position(win_T *wp)
 	textpos2screenpos(prop_win, &pos, &screen_row,
 				     &screen_scol, &screen_ccol, &screen_ecol);
 
+	if (screen_scol == 0)
+	{
+	    // position is off screen, make the width zero to hide it.
+	    wp->w_width = 0;
+	    return;
+	}
 	if (wp->w_popup_pos == POPPOS_TOPLEFT
 		|| wp->w_popup_pos == POPPOS_TOPRIGHT)
 	    // below the text
@@ -1941,7 +1947,7 @@ popup_create(typval_T *argvars, typval_T *rettv, create_type_T type)
 	buf->b_p_ul = -1;	// no undo
 	buf->b_p_swf = FALSE;   // no swap file
 	buf->b_p_bl = FALSE;    // unlisted buffer
-	buf->b_locked = TRUE;
+	buf->b_locked = TRUE;	// prevent deleting the buffer
 
 	// Avoid that 'buftype' is reset when this buffer is entered.
 	buf->b_p_initialized = TRUE;
@@ -2983,7 +2989,7 @@ f_popup_getoptions(typval_T *argvars, typval_T *rettv)
 	dict_add_number(dict, "scrollbar", wp->w_want_scrollbar);
 	dict_add_number(dict, "zindex", wp->w_zindex);
 	dict_add_number(dict, "fixed", wp->w_popup_fixed);
-	if (wp->w_popup_prop_type && win_valid(wp->w_popup_prop_win))
+	if (wp->w_popup_prop_type && win_valid_any_tab(wp->w_popup_prop_win))
 	{
 	    proptype_T *pt = text_prop_type_by_id(
 				 wp->w_popup_prop_win->w_buffer,
@@ -3325,8 +3331,12 @@ popup_update_mask(win_T *wp, int width, int height)
     char_u	*cells;
     int		row, col;
 
-    if (wp->w_popup_mask == NULL)
+    if (wp->w_popup_mask == NULL || width == 0 || height == 0)
+    {
+	vim_free(wp->w_popup_mask_cells);
+	wp->w_popup_mask_cells = NULL;
 	return;
+    }
     if (wp->w_popup_mask_cells != NULL
 	    && wp->w_popup_mask_height == height
 	    && wp->w_popup_mask_width == width)

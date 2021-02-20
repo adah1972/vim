@@ -31,18 +31,8 @@ def TestCompilingError()
   call writefile(lines, 'XTest_compile_error')
   var buf = RunVimInTerminal('-S XTest_compile_error',
               {rows: 10, wait_for_ruler: 0})
-  var text = ''
-  for loop in range(100)
-    text = ''
-    for i in range(1, 9)
-      text ..= term_getline(buf, i)
-    endfor
-    if text =~ 'Variable not found: nothing'
-      break
-    endif
-    sleep 20m
-  endfor
-  assert_match('Error detected while compiling command line.*Fails.*Variable not found: nothing', text)
+  call WaitForAssert(() => assert_match('Error detected while compiling command line.*Fails.*Variable not found: nothing',
+                     Term_getlines(buf, range(1, 9))))
 
   # clean up
   call StopVimInTerminal(buf)
@@ -254,6 +244,21 @@ def Test_return_invalid()
     defcompile
   END
   CheckScriptFailure(lines, 'E1010:', 2)
+
+  lines =<< trim END
+      vim9script
+      def Test(Fun: func(number): number): list<number>
+          return map([1, 2, 3], (_, i) => Fun(i))
+      enddef
+      defcompile
+      def Inc(nr: number): nr
+        return nr + 2
+      enddef
+      echo Test(Inc)
+  END
+  # doing this twice was leaking memory
+  CheckScriptFailure(lines, 'E1010:')
+  CheckScriptFailure(lines, 'E1010:')
 enddef
 
 func Increment()
@@ -781,6 +786,16 @@ def Test_call_def_varargs()
       Func(1, 'a')
   END
   CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch')
+
+  lines =<< trim END
+      vim9script
+      def Func(  # some comment
+                ...l = []
+                )
+        echo l
+      enddef
+  END
+  CheckScriptFailure(lines, 'E1160:')
 enddef
 
 let s:value = ''
@@ -1659,6 +1674,18 @@ def Test_closure_using_argument()
 
   unlet g:UseArg
   unlet g:UseVararg
+
+  var lines =<< trim END
+      vim9script
+      def Test(Fun: func(number): number): list<number>
+        return map([1, 2, 3], (_, i) => Fun(i))
+      enddef
+      def Inc(nr: number): number
+        return nr + 2
+      enddef
+      assert_equal([3, 4, 5], Test(Inc))
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 def MakeGetAndAppendRefs()

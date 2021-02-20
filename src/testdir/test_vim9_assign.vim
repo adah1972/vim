@@ -284,6 +284,14 @@ def Test_assign_unpack()
       [v1, v2] = ''
   END
   CheckDefFailure(lines, 'E1012: Type mismatch; expected list<any> but got string', 3)
+
+  lines =<< trim END
+    g:values = [false, 0]
+    var x: bool
+    var y: string
+    [x, y] = g:values
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1163: Variable 2: type mismatch, expected string but got number')
 enddef
 
 def Test_assign_linebreak()
@@ -1100,6 +1108,8 @@ def Test_assign_lambda()
       assert_equal(123, FuncRef_Func())
       var FuncRef_Any: any = () => 123
       assert_equal(123, FuncRef_Any())
+      var FuncRef_Number: func(): number = () => 321
+      assert_equal(321, FuncRef_Number())
   END
   CheckScriptSuccess(lines)
 
@@ -1107,8 +1117,12 @@ def Test_assign_lambda()
       var Ref: func(number)
       Ref = (j) => !j
   END
-  CheckDefFailure(lines, 'E1012: Type mismatch; expected func(number) but got func(any): bool')
-  CheckScriptFailure(['vim9script'] + lines, 'E1012: Type mismatch; expected func(number) but got func(any): any')
+  CheckDefAndScriptFailure(lines, 'E1012: Type mismatch; expected func(number) but got func(any): bool')
+
+  lines =<< trim END
+      echo filter([1, 2, 3], (_, v: string) => v + 1) 
+  END
+  CheckDefAndScriptFailure(lines, 'E1051:')
 enddef
 
 def Test_heredoc()

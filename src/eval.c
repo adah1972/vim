@@ -1299,8 +1299,9 @@ set_var_lval(
     char_u	*endp,
     typval_T	*rettv,
     int		copy,
-    int		flags,    // ASSIGN_CONST, ASSIGN_NO_DECL
-    char_u	*op)
+    int		flags,	    // ASSIGN_CONST, ASSIGN_NO_DECL
+    char_u	*op,
+    int		var_idx)    // index for "let [a, b] = list"
 {
     int		cc;
     listitem_T	*ri;
@@ -1390,9 +1391,10 @@ set_var_lval(
 	else
 	{
 	    if (lp->ll_type != NULL
-			   && check_typval_type(lp->ll_type, rettv, 0) == FAIL)
+		       && check_typval_arg_type(lp->ll_type, rettv, 0) == FAIL)
 		return;
-	    set_var_const(lp->ll_name, lp->ll_type, rettv, copy, flags);
+	    set_var_const(lp->ll_name, lp->ll_type, rettv, copy,
+							       flags, var_idx);
 	}
 	*endp = cc;
     }
@@ -1471,7 +1473,7 @@ set_var_lval(
 	}
 
 	if (lp->ll_valtype != NULL
-			&& check_typval_type(lp->ll_valtype, rettv, 0) == FAIL)
+		    && check_typval_arg_type(lp->ll_valtype, rettv, 0) == FAIL)
 	    return;
 
 	if (lp->ll_newkey != NULL)
@@ -3419,7 +3421,21 @@ eval7(
      */
     case '(':	ret = NOTDONE;
 		if (in_vim9script())
+		{
 		    ret = get_lambda_tv(arg, rettv, TRUE, evalarg);
+		    if (ret == OK && evaluate)
+		    {
+			ufunc_T *ufunc = rettv->vval.v_partial->pt_func;
+
+			// compile it here to get the return type
+			if (compile_def_function(ufunc,
+					 TRUE, PROFILING(ufunc), NULL) == FAIL)
+			{
+			    clear_tv(rettv);
+			    ret = FAIL;
+			}
+		    }
+		}
 		if (ret == NOTDONE)
 		{
 		    *arg = skipwhite_and_linebreak(*arg + 1, evalarg);
@@ -3849,11 +3865,23 @@ eval_index(
 	    clear_tv(&var1);
 	    return FAIL;
 	}
-	else if (evaluate && tv_get_string_chk(&var1) == NULL)
+	else if (evaluate)
 	{
-	    // not a number or string
-	    clear_tv(&var1);
-	    return FAIL;
+#ifdef FEAT_FLOAT
+	    // allow for indexing with float
+	    if (vim9 && rettv->v_type == VAR_DICT
+						   && var1.v_type == VAR_FLOAT)
+	    {
+		var1.vval.v_string = typval_tostring(&var1, TRUE);
+		var1.v_type = VAR_STRING;
+	    }
+#endif
+	    if (tv_get_string_chk(&var1) == NULL)
+	    {
+		// not a number or string
+		clear_tv(&var1);
+		return FAIL;
+	    }
 	}
 
 	/*
@@ -4065,8 +4093,6 @@ eval_index_inner(
 			n2 = len + n2;
 		    else if (n2 >= len)
 			n2 = len;
-		    if (exclusive)
-			--n2;
 		    if (n1 >= len || n2 < 0 || n1 > n2)
 			s = NULL;
 		    else

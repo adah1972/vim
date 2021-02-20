@@ -1787,6 +1787,12 @@ typedef struct timeval proftime_T;
 typedef int proftime_T;	    // dummy for function prototypes
 #endif
 
+#ifdef FEAT_PROFILE
+# define PROFILING(ufunc) (do_profiling == PROF_YES && (ufunc)->uf_profiling)
+#else
+# define PROFILING(ufunc) FALSE
+#endif
+
 /*
  * When compiling with 32 bit Perl time_t is 32 bits in the Perl code but 64
  * bits elsewhere.  That causes memory corruption.  Define time_T and use it
@@ -2458,10 +2464,11 @@ typedef enum {
 #define DOSO_GVIMRC	2	// loading gvimrc file
 
 // flags for read_viminfo() and children
-#define VIF_WANT_INFO		1	// load non-mark info
-#define VIF_WANT_MARKS		2	// load file marks
-#define VIF_FORCEIT		4	// overwrite info already read
-#define VIF_GET_OLDFILES	8	// load v:oldfiles
+#define VIF_WANT_INFO	    1	// load non-mark info
+#define VIF_WANT_MARKS	    2	// load file marks
+#define VIF_ONLY_CURBUF	    4	// bail out after loading marks for curbuf
+#define VIF_FORCEIT	    8	// overwrite info already read
+#define VIF_GET_OLDFILES    16	// load v:oldfiles
 
 // flags for buf_freeall()
 #define BFA_DEL		 1	// buffer is going to be deleted

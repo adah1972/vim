@@ -945,7 +945,7 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
 	if (**arg != ':')
 	{
 	    if (*skipwhite(*arg) == ':')
-		semsg(_(e_no_white_space_allowed_before_str), ":");
+		semsg(_(e_no_white_space_allowed_before_str_str), ":", *arg);
 	    else
 		semsg(_(e_missing_dict_colon), *arg);
 	    clear_tv(&tvkey);
@@ -953,11 +953,13 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
 	}
 	if (evaluate)
 	{
-	    if (vim9script && check_for_string(&tvkey) == FAIL)
+#ifdef FEAT_FLOAT
+	    if (tvkey.v_type == VAR_FLOAT)
 	    {
-		clear_tv(&tvkey);
-		goto failret;
+		tvkey.vval.v_string = typval_tostring(&tvkey, TRUE);
+		tvkey.v_type = VAR_STRING;
 	    }
+#endif
 	    key = tv_get_string_buf_chk(&tvkey, buf);
 	    if (key == NULL)
 	    {
@@ -968,7 +970,7 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
 	}
 	if (vim9script && (*arg)[1] != NUL && !VIM_ISWHITE((*arg)[1]))
 	{
-	    semsg(_(e_white_space_required_after_str), ":");
+	    semsg(_(e_white_space_required_after_str_str), ":", *arg);
 	    clear_tv(&tvkey);
 	    goto failret;
 	}
@@ -1010,7 +1012,7 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
 	{
 	    if (vim9script && (*arg)[1] != NUL && !VIM_ISWHITE((*arg)[1]))
 	    {
-		semsg(_(e_white_space_required_after_str), ",");
+		semsg(_(e_white_space_required_after_str_str), ",", *arg);
 		goto failret;
 	    }
 	    *arg = skipwhite(*arg + 1);
@@ -1023,7 +1025,7 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
 	if (!had_comma)
 	{
 	    if (**arg == ',')
-		semsg(_(e_no_white_space_allowed_before_str), ",");
+		semsg(_(e_no_white_space_allowed_before_str_str), ",", *arg);
 	    else
 		semsg(_(e_missing_dict_comma), *arg);
 	    goto failret;
@@ -1087,7 +1089,8 @@ dict_extend(dict_T *d1, dict_T *d2, char_u *action)
 	    }
 
 	    if (type != NULL
-		     && check_typval_type(type, &HI2DI(hi2)->di_tv, 0) == FAIL)
+		     && check_typval_arg_type(type, &HI2DI(hi2)->di_tv, 0)
+								       == FAIL)
 		break;
 
 	    if (di1 == NULL)

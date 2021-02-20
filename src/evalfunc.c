@@ -954,6 +954,8 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_findfile},
     {"flatten",		1, 2, FEARG_1,	    NULL,
 			ret_list_any,	    f_flatten},
+    {"flattennew",	1, 2, FEARG_1,	    NULL,
+			ret_list_any,	    f_flattennew},
     {"float2nr",	1, 1, FEARG_1,	    NULL,
 			ret_number,	    FLOAT_FUNC(f_float2nr)},
     {"floor",		1, 1, FEARG_1,	    NULL,
@@ -976,6 +978,8 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_foldtextresult},
     {"foreground",	0, 0, 0,	    NULL,
 			ret_void,	    f_foreground},
+    {"fullcommand",	1, 1, FEARG_1,	    arg1_string,
+			ret_string,	    f_fullcommand},
     {"funcref",		1, 3, FEARG_1,	    NULL,
 			ret_func_any,	    f_funcref},
     {"function",	1, 3, FEARG_1,	    NULL,
@@ -4281,7 +4285,13 @@ f_getreg(typval_T *argvars, typval_T *rettv)
     if (argvars[0].v_type != VAR_UNKNOWN)
     {
 	strregname = tv_get_string_chk(&argvars[0]);
-	error = strregname == NULL;
+	if (strregname == NULL)
+	    error = TRUE;
+	else if (in_vim9script() && STRLEN(strregname) > 1)
+	{
+	    semsg(_(e_register_name_must_be_one_char_str), strregname);
+	    error = TRUE;
+	}
 	if (argvars[1].v_type != VAR_UNKNOWN)
 	{
 	    arg2 = (int)tv_get_bool_chk(&argvars[1], &error);
@@ -4331,6 +4341,11 @@ f_getregtype(typval_T *argvars, typval_T *rettv)
     if (argvars[0].v_type != VAR_UNKNOWN)
     {
 	strregname = tv_get_string_chk(&argvars[0]);
+	if (strregname != NULL && in_vim9script() && STRLEN(strregname) > 1)
+	{
+	    semsg(_(e_register_name_must_be_one_char_str), strregname);
+	    strregname = NULL;
+	}
 	if (strregname == NULL)	    // type error; errmsg already given
 	{
 	    rettv->v_type = VAR_STRING;
@@ -6767,12 +6782,16 @@ max_min(typval_T *argvars, typval_T *rettv, int domax)
 		if (li != NULL)
 		{
 		    n = tv_get_number_chk(&li->li_tv, &error);
+		    if (error)
+			return; // type error; errmsg already given
 		    for (;;)
 		    {
 			li = li->li_next;
 			if (li == NULL)
 			    break;
 			i = tv_get_number_chk(&li->li_tv, &error);
+			if (error)
+			    return; // type error; errmsg already given
 			if (domax ? i > n : i < n)
 			    n = i;
 		    }
@@ -6797,6 +6816,8 @@ max_min(typval_T *argvars, typval_T *rettv, int domax)
 		{
 		    --todo;
 		    i = tv_get_number_chk(&HI2DI(hi)->di_tv, &error);
+		    if (error)
+			return; // type error; errmsg already given
 		    if (first)
 		    {
 			n = i;
@@ -6810,7 +6831,8 @@ max_min(typval_T *argvars, typval_T *rettv, int domax)
     }
     else
 	semsg(_(e_listdictarg), domax ? "max()" : "min()");
-    rettv->vval.v_number = error ? 0 : n;
+
+    rettv->vval.v_number = n;
 }
 
 /*
@@ -7357,6 +7379,11 @@ f_getreginfo(typval_T *argvars, typval_T *rettv)
 	strregname = tv_get_string_chk(&argvars[0]);
 	if (strregname == NULL)
 	    return;
+	if (in_vim9script() && STRLEN(strregname) > 1)
+	{
+	    semsg(_(e_register_name_must_be_one_char_str), strregname);
+	    return;
+	}
     }
     else
 	strregname = get_vim_var_str(VV_REG);
@@ -7399,7 +7426,7 @@ f_getreginfo(typval_T *argvars, typval_T *rettv)
 	{
 	    item->di_tv.v_type = VAR_SPECIAL;
 	    item->di_tv.vval.v_number = regname == buf[0]
-		? VVAL_TRUE : VVAL_FALSE;
+						      ? VVAL_TRUE : VVAL_FALSE;
 	    (void)dict_add(dict, item);
 	}
     }
@@ -8461,6 +8488,11 @@ f_setreg(typval_T *argvars, typval_T *rettv)
 
     if (strregname == NULL)
 	return;		// type error; errmsg already given
+    if (in_vim9script() && STRLEN(strregname) > 1)
+    {
+	semsg(_(e_register_name_must_be_one_char_str), strregname);
+	return;
+    }
     regname = *strregname;
     if (regname == 0 || regname == '@')
 	regname = '"';
@@ -9704,7 +9736,8 @@ f_synconcealed(typval_T *argvars UNUSED, typval_T *rettv)
 	    {
 		cchar = syn_get_sub_char();
 		if (cchar == NUL && curwin->w_p_cole == 1)
-		    cchar = (lcs_conceal == NUL) ? ' ' : lcs_conceal;
+		    cchar = (curwin->w_lcs_chars.conceal == NUL) ? ' '
+					: curwin->w_lcs_chars.conceal;
 		if (cchar != NUL)
 		{
 		    if (has_mbyte)

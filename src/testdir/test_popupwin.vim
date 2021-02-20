@@ -825,6 +825,25 @@ func Test_popup_with_mask()
   " this was causing a crash
   call popup_create('test', #{mask: [[0, 0, 0, 0]]})
   call popup_clear()
+
+  " this was causing an internal error
+  enew
+  set nowrap
+  call repeat('x', &columns)->setline(1)
+  call prop_type_add('textprop', {})
+  call prop_add(1, 1, #{length: &columns, type: 'textprop'})
+  vsplit
+  let opts = popup_create('', #{textprop: 'textprop'})
+	\ ->popup_getoptions()
+	\ ->extend(#{mask: [[1, 1, 1, 1]]})
+  call popup_create('', opts)
+  redraw
+
+  close!
+  bwipe!
+  call prop_type_delete('textprop')
+  call popup_clear()
+  set wrap&
 endfunc
 
 func Test_popup_select()
@@ -3802,5 +3821,81 @@ func Test_popup_filter_menu()
   call popup_menu(colors, #{callback: {_, result -> assert_equal('green', colors[result - 1])}})
   call feedkeys("\<c-n>\<c-n>\<c-p>\<cr>", 'xt')
 endfunc
+
+func Test_popup_getoptions_other_tab()
+  new
+  call setline(1, 'some text')
+  call prop_type_add('textprop', {})
+  call prop_add(1, 1, #{type: 'textprop', length: 1})
+  let id = popup_create('TEST', #{textprop: 'textprop', highlight: 'ErrorMsg', tabpage: 1})
+  tab sp
+  call assert_equal(['textprop', 'textpropid', 'textpropwin'], popup_getoptions(id)->keys()->filter({_, v -> v =~ 'textprop'}))
+
+  tabclose
+  call popup_close(id)
+  bwipe!
+  call prop_type_delete('textprop')
+endfunc
+
+
+func Test_popup_setoptions_other_tab()
+  new Xfile
+  let winid = win_getid()
+  call setline(1, 'some text')
+  call prop_type_add('textprop', {})
+  call prop_add(1, 1, #{type: 'textprop', length: 1})
+  let id = popup_create('TEST', #{textprop: 'textprop'})
+  tab sp
+  call popup_setoptions(id, #{textprop: 'textprop', textpropwin: winid})
+  call assert_equal(winid, popup_getoptions(id).textpropwin)
+
+  tabclose
+  call popup_close(id)
+  bwipe! Xfile
+  call prop_type_delete('textprop')
+endfunc
+
+func Test_popup_prop_not_visible()
+  CheckScreendump
+
+  let lines =<< trim END
+      vim9script
+      set nowrap stal=2
+      rightbelow :31vnew
+      setline(1, ['', 'some text', '', 'other text'])
+      prop_type_add('someprop', {})
+      prop_add(2, 9, {type: 'someprop', length: 5})
+      popup_create('attached to "some"', {
+          textprop: 'someprop',
+          highlight: 'ErrorMsg',
+          line: -1,
+          wrap: false,
+          fixed: true,
+          })
+      prop_type_add('otherprop', {})
+      prop_add(4, 10, {type: 'otherprop', length: 5})
+      popup_create('attached to "other"', {
+          textprop: 'otherprop',
+          highlight: 'ErrorMsg',
+          line: -1,
+          wrap: false,
+          fixed: false,
+          })
+  END
+  call writefile(lines, 'XtestPropNotVisble')
+  let buf = RunVimInTerminal('-S XtestPropNotVisble', #{rows: 10})
+  call VerifyScreenDump(buf, 'Test_popup_prop_not_visible_01', {})
+
+  call term_sendkeys(buf, ":vert resize -14\<CR>")
+  call VerifyScreenDump(buf, 'Test_popup_prop_not_visible_02', {})
+
+  call term_sendkeys(buf, ":vert resize -8\<CR>")
+  call VerifyScreenDump(buf, 'Test_popup_prop_not_visible_03', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XtestPropNotVisble')
+endfunction
+
 
 " vim: shiftwidth=2 sts=2

@@ -126,7 +126,7 @@ one_function_arg(
 	    ++p;
 	    if (!skip && !VIM_ISWHITE(*p))
 	    {
-		semsg(_(e_white_space_required_after_str), ":");
+		semsg(_(e_white_space_required_after_str_str), ":", p - 1);
 		return arg;
 	    }
 	    type = skipwhite(p);
@@ -241,6 +241,11 @@ get_function_args(
 									 skip);
 		if (p == arg)
 		    break;
+		if (*skipwhite(p) == '=')
+		{
+		    emsg(_(e_cannot_use_default_for_variable_arguments));
+		    break;
+		}
 	    }
 	}
 	else
@@ -297,7 +302,7 @@ get_function_args(
 		if (!skip && in_vim9script()
 				      && !IS_WHITE_OR_NUL(*p) && *p != endchar)
 		{
-		    semsg(_(e_white_space_required_after_str), ",");
+		    semsg(_(e_white_space_required_after_str_str), ",", p - 1);
 		    goto err_ret;
 		}
 	    }
@@ -403,7 +408,9 @@ register_closure(ufunc_T *fp)
     static void
 set_ufunc_name(ufunc_T *fp, char_u *name)
 {
-    STRCPY(fp->uf_name, name);
+    // Add a type cast to avoid a warning for an overflow, the uf_name[] array
+    // actually extends beyond the struct.
+    STRCPY((void *)fp->uf_name, name);
 
     if (name[0] == K_SPECIAL)
     {
@@ -485,7 +492,7 @@ skip_arrow(
 	    if (white_error != NULL && !VIM_ISWHITE(s[1]))
 	    {
 		*white_error = TRUE;
-		semsg(_(e_white_space_required_after_str), ":");
+		semsg(_(e_white_space_required_after_str_str), ":", s);
 		return NULL;
 	    }
 	    s = skipwhite(s + 1);
@@ -871,7 +878,7 @@ get_func_tv(
 	{
 	    if (*argp != ',' && *skipwhite(argp) == ',')
 	    {
-		semsg(_(e_no_white_space_allowed_before_str), ",");
+		semsg(_(e_no_white_space_allowed_before_str_str), ",", argp);
 		ret = FAIL;
 		break;
 	    }
@@ -882,7 +889,7 @@ get_func_tv(
 	    break;
 	if (vim9script && !IS_WHITE_OR_NUL(argp[1]))
 	{
-	    semsg(_(e_white_space_required_after_str), ",");
+	    semsg(_(e_white_space_required_after_str_str), ",", argp);
 	    ret = FAIL;
 	    break;
 	}
@@ -1642,16 +1649,20 @@ call_user_func(
 
     if (fp->uf_def_status != UF_NOT_COMPILED)
     {
+#ifdef FEAT_PROFILE
+	ufunc_T *caller = fc->caller == NULL ? NULL : fc->caller->func;
+#endif
 	// Execute the function, possibly compiling it first.
 #ifdef FEAT_PROFILE
-	profile_may_start_func(&profile_info, fp, fc);
+	if (do_profiling == PROF_YES)
+	    profile_may_start_func(&profile_info, fp, caller);
 #endif
 	call_def_function(fp, argcount, argvars, funcexe->partial, rettv);
 	funcdepth_decrement();
 #ifdef FEAT_PROFILE
 	if (do_profiling == PROF_YES && (fp->uf_profiling
-		    || (fc->caller != NULL && fc->caller->func->uf_profiling)))
-	    profile_may_end_func(&profile_info, fp, fc);
+				  || (caller != NULL && caller->uf_profiling)))
+	    profile_may_end_func(&profile_info, fp, caller);
 #endif
 	current_funccal = fc->caller;
 	free_funccal(fc);
@@ -1865,7 +1876,9 @@ call_user_func(
 	--no_wait_return;
     }
 #ifdef FEAT_PROFILE
-    profile_may_start_func(&profile_info, fp, fc);
+    if (do_profiling == PROF_YES)
+	profile_may_start_func(&profile_info, fp,
+				 fc->caller == NULL ? NULL : fc->caller->func);
 #endif
 
     save_current_sctx = current_sctx;
@@ -1901,9 +1914,13 @@ call_user_func(
     }
 
 #ifdef FEAT_PROFILE
-    if (do_profiling == PROF_YES && (fp->uf_profiling
-		    || (fc->caller != NULL && fc->caller->func->uf_profiling)))
-	profile_may_end_func(&profile_info, fp, fc);
+    if (do_profiling == PROF_YES)
+    {
+	ufunc_T *caller = fc->caller == NULL ? NULL : fc->caller->func;
+
+	if (fp->uf_profiling || (caller != NULL && caller->uf_profiling))
+	    profile_may_end_func(&profile_info, fp, caller);
+    }
 #endif
 
     // when being verbose, mention the return value
@@ -3207,7 +3224,7 @@ define_function(exarg_T *eap, char_u *name_arg)
 
     if ((vim9script || eap->cmdidx == CMD_def) && VIM_ISWHITE(p[-1]))
     {
-	semsg(_(e_no_white_space_allowed_before_str), "(");
+	semsg(_(e_no_white_space_allowed_before_str_str), "(", p - 1);
 	goto ret_free;
     }
 
@@ -3948,8 +3965,15 @@ define_function(exarg_T *eap, char_u *name_arg)
 erret:
     ga_clear_strings(&newargs);
     ga_clear_strings(&default_args);
+    if (fp != NULL)
+    {
+	ga_init(&fp->uf_args);
+	ga_init(&fp->uf_def_args);
+    }
 errret_2:
     ga_clear_strings(&newlines);
+    if (fp != NULL)
+	VIM_CLEAR(fp->uf_arg_types);
 ret_free:
     ga_clear_strings(&argtypes);
     vim_free(skip_until);

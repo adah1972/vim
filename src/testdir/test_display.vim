@@ -257,4 +257,80 @@ func Test_display_scroll_at_topline()
   call StopVimInTerminal(buf)
 endfunc
 
+" Test for 'eob' (EndOfBuffer) item in 'fillchars'
+func Test_eob_fillchars()
+  " default value
+  call assert_match('eob:\~', &fillchars)
+  " invalid values
+  call assert_fails(':set fillchars=eob:', 'E474:')
+  call assert_fails(':set fillchars=eob:xy', 'E474:')
+  call assert_fails(':set fillchars=eob:\255', 'E474:')
+  call assert_fails(':set fillchars=eob:<ff>', 'E474:')
+  " default is ~
+  new
+  call assert_equal('~', Screenline(2))
+  set fillchars=eob:+
+  redraw!
+  call assert_equal('+', Screenline(2))
+  set fillchars=eob:\ 
+  redraw!
+  call assert_equal(' ', nr2char(screenchar(2, 1)))
+  set fillchars&
+  close
+endfunc
+
+" Test for 'foldopen', 'foldclose' and 'foldsep' in 'fillchars'
+func Test_fold_fillchars()
+  new
+  set fdc=2 foldenable foldmethod=manual
+  call setline(1, ['one', 'two', 'three', 'four', 'five'])
+  2,4fold
+  " First check for the default setting for a closed fold
+  let lines = ScreenLines([1, 3], 8)
+  let expected = [
+        \ '  one   ',
+        \ '+ +--  3',
+        \ '  five  '
+        \ ]
+  call assert_equal(expected, lines)
+  normal 2Gzo
+  " check the characters for an open fold
+  let lines = ScreenLines([1, 5], 8)
+  let expected = [
+        \ '  one   ',
+        \ '- two   ',
+        \ '| three ',
+        \ '| four  ',
+        \ '  five  '
+        \ ]
+  call assert_equal(expected, lines)
+
+  " change the setting
+  set fillchars=vert:\|,fold:-,eob:~,foldopen:[,foldclose:],foldsep:-
+
+  " check the characters for an open fold
+  let lines = ScreenLines([1, 5], 8)
+  let expected = [
+        \ '  one   ',
+        \ '[ two   ',
+        \ '- three ',
+        \ '- four  ',
+        \ '  five  '
+        \ ]
+  call assert_equal(expected, lines)
+
+  " check the characters for a closed fold
+  normal 2Gzc
+  let lines = ScreenLines([1, 3], 8)
+  let expected = [
+        \ '  one   ',
+        \ '] +--  3',
+        \ '  five  '
+        \ ]
+  call assert_equal(expected, lines)
+
+  %bw!
+  set fillchars& fdc& foldmethod& foldenable&
+endfunc
+
 " vim: shiftwidth=2 sts=2 expandtab

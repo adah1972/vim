@@ -22,6 +22,17 @@ def Test_range_only()
   :3
   list
   assert_equal('three$', Screenline(&lines))
+
+  # missing command does not print the line
+  var lines =<< trim END
+    vim9script
+    :1|
+    assert_equal('three$', Screenline(&lines))
+    :|
+    assert_equal('three$', Screenline(&lines))
+  END
+  CheckScriptSuccess(lines)
+
   bwipe!
 
   # won't generate anything
@@ -450,8 +461,8 @@ def Test_try_catch_throw()
 
   var nd: dict<any>
   try
-    nd = {[g:anumber]: 1}
-  catch /E1012:/
+    nd = {[g:alist]: 1}
+  catch /E1105:/
     n = 266
   endtry
   assert_equal(266, n)
@@ -556,6 +567,16 @@ def Test_try_catch_throw()
     n = 411
   endtry
   assert_equal(411, n)
+
+  var counter = 0
+  for i in range(4)
+    try
+      eval [][0]
+    catch
+    endtry
+    counter += 1
+  endfor
+  assert_equal(4, counter)
 enddef
 
 def Test_cnext_works_in_catch()
@@ -714,6 +735,27 @@ def Test_try_catch_fails()
   CheckDefFailure(['throw xxx'], 'E1001:')
 enddef
 
+def Try_catch_skipped()
+  var l = []
+  try
+  finally
+  endtry
+
+  if 1
+  else
+    try
+    endtry
+  endif
+enddef
+
+" The skipped try/endtry was updating the wrong instruction.
+def Test_try_catch_skipped()
+  var instr = execute('disassemble Try_catch_skipped')
+  assert_match("NEWLIST size 0\n", instr)
+enddef
+
+
+
 def Test_throw_vimscript()
   # only checks line continuation
   var lines =<< trim END
@@ -745,7 +787,7 @@ def Test_throw_vimscript()
 enddef
 
 def Test_error_in_nested_function()
-  # an error in a nested :function aborts executin in the calling :def function
+  # an error in a nested :function aborts executing in the calling :def function
   var lines =<< trim END
       vim9script
       def Func()
@@ -1218,6 +1260,27 @@ def Test_use_import_in_mapping()
   delete('XsomeExport.vim')
   delete('Xmapscript.vim')
   nunmap <F3>
+enddef
+
+def Test_vim9script_mix()
+  var lines =<< trim END
+    if has(g:feature)
+      " legacy script
+      let g:legacy = 1
+      finish
+    endif
+    vim9script
+    g:legacy = 0
+  END
+  g:feature = 'eval'
+  g:legacy = -1
+  CheckScriptSuccess(lines)
+  assert_equal(1, g:legacy)
+
+  g:feature = 'noteval'
+  g:legacy = -1
+  CheckScriptSuccess(lines)
+  assert_equal(0, g:legacy)
 enddef
 
 def Test_vim9script_fails()
@@ -1743,6 +1806,21 @@ def Test_if_elseif_else_fails()
   CheckDefFailure(['endif'], 'E580:')
   CheckDefFailure(['if g:abool', 'elseif xxx'], 'E1001:')
   CheckDefFailure(['if true', 'echo 1'], 'E171:')
+
+  var lines =<< trim END
+      var s = ''
+      if s = ''
+      endif
+  END
+  CheckDefFailure(lines, 'E488:')
+
+  lines =<< trim END
+      var s = ''
+      if s == ''
+      elseif s = ''
+      endif
+  END
+  CheckDefFailure(lines, 'E488:')
 enddef
 
 let g:bool_true = v:true
@@ -2176,6 +2254,23 @@ def Test_for_loop_unpack()
   CheckDefExecFailure(lines, 'E1017:', 1)
 enddef
 
+def Test_for_loop_with_try_continue()
+  var looped = 0
+  var cleanup = 0
+  for i in range(3)
+    looped += 1
+    try
+      eval [][0]
+    catch
+      continue
+    finally
+      cleanup += 1
+    endtry
+  endfor
+  assert_equal(3, looped)
+  assert_equal(3, cleanup)
+enddef
+
 def Test_while_loop()
   var result = ''
   var cnt = 0
@@ -2190,6 +2285,10 @@ def Test_while_loop()
     result ..= cnt .. '_'
   endwhile
   assert_equal('1_3_', result)
+
+  var s = ''
+  while s == 'x' #{comment}
+  endwhile
 enddef
 
 def Test_while_loop_fails()
@@ -2200,6 +2299,13 @@ def Test_while_loop_fails()
   CheckDefFailure(['break'], 'E587:')
   CheckDefFailure(['if true', 'break'], 'E587:')
   CheckDefFailure(['while 1', 'echo 3'], 'E170:')
+
+  var lines =<< trim END
+      var s = ''
+      while s = ''
+      endwhile
+  END
+  CheckDefFailure(lines, 'E488:')
 enddef
 
 def Test_interrupt_loop()
@@ -3129,6 +3235,19 @@ def Test_restoring_cpo()
   delete('Xsourced')
   delete('Xclose')
   delete('Xdone')
+
+  writefile(['vim9script'], 'XanotherScript')
+  set cpo=aABceFsMny>
+  edit XanotherScript
+  so %
+  assert_equal('aABceFsMny>', &cpo)
+  :1del
+  w
+  so %
+  assert_equal('aABceFsMny>', &cpo)
+
+  delete('XanotherScript')
+  set cpo&vim
 enddef
 
 
@@ -3370,6 +3489,31 @@ def Test_import_gone_when_sourced_twice()
   delete('XexportScript.vim')
   delete('XscriptImport.vim')
   unlet g:guard
+enddef
+
+def Test_unsupported_commands()
+  var lines =<< trim END
+      ka
+  END
+  CheckDefAndScriptFailure(lines, 'E1100:')
+
+  lines =<< trim END
+    t
+  END
+  CheckDefFailure(lines, 'E1100:')
+  CheckScriptFailure(['vim9script'] + lines, 'E1100:')
+
+  lines =<< trim END
+    x
+  END
+  CheckDefFailure(lines, 'E1100:')
+  CheckScriptFailure(['vim9script'] + lines, 'E1100:')
+
+  lines =<< trim END
+    xit
+  END
+  CheckDefFailure(lines, 'E1100:')
+  CheckScriptFailure(['vim9script'] + lines, 'E1100:')
 enddef
 
 " Keep this last, it messes up highlighting.

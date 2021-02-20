@@ -696,7 +696,7 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 
 	// In list mode virtcol needs to be recomputed
 	virtcol = wp->w_virtcol;
-	if (wp->w_p_list && lcs_tab1 == NUL)
+	if (wp->w_p_list && wp->w_lcs_chars.tab1 == NUL)
 	{
 	    wp->w_p_list = FALSE;
 	    getvvcol(wp, &wp->w_cursor, NULL, &virtcol, NULL);
@@ -2552,11 +2552,11 @@ win_update(win_T *wp)
 	    wp->w_botline = lnum;
 
 	// Make sure the rest of the screen is blank
-	// put '~'s on rows that aren't part of the file.
+	// write the 'fill_eob' character to rows that aren't part of the file
 	if (WIN_IS_POPUP(wp))
 	    win_draw_end(wp, ' ', ' ', FALSE, row, wp->w_height, HLF_AT);
 	else
-	    win_draw_end(wp, '~', ' ', FALSE, row, wp->w_height, HLF_EOB);
+	    win_draw_end(wp, fill_eob, ' ', FALSE, row, wp->w_height, HLF_EOB);
     }
 
 #ifdef SYN_TIME_LIMIT
