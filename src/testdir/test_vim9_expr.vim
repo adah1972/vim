@@ -1254,6 +1254,17 @@ def Test_expr5_vim9script()
       echo 'a' .. function('len')
   END
   CheckScriptFailure(lines, 'E729:', 2)
+
+  lines =<< trim END
+      vim9script
+      new
+      ['']->setline(1)
+      /pattern
+
+      eval 0
+      bwipe!
+  END
+  CheckScriptFailure(lines, "E1004: White space required before and after '/' at \"/pattern")
 enddef
 
 def Test_expr5_vim9script_channel()
@@ -1359,6 +1370,9 @@ def Test_expr5_list_add()
     dany[i] = i
   endfor
   assert_equal({a: 'a', 12: 12}, dany)
+
+  # result of glob() is "any", runtime type check
+  var sl: list<string> = glob('*.txt', false, true) + ['']
 enddef
 
 " test multiply, divide, modulo
@@ -1922,6 +1936,14 @@ def Test_expr7_lambda()
 
   CheckDefSuccess(['var Fx = (a) => [0,', ' 1]'])
   CheckDefFailure(['var Fx = (a) => [0', ' 1]'], 'E696:', 2)
+
+  # no error for existing script variable when checking for lambda
+  lines =<< trim END
+    vim9script
+    var name = 0
+    eval (name + 2) / 3
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 def NewLambdaWithComments(): func
@@ -2137,8 +2159,10 @@ def Test_expr7_dict()
   CheckDefAndScriptSuccess(lines)
  
   # legacy syntax doesn't work
-  CheckDefFailure(["var x = #{key: 8}"], 'E1097:', 3)
-  CheckDefFailure(["var x = 'a' .. #{a: 1}"], 'E1097:', 3)
+  CheckDefFailure(["var x = #{key: 8}"], 'E1170:', 1)
+  CheckDefFailure(["var x = 'a' #{a: 1}"], 'E1170:', 1)
+  CheckDefFailure(["var x = 'a' .. #{a: 1}"], 'E1170:', 1)
+  CheckDefFailure(["var x = true ? #{a: 1}"], 'E1170:', 1)
 
   CheckDefFailure(["var x = {a:8}"], 'E1069:', 1)
   CheckDefFailure(["var x = {a : 8}"], 'E1068:', 1)
@@ -2345,6 +2369,35 @@ def Test_expr7_any_index_slice()
     assert_equal('abcd', g:teststring[: -3])
     assert_equal('', g:teststring[: -9])
 
+    # composing characters are included
+    g:teststring = 'àéû'
+    assert_equal('à', g:teststring[0])
+    assert_equal('é', g:teststring[1])
+    assert_equal('û', g:teststring[2])
+    assert_equal('', g:teststring[3])
+    assert_equal('', g:teststring[4])
+
+    assert_equal('û', g:teststring[-1])
+    assert_equal('é', g:teststring[-2])
+    assert_equal('à', g:teststring[-3])
+    assert_equal('', g:teststring[-4])
+    assert_equal('', g:teststring[-5])
+
+    assert_equal('à', g:teststring[0 : 0])
+    assert_equal('é', g:teststring[1 : 1])
+    assert_equal('àé', g:teststring[0 : 1])
+    assert_equal('àéû', g:teststring[0 : -1])
+    assert_equal('àé', g:teststring[0 : -2])
+    assert_equal('à', g:teststring[0 : -3])
+    assert_equal('', g:teststring[0 : -4])
+    assert_equal('', g:teststring[0 : -5])
+    assert_equal('àéû', g:teststring[ : ])
+    assert_equal('àéû', g:teststring[0 : ])
+    assert_equal('éû', g:teststring[1 : ])
+    assert_equal('û', g:teststring[2 : ])
+    assert_equal('', g:teststring[3 : ])
+    assert_equal('', g:teststring[4 : ])
+
     # blob index cannot be out of range
     g:testblob = 0z01ab
     assert_equal(0x01, g:testblob[0])
@@ -2537,6 +2590,12 @@ def Test_expr7_namespace()
   assert_equal('some', get(t:, 'some_var', 'xxx'))
   assert_equal('xxx', get(t:, 'no_var', 'xxx'))
   unlet t:some_var
+
+  # check using g: in a for loop more than DO_NOT_FREE_CNT times
+  for i in range(100000)
+    if has_key(g:, 'does-not-exist')
+    endif
+  endfor
 enddef
 
 def Test_expr7_parens()
@@ -2829,7 +2888,7 @@ def Test_expr7_trailing()
 
   # lambda method call
   l = [2, 5]
-  l->((l) => add(l, 8))()
+  l->((ll) => add(ll, 8))()
   assert_equal([2, 5, 8], l)
 
   # dict member
@@ -3020,8 +3079,8 @@ def Test_expr7_subscript_linebreak()
 enddef
 
 func Test_expr7_trailing_fails()
-  call CheckDefFailure(['var l = [2]', 'l->((l) => add(l, 8))'], 'E107:', 2)
-  call CheckDefFailure(['var l = [2]', 'l->((l) => add(l, 8)) ()'], 'E274:', 2)
+  call CheckDefFailure(['var l = [2]', 'l->((ll) => add(ll, 8))'], 'E107:', 2)
+  call CheckDefFailure(['var l = [2]', 'l->((ll) => add(ll, 8)) ()'], 'E274:', 2)
 endfunc
 
 func Test_expr_fails()

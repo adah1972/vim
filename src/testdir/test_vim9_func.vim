@@ -311,6 +311,14 @@ def Test_call_default_args()
   delfunc g:Func
   CheckScriptFailure(['def Func(arg: number = "text")', 'enddef', 'defcompile'], 'E1013: Argument 1: type mismatch, expected number but got string')
   delfunc g:Func
+
+  var lines =<< trim END
+      vim9script
+      def Func(a = b == 0 ? 1 : 2, b = 0)
+      enddef
+      defcompile
+  END
+  CheckScriptFailure(lines, 'E1001: Variable not found: b')
 enddef
 
 def FuncWithComment(  # comment
@@ -385,11 +393,29 @@ def Test_nested_function()
   CheckDefFailure(lines, 'E1117:')
 
   # nested function inside conditional
-  # TODO: should it work when "thecount" is inside the "if"?
   lines =<< trim END
       vim9script
       var thecount = 0
       if true
+        def Test(): number
+          def TheFunc(): number
+            thecount += 1
+            return thecount
+          enddef
+          return TheFunc()
+        enddef
+      endif
+      defcompile
+      assert_equal(1, Test())
+      assert_equal(2, Test())
+  END
+  CheckScriptSuccess(lines)
+
+  # also works when "thecount" is inside the "if" block
+  lines =<< trim END
+      vim9script
+      if true
+        var thecount = 0
         def Test(): number
           def TheFunc(): number
             thecount += 1
@@ -591,6 +617,15 @@ def Test_call_wrong_args()
 
   lines =<< trim END
     vim9script
+    var name = 'piet'
+    def FuncOne(name: string)
+      echo nr
+    enddef
+  END
+  CheckScriptFailure(lines, 'E1168:')
+
+  lines =<< trim END
+    vim9script
     def FuncOne(nr: number)
       echo nr
     enddef
@@ -690,6 +725,35 @@ def Test_call_lambda_args()
     Ref = (x, y, z) => 0
   END
   CheckDefAndScriptFailure(lines, 'E1012:')
+
+  lines =<< trim END
+      var one = 1
+      var l = [1, 2, 3]
+      echo map(l, (one) => one)
+  END
+  CheckDefFailure(lines, 'E1167:')
+  CheckScriptFailure(['vim9script'] + lines, 'E1168:')
+
+  lines =<< trim END
+      def ShadowLocal()
+        var one = 1
+        var l = [1, 2, 3]
+        echo map(l, (one) => one)
+      enddef
+  END
+  CheckDefFailure(lines, 'E1167:')
+
+  lines =<< trim END
+      def Shadowarg(one: number)
+        var l = [1, 2, 3]
+        echo map(l, (one) => one)
+      enddef
+  END
+  CheckDefFailure(lines, 'E1167:')
+enddef
+
+def FilterWithCond(x: string, Cond: func(string): bool): bool
+  return Cond(x)
 enddef
 
 def Test_lambda_return_type()
@@ -697,12 +761,36 @@ def Test_lambda_return_type()
     var Ref = (): => 123
   END
   CheckDefAndScriptFailure(lines, 'E1157:', 1)
+
+  # this works
+  for x in ['foo', 'boo']
+    echo FilterWithCond(x, (v) => v =~ '^b')
+  endfor
+
+  # this fails
+  lines =<< trim END
+      echo FilterWithCond('foo', (v) => v .. '^b')
+  END
+  CheckDefAndScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected func(string): bool but got func(any): string', 1)
 enddef
 
 def Test_lambda_uses_assigned_var()
   CheckDefSuccess([
         'var x: any = "aaa"'
         'x = filter(["bbb"], (_, v) => v =~ x)'])
+enddef
+
+def Test_pass_legacy_lambda_to_def_func()
+  var lines =<< trim END
+      vim9script
+      func Foo()
+        eval s:Bar({x -> 0})
+      endfunc
+      def Bar(y: any)
+      enddef
+      Foo()
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 " Default arg and varargs
@@ -1087,6 +1175,23 @@ def Test_arg_type_wrong()
   CheckScriptFailure(['def Func4(...)', 'echo "a"', 'enddef'], 'E1055: Missing name after ...')
   CheckScriptFailure(['def Func5(items:string)', 'echo "a"'], 'E1069:')
   CheckScriptFailure(['def Func5(items)', 'echo "a"'], 'E1077:')
+enddef
+
+def Test_white_space_after_comma()
+  var lines =<< trim END
+    vim9script
+    def Func(a: number,b: number)
+    enddef
+  END
+  CheckScriptFailure(lines, 'E1069:')
+
+  # OK in legacy function
+  lines =<< trim END
+    vim9script
+    func Func(a,b)
+    endfunc
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 def Test_vim9script_call()
@@ -2318,6 +2423,30 @@ def Test_nested_lambda_in_closure()
   endif
   assert_equal(['Done'], readfile('XnestedDone'))
   delete('XnestedDone')
+enddef
+
+def Test_check_func_arg_types()
+  var lines =<< trim END
+      vim9script
+      def F1(x: string): string
+        return x
+      enddef
+
+      def F2(x: number): number
+        return x + 1
+      enddef
+
+      def G(g: func): dict<func>
+        return {f: g}
+      enddef
+
+      def H(d: dict<func>): string
+        return d.f('a')
+      enddef
+  END
+
+  CheckScriptSuccess(lines + ['echo H(G(F1))'])
+  CheckScriptFailure(lines + ['echo H(G(F2))'], 'E1013:')
 enddef
 
 

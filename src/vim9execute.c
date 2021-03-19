@@ -26,10 +26,11 @@
 typedef struct {
     int	    tcd_frame_idx;	// ec_frame_idx at ISN_TRY
     int	    tcd_stack_len;	// size of ectx.ec_stack at ISN_TRY
-    int	    tcd_catch_idx;	// instruction of the first catch
-    int	    tcd_finally_idx;	// instruction of the finally block or :endtry
+    int	    tcd_catch_idx;	// instruction of the first :catch or :finally
+    int	    tcd_finally_idx;	// instruction of the :finally block or zero
+    int	    tcd_endtry_idx;	// instruction of the :endtry
     int	    tcd_caught;		// catch block entered
-    int	    tcd_cont;		// :continue encountered, jump here
+    int	    tcd_cont;		// :continue encountered, jump here (minus one)
     int	    tcd_return;		// when TRUE return from end of :finally
 } trycmd_T;
 
@@ -322,6 +323,8 @@ call_dfunc(int cdf_idx, partial_T *pt, int argcount_arg, ectx_T *ectx)
     else
 	ectx->ec_outer = NULL;
 
+    ++ufunc->uf_calls;
+
     // Set execution state to the start of the called function.
     ectx->ec_dfunc_idx = cdf_idx;
     ectx->ec_instr = INSTRUCTIONS(dfunc);
@@ -555,6 +558,9 @@ func_return(ectx_T *ectx)
 	}
     }
 #endif
+    // TODO: when is it safe to delete the function when it is no longer used?
+    --dfunc->df_ufunc->uf_calls;
+
     // execution context goes one level up
     entry = estack_pop();
     if (entry != NULL)
@@ -796,7 +802,30 @@ call_by_name(char_u *name, int argcount, ectx_T *ectx, isn_T *iptr)
     }
 
     if (ufunc != NULL)
+    {
+	if (ufunc->uf_arg_types != NULL)
+	{
+	    int i;
+	    typval_T	*argv = STACK_TV_BOT(0) - argcount;
+
+	    // The function can change at runtime, check that the argument
+	    // types are correct.
+	    for (i = 0; i < argcount; ++i)
+	    {
+		type_T *type = NULL;
+
+		if (i < ufunc->uf_args.ga_len)
+		    type = ufunc->uf_arg_types[i];
+		else if (ufunc->uf_va_type != NULL)
+		    type = ufunc->uf_va_type->tt_member;
+		if (type != NULL && check_typval_arg_type(type,
+						      &argv[i], i + 1) == FAIL)
+		    return FAIL;
+	    }
+	}
+
 	return call_ufunc(ufunc, NULL, argcount, ectx, iptr);
+    }
 
     return FAIL;
 }
@@ -879,6 +908,21 @@ error_if_locked(int lock, char *error)
 }
 
 /*
+ * Give an error if "tv" is not a number and return FAIL.
+ */
+    static int
+check_for_number(typval_T *tv)
+{
+    if (tv->v_type != VAR_NUMBER)
+    {
+	semsg(_(e_expected_str_but_got_str),
+		vartype_name(VAR_NUMBER), vartype_name(tv->v_type));
+	return FAIL;
+    }
+    return OK;
+}
+
+/*
  * Store "tv" in variable "name".
  * This is for s: and g: variables.
  */
@@ -946,8 +990,9 @@ allocate_if_null(typval_T *tv)
 }
 
 /*
- * Return the character "str[index]" where "index" is the character index.  If
- * "index" is out of range NULL is returned.
+ * Return the character "str[index]" where "index" is the character index,
+ * including composing characters.
+ * If "index" is out of range NULL is returned.
  */
     char_u *
 char_from_string(char_u *str, varnumber_T index)
@@ -966,7 +1011,7 @@ char_from_string(char_u *str, varnumber_T index)
 	int	clen = 0;
 
 	for (nbyte = 0; nbyte < slen; ++clen)
-	    nbyte += MB_CPTR2LEN(str + nbyte);
+	    nbyte += mb_ptr2len(str + nbyte);
 	nchar = clen + index;
 	if (nchar < 0)
 	    // unlike list: index out of range results in empty string
@@ -974,15 +1019,15 @@ char_from_string(char_u *str, varnumber_T index)
     }
 
     for (nbyte = 0; nchar > 0 && nbyte < slen; --nchar)
-	nbyte += MB_CPTR2LEN(str + nbyte);
+	nbyte += mb_ptr2len(str + nbyte);
     if (nbyte >= slen)
 	return NULL;
-    return vim_strnsave(str + nbyte, MB_CPTR2LEN(str + nbyte));
+    return vim_strnsave(str + nbyte, mb_ptr2len(str + nbyte));
 }
 
 /*
  * Get the byte index for character index "idx" in string "str" with length
- * "str_len".
+ * "str_len".  Composing characters are included.
  * If going over the end return "str_len".
  * If "idx" is negative count from the end, -1 is the last character.
  * When going over the start return -1.
@@ -997,7 +1042,7 @@ char_idx2byte(char_u *str, size_t str_len, varnumber_T idx)
     {
 	while (nchar > 0 && nbyte < str_len)
 	{
-	    nbyte += MB_CPTR2LEN(str + nbyte);
+	    nbyte += mb_ptr2len(str + nbyte);
 	    --nchar;
 	}
     }
@@ -1017,7 +1062,8 @@ char_idx2byte(char_u *str, size_t str_len, varnumber_T idx)
 }
 
 /*
- * Return the slice "str[first:last]" using character indexes.
+ * Return the slice "str[first : last]" using character indexes.  Composing
+ * characters are included.
  * "exclusive" is TRUE for slice().
  * Return NULL when the result is empty.
  */
@@ -1040,7 +1086,7 @@ string_slice(char_u *str, varnumber_T first, varnumber_T last, int exclusive)
 	end_byte = char_idx2byte(str, slen, last);
 	if (!exclusive && end_byte >= 0 && end_byte < (long)slen)
 	    // end index is inclusive
-	    end_byte += MB_CPTR2LEN(str + end_byte);
+	    end_byte += mb_ptr2len(str + end_byte);
     }
 
     if (start_byte >= (long)slen || end_byte <= start_byte)
@@ -1293,7 +1339,7 @@ call_def_function(
 	    ++ectx.ec_stack.ga_len;
 	}
     if (ufunc->uf_va_name != NULL)
-	    ++ectx.ec_stack.ga_len;
+	++ectx.ec_stack.ga_len;
 
     // Frame pointer points to just after arguments.
     ectx.ec_frame_idx = ectx.ec_stack.ga_len;
@@ -1365,6 +1411,9 @@ call_def_function(
 
     // Do turn errors into exceptions.
     suppress_errthrow = FALSE;
+
+    // Do not delete the function while executing it.
+    ++ufunc->uf_calls;
 
     // When ":silent!" was used before calling then we still abort the
     // function.  If ":silent!" is used in the function then we don't.
@@ -1726,7 +1775,7 @@ call_def_function(
 			goto failed;
 		    SOURCING_LNUM = iptr->isn_lnum;
 		    if (eval_variable(name, (int)STRLEN(name),
-				  STACK_TV_BOT(0), NULL, TRUE, FALSE) == FAIL)
+			      STACK_TV_BOT(0), NULL, EVAL_VAR_VERBOSE) == FAIL)
 			goto on_error;
 		    ++ectx.ec_stack.ga_len;
 		}
@@ -1755,6 +1804,7 @@ call_def_function(
 		    tv->v_type = VAR_DICT;
 		    tv->v_lock = 0;
 		    tv->vval.v_dict = d;
+		    ++d->dv_refcount;
 		    ++ectx.ec_stack.ga_len;
 		}
 		break;
@@ -2178,12 +2228,9 @@ call_def_function(
 		    else if (tv_dest->v_type == VAR_LIST)
 		    {
 			// unlet a List item, index must be a number
-			if (tv_idx->v_type != VAR_NUMBER)
+			SOURCING_LNUM = iptr->isn_lnum;
+			if (check_for_number(tv_idx) == FAIL)
 			{
-			    SOURCING_LNUM = iptr->isn_lnum;
-			    semsg(_(e_expected_str_but_got_str),
-					vartype_name(VAR_NUMBER),
-					vartype_name(tv_idx->v_type));
 			    status = FAIL;
 			}
 			else
@@ -2214,6 +2261,58 @@ call_def_function(
 		    clear_tv(tv_idx);
 		    clear_tv(tv_dest);
 		    ectx.ec_stack.ga_len -= 2;
+		    if (status == FAIL)
+			goto on_error;
+		}
+		break;
+
+	    // unlet range of items in list variable
+	    case ISN_UNLETRANGE:
+		{
+		    // Stack contains:
+		    // -3 index1
+		    // -2 index2
+		    // -1 dict or list
+		    typval_T	*tv_idx1 = STACK_TV_BOT(-3);
+		    typval_T	*tv_idx2 = STACK_TV_BOT(-2);
+		    typval_T	*tv_dest = STACK_TV_BOT(-1);
+		    int		status = OK;
+
+		    if (tv_dest->v_type == VAR_LIST)
+		    {
+			// indexes must be a number
+			SOURCING_LNUM = iptr->isn_lnum;
+			if (check_for_number(tv_idx1) == FAIL
+				|| check_for_number(tv_idx2) == FAIL)
+			{
+			    status = FAIL;
+			}
+			else
+			{
+			    list_T	*l = tv_dest->vval.v_list;
+			    long	n1 = (long)tv_idx1->vval.v_number;
+			    long	n2 = (long)tv_idx2->vval.v_number;
+			    listitem_T	*li;
+
+			    li = list_find_index(l, &n1);
+			    if (li == NULL
+				     || list_unlet_range(l, li, NULL, n1,
+							    TRUE, n2) == FAIL)
+				status = FAIL;
+			}
+		    }
+		    else
+		    {
+			status = FAIL;
+			SOURCING_LNUM = iptr->isn_lnum;
+			semsg(_(e_cannot_index_str),
+						vartype_name(tv_dest->v_type));
+		    }
+
+		    clear_tv(tv_idx1);
+		    clear_tv(tv_idx2);
+		    clear_tv(tv_dest);
+		    ectx.ec_stack.ga_len -= 3;
 		    if (status == FAIL)
 			goto on_error;
 		}
@@ -2452,12 +2551,13 @@ call_def_function(
 			trycmd = ((trycmd_T *)trystack->ga_data)
 							+ trystack->ga_len - 1;
 		    if (trycmd != NULL
-				  && trycmd->tcd_frame_idx == ectx.ec_frame_idx
-				  && ectx.ec_instr[trycmd->tcd_finally_idx]
-						       .isn_type != ISN_ENDTRY)
+				 && trycmd->tcd_frame_idx == ectx.ec_frame_idx)
 		    {
-			// jump to ":finally"
-			ectx.ec_iidx = trycmd->tcd_finally_idx;
+			// jump to ":finally" or ":endtry"
+			if (trycmd->tcd_finally_idx != 0)
+			    ectx.ec_iidx = trycmd->tcd_finally_idx;
+			else
+			    ectx.ec_iidx = trycmd->tcd_endtry_idx;
 			trycmd->tcd_return = TRUE;
 		    }
 		    else
@@ -2601,8 +2701,9 @@ call_def_function(
 		    CLEAR_POINTER(trycmd);
 		    trycmd->tcd_frame_idx = ectx.ec_frame_idx;
 		    trycmd->tcd_stack_len = ectx.ec_stack.ga_len;
-		    trycmd->tcd_catch_idx = iptr->isn_arg.try.try_catch;
-		    trycmd->tcd_finally_idx = iptr->isn_arg.try.try_finally;
+		    trycmd->tcd_catch_idx = iptr->isn_arg.try.try_ref->try_catch;
+		    trycmd->tcd_finally_idx = iptr->isn_arg.try.try_ref->try_finally;
+		    trycmd->tcd_endtry_idx = iptr->isn_arg.try.try_ref->try_endtry;
 		}
 		break;
 
@@ -2666,13 +2767,28 @@ call_def_function(
 		    {
 			trycmd = ((trycmd_T *)trystack->ga_data)
 							+ trystack->ga_len - i;
-			trycmd->tcd_cont = iidx;
-			iidx = trycmd->tcd_finally_idx;
+			// Add one to tcd_cont to be able to jump to
+			// instruction with index zero.
+			trycmd->tcd_cont = iidx + 1;
+			iidx = trycmd->tcd_finally_idx == 0
+			    ? trycmd->tcd_endtry_idx : trycmd->tcd_finally_idx;
 		    }
 		    // jump to :finally or :endtry of current try statement
 		    ectx.ec_iidx = iidx;
 		}
 		break;
+
+	    case ISN_FINALLY:
+		{
+		    garray_T	*trystack = &ectx.ec_trystack;
+		    trycmd_T    *trycmd = ((trycmd_T *)trystack->ga_data)
+							+ trystack->ga_len - 1;
+
+		    // Reset the index to avoid a return statement jumps here
+		    // again.
+		    trycmd->tcd_finally_idx = 0;
+		    break;
+		}
 
 	    // end of ":try" block
 	    case ISN_ENDTRY:
@@ -2707,7 +2823,7 @@ call_def_function(
 			if (trycmd->tcd_cont != 0)
 			    // handling :continue: jump to outer try block or
 			    // start of the loop
-			    ectx.ec_iidx = trycmd->tcd_cont;
+			    ectx.ec_iidx = trycmd->tcd_cont - 1;
 		    }
 		}
 		break;
@@ -3143,8 +3259,9 @@ call_def_function(
 			res = string_slice(tv->vval.v_string, n1, n2, FALSE);
 		    else
 			// Index: The resulting variable is a string of a
-			// single character.  If the index is too big or
-			// negative the result is empty.
+			// single character (including composing characters).
+			// If the index is too big or negative the result is
+			// empty.
 			res = char_from_string(tv->vval.v_string, n2);
 		    vim_free(tv->vval.v_string);
 		    tv->vval.v_string = res;
@@ -3729,6 +3846,9 @@ failed:
     estack_pop();
     current_sctx = save_current_sctx;
 
+    // TODO: when is it safe to delete the function if it is no longer used?
+    --ufunc->uf_calls;
+
     if (*msg_list != NULL && saved_msg_list != NULL)
     {
 	msglist_T **plist = saved_msg_list;
@@ -4151,6 +4271,9 @@ ex_disassemble(exarg_T *eap)
 	    case ISN_UNLETINDEX:
 		smsg("%4d UNLETINDEX", current);
 		break;
+	    case ISN_UNLETRANGE:
+		smsg("%4d UNLETRANGE", current);
+		break;
 	    case ISN_LOCKCONST:
 		smsg("%4d LOCKCONST", current);
 		break;
@@ -4281,11 +4404,17 @@ ex_disassemble(exarg_T *eap)
 		{
 		    try_T *try = &iptr->isn_arg.try;
 
-		    smsg("%4d TRY catch -> %d, %s -> %d", current,
-				 try->try_catch,
-				 instr[try->try_finally].isn_type == ISN_ENDTRY
-							   ? "end" : "finally",
-				 try->try_finally);
+		    if (try->try_ref->try_finally == 0)
+			smsg("%4d TRY catch -> %d, endtry -> %d",
+				current,
+				try->try_ref->try_catch,
+				try->try_ref->try_endtry);
+		    else
+			smsg("%4d TRY catch -> %d, finally -> %d, endtry -> %d",
+				current,
+				try->try_ref->try_catch,
+				try->try_ref->try_finally,
+				try->try_ref->try_endtry);
 		}
 		break;
 	    case ISN_CATCH:
@@ -4301,6 +4430,9 @@ ex_disassemble(exarg_T *eap)
 				      trycont->tct_levels == 1 ? "" : "s",
 				      trycont->tct_where);
 		}
+		break;
+	    case ISN_FINALLY:
+		smsg("%4d FINALLY", current);
 		break;
 	    case ISN_ENDTRY:
 		smsg("%4d ENDTRY", current);

@@ -2978,6 +2978,10 @@ func Test_popup_cursorline()
   call assert_equal(1, popup_getoptions(winid).cursorline)
   call popup_close(winid)
 
+  let winid = popup_create('some text', #{ cursorline: v:true, })
+  call assert_equal(1, popup_getoptions(winid).cursorline)
+  call popup_close(winid)
+
   let winid = popup_create('some text', #{ cursorline: 0, })
   call assert_equal(0, popup_getoptions(winid).cursorline)
   call popup_close(winid)
@@ -3112,6 +3116,15 @@ func Test_popup_cursorline()
   call delete('XtestPopupCursorLine')
 endfunc
 
+def Test_popup_cursorline_vim9()
+  var winid = popup_create('some text', { cursorline: true, })
+  assert_equal(1, popup_getoptions(winid).cursorline)
+  popup_close(winid)
+
+  assert_fails("popup_create('some text', { cursorline: 2, })", 'E1023:')
+  popup_clear()
+enddef
+
 func Test_previewpopup()
   CheckScreendump
   CheckFeature quickfix
@@ -3146,6 +3159,7 @@ func Test_previewpopup()
 	      \ 'this is another word',
 	      \ 'very long line where the word is also another'])
         set previewpopup=height:4,width:40
+	hi OtherColor ctermbg=lightcyan guibg=lightcyan
 	set path=.
   END
   call writefile(lines, 'XtestPreviewPopup')
@@ -3155,6 +3169,7 @@ func Test_previewpopup()
   call term_sendkeys(buf, ":\<CR>")
   call VerifyScreenDump(buf, 'Test_popupwin_previewpopup_1', {})
 
+  call term_sendkeys(buf, ":set previewpopup+=highlight:OtherColor\<CR>")
   call term_sendkeys(buf, "/another\<CR>\<C-W>}")
   call VerifyScreenDump(buf, 'Test_popupwin_previewpopup_2', {})
 
@@ -3169,6 +3184,7 @@ func Test_previewpopup()
   call VerifyScreenDump(buf, 'Test_popupwin_previewpopup_5', {})
   call term_sendkeys(buf, ":silent cd testdir\<CR>")
 
+  call term_sendkeys(buf, ":set previewpopup-=highlight:OtherColor\<CR>")
   call term_sendkeys(buf, ":pclose\<CR>")
   call term_sendkeys(buf, ":\<BS>")
   call VerifyScreenDump(buf, 'Test_popupwin_previewpopup_6', {})

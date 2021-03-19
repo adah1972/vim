@@ -357,6 +357,24 @@ def Test_method_call_linebreak()
 
   lines =<< trim END
       new
+      def Foo(): string
+        return 'the text'
+      enddef
+      def Bar(F: func): string
+        return F()
+      enddef
+      def Test()
+        Foo  ->Bar()
+             ->setline(1)
+      enddef
+      Test()
+      assert_equal('the text', getline(1))
+      bwipe!
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      new
       g:shortlist
           ->copy()
           ->setline(1)
@@ -370,6 +388,23 @@ def Test_method_call_linebreak()
   new
   MethodAfterLinebreak('foobar')
   assert_equal('foobar', getline(1))
+  bwipe!
+
+  lines =<< trim END
+      vim9script
+      def Foo(): string
+          return '# some text'
+      enddef
+
+      def Bar(F: func): string
+          return F()
+      enddef
+
+      Foo->Bar()
+         ->setline(1)
+  END
+  CheckScriptSuccess(lines)
+  assert_equal('# some text', getline(1))
   bwipe!
 enddef
 
@@ -385,6 +420,33 @@ def Test_method_call_whitespace()
     bwipe!
   END
   CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_method_and_user_command()
+  var lines =<< trim END
+      vim9script
+      def Cmd()
+        g:didFunc = 1
+      enddef
+      command Cmd g:didCmd = 1
+      Cmd
+      assert_equal(1, g:didCmd)
+      Cmd()
+      assert_equal(1, g:didFunc)
+      unlet g:didFunc
+      unlet g:didCmd
+
+      def InDefFunc()
+        Cmd
+        assert_equal(1, g:didCmd)
+        Cmd()
+        assert_equal(1, g:didFunc)
+        unlet g:didFunc
+        unlet g:didCmd
+      enddef
+      InDefFunc()
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 def Test_skipped_expr_linebreak()

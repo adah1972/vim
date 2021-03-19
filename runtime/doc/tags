@@ -3191,6 +3191,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 :stselect	tagsrch.txt	/*:stselect*
 :su	change.txt	/*:su*
 :substitute	change.txt	/*:substitute*
+:substitute-repeat	change.txt	/*:substitute-repeat*
 :sun	windows.txt	/*:sun*
 :sunhide	windows.txt	/*:sunhide*
 :sunm	map.txt	/*:sunm*
@@ -3402,7 +3403,9 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 :vie	editing.txt	/*:vie*
 :view	editing.txt	/*:view*
 :vim	quickfix.txt	/*:vim*
-:vim9	repeat.txt	/*:vim9*
+:vim9	vim9.txt	/*:vim9*
+:vim9cmd	vim9.txt	/*:vim9cmd*
+:vim9s	repeat.txt	/*:vim9s*
 :vim9script	repeat.txt	/*:vim9script*
 :vimgrep	quickfix.txt	/*:vimgrep*
 :vimgrepa	quickfix.txt	/*:vimgrepa*
@@ -6576,6 +6579,7 @@ ft-mail.vim	syntax.txt	/*ft-mail.vim*
 ft-make-syntax	syntax.txt	/*ft-make-syntax*
 ft-man-plugin	filetype.txt	/*ft-man-plugin*
 ft-maple-syntax	syntax.txt	/*ft-maple-syntax*
+ft-markdown-plugin	filetype.txt	/*ft-markdown-plugin*
 ft-masm-syntax	syntax.txt	/*ft-masm-syntax*
 ft-mathematica-syntax	syntax.txt	/*ft-mathematica-syntax*
 ft-matlab-indent	indent.txt	/*ft-matlab-indent*
@@ -10126,6 +10130,7 @@ vim9-export	vim9.txt	/*vim9-export*
 vim9-final	vim9.txt	/*vim9-final*
 vim9-gotchas	vim9.txt	/*vim9-gotchas*
 vim9-import	vim9.txt	/*vim9-import*
+vim9-mix	vim9.txt	/*vim9-mix*
 vim9-namespace	vim9.txt	/*vim9-namespace*
 vim9-rationale	vim9.txt	/*vim9-rationale*
 vim9-reload	vim9.txt	/*vim9-reload*

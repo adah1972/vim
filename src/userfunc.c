@@ -55,6 +55,7 @@ func_tbl_get(void)
  * Get one function argument.
  * If "argtypes" is not NULL also get the type: "arg: type".
  * If "types_optional" is TRUE a missing type is OK, use "any".
+ * If "evalarg" is not NULL use it to check for an already declared name.
  * Return a pointer to after the type.
  * When something is wrong return "arg".
  */
@@ -64,6 +65,7 @@ one_function_arg(
 	garray_T    *newargs,
 	garray_T    *argtypes,
 	int	    types_optional,
+	evalarg_T   *evalarg,
 	int	    skip)
 {
     char_u	*p = arg;
@@ -80,6 +82,13 @@ one_function_arg(
 	    semsg(_("E125: Illegal argument: %s"), arg);
 	return arg;
     }
+
+    // Vim9 script: cannot use script var name for argument. In function: also
+    // check local vars and arguments.
+    if (!skip && argtypes != NULL && check_defined(arg, p - arg,
+		    evalarg == NULL ? NULL : evalarg->eval_cctx, TRUE) == FAIL)
+	return arg;
+
     if (newargs != NULL && ga_grow(newargs, 1) == FAIL)
 	return arg;
     if (newargs != NULL)
@@ -164,6 +173,7 @@ get_function_args(
     garray_T	*newargs,
     garray_T	*argtypes,	// NULL unless using :def
     int		types_optional,	// types optional if "argtypes" is not NULL
+    evalarg_T	*evalarg,	// context or NULL
     int		*varargs,
     garray_T	*default_args,
     int		skip,
@@ -238,7 +248,7 @@ get_function_args(
 
 		arg = p;
 		p = one_function_arg(p, newargs, argtypes, types_optional,
-									 skip);
+								evalarg, skip);
 		if (p == arg)
 		    break;
 		if (*skipwhite(p) == '=')
@@ -251,7 +261,8 @@ get_function_args(
 	else
 	{
 	    arg = p;
-	    p = one_function_arg(p, newargs, argtypes, types_optional, skip);
+	    p = one_function_arg(p, newargs, argtypes, types_optional,
+								evalarg, skip);
 	    if (p == arg)
 		break;
 
@@ -299,7 +310,8 @@ get_function_args(
 		++p;
 		// Don't give this error when skipping, it makes the "->" not
 		// found in "{k,v -> x}" and give a confusing error.
-		if (!skip && in_vim9script()
+		// Allow missing space after comma in legacy functions.
+		if (!skip && argtypes != NULL
 				      && !IS_WHITE_OR_NUL(*p) && *p != endchar)
 		{
 		    semsg(_(e_white_space_required_after_str_str), ",", p - 1);
@@ -567,7 +579,7 @@ get_lambda_tv(
     // be found after the arguments.
     s = *arg + 1;
     ret = get_function_args(&s, equal_arrow ? ')' : '-', NULL,
-	    types_optional ? &argtypes : NULL, types_optional,
+	    types_optional ? &argtypes : NULL, types_optional, evalarg,
 						 NULL, NULL, TRUE, NULL, NULL);
     if (ret == FAIL || skip_arrow(s, equal_arrow, &ret_type, NULL) == NULL)
     {
@@ -583,7 +595,7 @@ get_lambda_tv(
 	pnewargs = NULL;
     *arg += 1;
     ret = get_function_args(arg, equal_arrow ? ')' : '-', pnewargs,
-	    types_optional ? &argtypes : NULL, types_optional,
+	    types_optional ? &argtypes : NULL, types_optional, evalarg,
 					    &varargs, NULL, FALSE, NULL, NULL);
     if (ret == FAIL
 		  || (s = skip_arrow(*arg, equal_arrow, &ret_type,
@@ -674,7 +686,6 @@ get_lambda_tv(
 
 	fp->uf_refcount = 1;
 	set_ufunc_name(fp, name);
-	hash_add(&func_hashtab, UF2HIKEY(fp));
 	fp->uf_args = newargs;
 	ga_init(&fp->uf_def_args);
 	if (types_optional)
@@ -717,6 +728,8 @@ get_lambda_tv(
 	pt->pt_refcount = 1;
 	rettv->vval.v_partial = pt;
 	rettv->v_type = VAR_PARTIAL;
+
+	hash_add(&func_hashtab, UF2HIKEY(fp));
     }
 
     eval_lavars_used = old_eval_lavars;
@@ -1346,9 +1359,12 @@ func_remove(ufunc_T *fp)
 	// function, so we can find the index when defining the function again.
 	// Do remove it when it's a copy.
 	if (fp->uf_def_status == UF_COMPILED && (fp->uf_flags & FC_COPY) == 0)
+	{
 	    fp->uf_flags |= FC_DEAD;
-	else
-	    hash_remove(&func_hashtab, hi);
+	    return FALSE;
+	}
+	hash_remove(&func_hashtab, hi);
+	fp->uf_flags |= FC_DELETED;
 	return TRUE;
     }
     return FALSE;
@@ -2121,11 +2137,23 @@ delete_script_functions(int sid)
 		    int changed = func_hashtab.ht_changed;
 
 		    fp->uf_flags |= FC_DEAD;
-		    func_clear(fp, TRUE);
-		    // When clearing a function another function can be cleared
-		    // as a side effect.  When that happens start over.
-		    if (changed != func_hashtab.ht_changed)
-			break;
+
+		    if (fp->uf_calls > 0)
+		    {
+			// Function is executing, don't free it but do remove
+			// it from the hashtable.
+			if (func_remove(fp))
+			    fp->uf_refcount--;
+		    }
+		    else
+		    {
+			func_clear(fp, TRUE);
+			// When clearing a function another function can be
+			// cleared as a side effect.  When that happens start
+			// over.
+			if (changed != func_hashtab.ht_changed)
+			    break;
+		    }
 		}
 		--todo;
 	    }
@@ -3269,7 +3297,7 @@ define_function(exarg_T *eap, char_u *name_arg)
     ++p;
     if (get_function_args(&p, ')', &newargs,
 			eap->cmdidx == CMD_def ? &argtypes : NULL, FALSE,
-			 &varargs, &default_args, eap->skip,
+			 NULL, &varargs, &default_args, eap->skip,
 			 eap, &line_to_free) == FAIL)
 	goto errret_2;
     whitep = p;
@@ -4020,7 +4048,7 @@ ex_defcompile(exarg_T *eap UNUSED)
 		    && ufunc->uf_def_status == UF_TO_BE_COMPILED
 		    && (ufunc->uf_flags & FC_DEAD) == 0)
 	    {
-		compile_def_function(ufunc, FALSE, FALSE, NULL);
+		(void)compile_def_function(ufunc, FALSE, FALSE, NULL);
 
 		if (func_hashtab.ht_changed != changed)
 		{
@@ -4238,7 +4266,6 @@ ex_delfunction(exarg_T *eap)
 		// do remove it from the hashtable.
 		if (func_remove(fp))
 		    fp->uf_refcount--;
-		fp->uf_flags |= FC_DELETED;
 	    }
 	    else
 		func_clear_free(fp, FALSE);
