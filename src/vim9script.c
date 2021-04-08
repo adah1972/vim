@@ -17,15 +17,33 @@
 # include "vim9.h"
 #endif
 
+/*
+ * Return TRUE when currently using Vim9 script syntax.
+ * Does not go up the stack, a ":function" inside vim9script uses legacy
+ * syntax.
+ */
     int
 in_vim9script(void)
 {
-    // Do not go up the stack, a ":function" inside vim9script uses legacy
-    // syntax.  "sc_version" is also set when compiling a ":def" function in
-    // legacy script.
+    // "sc_version" is also set when compiling a ":def" function in legacy
+    // script.
     return current_sctx.sc_version == SCRIPT_VERSION_VIM9
 		|| (cmdmod.cmod_flags & CMOD_VIM9CMD);
 }
+
+#if defined(FEAT_EVAL) || defined(PROTO)
+/*
+ * Return TRUE if the current script is Vim9 script.
+ * This also returns TRUE in a legacy function in a Vim9 script.
+ */
+    int
+current_script_is_vim9(void)
+{
+    return SCRIPT_ID_VALID(current_sctx.sc_sid)
+	    && SCRIPT_ITEM(current_sctx.sc_sid)->sn_version
+						       == SCRIPT_VERSION_VIM9;
+}
+#endif
 
 /*
  * ":vim9script".
@@ -120,7 +138,7 @@ not_in_vim9(exarg_T *eap)
     int
 vim9_bad_comment(char_u *p)
 {
-    if (p[0] == '#' && p[1] == '{')
+    if (p[0] == '#' && p[1] == '{' && p[2] != '{')
     {
 	emsg(_(e_cannot_use_hash_curly_to_start_comment));
 	return TRUE;
@@ -129,13 +147,13 @@ vim9_bad_comment(char_u *p)
 }
 
 /*
- * Return TRUE if "p" points at a "#" not followed by '{'.
+ * Return TRUE if "p" points at a "#" not followed by one '{'.
  * Does not check for white space.
  */
     int
 vim9_comment_start(char_u *p)
 {
-    return p[0] == '#' && p[1] != '{';
+    return p[0] == '#' && (p[1] != '{' || p[2] == '{');
 }
 
 #if defined(FEAT_EVAL) || defined(PROTO)
@@ -282,8 +300,7 @@ find_exported(
     svar_T	*sv;
     scriptitem_T *script = SCRIPT_ITEM(sid);
 
-    // find name in "script"
-    // TODO: also find script-local user function
+    // Find name in "script".
     idx = get_script_item_idx(sid, name, 0, cctx);
     if (idx >= 0)
     {
@@ -323,6 +340,13 @@ find_exported(
 	{
 	    if (verbose)
 		semsg(_(e_item_not_found_in_script_str), name);
+	    return -1;
+	}
+	else if (((*ufunc)->uf_flags & FC_EXPORT) == 0)
+	{
+	    if (verbose)
+		semsg(_(e_item_not_exported_in_script_str), name);
+	    *ufunc = NULL;
 	    return -1;
 	}
     }
