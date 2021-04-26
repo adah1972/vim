@@ -230,6 +230,9 @@ EXTERN int	did_endif INIT(= FALSE);    // just had ":endif"
 EXTERN int	did_emsg;		    // set by emsg() when the message
 					    // is displayed or thrown
 #ifdef FEAT_EVAL
+EXTERN int	did_emsg_silent INIT(= 0);  // incremented by emsg() when
+					    // emsg_silent was set and did_emsg
+					    // is not incremented
 EXTERN int	did_emsg_def;		    // set by emsg() when emsg_silent
 					    // is set before calling a function
 EXTERN int	did_emsg_cumul;		    // cumulative did_emsg, increased
@@ -737,6 +740,10 @@ EXTERN int	popup_visible INIT(= FALSE);
 
 EXTERN int	text_prop_frozen INIT(= 0);
 #endif
+
+// When set the popup menu will redraw soon using the pum_win_ values. Do not
+// draw over the poup menu area to avoid flicker.
+EXTERN int	pum_will_redraw INIT(= FALSE);
 
 /*
  * The window layout is kept in a tree of frames.  topframe points to the top
@@ -1375,6 +1382,9 @@ EXTERN char_u no_lines_msg[]	INIT(= N_("--No lines in buffer--"));
  */
 EXTERN long	sub_nsubs;	// total number of substitutions
 EXTERN linenr_T	sub_nlines;	// total number of lines changed
+
+// Used when a compiled :substitute has an expression.
+EXTERN struct subs_expr_S	*substitute_instr INIT(= NULL);
 
 // table to store parsed 'wildmode'
 EXTERN char_u	wim_flags[4];

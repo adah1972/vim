@@ -51,6 +51,7 @@ static int eval3(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval4(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval5(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval6(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int want_string);
+static int eval7t(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int want_string);
 static int eval7(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int want_string);
 static int eval7_leader(typval_T *rettv, int numeric_only, char_u *start_leader, char_u **end_leaderp);
 
@@ -1175,12 +1176,8 @@ get_lval(
 		lp->ll_n1 = (long)tv_get_number(&var1);
 	    clear_tv(&var1);
 
-	    if (lp->ll_n1 < 0
-		    || lp->ll_n1 > bloblen
-		    || (lp->ll_range && lp->ll_n1 == bloblen))
+	    if (check_blob_index(bloblen, lp->ll_n1, quiet) == FAIL)
 	    {
-		if (!quiet)
-		    semsg(_(e_blobidx), lp->ll_n1);
 		clear_tv(&var2);
 		return NULL;
 	    }
@@ -1188,14 +1185,9 @@ get_lval(
 	    {
 		lp->ll_n2 = (long)tv_get_number(&var2);
 		clear_tv(&var2);
-		if (lp->ll_n2 < 0
-			|| lp->ll_n2 >= bloblen
-			|| lp->ll_n2 < lp->ll_n1)
-		{
-		    if (!quiet)
-			semsg(_(e_blobidx), lp->ll_n2);
+		if (check_blob_range(bloblen, lp->ll_n1, lp->ll_n2, quiet)
+								       == FAIL)
 		    return NULL;
-		}
 	    }
 	    lp->ll_blob = lp->ll_tv->vval.v_blob;
 	    lp->ll_tv = NULL;
@@ -1319,50 +1311,26 @@ set_var_lval(
 
 	    if (lp->ll_range && rettv->v_type == VAR_BLOB)
 	    {
-		int	il, ir;
-
 		if (lp->ll_empty2)
 		    lp->ll_n2 = blob_len(lp->ll_blob) - 1;
 
-		if (lp->ll_n2 - lp->ll_n1 + 1 != blob_len(rettv->vval.v_blob))
-		{
-		    emsg(_("E972: Blob value does not have the right number of bytes"));
+		if (blob_set_range(lp->ll_blob, lp->ll_n1, lp->ll_n2,
+								rettv) == FAIL)
 		    return;
-		}
-		if (lp->ll_empty2)
-		    lp->ll_n2 = blob_len(lp->ll_blob);
-
-		ir = 0;
-		for (il = lp->ll_n1; il <= lp->ll_n2; il++)
-		    blob_set(lp->ll_blob, il,
-			    blob_get(rettv->vval.v_blob, ir++));
 	    }
 	    else
 	    {
 		val = (int)tv_get_number_chk(rettv, &error);
 		if (!error)
-		{
-		    garray_T *gap = &lp->ll_blob->bv_ga;
-
-		    // Allow for appending a byte.  Setting a byte beyond
-		    // the end is an error otherwise.
-		    if (lp->ll_n1 < gap->ga_len
-			    || (lp->ll_n1 == gap->ga_len
-				&& ga_grow(&lp->ll_blob->bv_ga, 1) == OK))
-		    {
-			blob_set(lp->ll_blob, lp->ll_n1, val);
-			if (lp->ll_n1 == gap->ga_len)
-			    ++gap->ga_len;
-		    }
-		    // error for invalid range was already given in get_lval()
-		}
+		    blob_set_append(lp->ll_blob, lp->ll_n1, val);
 	    }
 	}
 	else if (op != NULL && *op != '=')
 	{
 	    typval_T tv;
 
-	    if (flags & (ASSIGN_CONST | ASSIGN_FINAL))
+	    if ((flags & (ASSIGN_CONST | ASSIGN_FINAL))
+					     && (flags & ASSIGN_FOR_LOOP) == 0)
 	    {
 		emsg(_(e_cannot_mod));
 		*endp = cc;
@@ -1401,7 +1369,8 @@ set_var_lval(
 	listitem_T *ll_li = lp->ll_li;
 	int	    ll_n1 = lp->ll_n1;
 
-	if (flags & (ASSIGN_CONST | ASSIGN_FINAL))
+	if ((flags & (ASSIGN_CONST | ASSIGN_FINAL))
+					     && (flags & ASSIGN_FOR_LOOP) == 0)
 	{
 	    emsg(_("E996: Cannot lock a range"));
 	    return;
@@ -1460,7 +1429,8 @@ set_var_lval(
 	/*
 	 * Assign to a List or Dictionary item.
 	 */
-	if (flags & (ASSIGN_CONST | ASSIGN_FINAL))
+	if ((flags & (ASSIGN_CONST | ASSIGN_FINAL))
+					     && (flags & ASSIGN_FOR_LOOP) == 0)
 	{
 	    emsg(_("E996: Cannot lock a list or dict"));
 	    return;
@@ -1786,7 +1756,9 @@ next_for_item(void *fi_void, char_u *arg)
 {
     forinfo_T	*fi = (forinfo_T *)fi_void;
     int		result;
-    int		flag = in_vim9script() ? ASSIGN_DECL : 0;
+    int		flag = ASSIGN_FOR_LOOP | (in_vim9script()
+			 ? (ASSIGN_FINAL | ASSIGN_DECL | ASSIGN_NO_MEMBER_TYPE)
+			 : 0);
     listitem_T	*item;
 
     if (fi->fi_blob != NULL)
@@ -2111,7 +2083,8 @@ getline_peek_skip_comments(evalarg_T *evalarg)
  * If inside Vim9 script, "arg" points to the end of a line (ignoring a #
  * comment) and there is a next line, return the next line (skipping blanks)
  * and set "getnext".
- * Otherwise just return "arg" unmodified and set "getnext" to FALSE.
+ * Otherwise return the next non-white at or after "arg" and set "getnext" to
+ * FALSE.
  * "arg" must point somewhere inside a line, not at the start.
  */
     char_u *
@@ -2123,7 +2096,7 @@ eval_next_non_blank(char_u *arg, evalarg_T *evalarg, int *getnext)
     if (in_vim9script()
 	    && evalarg != NULL
 	    && (evalarg->eval_cookie != NULL || evalarg->eval_cctx != NULL)
-	    && (*p == NUL || (VIM_ISWHITE(p[-1]) && vim9_comment_start(p))))
+	    && (*p == NUL || (vim9_comment_start(p) && VIM_ISWHITE(p[-1]))))
     {
 	char_u *next;
 
@@ -2883,11 +2856,14 @@ eval5(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 
 	// "." is only string concatenation when scriptversion is 1
 	// "+=", "-=" and "..=" are assignments
+	// "++" and "--" on the next line are a separate command.
 	p = eval_next_non_blank(*arg, evalarg, &getnext);
 	op = *p;
 	concat = op == '.' && (*(p + 1) == '.' || current_sctx.sc_version < 2);
 	if ((op != '+' && op != '-' && !concat) || p[1] == '='
 					       || (p[1] == '.' && p[2] == '='))
+	    break;
+	if (getnext && (op == '+' || op == '-') && p[0] == p[1])
 	    break;
 
 	evaluate = evalarg == NULL ? 0 : (evalarg->eval_flags & EVAL_EVALUATE);
@@ -3097,7 +3073,7 @@ eval6(
     /*
      * Get the first variable.
      */
-    if (eval7(arg, rettv, evalarg, want_string) == FAIL)
+    if (eval7t(arg, rettv, evalarg, want_string) == FAIL)
 	return FAIL;
 
     /*
@@ -3170,7 +3146,7 @@ eval6(
 	    return FAIL;
 	}
 	*arg = skipwhite_and_linebreak(*arg + 1, evalarg);
-	if (eval7(arg, &var2, evalarg, FALSE) == FAIL)
+	if (eval7t(arg, &var2, evalarg, FALSE) == FAIL)
 	    return FAIL;
 
 	if (evaluate)
@@ -3258,6 +3234,86 @@ eval6(
     }
 
     return OK;
+}
+
+/*
+ * Handle a type cast before a base level expression.
+ * "arg" must point to the first non-white of the expression.
+ * "arg" is advanced to just after the recognized expression.
+ * Return OK or FAIL.
+ */
+    static int
+eval7t(
+    char_u	**arg,
+    typval_T	*rettv,
+    evalarg_T	*evalarg,
+    int		want_string)	// after "." operator
+{
+    type_T	*want_type = NULL;
+    garray_T	type_list;	    // list of pointers to allocated types
+    int		res;
+    int		evaluate = evalarg == NULL ? 0
+				       : (evalarg->eval_flags & EVAL_EVALUATE);
+
+    // Recognize <type> in Vim9 script only.
+    if (in_vim9script() && **arg == '<' && eval_isnamec1((*arg)[1]))
+    {
+	++*arg;
+	ga_init2(&type_list, sizeof(type_T *), 10);
+	want_type = parse_type(arg, &type_list, TRUE);
+	if (want_type == NULL && (evaluate || **arg != '>'))
+	{
+	    clear_type_list(&type_list);
+	    return FAIL;
+	}
+
+	if (**arg != '>')
+	{
+	    if (*skipwhite(*arg) == '>')
+		semsg(_(e_no_white_space_allowed_before_str_str), ">", *arg);
+	    else
+		emsg(_(e_missing_gt));
+	    clear_type_list(&type_list);
+	    return FAIL;
+	}
+	++*arg;
+	*arg = skipwhite_and_linebreak(*arg, evalarg);
+    }
+
+    res = eval7(arg, rettv, evalarg, want_string);
+
+    if (want_type != NULL && evaluate)
+    {
+	if (res == OK)
+	{
+	    type_T *actual = typval2type(rettv, get_copyID(), &type_list, TRUE);
+
+	    if (!equal_type(want_type, actual))
+	    {
+		if (want_type == &t_bool && actual != &t_bool
+					&& (actual->tt_flags & TTFLAG_BOOL_OK))
+		{
+		    int n = tv2bool(rettv);
+
+		    // can use "0" and "1" for boolean in some places
+		    clear_tv(rettv);
+		    rettv->v_type = VAR_BOOL;
+		    rettv->vval.v_number = n ? VVAL_TRUE : VVAL_FALSE;
+		}
+		else
+		{
+		    where_T where;
+
+		    where.wt_index = 0;
+		    where.wt_variable = TRUE;
+		    res = check_type(want_type, actual, TRUE, where);
+		}
+	    }
+	}
+	clear_type_list(&type_list);
+    }
+
+    return res;
 }
 
     int
@@ -3514,7 +3570,12 @@ eval7(
 	{
 	    int	    flags = evalarg == NULL ? 0 : evalarg->eval_flags;
 
-	    if ((in_vim9script() ? **arg : *skipwhite(*arg)) == '(')
+	    if (evaluate && in_vim9script() && len == 1 && *s == '_')
+	    {
+		emsg(_(e_cannot_use_underscore_here));
+		ret = FAIL;
+	    }
+	    else if ((in_vim9script() ? **arg : *skipwhite(*arg)) == '(')
 	    {
 		// "name(..."  recursive!
 		*arg = skipwhite(*arg);
@@ -4156,68 +4217,8 @@ eval_index_inner(
 	    break;
 
 	case VAR_BLOB:
-	    len = blob_len(rettv->vval.v_blob);
-	    if (is_range)
-	    {
-		// The resulting variable is a sub-blob.  If the indexes
-		// are out of range the result is empty.
-		if (n1 < 0)
-		{
-		    n1 = len + n1;
-		    if (n1 < 0)
-			n1 = 0;
-		}
-		if (n2 < 0)
-		    n2 = len + n2;
-		else if (n2 >= len)
-		    n2 = len - (exclusive ? 0 : 1);
-		if (exclusive)
-		    --n2;
-		if (n1 >= len || n2 < 0 || n1 > n2)
-		{
-		    clear_tv(rettv);
-		    rettv->v_type = VAR_BLOB;
-		    rettv->vval.v_blob = NULL;
-		}
-		else
-		{
-		    blob_T  *blob = blob_alloc();
-		    long    i;
-
-		    if (blob != NULL)
-		    {
-			if (ga_grow(&blob->bv_ga, n2 - n1 + 1) == FAIL)
-			{
-			    blob_free(blob);
-			    return FAIL;
-			}
-			blob->bv_ga.ga_len = n2 - n1 + 1;
-			for (i = n1; i <= n2; i++)
-			    blob_set(blob, i - n1,
-					  blob_get(rettv->vval.v_blob, i));
-
-			clear_tv(rettv);
-			rettv_blob_set(rettv, blob);
-		    }
-		}
-	    }
-	    else
-	    {
-		// The resulting variable is a byte value.
-		// If the index is too big or negative that is an error.
-		if (n1 < 0)
-		    n1 = len + n1;
-		if (n1 < len && n1 >= 0)
-		{
-		    int v = blob_get(rettv->vval.v_blob, n1);
-
-		    clear_tv(rettv);
-		    rettv->v_type = VAR_NUMBER;
-		    rettv->vval.v_number = v;
-		}
-		else
-		    semsg(_(e_blobidx), n1);
-	    }
+	    blob_slice_or_index(rettv->vval.v_blob, is_range, n1, n2,
+							     exclusive, rettv);
 	    break;
 
 	case VAR_LIST:

@@ -19,6 +19,7 @@ typedef enum {
     ISN_ECHOMSG,    // echo Ex commands isn_arg.number items on top of stack
     ISN_ECHOERR,    // echo Ex commands isn_arg.number items on top of stack
     ISN_RANGE,	    // compute range from isn_arg.string, push to stack
+    ISN_SUBSTITUTE, // :s command with expression
 
     // get and set variables
     ISN_LOAD,	    // push local variable isn_arg.number
@@ -57,6 +58,8 @@ typedef enum {
     ISN_STORENR,    // store number into local variable isn_arg.storenr.stnr_idx
     ISN_STOREINDEX,	// store into list or dictionary, type isn_arg.vartype,
 			// value/index/variable on stack
+    ISN_STORERANGE,	// store into blob,
+			// value/index 1/index 2/variable on stack
 
     ISN_UNLET,		// unlet variable isn_arg.unlet.ul_name
     ISN_UNLETENV,	// unlet environment variable isn_arg.unlet.ul_name
@@ -92,7 +95,8 @@ typedef enum {
 
     // expression operations
     ISN_JUMP,	    // jump if condition is matched isn_arg.jump
-    ISN_JUMP_IF_ARG_SET, // jump if argument is already set, uses isn_arg.jumparg
+    ISN_JUMP_IF_ARG_SET, // jump if argument is already set, uses
+			 // isn_arg.jumparg
 
     // loop
     ISN_FOR,	    // get next item from a list, uses isn_arg.forloop
@@ -133,6 +137,8 @@ typedef enum {
     ISN_LISTAPPEND, // append to a list, like add()
     ISN_LISTINDEX,  // [expr] list index
     ISN_LISTSLICE,  // [expr:expr] list slice
+    ISN_BLOBINDEX,  // [expr] blob index
+    ISN_BLOBSLICE,  // [expr:expr] blob slice
     ISN_ANYINDEX,   // [expr] runtime index
     ISN_ANYSLICE,   // [expr:expr] runtime slice
     ISN_SLICE,	    // drop isn_arg.number items from start of list
@@ -161,7 +167,12 @@ typedef enum {
 
     ISN_UNPACK,	    // unpack list into items, uses isn_arg.unpack
     ISN_SHUFFLE,    // move item on stack up or down
-    ISN_DROP	    // pop stack and discard value
+    ISN_DROP,	    // pop stack and discard value
+
+    ISN_REDIRSTART, // :redir =>
+    ISN_REDIREND,   // :redir END, isn_arg.number == 1 for append
+
+    ISN_FINISH	    // end marker in list of instructions
 } isntype_T;
 
 
@@ -335,6 +346,12 @@ typedef struct {
     int		outer_depth;	// nesting level, stack frames to go up
 } isn_outer_T;
 
+// arguments to ISN_SUBSTITUTE
+typedef struct {
+    char_u	*subs_cmd;	// :s command
+    isn_T	*subs_instr;	// sequence of instructions
+} subs_T;
+
 /*
  * Instruction
  */
@@ -377,6 +394,7 @@ struct isn_S {
 	cmod_T		    cmdmod;
 	unpack_T	    unpack;
 	isn_outer_T	    outer;
+	subs_T		    subs;
     } isn_arg;
 };
 

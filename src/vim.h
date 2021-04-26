@@ -1201,6 +1201,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define OPT_NOWIN	0x20	// don't set window-local options
 #define OPT_ONECOLUMN	0x40	// list options one per line
 #define OPT_NO_REDRAW	0x80	// ignore redraw flags on option
+#define OPT_SKIPRTP	0x100	// "skiprtp" in 'sessionoptions'
 
 // Magic chars used in confirm dialog strings
 #define DLG_BUTTON_SEP	'\n'
@@ -2152,10 +2153,13 @@ typedef enum {
 } estack_arg_T;
 
 // Flags for assignment functions.
-#define ASSIGN_FINAL	1   // ":final"
-#define ASSIGN_CONST	2   // ":const"
-#define ASSIGN_NO_DECL	4   // "name = expr" without ":let"/":const"/":final"
-#define ASSIGN_DECL	8   // may declare variable if it does not exist
+#define ASSIGN_FINAL	0x01  // ":final"
+#define ASSIGN_CONST	0x02  // ":const"
+#define ASSIGN_NO_DECL	0x04  // "name = expr" without ":let"/":const"/":final"
+#define ASSIGN_DECL	0x08  // may declare variable if it does not exist
+#define ASSIGN_UNPACK	0x10  // using [a, b] = list
+#define ASSIGN_NO_MEMBER_TYPE 0x20 // use "any" for list and dict member type
+#define ASSIGN_FOR_LOOP 0x40 // assigning to loop variable
 
 #include "ex_cmds.h"	    // Ex command defines
 #include "spell.h"	    // spell checking stuff

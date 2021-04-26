@@ -1,4 +1,4 @@
-*vim9.txt*	For Vim version 8.2.  Last change: 2021 Apr 06
+*vim9.txt*	For Vim version 8.2.  Last change: 2021 Apr 11
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -61,11 +61,16 @@ Vim9 script and legacy Vim script can be mixed.  There is no requirement to
 rewrite old scripts, they keep working as before.  You may want to use a few
 `:def` functions for code that needs to be fast.
 
-						*:vim9* *:vim9cmd*
-:vim9[cmd] {cmd}
+:vim9[cmd] {cmd}				*:vim9* *:vim9cmd*
 		Execute {cmd} using Vim9 script syntax and semantics.
 		Useful when typing a command and in a legacy script or
 		function.
+
+:leg[acy] {cmd}					*:leg* *:legacy*
+		Execute {cmd} using legacy script syntax and semantics.  Only
+		useful in a Vim9 script or a :def function.
+		Note that {cmd} cannot use local variables, since it is parsed
+		with legacy expression syntax.
 
 ==============================================================================
 
@@ -137,18 +142,21 @@ arguments).
 Vim9 functions ~
 
 A function defined with `:def` is compiled.  Execution is many times faster,
-often 10x to 100x times.
+often 10 to 100 times.
 
 Many errors are already found when compiling, before the function is executed.
 The syntax is strict, to enforce code that is easy to read and understand.
 
-Compilation is done when either of these is encountered:
+Compilation is done when any of these is encountered:
 - the first time the function is called
-- when the `:defcompile` command is encountered in the script where the
+- when the `:defcompile` command is encountered in the script after the
   function was defined
 - `:disassemble` is used for the function.
 - a function that is compiled calls the function or uses it as a function
   reference
+							*E1091*
+If compilation fails it is not tried again on the next call, instead this
+error is given: "E1091: Function is not compiled: {name}".
 
 `:def` has no options like `:function` does: "range", "abort", "dict" or
 "closure".  A `:def` function always aborts on an error (unless `:silent!` was
@@ -161,7 +169,7 @@ functions.
 
 Arguments are accessed by name, without "a:", just like any other language.
 There is no "a:" dictionary or "a:000" list.
-
+						*vim9-variable-arguments*
 Variable arguments are defined as the last argument, with a name and have a
 list type, similar to TypeScript.  For example, a list of numbers: >
 	def MyFunc(...itemlist: list<number>)
@@ -176,6 +184,15 @@ should use its default value.  Example: >
 	  ...
 	enddef
 	MyFunc(v:none, 'LAST')  # first argument uses default value 'one'
+<
+						*vim9-ignored-argument*
+The argument "_" (an underscore) can be used to ignore the argument.  This is
+most useful in callbacks where you don't need it, but do need to give an
+argument to match the call.  E.g. when using map() two arguments are passed,
+the key and the value, to ignore the key: >
+	map(myList, (_, v) => v * 2)
+There is no error for using the "_" argument multiple times.  No type needs to
+be given.
 
 
 Functions and variables are script-local by default ~
@@ -322,6 +339,19 @@ The "g:" prefix is not needed for auto-load functions.
 
 Since `&opt = value` is now assigning a value to option "opt", ":&" cannot be
 used to repeat a `:substitute` command.
+							*vim9-unpack-ignore*
+For an unpack assignment the underscore can be used to ignore a list item,
+similar to how a function argument can be ignored: >
+	[a, _, c] = theList
+To ignore any remaining items: >
+	[a, b; _] = longList
+
+<							*E1092*
+Declaring more than one variable at a time, using the unpack notation, is
+currently not supported: >
+	var [v1, v2] = GetValues()  # Error!
+That is because the type needs to be inferred from the list item type, which
+isn't that easy.
 
 
 Constants ~
@@ -355,13 +385,6 @@ The constant only applies to the value itself, not what it refers to. >
 	NAMES[0][0] = "Jack"    # Error!
 	NAMES[1] = ["Emma"]     # Error!
 	NAMES[1][0] = "Emma"    # OK, now females[0] == "Emma"
-
-<							*E1092*
-Declaring more than one variable at a time, using the unpack notation, is
-currently not supported: >
-	var [v1, v2] = GetValues()  # Error!
-That is because the type needs to be inferred from the list item type, which
-isn't that easy.
 
 
 Omitting :call and :eval ~
@@ -433,6 +456,15 @@ But you can use a backslash to concatenate the lines before parsing: >
 	filter(list, (k,
 		\	v)
 		\	=> v > 0)
+<							*vim9-lambda-arguments*
+In legacy script a lambda could be called with any number of extra arguments,
+there was no way to warn for not using them.  In Vim9 script the number of
+arguments must match.  If you do want to accept any arguments, or any further
+arguments, use "..._", which makes the function accept
+|vim9-variable-arguments|.  Example: >
+	var Callback = (..._) => 'anything'
+	echo Callback(1, 2, 3)  # displays "anything"
+
 <							*inline-function*
 Additionally, a lambda can contain statements in {}: >
 	var Lambda = (arg) => {

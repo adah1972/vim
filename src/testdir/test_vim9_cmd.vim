@@ -984,18 +984,26 @@ def Test_user_command_comment()
   command -nargs=1 Comd echom <q-args>
 
   var lines =<< trim END
-    vim9script
-    Comd # comment
+      vim9script
+      Comd # comment
   END
   CheckScriptSuccess(lines)
 
   lines =<< trim END
-    vim9script
-    Comd# comment
+      vim9script
+      Comd# comment
   END
   CheckScriptFailure(lines, 'E1144:')
-
   delcommand Comd
+
+  lines =<< trim END
+      vim9script
+      command Foo echo 'Foo'
+      Foo3Bar
+  END
+  CheckScriptFailure(lines, 'E1144: Command "Foo" is not followed by white space: Foo3Bar')
+
+  delcommand Foo
 enddef
 
 def Test_star_command()
@@ -1170,6 +1178,103 @@ def Test_lockvar()
       unlockvar theList
   END
   CheckDefFailure(lines, 'E1178', 2)
+enddef
+
+def Test_substitute_expr()
+  var to = 'repl'
+  new
+  setline(1, 'one from two')
+  s/from/\=to
+  assert_equal('one repl two', getline(1))
+
+  setline(1, 'one from two')
+  s/from/\=to .. '_x'
+  assert_equal('one repl_x two', getline(1))
+
+  setline(1, 'one from two from three')
+  var also = 'also'
+  s/from/\=to .. '_' .. also/g#e
+  assert_equal('one repl_also two repl_also three', getline(1))
+
+  setline(1, 'abc abc abc')
+  for choice in [true, false]
+    :1s/abc/\=choice ? 'yes' : 'no'/
+  endfor
+  assert_equal('yes no abc', getline(1))
+
+  bwipe!
+
+  CheckDefFailure(['s/from/\="x")/'], 'E488:')
+  CheckDefFailure(['s/from/\="x"/9'], 'E488:')
+
+  # When calling a function the right instruction list needs to be restored.
+  var lines =<< trim END
+      vim9script
+      def Foo()
+          Bar([])
+      enddef
+      def Bar(l: list<number>)
+          s/^/\=Rep()/
+          for n in l[:]
+          endfor
+      enddef
+      def Rep(): string
+          return 'rep'
+      enddef
+      new
+      Foo()
+      assert_equal('rep', getline(1))
+      bwipe!
+  END
+  CheckScriptSuccess(lines)
+enddef
+
+def Test_redir_to_var()
+  var result: string
+  redir => result
+    echo 'something'
+  redir END
+  assert_equal("\nsomething", result)
+
+  redir =>> result
+    echo 'more'
+  redir END
+  assert_equal("\nsomething\nmore", result)
+
+  var d: dict<string>
+  redir => d.redir
+    echo 'dict'
+  redir END
+  assert_equal({redir: "\ndict"}, d)
+
+  var l = ['a', 'b', 'c']
+  redir => l[1]
+    echo 'list'
+  redir END
+  assert_equal(['a', "\nlist", 'c'], l)
+
+  var dl = {l: ['x']}
+  redir => dl.l[0]
+    echo 'dict-list'
+  redir END
+  assert_equal({l: ["\ndict-list"]}, dl)
+
+  redir =>> d.redir
+    echo 'more'
+  redir END
+  assert_equal({redir: "\ndict\nmore"}, d)
+
+  var lines =<< trim END
+    redir => notexist
+  END
+  CheckDefFailure(lines, 'E1089:')
+
+  lines =<< trim END
+    var ls = 'asdf'
+    redir => ls[1]
+    redir END
+  END
+  CheckDefFailure(lines, 'E1141:')
 enddef
 
 

@@ -287,6 +287,7 @@ static void	ex_tag_cmd(exarg_T *eap, char_u *name);
 # define ex_endwhile		ex_ni
 # define ex_eval		ex_ni
 # define ex_execute		ex_ni
+# define ex_incdec		ex_ni
 # define ex_finally		ex_ni
 # define ex_finish		ex_ni
 # define ex_function		ex_ni
@@ -2925,6 +2926,17 @@ parse_command_modifiers(
 			    cmod->cmod_flags |= CMOD_LOCKMARKS;
 			    continue;
 			}
+			if (checkforcmd_noparen(&eap->cmd, "legacy", 3))
+			{
+			    if (ends_excmd2(p, eap->cmd))
+			    {
+				*errormsg =
+				      _(e_vim9cmd_must_be_followed_by_command);
+				return FAIL;
+			    }
+			    cmod->cmod_flags |= CMOD_LEGACY;
+			    continue;
+			}
 
 			if (!checkforcmd_noparen(&eap->cmd, "leftabove", 5))
 			    break;
@@ -3429,22 +3441,25 @@ find_ex_command(
 			    // "varname.key" is an expression.
 			 || (*p == '.' && ASCII_ISALPHA(p[1]))))
 	    {
-		char_u	*after = p;
+		char_u	*after = eap->cmd;
 
 		// When followed by "=" or "+=" then it is an assignment.
+		// Skip over the whole thing, it can be:
+		//	name.member = val
+		//	name[a : b] = val
+		//	name[idx] = val
+		//	name[idx].member = val
+		//	etc.
+		eap->cmdidx = CMD_eval;
 		++emsg_silent;
-		if (*after == '.')
-		    after = skipwhite(after + 1);
 		if (skip_expr(&after, NULL) == OK)
+		{
 		    after = skipwhite(after);
-		else
-		    after = (char_u *)"";
-		if (*after == '=' || (*after != NUL && after[1] == '=')
+		    if (*after == '=' || (*after != NUL && after[1] == '=')
 					 || (after[0] == '.' && after[1] == '.'
 							   && after[2] == '='))
-		    eap->cmdidx = CMD_var;
-		else
-		    eap->cmdidx = CMD_eval;
+			eap->cmdidx = CMD_var;
+		}
 		--emsg_silent;
 		return eap->cmd;
 	    }
@@ -3480,7 +3495,8 @@ find_ex_command(
 
 	    // Recognize an assignment if we recognize the variable name:
 	    // "g:var = expr"
-	    // "var = expr"  where "var" is a variable name.
+	    // "var = expr"  where "var" is a variable name or we are skipping
+	    // (variable declaration might have been skipped).
 	    if (*eap->cmd == '@')
 		p = eap->cmd + 2;
 	    oplen = assignment_len(skipwhite(p), &heredoc);
@@ -3490,6 +3506,7 @@ find_ex_command(
 			|| *eap->cmd == '&'
 			|| *eap->cmd == '$'
 			|| *eap->cmd == '@'
+			|| eap->skip
 			|| lookup(eap->cmd, p - eap->cmd, TRUE, cctx) == OK)
 		{
 		    eap->cmdidx = CMD_var;
@@ -3514,6 +3531,13 @@ find_ex_command(
 	{
 	    eap->cmdidx = CMD_eval;
 	    return eap->cmd;
+	}
+
+	// Check for "++nr" and "--nr".
+	if (p == eap->cmd && p[0] == p[1] && (*p == '+' || *p == '-'))
+	{
+	    eap->cmdidx = *p == '+' ? CMD_increment : CMD_decrement;
+	    return eap->cmd + 2;
 	}
     }
 #endif
@@ -3649,8 +3673,11 @@ find_ex_command(
 	    && (eap->cmdidx < 0 ||
 		(cmdnames[eap->cmdidx].cmd_argt & EX_NONWHITE_OK) == 0))
     {
-	semsg(_(e_command_not_followed_by_white_space_str), eap->cmd);
+	char_u *cmd = vim_strnsave(eap->cmd, p - eap->cmd);
+
+	semsg(_(e_command_str_not_followed_by_white_space_str), cmd, eap->cmd);
 	eap->cmdidx = CMD_SIZE;
+	vim_free(cmd);
     }
 #endif
 
@@ -7370,7 +7397,7 @@ do_sleep(long msec, int hide_cursor)
 # endif
 
     if (hide_cursor)
-        cursor_off();
+        cursor_sleep();
     else
         cursor_on();
 
@@ -7422,6 +7449,9 @@ do_sleep(long msec, int hide_cursor)
     // input buffer, otherwise a following call to input() fails.
     if (got_int)
 	(void)vpeekc();
+
+    if (hide_cursor)
+        cursor_unsleep();
 }
 
 /*
