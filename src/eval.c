@@ -309,6 +309,10 @@ eval_expr_typval(typval_T *expr, typval_T *argv, int argc, typval_T *rettv)
 		return FAIL;
 	}
     }
+    else if (expr->v_type == VAR_INSTR)
+    {
+	return exe_typval_instr(expr, rettv);
+    }
     else
     {
 	s = tv_get_string_buf_chk(expr, buf);
@@ -393,7 +397,7 @@ skip_expr(char_u **pp, evalarg_T *evalarg)
 }
 
 /*
- * Skip over an expression at "*pp".
+ * Skip over an expression at "*arg".
  * If in Vim9 script and line breaks are encountered, the lines are
  * concatenated.  "evalarg->eval_tofree" will be set accordingly.
  * "arg" is advanced to just after the expression.
@@ -451,7 +455,7 @@ skip_expr_concatenate(
 
 	    // Line breaks encountered, concatenate all the lines.
 	    *((char_u **)gap->ga_data) = *start;
-	    p = ga_concat_strings(gap, "");
+	    p = ga_concat_strings(gap, " ");
 
 	    // free the lines only when using getsourceline()
 	    if (evalarg->eval_cookie != NULL)
@@ -1510,6 +1514,7 @@ tv_op(typval_T *tv1, typval_T *tv2, char_u *op)
 	    case VAR_SPECIAL:
 	    case VAR_JOB:
 	    case VAR_CHANNEL:
+	    case VAR_INSTR:
 		break;
 
 	    case VAR_BLOB:
@@ -2059,6 +2064,7 @@ eval_func(
 /*
  * Get the next line source line without advancing.  But do skip over comment
  * lines.
+ * Only called for Vim9 script.
  */
     static char_u *
 getline_peek_skip_comments(evalarg_T *evalarg)
@@ -2116,6 +2122,7 @@ eval_next_non_blank(char_u *arg, evalarg_T *evalarg, int *getnext)
 
 /*
  * To be called after eval_next_non_blank() sets "getnext" to TRUE.
+ * Only called for Vim9 script.
  */
     char_u *
 eval_next_line(evalarg_T *evalarg)
@@ -2131,7 +2138,16 @@ eval_next_line(evalarg_T *evalarg)
     ++evalarg->eval_break_count;
     if (gap->ga_itemsize > 0 && ga_grow(gap, 1) == OK)
     {
-	// Going to concatenate the lines after parsing.
+	char_u *p = skipwhite(line);
+
+	// Going to concatenate the lines after parsing.  For an empty or
+	// comment line use an empty string.
+	if (*p == NUL || vim9_comment_start(p))
+	{
+	    vim_free(line);
+	    line = vim_strsave((char_u *)"");
+	}
+
 	((char_u **)gap->ga_data)[gap->ga_len] = line;
 	++gap->ga_len;
     }
@@ -2935,7 +2951,8 @@ eval5(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 		if (vim9script && (var2.v_type == VAR_VOID
 			|| var2.v_type == VAR_CHANNEL
 			|| var2.v_type == VAR_JOB))
-		    emsg(_(e_inval_string));
+		    semsg(_(e_using_invalid_value_as_string_str),
+						   vartype_name(var2.v_type));
 #ifdef FEAT_FLOAT
 		else if (vim9script && var2.v_type == VAR_FLOAT)
 		{
@@ -4073,6 +4090,7 @@ check_can_index(typval_T *rettv, int evaluate, int verbose)
 	case VAR_SPECIAL:
 	case VAR_JOB:
 	case VAR_CHANNEL:
+	case VAR_INSTR:
 	    if (verbose)
 		emsg(_(e_cannot_index_special_variable));
 	    return FAIL;
@@ -4166,6 +4184,7 @@ eval_index_inner(
 	case VAR_SPECIAL:
 	case VAR_JOB:
 	case VAR_CHANNEL:
+	case VAR_INSTR:
 	    break; // not evaluating, skipping over subscript
 
 	case VAR_NUMBER:
@@ -4265,10 +4284,13 @@ eval_index_inner(
     char_u *
 partial_name(partial_T *pt)
 {
-    if (pt->pt_name != NULL)
-	return pt->pt_name;
-    if (pt->pt_func != NULL)
-	return pt->pt_func->uf_name;
+    if (pt != NULL)
+    {
+	if (pt->pt_name != NULL)
+	    return pt->pt_name;
+	if (pt->pt_func != NULL)
+	    return pt->pt_func->uf_name;
+    }
     return (char_u *)"";
 }
 
@@ -5054,6 +5076,11 @@ echo_string_core(
 		*tofree = string_quote(r, FALSE);
 		r = *tofree;
 	    }
+	    break;
+
+	case VAR_INSTR:
+	    *tofree = NULL;
+	    r = (char_u *)"instructions";
 	    break;
 
 	case VAR_FLOAT:
@@ -5976,6 +6003,7 @@ item_copy(
 	case VAR_SPECIAL:
 	case VAR_JOB:
 	case VAR_CHANNEL:
+	case VAR_INSTR:
 	    copy_tv(from, to);
 	    break;
 	case VAR_LIST:
@@ -6086,7 +6114,7 @@ ex_echo(exarg_T *eap)
 {
     char_u	*arg = eap->arg;
     typval_T	rettv;
-    char_u	*p;
+    char_u	*arg_start;
     int		needclr = TRUE;
     int		atstart = TRUE;
     int		did_emsg_before = did_emsg;
@@ -6103,7 +6131,7 @@ ex_echo(exarg_T *eap)
 	// still need to be cleared. E.g., "echo 22,44".
 	need_clr_eos = needclr;
 
-	p = arg;
+	arg_start = arg;
 	if (eval1(&arg, &rettv, &evalarg) == FAIL)
 	{
 	    /*
@@ -6113,14 +6141,21 @@ ex_echo(exarg_T *eap)
 	     */
 	    if (!aborting() && did_emsg == did_emsg_before
 					  && called_emsg == called_emsg_before)
-		semsg(_(e_invexpr2), p);
+		semsg(_(e_invexpr2), arg_start);
 	    need_clr_eos = FALSE;
 	    break;
 	}
 	need_clr_eos = FALSE;
 
 	if (!eap->skip)
+	{
+	    if (rettv.v_type == VAR_VOID)
+	    {
+		semsg(_(e_expression_does_not_result_in_value_str), arg_start);
+		break;
+	    }
 	    echo_one(&rettv, eap->cmdidx == CMD_echo, &atstart, &needclr);
+	}
 
 	clear_tv(&rettv);
 	arg = skipwhite(arg);
@@ -6194,7 +6229,8 @@ ex_execute(exarg_T *eap)
 	    {
 		if (rettv.v_type == VAR_CHANNEL || rettv.v_type == VAR_JOB)
 		{
-		    emsg(_(e_inval_string));
+		    semsg(_(e_using_invalid_value_as_string_str),
+						  vartype_name(rettv.v_type));
 		    p = NULL;
 		}
 		else

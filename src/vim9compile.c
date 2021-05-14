@@ -615,6 +615,7 @@ may_generate_2STRING(int offset, cctx_T *cctx)
 	case VAR_DICT:
 	case VAR_JOB:
 	case VAR_CHANNEL:
+	case VAR_INSTR:
 			 to_string_error((*type)->tt_type);
 			 return FAIL;
     }
@@ -2708,41 +2709,40 @@ clear_ppconst(ppconst_T *ppconst)
 
 /*
  * Compile getting a member from a list/dict/string/blob.  Stack has the
- * indexable value and the index.
+ * indexable value and the index or the two indexes of a slice.
  */
     static int
 compile_member(int is_slice, cctx_T *cctx)
 {
     type_T	**typep;
     garray_T	*stack = &cctx->ctx_type_stack;
-    vartype_T	vtype;
-    type_T	*valtype;
+    vartype_T	vartype;
+    type_T	*idxtype;
 
-    // We can index a list and a dict.  If we don't know the type
-    // we can use the index value type.
-    // TODO: If we don't know use an instruction to figure it out at
-    // runtime.
+    // We can index a list, dict and blob.  If we don't know the type
+    // we can use the index value type.  If we still don't know use an "ANY"
+    // instruction.
     typep = ((type_T **)stack->ga_data) + stack->ga_len
 						  - (is_slice ? 3 : 2);
-    vtype = (*typep)->tt_type;
-    valtype = ((type_T **)stack->ga_data)[stack->ga_len - 1];
+    vartype = (*typep)->tt_type;
+    idxtype = ((type_T **)stack->ga_data)[stack->ga_len - 1];
     // If the index is a string, the variable must be a Dict.
-    if (*typep == &t_any && valtype == &t_string)
-	vtype = VAR_DICT;
-    if (vtype == VAR_STRING || vtype == VAR_LIST || vtype == VAR_BLOB)
+    if (*typep == &t_any && idxtype == &t_string)
+	vartype = VAR_DICT;
+    if (vartype == VAR_STRING || vartype == VAR_LIST || vartype == VAR_BLOB)
     {
-	if (need_type(valtype, &t_number, -1, 0, cctx, FALSE, FALSE) == FAIL)
+	if (need_type(idxtype, &t_number, -1, 0, cctx, FALSE, FALSE) == FAIL)
 	    return FAIL;
 	if (is_slice)
 	{
-	    valtype = ((type_T **)stack->ga_data)[stack->ga_len - 2];
-	    if (need_type(valtype, &t_number, -2, 0, cctx,
+	    idxtype = ((type_T **)stack->ga_data)[stack->ga_len - 2];
+	    if (need_type(idxtype, &t_number, -2, 0, cctx,
 							 FALSE, FALSE) == FAIL)
 		return FAIL;
 	}
     }
 
-    if (vtype == VAR_DICT)
+    if (vartype == VAR_DICT)
     {
 	if (is_slice)
 	{
@@ -2768,7 +2768,7 @@ compile_member(int is_slice, cctx_T *cctx)
 	if (generate_instr_drop(cctx, ISN_MEMBER, 1) == FAIL)
 	    return FAIL;
     }
-    else if (vtype == VAR_STRING)
+    else if (vartype == VAR_STRING)
     {
 	*typep = &t_string;
 	if ((is_slice
@@ -2776,7 +2776,7 @@ compile_member(int is_slice, cctx_T *cctx)
 		: generate_instr_drop(cctx, ISN_STRINDEX, 1)) == FAIL)
 	    return FAIL;
     }
-    else if (vtype == VAR_BLOB)
+    else if (vartype == VAR_BLOB)
     {
 	if (is_slice)
 	{
@@ -2791,12 +2791,12 @@ compile_member(int is_slice, cctx_T *cctx)
 		return FAIL;
 	}
     }
-    else if (vtype == VAR_LIST || *typep == &t_any)
+    else if (vartype == VAR_LIST || *typep == &t_any)
     {
 	if (is_slice)
 	{
 	    if (generate_instr_drop(cctx,
-		     vtype == VAR_LIST ?  ISN_LISTSLICE : ISN_ANYSLICE,
+		     vartype == VAR_LIST ?  ISN_LISTSLICE : ISN_ANYSLICE,
 							    2) == FAIL)
 		return FAIL;
 	}
@@ -2810,7 +2810,8 @@ compile_member(int is_slice, cctx_T *cctx)
 		    *typep = &t_any;
 	    }
 	    if (generate_instr_drop(cctx,
-		 vtype == VAR_LIST ?  ISN_LISTINDEX : ISN_ANYINDEX, 1) == FAIL)
+			vartype == VAR_LIST ?  ISN_LISTINDEX : ISN_ANYINDEX, 1)
+								       == FAIL)
 		return FAIL;
 	}
     }
@@ -3097,16 +3098,72 @@ theend:
     return res;
 }
 
+    static void
+clear_instr_ga(garray_T *gap)
+{
+    int idx;
+
+    for (idx = 0; idx < gap->ga_len; ++idx)
+	delete_instr(((isn_T *)gap->ga_data) + idx);
+    ga_clear(gap);
+}
+
+/*
+ * Compile a string in a ISN_PUSHS instruction into an ISN_INSTR.
+ * Returns FAIL if compilation fails.
+ */
+    static int
+compile_string(isn_T *isn, cctx_T *cctx)
+{
+    char_u	*s = isn->isn_arg.string;
+    garray_T	save_ga = cctx->ctx_instr;
+    int		expr_res;
+    int		trailing_error;
+    int		instr_count;
+    isn_T	*instr = NULL;
+
+    // Temporarily reset the list of instructions so that the jump labels are
+    // correct.
+    cctx->ctx_instr.ga_len = 0;
+    cctx->ctx_instr.ga_maxlen = 0;
+    cctx->ctx_instr.ga_data = NULL;
+    expr_res = compile_expr0(&s, cctx);
+    s = skipwhite(s);
+    trailing_error = *s != NUL;
+
+    if (expr_res == FAIL || trailing_error)
+    {
+	if (trailing_error)
+	    semsg(_(e_trailing_arg), s);
+	clear_instr_ga(&cctx->ctx_instr);
+	cctx->ctx_instr = save_ga;
+	return FAIL;
+    }
+
+    // Move the generated instructions into the ISN_INSTR instruction, then
+    // restore the list of instructions.
+    instr_count = cctx->ctx_instr.ga_len;
+    instr = cctx->ctx_instr.ga_data;
+    instr[instr_count].isn_type = ISN_FINISH;
+
+    cctx->ctx_instr = save_ga;
+    vim_free(isn->isn_arg.string);
+    isn->isn_type = ISN_INSTR;
+    isn->isn_arg.instr = instr;
+    return OK;
+}
+
 /*
  * Compile the argument expressions.
  * "arg" points to just after the "(" and is advanced to after the ")"
  */
     static int
-compile_arguments(char_u **arg, cctx_T *cctx, int *argcount)
+compile_arguments(char_u **arg, cctx_T *cctx, int *argcount, int is_searchpair)
 {
     char_u  *p = *arg;
     char_u  *whitep = *arg;
     int	    must_end = FALSE;
+    int	    instr_count;
 
     for (;;)
     {
@@ -3123,9 +3180,20 @@ compile_arguments(char_u **arg, cctx_T *cctx, int *argcount)
 	    return FAIL;
 	}
 
+	instr_count = cctx->ctx_instr.ga_len;
 	if (compile_expr0(&p, cctx) == FAIL)
 	    return FAIL;
 	++*argcount;
+
+	if (is_searchpair && *argcount == 5
+		&& cctx->ctx_instr.ga_len == instr_count + 1)
+	{
+	    isn_T *isn = ((isn_T *)cctx->ctx_instr.ga_data) + instr_count;
+
+	    // {skip} argument of searchpair() can be compiled if not empty
+	    if (isn->isn_type == ISN_PUSHS && *isn->isn_arg.string != NUL)
+		compile_string(isn, cctx);
+	}
 
 	if (*p != ',' && *skipwhite(p) == ',')
 	{
@@ -3175,6 +3243,7 @@ compile_call(
     ufunc_T	*ufunc = NULL;
     int		res = FAIL;
     int		is_autoload;
+    int		is_searchpair;
 
     // we can evaluate "has('name')" at compile time
     if (varlen == 3 && STRNCMP(*arg, "has", 3) == 0)
@@ -3216,8 +3285,15 @@ compile_call(
     vim_strncpy(namebuf, *arg, varlen);
     name = fname_trans_sid(namebuf, fname_buf, &tofree, &error);
 
+    // We handle the "skip" argument of searchpair() and searchpairpos()
+    // differently.
+    is_searchpair = (varlen == 6 && STRNCMP(*arg, "search", 6) == 0)
+	         || (varlen == 9 && STRNCMP(*arg, "searchpos", 9) == 0)
+	        || (varlen == 10 && STRNCMP(*arg, "searchpair", 10) == 0)
+	        || (varlen == 13 && STRNCMP(*arg, "searchpairpos", 13) == 0);
+
     *arg = skipwhite(*arg + varlen + 1);
-    if (compile_arguments(arg, cctx, &argcount) == FAIL)
+    if (compile_arguments(arg, cctx, &argcount, is_searchpair) == FAIL)
 	goto theend;
 
     is_autoload = vim_strchr(name, AUTOLOAD_CHAR) != NULL;
@@ -4027,7 +4103,7 @@ compile_subscript(
 	    type = ((type_T **)stack->ga_data)[stack->ga_len - 1];
 
 	    *arg = skipwhite(p + 1);
-	    if (compile_arguments(arg, cctx, &argcount) == FAIL)
+	    if (compile_arguments(arg, cctx, &argcount, FALSE) == FAIL)
 		return FAIL;
 	    if (generate_PCALL(cctx, argcount, name_start, type, TRUE) == FAIL)
 		return FAIL;
@@ -4080,7 +4156,7 @@ compile_subscript(
 		    return FAIL;
 		}
 		*arg = skipwhite(*arg + 1);
-		if (compile_arguments(arg, cctx, &argcount) == FAIL)
+		if (compile_arguments(arg, cctx, &argcount, FALSE) == FAIL)
 		    return FAIL;
 
 		// Move the instructions for the arguments to before the
@@ -6728,6 +6804,7 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
 		    case VAR_ANY:
 		    case VAR_PARTIAL:
 		    case VAR_VOID:
+		    case VAR_INSTR:
 		    case VAR_SPECIAL:  // cannot happen
 			generate_PUSHNR(cctx, 0);
 			break;
@@ -8298,15 +8375,31 @@ compile_mult_expr(char_u *arg, int cmdidx, cctx_T *cctx)
 {
     char_u	*p = arg;
     char_u	*prev = arg;
+    char_u	*expr_start;
     int		count = 0;
     int		start_ctx_lnum = cctx->ctx_lnum;
+    garray_T	*stack = &cctx->ctx_type_stack;
+    type_T	*type;
 
     for (;;)
     {
 	if (ends_excmd2(prev, p))
 	    break;
+	expr_start = p;
 	if (compile_expr0(&p, cctx) == FAIL)
 	    return NULL;
+
+	if (cctx->ctx_skip != SKIP_YES)
+	{
+	    // check for non-void type
+	    type = ((type_T **)stack->ga_data)[stack->ga_len - 1];
+	    if (type->tt_type == VAR_VOID)
+	    {
+		semsg(_(e_expression_does_not_result_in_value_str), expr_start);
+		return NULL;
+	    }
+	}
+
 	++count;
 	prev = p;
 	p = skipwhite(p);
@@ -8536,16 +8629,6 @@ theend:
 }
 
 
-    static void
-clear_instr_ga(garray_T *gap)
-{
-    int idx;
-
-    for (idx = 0; idx < gap->ga_len; ++idx)
-	delete_instr(((isn_T *)gap->ga_data) + idx);
-    ga_clear(gap);
-}
-
 /*
  * :s/pat/repl/
  */
@@ -8568,13 +8651,13 @@ compile_substitute(char_u *arg, exarg_T *eap, cctx_T *cctx)
 	    int		expr_res;
 	    int		trailing_error;
 	    int		instr_count;
-	    isn_T	*instr = NULL;
+	    isn_T	*instr;
 	    isn_T	*isn;
 
 	    cmd += 3;
 	    end = skip_substitute(cmd, delimiter);
 
-	    // Temporarily reset the list of instructions so that the jumps
+	    // Temporarily reset the list of instructions so that the jump
 	    // labels are correct.
 	    cctx->ctx_instr.ga_len = 0;
 	    cctx->ctx_instr.ga_maxlen = 0;
@@ -8592,7 +8675,6 @@ compile_substitute(char_u *arg, exarg_T *eap, cctx_T *cctx)
 		    semsg(_(e_trailing_arg), cmd);
 		clear_instr_ga(&cctx->ctx_instr);
 		cctx->ctx_instr = save_ga;
-		vim_free(instr);
 		return NULL;
 	    }
 
@@ -8703,6 +8785,36 @@ compile_redir(char_u *line, exarg_T *eap, cctx_T *cctx)
     // other redirects are handled like at script level
     return compile_exec(line, eap, cctx);
 }
+
+#ifdef FEAT_QUICKFIX
+    static char_u *
+compile_cexpr(char_u *line, exarg_T *eap, cctx_T *cctx)
+{
+    isn_T	*isn;
+    char_u	*p;
+
+    isn = generate_instr(cctx, ISN_CEXPR_AUCMD);
+    if (isn == NULL)
+	return NULL;
+    isn->isn_arg.number = eap->cmdidx;
+
+    p = eap->arg;
+    if (compile_expr0(&p, cctx) == FAIL)
+	return NULL;
+
+    isn = generate_instr(cctx, ISN_CEXPR_CORE);
+    if (isn == NULL)
+	return NULL;
+    isn->isn_arg.cexpr.cexpr_ref = ALLOC_ONE(cexprref_T);
+    if (isn->isn_arg.cexpr.cexpr_ref == NULL)
+	return NULL;
+    isn->isn_arg.cexpr.cexpr_ref->cer_cmdidx = eap->cmdidx;
+    isn->isn_arg.cexpr.cexpr_ref->cer_forceit = eap->forceit;
+    isn->isn_arg.cexpr.cexpr_ref->cer_cmdline = vim_strsave(skipwhite(line));
+
+    return p;
+}
+#endif
 
 /*
  * Add a function to the list of :def functions.
@@ -9262,6 +9374,21 @@ compile_def_function(
 		    line = compile_redir(line, &ea, &cctx);
 		    break;
 
+	    case CMD_cexpr:
+	    case CMD_lexpr:
+	    case CMD_caddexpr:
+	    case CMD_laddexpr:
+	    case CMD_cgetexpr:
+	    case CMD_lgetexpr:
+#ifdef FEAT_QUICKFIX
+		    ea.arg = p;
+		    line = compile_cexpr(line, &ea, &cctx);
+#else
+		    ex_ni(&ea);
+		    line = NULL;
+#endif
+		    break;
+
 	    // TODO: any other commands with an expression argument?
 
 	    case CMD_append:
@@ -9510,6 +9637,17 @@ delete_instr(isn_T *isn)
 	    }
 	    break;
 
+	case ISN_INSTR:
+	    {
+		int	idx;
+		isn_T	*list = isn->isn_arg.instr;
+
+		for (idx = 0; list[idx].isn_type != ISN_FINISH; ++idx)
+		    delete_instr(list + idx);
+		vim_free(list);
+	    }
+	    break;
+
 	case ISN_LOADS:
 	case ISN_STORES:
 	    vim_free(isn->isn_arg.loadstore.ls_name);
@@ -9602,6 +9740,11 @@ delete_instr(isn_T *isn)
 	    vim_free(isn->isn_arg.try.try_ref);
 	    break;
 
+	case ISN_CEXPR_CORE:
+	    vim_free(isn->isn_arg.cexpr.cexpr_ref->cer_cmdline);
+	    vim_free(isn->isn_arg.cexpr.cexpr_ref);
+	    break;
+
 	case ISN_2BOOL:
 	case ISN_2STRING:
 	case ISN_2STRING_ANY:
@@ -9614,6 +9757,7 @@ delete_instr(isn_T *isn)
 	case ISN_BLOBINDEX:
 	case ISN_BLOBSLICE:
 	case ISN_CATCH:
+	case ISN_CEXPR_AUCMD:
 	case ISN_CHECKLEN:
 	case ISN_CHECKNR:
 	case ISN_CMDMOD_REV:

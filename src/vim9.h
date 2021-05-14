@@ -20,6 +20,7 @@ typedef enum {
     ISN_ECHOERR,    // echo Ex commands isn_arg.number items on top of stack
     ISN_RANGE,	    // compute range from isn_arg.string, push to stack
     ISN_SUBSTITUTE, // :s command with expression
+    ISN_INSTR,	    // instructions compiled from expression
 
     // get and set variables
     ISN_LOAD,	    // push local variable isn_arg.number
@@ -171,6 +172,9 @@ typedef enum {
 
     ISN_REDIRSTART, // :redir =>
     ISN_REDIREND,   // :redir END, isn_arg.number == 1 for append
+
+    ISN_CEXPR_AUCMD, // first part of :cexpr  isn_arg.number is cmdidx
+    ISN_CEXPR_CORE,  // second part of :cexpr, uses isn_arg.cexpr
 
     ISN_FINISH	    // end marker in list of instructions
 } isntype_T;
@@ -352,6 +356,18 @@ typedef struct {
     isn_T	*subs_instr;	// sequence of instructions
 } subs_T;
 
+// indirect arguments to ISN_TRY
+typedef struct {
+    int		cer_cmdidx;
+    char_u	*cer_cmdline;
+    int		cer_forceit;
+} cexprref_T;
+
+// arguments to ISN_CEXPR_CORE
+typedef struct {
+    cexprref_T *cexpr_ref;
+} cexpr_T;
+
 /*
  * Instruction
  */
@@ -395,6 +411,8 @@ struct isn_S {
 	unpack_T	    unpack;
 	isn_outer_T	    outer;
 	subs_T		    subs;
+	cexpr_T		    cexpr;
+	isn_T		    *instr;
     } isn_arg;
 };
 
@@ -427,15 +445,17 @@ struct dfunc_S {
 // Number of entries used by stack frame for a function call.
 // - ec_dfunc_idx:   function index
 // - ec_iidx:        instruction index
+// - ec_instr:       instruction list pointer
 // - ec_outer:	     stack used for closures
 // - funclocal:	     function-local data
 // - ec_frame_idx:   previous frame index
 #define STACK_FRAME_FUNC_OFF 0
 #define STACK_FRAME_IIDX_OFF 1
-#define STACK_FRAME_OUTER_OFF 2
-#define STACK_FRAME_FUNCLOCAL_OFF 3
-#define STACK_FRAME_IDX_OFF 4
-#define STACK_FRAME_SIZE 5
+#define STACK_FRAME_INSTR_OFF 2
+#define STACK_FRAME_OUTER_OFF 3
+#define STACK_FRAME_FUNCLOCAL_OFF 4
+#define STACK_FRAME_IDX_OFF 5
+#define STACK_FRAME_SIZE 6
 
 
 #ifdef DEFINE_VIM9_GLOBALS
