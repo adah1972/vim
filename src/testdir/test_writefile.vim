@@ -285,7 +285,7 @@ func Test_write_errors()
         \ && getftype('/dev/loop0') == 'bdev' && !IsRoot()
     new
     edit /dev/loop0
-    call assert_fails('write', 'E505: ')
+    call assert_fails('write', 'E503: ')
     call assert_fails('write!', 'E503: ')
     close!
   endif
@@ -471,7 +471,7 @@ func Test_write_readonly_dir()
   " Root can do it too.
   CheckNotRoot
 
-  call mkdir('Xdir')
+  call mkdir('Xdir/')
   call writefile(['one'], 'Xdir/Xfile1')
   call setfperm('Xdir', 'r-xr--r--')
   " try to create a new file in the directory
@@ -754,7 +754,7 @@ func Test_read_write_bin()
   call assert_equal(0z6E6F656F6C0A, readfile('XNoEolSetEol', 'B'))
 
   call delete('XNoEolSetEol')
-  set ff&
+  set ff& fixeol&
   bwipe! XNoEolSetEol
 endfunc
 
@@ -895,6 +895,45 @@ func Test_write_backup_symlink()
 
   call delete('Xfile')
   call delete('Xfile.bak')
+endfunc
+
+" Test for ':write ++bin' and ':write ++nobin'
+func Test_write_binary_file()
+  " create a file without an eol/eof character
+  call writefile(0z616161, 'Xfile1', 'b')
+  new Xfile1
+  write ++bin Xfile2
+  write ++nobin Xfile3
+  call assert_equal(0z616161, readblob('Xfile2'))
+  if has('win32')
+    call assert_equal(0z6161610D.0A, readblob('Xfile3'))
+  else
+    call assert_equal(0z6161610A, readblob('Xfile3'))
+  endif
+  call delete('Xfile1')
+  call delete('Xfile2')
+  call delete('Xfile3')
+endfunc
+
+" Check that buffer is written before triggering QuitPre
+func Test_wq_quitpre_autocommand()
+  edit Xsomefile
+  call setline(1, 'hello')
+  split
+  let g:seq = []
+  augroup Testing
+    au QuitPre * call add(g:seq, 'QuitPre - ' .. (&modified ? 'modified' : 'not modified'))
+    au BufWritePost * call add(g:seq, 'written')
+  augroup END
+  wq
+  call assert_equal(['written', 'QuitPre - not modified'], g:seq)
+
+  augroup Testing
+    au!
+  augroup END
+  bwipe!
+  unlet g:seq
+  call delete('Xsomefile')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

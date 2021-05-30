@@ -141,6 +141,7 @@ func Test_min()
 
   call assert_fails('call min(1)', 'E712:')
   call assert_fails('call min(v:none)', 'E712:')
+  call assert_fails('call min([1, {}])', 'E728:')
 
   " check we only get one error
   call assert_fails('call min([[1], #{}])', ['E745:', 'E745:'])
@@ -715,6 +716,7 @@ func Test_tr()
   call assert_fails("let s=tr('abcd', 'abcd', 'def')", 'E475:')
   call assert_equal('hEllO', tr('hello', 'eo', 'EO'))
   call assert_equal('hello', tr('hello', 'xy', 'ab'))
+  call assert_fails('call tr("abc", "123", "₁₂")', 'E475:')
   set encoding=utf8
 endfunc
 
@@ -1480,6 +1482,10 @@ func Test_inputlist()
   call feedkeys(":let c = inputlist(['Select color:', '1. red', '2. green', '3. blue'])\<cr>q", 'tx')
   call assert_equal(0, c)
 
+  " Cancel after inputting a number
+  call feedkeys(":let c = inputlist(['Select color:', '1. red', '2. green', '3. blue'])\<cr>5q", 'tx')
+  call assert_equal(0, c)
+
   " Use backspace to delete characters in the prompt
   call feedkeys(":let c = inputlist(['Select color:', '1. red', '2. green', '3. blue'])\<cr>1\<BS>3\<BS>2\<cr>", 'tx')
   call assert_equal(2, c)
@@ -1838,6 +1844,10 @@ func Test_func_exists_on_reload()
   " But redefining in another script is not OK.
   call writefile(['func ExistingFunction()', 'echo "yes"', 'endfunc'], 'Xfuncexists2')
   call assert_fails('source Xfuncexists2', 'E122:')
+
+  " Defining a new function from the cmdline should fail if the function is
+  " already defined
+  call assert_fails('call feedkeys(":func ExistingFunction()\<CR>", "xt")', 'E122:')
 
   delfunc ExistingFunction
   call assert_equal(0, exists('*ExistingFunction'))
@@ -2630,6 +2640,7 @@ endfunc
 func Test_glob()
   call assert_equal('', glob(test_null_string()))
   call assert_equal('', globpath(test_null_string(), test_null_string()))
+  call assert_fails("let x = globpath(&rtp, 'syntax/c.vim', [])", 'E745:')
 
   call writefile([], 'Xglob1')
   call writefile([], 'XGLOB2')
@@ -2663,6 +2674,11 @@ endfunc
 
 func Test_default_arg_value()
   call assert_equal('msg', HasDefault())
+endfunc
+
+" Test for gettext()
+func Test_gettext()
+  call assert_fails('call gettext(1)', 'E475:')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

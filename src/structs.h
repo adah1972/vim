@@ -774,6 +774,7 @@ typedef struct memline
 #define ML_APPEND_NEW	    1	// starting to edit a new file
 #define ML_APPEND_MARK	    2	// mark the new line
 #define ML_APPEND_UNDO	    4	// called from undo
+#define ML_APPEND_NOPROP    8	// do not continue textprop from previous line
 
 
 /*
@@ -1881,7 +1882,9 @@ typedef struct {
     // Used to collect lines while parsing them, so that they can be
     // concatenated later.  Used when "eval_ga.ga_itemsize" is not zero.
     // "eval_ga.ga_data" is a list of pointers to lines.
+    // "eval_freega" list pointers that need to be freed after concatenating.
     garray_T	eval_ga;
+    garray_T	eval_freega;
 
     // pointer to the last line obtained with getsourceline()
     char_u	*eval_tofree;

@@ -416,6 +416,7 @@ skip_expr_concatenate(
     int		res;
     int		vim9script = in_vim9script();
     garray_T    *gap = evalarg == NULL ? NULL : &evalarg->eval_ga;
+    garray_T    *freegap = evalarg == NULL ? NULL : &evalarg->eval_freega;
     int		save_flags = evalarg == NULL ? 0 : evalarg->eval_flags;
     int		evaluate = evalarg == NULL
 			       ? FALSE : (evalarg->eval_flags & EVAL_EVALUATE);
@@ -427,6 +428,7 @@ skip_expr_concatenate(
 	// leave room for "start"
 	if (ga_grow(gap, 1) == OK)
 	    ++gap->ga_len;
+	ga_init2(freegap, sizeof(char_u *), 10);
     }
     *start = *arg;
 
@@ -444,7 +446,7 @@ skip_expr_concatenate(
     {
 	if (evalarg->eval_ga.ga_len == 1)
 	{
-	    // just one line, no need to concatenate
+	    // just the one line, no need to concatenate
 	    ga_clear(gap);
 	    gap->ga_itemsize = 0;
 	}
@@ -471,7 +473,13 @@ skip_expr_concatenate(
 		ga_clear_strings(gap);
 	    }
 	    else
+	    {
 		ga_clear(gap);
+
+		// free lines that were explicitly marked for freeing
+		ga_clear_strings(freegap);
+	    }
+
 	    gap->ga_itemsize = 0;
 	    if (p == NULL)
 		return FAIL;
@@ -1301,6 +1309,9 @@ set_var_lval(
     {
 	cc = *endp;
 	*endp = NUL;
+	if (in_vim9script() && check_reserved_name(lp->ll_name) == FAIL)
+	    return;
+
 	if (lp->ll_blob != NULL)
 	{
 	    int	    error = FALSE, val;
@@ -2350,7 +2361,7 @@ eval1(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	    ++*arg;
 	if (evaluate && vim9script && !IS_WHITE_OR_NUL((*arg)[1]))
 	{
-	    error_white_both(p, op_falsy ? 2 : 1);
+	    error_white_both(*arg - (op_falsy ? 1 : 0), op_falsy ? 2 : 1);
 	    clear_tv(rettv);
 	    return FAIL;
 	}
@@ -2398,7 +2409,7 @@ eval1(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	     */
 	    if (evaluate && vim9script && !IS_WHITE_OR_NUL((*arg)[1]))
 	    {
-		error_white_both(p, 1);
+		error_white_both(*arg, 1);
 		clear_tv(rettv);
 		evalarg_used->eval_flags = orig_flags;
 		return FAIL;
@@ -2503,7 +2514,7 @@ eval2(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	     */
 	    if (evaluate && in_vim9script() && !IS_WHITE_OR_NUL((*arg)[2]))
 	    {
-		error_white_both(p, 2);
+		error_white_both(*arg, 2);
 		clear_tv(rettv);
 		return FAIL;
 	    }
@@ -2629,7 +2640,7 @@ eval3(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	     */
 	    if (evaluate && in_vim9script() && !IS_WHITE_OR_NUL((*arg)[2]))
 	    {
-		error_white_both(p, 2);
+		error_white_both(*arg, 2);
 		clear_tv(rettv);
 		return FAIL;
 	    }
@@ -2727,10 +2738,13 @@ eval4(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 				   ? 0 : (evalarg->eval_flags & EVAL_EVALUATE);
 
 	if (getnext)
+	{
 	    *arg = eval_next_line(evalarg);
+	    p = *arg;
+	}
 	else if (evaluate && vim9script && !VIM_ISWHITE(**arg))
 	{
-	    error_white_both(p, len);
+	    error_white_both(*arg, len);
 	    clear_tv(rettv);
 	    return FAIL;
 	}
@@ -2890,7 +2904,7 @@ eval5(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	{
 	    if (evaluate && vim9script && !VIM_ISWHITE(**arg))
 	    {
-		error_white_both(p, oplen);
+		error_white_both(*arg, oplen);
 		clear_tv(rettv);
 		return FAIL;
 	    }
@@ -2926,7 +2940,7 @@ eval5(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	 */
 	if (evaluate && vim9script && !IS_WHITE_OR_NUL((*arg)[oplen]))
 	{
-	    error_white_both(p, oplen);
+	    error_white_both(*arg, oplen);
 	    clear_tv(rettv);
 	    return FAIL;
 	}
@@ -3122,7 +3136,7 @@ eval6(
 	{
 	    if (evaluate && in_vim9script() && !VIM_ISWHITE(**arg))
 	    {
-		error_white_both(p, 1);
+		error_white_both(*arg, 1);
 		clear_tv(rettv);
 		return FAIL;
 	    }
@@ -3530,7 +3544,7 @@ eval7(
 
     /*
      * nested expression: (expression).
-     * lambda: (arg) => expr
+     * or lambda: (arg) => expr
      */
     case '(':	ret = NOTDONE;
 		if (in_vim9script())
@@ -5916,10 +5930,18 @@ handle_subscript(
 	}
 	else if (p[0] == '-' && p[1] == '>')
 	{
-	    *arg = skipwhite(p + 2);
+	    if (in_vim9script())
+		*arg = skipwhite(p + 2);
+	    else
+		*arg = p + 2;
 	    if (ret == OK)
 	    {
-		if ((**arg == '{' && !in_vim9script()) || **arg == '(')
+		if (VIM_ISWHITE(**arg))
+		{
+		    emsg(_(e_nowhitespace));
+		    ret = FAIL;
+		}
+		else if ((**arg == '{' && !in_vim9script()) || **arg == '(')
 		    // expr->{lambda}() or expr->(lambda)()
 		    ret = eval_lambda(arg, rettv, evalarg, verbose);
 		else

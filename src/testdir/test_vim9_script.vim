@@ -2500,6 +2500,12 @@ def Test_for_loop_unpack()
       endfor
       assert_equal(['global', 'buf', 'win', 'tab', '1', '2', '3', '4'], slist)
       unlet! g:globalvar b:bufvar w:winvar t:tabvar
+
+      var res = []
+      for [_, n, _] in [[1, 2, 3], [4, 5, 6]]
+        res->add(n)
+      endfor
+      assert_equal([2, 5], res)
   END
   CheckDefAndScriptSuccess(lines)
 
@@ -3838,12 +3844,14 @@ def Test_unsupported_commands()
   var lines =<< trim END
       ka
   END
-  CheckDefAndScriptFailure(lines, 'E1100:')
+  CheckDefFailure(lines, 'E476:')
+  CheckScriptFailure(['vim9script'] + lines, 'E492:')
 
   lines =<< trim END
       :1ka
   END
-  CheckDefAndScriptFailure(lines, 'E481:')
+  CheckDefFailure(lines, 'E476:')
+  CheckScriptFailure(['vim9script'] + lines, 'E492:')
 
   lines =<< trim END
     t

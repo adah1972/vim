@@ -1436,7 +1436,7 @@ if test "$enable_python3interp" = "yes" -o "$enable_python3interp" = "dynamic"; 
     dnl -- get its version number
     AC_CACHE_CHECK(Python version,vi_cv_var_python3_version,
     [[vi_cv_var_python3_version=`
-          ${vi_cv_path_python3} -c 'import sys; print(sys.version[:3])'`
+          ${vi_cv_path_python3} -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))'`
     ]])
 
     dnl -- it must be at least version 3
@@ -4519,7 +4519,9 @@ AC_MSG_CHECKING(linker --as-needed support)
 LINK_AS_NEEDED=
 # Check if linker supports --as-needed and --no-as-needed options
 if $CC -Wl,--help 2>/dev/null | grep as-needed > /dev/null; then
-  LDFLAGS=`echo "$LDFLAGS" | sed -e 's/ *-Wl,--as-needed//g' | sed -e 's/$/ -Wl,--as-needed/'`
+  if ! echo "$LDFLAGS" | grep -q -- '-Wl,[[^[:space:]]]*--as-needed'; then
+    LDFLAGS="$LDFLAGS -Wl,--as-needed"
+  fi
   LINK_AS_NEEDED=yes
 fi
 if test "$LINK_AS_NEEDED" = yes; then

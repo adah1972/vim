@@ -397,6 +397,7 @@ def Test_call_default_args()
   delfunc g:Func
   CheckScriptFailure(['def Func(arg: number = "text")', 'enddef', 'defcompile'], 'E1013: Argument 1: type mismatch, expected number but got string')
   delfunc g:Func
+  CheckDefFailure(['def Func(x: number = )', 'enddef'], 'E15:')
 
   lines =<< trim END
       vim9script
@@ -887,6 +888,12 @@ def Test_lambda_return_type()
   END
   CheckDefAndScriptFailure(lines, 'E1157:', 1)
 
+  # no space before the return type
+  lines =<< trim END
+    var Ref = (x):number => x + 1
+  END
+  CheckDefAndScriptFailure(lines, 'E1069:', 1)
+
   # this works
   for x in ['foo', 'boo']
     echo FilterWithCond(x, (v) => v =~ '^b')
@@ -1309,6 +1316,8 @@ def Test_arg_type_wrong()
   CheckScriptFailure(['def Func4(...)', 'echo "a"', 'enddef'], 'E1055: Missing name after ...')
   CheckScriptFailure(['def Func5(items:string)', 'echo "a"'], 'E1069:')
   CheckScriptFailure(['def Func5(items)', 'echo "a"'], 'E1077:')
+  CheckScriptFailure(['def Func6(...x:list<number>)', 'echo "a"', 'enddef'], 'E1069:')
+  CheckScriptFailure(['def Func7(...x: int)', 'echo "a"', 'enddef'], 'E1010:')
 enddef
 
 def Test_white_space_before_comma()
@@ -1318,6 +1327,7 @@ def Test_white_space_before_comma()
     enddef
   END
   CheckScriptFailure(lines, 'E1068:')
+  call assert_fails('vim9cmd echo stridx("a" .. "b" , "a")', 'E1068:')
 enddef
 
 def Test_white_space_after_comma()
@@ -2102,6 +2112,20 @@ def Test_nested_lambda()
   CheckScriptSuccess(lines)
 enddef
 
+def Test_nested_inline_lambda()
+  # TODO: use the "text" argument
+  var lines =<< trim END
+      vim9script
+      def F(text: string): func(string): func(string): string
+        return (arg: string): func(string): string => ((sep: string): string => {
+            return sep .. arg
+          })
+      enddef
+      assert_equal('--there', F('unused')('there')('--'))
+  END
+  CheckScriptSuccess(lines)
+enddef
+
 def Shadowed(): list<number>
   var FuncList: list<func: number> = [() => 42]
   return FuncList->mapnew((_, Shadowed) => Shadowed())
@@ -2694,6 +2718,11 @@ def Test_ignored_argument()
 
   lines =<< trim END
       var _ = 1
+  END
+  CheckDefAndScriptFailure(lines, 'E1181:', 1)
+
+  lines =<< trim END
+      var x = _
   END
   CheckDefAndScriptFailure(lines, 'E1181:', 1)
 enddef
