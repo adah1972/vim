@@ -811,6 +811,10 @@ func Test_visual_block_mode()
   " reproducible if this operation is performed manually.
   "call assert_equal(['aaxa', 'bbxb', 'ccxc'], getline(1, '$'))
   call assert_equal(['aaxa', 'bbba', 'ccca'], getline(1, '$'))
+  " Repeat the previous test but use 'l' to move the cursor instead of '$'
+  call setline(1, ['aaa', 'bbb', 'ccc'])
+  exe "normal! gg2l\<C-V>2jA\<Left>x"
+  call assert_equal(['aaxa', 'bbxb', 'ccxc'], getline(1, '$'))
 
   " Change a characterwise motion to a blockwise motion using CTRL-V
   %d _
@@ -818,7 +822,108 @@ func Test_visual_block_mode()
   exe "normal ld\<C-V>j"
   call assert_equal(['13', '46', '789'], getline(1, '$'))
 
+  " Test from ':help v_b_I_example'
+  %d _
+  setlocal tabstop=8 shiftwidth=4
+  let lines =<< trim END
+    abcdefghijklmnopqrstuvwxyz
+    abc		defghijklmnopqrstuvwxyz
+    abcdef  ghi		jklmnopqrstuvwxyz
+    abcdefghijklmnopqrstuvwxyz
+  END
+  call setline(1, lines)
+  exe "normal ggfo\<C-V>3jISTRING"
+  let expected =<< trim END
+    abcdefghijklmnSTRINGopqrstuvwxyz
+    abc	      STRING  defghijklmnopqrstuvwxyz
+    abcdef  ghi   STRING  	jklmnopqrstuvwxyz
+    abcdefghijklmnSTRINGopqrstuvwxyz
+  END
+  call assert_equal(expected, getline(1, '$'))
+
+  " Test from ':help v_b_A_example'
+  %d _
+  let lines =<< trim END
+    abcdefghijklmnopqrstuvwxyz
+    abc		defghijklmnopqrstuvwxyz
+    abcdef  ghi		jklmnopqrstuvwxyz
+    abcdefghijklmnopqrstuvwxyz
+  END
+  call setline(1, lines)
+  exe "normal ggfo\<C-V>3j$ASTRING"
+  let expected =<< trim END
+    abcdefghijklmnopqrstuvwxyzSTRING
+    abc		defghijklmnopqrstuvwxyzSTRING
+    abcdef  ghi		jklmnopqrstuvwxyzSTRING
+    abcdefghijklmnopqrstuvwxyzSTRING
+  END
+  call assert_equal(expected, getline(1, '$'))
+
+  " Test from ':help v_b_<_example'
+  %d _
+  let lines =<< trim END
+    abcdefghijklmnopqrstuvwxyz
+    abc		defghijklmnopqrstuvwxyz
+    abcdef  ghi		jklmnopqrstuvwxyz
+    abcdefghijklmnopqrstuvwxyz
+  END
+  call setline(1, lines)
+  exe "normal ggfo\<C-V>3j3l<.."
+  let expected =<< trim END
+    abcdefghijklmnopqrstuvwxyz
+    abc	      defghijklmnopqrstuvwxyz
+    abcdef  ghi   jklmnopqrstuvwxyz
+    abcdefghijklmnopqrstuvwxyz
+  END
+  call assert_equal(expected, getline(1, '$'))
+
+  " Test from ':help v_b_>_example'
+  %d _
+  let lines =<< trim END
+    abcdefghijklmnopqrstuvwxyz
+    abc		defghijklmnopqrstuvwxyz
+    abcdef  ghi		jklmnopqrstuvwxyz
+    abcdefghijklmnopqrstuvwxyz
+  END
+  call setline(1, lines)
+  exe "normal ggfo\<C-V>3j>.."
+  let expected =<< trim END
+    abcdefghijklmn		  opqrstuvwxyz
+    abc			    defghijklmnopqrstuvwxyz
+    abcdef  ghi			    jklmnopqrstuvwxyz
+    abcdefghijklmn		  opqrstuvwxyz
+  END
+  call assert_equal(expected, getline(1, '$'))
+
+  " Test from ':help v_b_r_example'
+  %d _
+  let lines =<< trim END
+    abcdefghijklmnopqrstuvwxyz
+    abc		defghijklmnopqrstuvwxyz
+    abcdef  ghi		jklmnopqrstuvwxyz
+    abcdefghijklmnopqrstuvwxyz
+  END
+  call setline(1, lines)
+  exe "normal ggfo\<C-V>5l3jrX"
+  let expected =<< trim END
+    abcdefghijklmnXXXXXXuvwxyz
+    abc	      XXXXXXhijklmnopqrstuvwxyz
+    abcdef  ghi   XXXXXX    jklmnopqrstuvwxyz
+    abcdefghijklmnXXXXXXuvwxyz
+  END
+  call assert_equal(expected, getline(1, '$'))
+
   bwipe!
+  set tabstop& shiftwidth&
+endfunc
+
+func Test_visual_force_motion_feedkeys()
+    onoremap <expr> i- execute('let g:mode = mode(1)')->slice(0, 0)
+    call feedkeys('dvi-', 'x')
+    call assert_equal('nov', g:mode)
+    call feedkeys('di-', 'x')
+    call assert_equal('no', g:mode)
+    ounmap i-
 endfunc
 
 " Test block-insert using cursor keys for movement
@@ -1043,5 +1148,82 @@ func Test_visual_put_in_block()
   call assert_equal(['xxxx', 'y∞xx', 'zzxx'], getline(1, 3))
   bwipe!
 endfunc
+
+func Test_visual_put_in_block_using_zp()
+  new
+  " paste using zP
+  call setline(1, ['/path;text', '/path;text', '/path;text', '', 
+    \ '/subdir', 
+    \ '/longsubdir',
+    \ '/longlongsubdir'])
+  exe "normal! 5G\<c-v>2j$y"
+  norm! 1Gf;zP
+  call assert_equal(['/path/subdir;text', '/path/longsubdir;text', '/path/longlongsubdir;text'], getline(1, 3))
+  %d
+  " paste using zP
+  call setline(1, ['/path;text', '/path;text', '/path;text', '', 
+    \ '/subdir', 
+    \ '/longsubdir',
+    \ '/longlongsubdir'])
+  exe "normal! 5G\<c-v>2j$y"
+  norm! 1Gf;hzp
+  call assert_equal(['/path/subdir;text', '/path/longsubdir;text', '/path/longlongsubdir;text'], getline(1, 3))
+  bwipe!
+endfunc
+
+func Test_visual_put_in_block_using_zy_and_zp()
+  new
+
+  " Test 1) Paste using zp - after the cursor without trailing spaces
+  call setline(1, ['/path;text', '/path;text', '/path;text', '', 
+    \ 'texttext  /subdir           columntext',
+		\ 'texttext  /longsubdir       columntext',
+    \ 'texttext  /longlongsubdir   columntext'])
+  exe "normal! 5G0f/\<c-v>2jezy"
+  norm! 1G0f;hzp
+  call assert_equal(['/path/subdir;text', '/path/longsubdir;text', '/path/longlongsubdir;text'], getline(1, 3))
+
+  " Test 2) Paste using zP - in front of the cursor without trailing spaces
+  %d
+  call setline(1, ['/path;text', '/path;text', '/path;text', '', 
+    \ 'texttext  /subdir           columntext',
+		\ 'texttext  /longsubdir       columntext',
+    \ 'texttext  /longlongsubdir   columntext'])
+  exe "normal! 5G0f/\<c-v>2jezy"
+  norm! 1G0f;zP
+  call assert_equal(['/path/subdir;text', '/path/longsubdir;text', '/path/longlongsubdir;text'], getline(1, 3))
+
+  " Test 3) Paste using p - with trailing spaces
+  %d
+  call setline(1, ['/path;text', '/path;text', '/path;text', '', 
+    \ 'texttext  /subdir           columntext',
+		\ 'texttext  /longsubdir       columntext',
+    \ 'texttext  /longlongsubdir   columntext'])
+  exe "normal! 5G0f/\<c-v>2jezy"
+  norm! 1G0f;hp
+  call assert_equal(['/path/subdir        ;text', '/path/longsubdir    ;text', '/path/longlongsubdir;text'], getline(1, 3))
+
+  " Test 4) Paste using P - with trailing spaces
+  %d
+  call setline(1, ['/path;text', '/path;text', '/path;text', '', 
+    \ 'texttext  /subdir           columntext',
+		\ 'texttext  /longsubdir       columntext',
+    \ 'texttext  /longlongsubdir   columntext'])
+  exe "normal! 5G0f/\<c-v>2jezy"
+  norm! 1G0f;P
+  call assert_equal(['/path/subdir        ;text', '/path/longsubdir    ;text', '/path/longlongsubdir;text'], getline(1, 3))
+
+  " Test 5) Yank with spaces inside the block
+  %d
+  call setline(1, ['/path;text', '/path;text', '/path;text', '', 
+    \ 'texttext  /sub    dir/           columntext',
+    \ 'texttext  /lon    gsubdir/       columntext',
+    \ 'texttext  /lon    glongsubdir/   columntext'])
+  exe "normal! 5G0f/\<c-v>2jf/zy"
+  norm! 1G0f;zP
+  call assert_equal(['/path/sub    dir/;text', '/path/lon    gsubdir/;text', '/path/lon    glongsubdir/;text'], getline(1, 3))
+  bwipe!
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

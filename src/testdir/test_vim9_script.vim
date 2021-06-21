@@ -590,6 +590,19 @@ def Test_try_catch_throw()
     return 2
   enddef
   assert_equal(4, ReturnInFinally())
+
+  var lines =<< trim END
+      vim9script
+      try
+        acos('0.5')
+          ->setline(1)
+      catch
+        g:caught = v:exception
+      endtry
+  END
+  CheckScriptSuccess(lines)
+  assert_match('E808: Number or Float required', g:caught)
+  unlet g:caught
 enddef
 
 " :while at the very start of a function that :continue jumps to
@@ -3074,6 +3087,27 @@ def Test_vim9_comment()
       'func Test() # comment',
       'endfunc',
       ], 'E488:')
+
+  var lines =<< trim END
+      vim9script
+      syn region Text
+      \ start='foo'
+      #\ comment
+      \ end='bar'
+      syn region Text start='foo'
+      #\ comment
+      \ end='bar'
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      syn region Text
+      \ start='foo'
+      "\ comment
+      \ end='bar'
+  END
+  CheckScriptFailure(lines, 'E399:')
 enddef
 
 def Test_vim9_comment_gui()
@@ -3178,7 +3212,7 @@ def Test_vim9_comment_not_compiled()
       'if 1# comment3',
       '  echo "yes"',
       'endif',
-      ], 'E15:')
+      ], 'E488:')
 
   CheckScriptFailure([
       'vim9script',
@@ -3187,7 +3221,7 @@ def Test_vim9_comment_not_compiled()
       'elseif 2#comment',
       '  echo "no"',
       'endif',
-      ], 'E15:')
+      ], 'E488:')
 
   CheckScriptSuccess([
       'vim9script',
@@ -3197,7 +3231,7 @@ def Test_vim9_comment_not_compiled()
   CheckScriptFailure([
       'vim9script',
       'var v = 1# comment6',
-      ], 'E15:')
+      ], 'E488:')
 
   CheckScriptSuccess([
       'vim9script',
@@ -3901,6 +3935,26 @@ def Test_mapping_line_number()
 
   nunmap <F3>
   delfunc g:FuncA
+enddef
+
+def Test_option_modifier()
+  var lines =<< trim END
+      set hlsearch &  hlsearch  !
+      call assert_equal(1, &hlsearch)
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      set hlsearch &
+  END
+  CheckScriptFailure(lines, 'E518:')
+
+  lines =<< trim END
+      vim9script
+      set hlsearch &  hlsearch  !
+  END
+  CheckScriptFailure(lines, 'E518:')
 enddef
 
 " Keep this last, it messes up highlighting.

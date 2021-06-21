@@ -145,7 +145,7 @@ set_init_1(int clean_arg)
 	opt_idx = findoption((char_u *)"backupskip");
 
 	ga_init2(&ga, 1, 100);
-	for (n = 0; n < (long)(sizeof(names) / sizeof(char *)); ++n)
+	for (n = 0; n < (long)ARRAY_LENGTH(names); ++n)
 	{
 	    mustfree = FALSE;
 # ifdef UNIX
@@ -430,14 +430,21 @@ set_init_1(int clean_arg)
 #  endif
 # endif
 
+# ifdef MSWIN
+    // MS-Windows has builtin support for conversion to and from Unicode, using
+    // "utf-8" for 'encoding' should work best for most users.
+    p = vim_strsave((char_u *)ENC_DFLT);
+# else
     // enc_locale() will try to find the encoding of the current locale.
+    // This works best for properly configured systems, old and new.
     p = enc_locale();
+# endif
     if (p != NULL)
     {
 	char_u *save_enc;
 
 	// Try setting 'encoding' and check if the value is valid.
-	// If not, go back to the default "latin1".
+	// If not, go back to the default encoding.
 	save_enc = p_enc;
 	p_enc = p;
 	if (STRCMP(p_enc, "gb18030") == 0)
@@ -528,6 +535,19 @@ set_init_1(int clean_arg)
 #endif
 }
 
+static char_u *fencs_utf8_default = (char_u *)"ucs-bom,utf-8,default,latin1";
+
+/*
+ * Set the "fileencodings" option to the default value for when 'encoding' is
+ * utf-8.
+ */
+    void
+set_fencs_unicode()
+{
+    set_string_option_direct((char_u *)"fencs", -1, fencs_utf8_default,
+								  OPT_FREE, 0);
+}
+
 /*
  * Set an option to its default value.
  * This does not take care of side effects!
@@ -551,9 +571,12 @@ set_option_default(
 	dvi = ((flags & P_VI_DEF) || compatible) ? VI_DEFAULT : VIM_DEFAULT;
 	if (flags & P_STRING)
 	{
+	    // 'fencs' default value depends on 'encoding'
+	    if (options[opt_idx].var == (char_u *)&p_fencs && enc_utf8)
+		set_fencs_unicode();
 	    // Use set_string_option_direct() for local options to handle
 	    // freeing and allocating the value.
-	    if (options[opt_idx].indir != PV_NONE)
+	    else if (options[opt_idx].indir != PV_NONE)
 		set_string_option_direct(NULL, opt_idx,
 				 options[opt_idx].def_val[dvi], opt_flags, 0);
 	    else
@@ -1283,9 +1306,10 @@ do_set(
 	    // remember character after option name
 	    afterchar = arg[len];
 
-	    // skip white space, allow ":set ai  ?"
-	    while (VIM_ISWHITE(arg[len]))
-		++len;
+	    if (!in_vim9script())
+		// skip white space, allow ":set ai  ?", ":set hlsearch  !"
+		while (VIM_ISWHITE(arg[len]))
+		    ++len;
 
 	    adding = FALSE;
 	    prepending = FALSE;
@@ -1677,6 +1701,8 @@ do_set(
 #endif
 				    newval = term_bg_default();
 			    }
+			    else if ((char_u **)varp == &p_fencs && enc_utf8)
+				newval = fencs_utf8_default;
 
 			    // expand environment variables and ~ (since the
 			    // default value was already expanded, only
@@ -2687,6 +2713,10 @@ set_bool_option(
 				|| (opt_flags & OPT_GLOBAL) || opt_flags == 0)
 			&& !curbufIsChanged() && curbuf->b_ml.ml_mfp != NULL)
 		{
+#ifdef FEAT_CRYPT
+		    if (crypt_get_method_nr(curbuf) == CRYPT_M_SOD)
+			continue;
+#endif
 		    u_compute_hash(hash);
 		    u_read_undo(NULL, hash, curbuf->b_fname);
 		}
@@ -6310,8 +6340,7 @@ ExpandSettings(
 	regmatch->rm_ic = ic;
 	if (xp->xp_context != EXPAND_BOOL_SETTINGS)
 	{
-	    for (match = 0; match < (int)(sizeof(names) / sizeof(char *));
-								      ++match)
+	    for (match = 0; match < (int)ARRAY_LENGTH(names); ++match)
 		if (vim_regexec(regmatch, (char_u *)names[match], (colnr_T)0))
 		{
 		    if (loop == 0)

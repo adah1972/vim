@@ -733,8 +733,7 @@ codepage_invalid:
 
     // When using Unicode, set default for 'fileencodings'.
     if (enc_utf8 && !option_was_set((char_u *)"fencs"))
-	set_string_option_direct((char_u *)"fencs", -1,
-		       (char_u *)"ucs-bom,utf-8,default,latin1", OPT_FREE, 0);
+	set_fencs_unicode();
 
 #if defined(HAVE_BIND_TEXTDOMAIN_CODESET) && defined(FEAT_GETTEXT)
     // GNU gettext 0.10.37 supports this feature: set the codeset used for
@@ -2850,7 +2849,7 @@ utf_class_buf(int c, buf_T *buf)
     };
 
     int bot = 0;
-    int top = sizeof(classes) / sizeof(struct clinterval) - 1;
+    int top = ARRAY_LENGTH(classes) - 1;
     int mid;
 
     // First quick check for Latin1 characters, use 'iskeyword'.
@@ -3948,7 +3947,7 @@ utf_allow_break_before(int cc)
     };
 
     int first = 0;
-    int last  = sizeof(BOL_prohibition_punct)/sizeof(int) - 1;
+    int last  = ARRAY_LENGTH(BOL_prohibition_punct) - 1;
     int mid   = 0;
 
     while (first < last)
@@ -3998,7 +3997,7 @@ utf_allow_break_after(int cc)
     };
 
     int first = 0;
-    int last  = sizeof(EOL_prohibition_punct)/sizeof(int) - 1;
+    int last  = ARRAY_LENGTH(EOL_prohibition_punct) - 1;
     int mid   = 0;
 
     while (first < last)
@@ -4308,7 +4307,6 @@ mb_charlen(char_u *str)
     return count;
 }
 
-#if (defined(FEAT_SPELL) || defined(FEAT_EVAL)) || defined(PROTO)
 /*
  * Like mb_charlen() but for a string with specified length.
  */
@@ -4323,7 +4321,6 @@ mb_charlen_len(char_u *str, int len)
 
     return count;
 }
-#endif
 
 /*
  * Try to un-escape a multi-byte character.
@@ -4453,10 +4450,15 @@ enc_canonize(char_u *enc)
 
     if (STRCMP(enc, "default") == 0)
     {
+#ifdef MSWIN
+	// Use the system encoding, the default is always utf-8.
+	r = enc_locale();
+#else
 	// Use the default encoding as it's found by set_init_1().
 	r = get_encoding_default();
+#endif
 	if (r == NULL)
-	    r = (char_u *)"latin1";
+	    r = (char_u *)ENC_DFLT;
 	return vim_strsave(r);
     }
 

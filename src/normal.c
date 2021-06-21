@@ -379,7 +379,7 @@ static const struct nv_cmd
 };
 
 // Number of commands in nv_cmds[].
-#define NV_CMDS_SIZE (sizeof(nv_cmds) / sizeof(struct nv_cmd))
+#define NV_CMDS_SIZE ARRAY_LENGTH(nv_cmds)
 
 // Sorted index of commands in nv_cmds[].
 static short nv_cmd_idx[NV_CMDS_SIZE];
@@ -1350,11 +1350,18 @@ call_yank_do_autocmd(int regname)
 
 /*
  * End Visual mode.
- * This function should ALWAYS be called to end Visual mode, except from
- * do_pending_operator().
+ * This function or the next should ALWAYS be called to end Visual mode, except
+ * from do_pending_operator().
  */
     void
-end_visual_mode(void)
+end_visual_mode()
+{
+    end_visual_mode_keep_button();
+    reset_held_button();
+}
+
+    void
+end_visual_mode_keep_button()
 {
 #ifdef FEAT_CLIPBOARD
     /*
@@ -1743,6 +1750,7 @@ clearop(oparg_T *oap)
     oap->regname = 0;
     oap->motion_force = NUL;
     oap->use_reg_one = FALSE;
+    motion_force = NUL;
 }
 
     void
@@ -2973,6 +2981,13 @@ dozet:
 		}
 		break;
 
+		// "zp", "zP" in block mode put without addind trailing spaces
+    case 'P':
+    case 'p':  nv_put(cap);
+	       break;
+		// "zy" Yank without trailing spaces
+    case 'y':  nv_operator(cap);
+	       break;
 #ifdef FEAT_FOLDING
 		// "zF": create fold command
 		// "zf": create fold operator
@@ -7418,11 +7433,13 @@ nv_put_opt(cmdarg_T *cap, int fix_indent)
 	}
 	else
 	    dir = (cap->cmdchar == 'P'
-				 || (cap->cmdchar == 'g' && cap->nchar == 'P'))
-							 ? BACKWARD : FORWARD;
+		    || ((cap->cmdchar == 'g' || cap->cmdchar == 'z')
+			&& cap->nchar == 'P')) ? BACKWARD : FORWARD;
 	prep_redo_cmd(cap);
 	if (cap->cmdchar == 'g')
 	    flags |= PUT_CURSEND;
+	else if (cap->cmdchar == 'z')
+	    flags |= PUT_BLOCK_INNER;
 
 	if (VIsual_active)
 	{

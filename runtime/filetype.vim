@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2021 Apr 17
+" Last Change:	2021 Jun 13
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -855,6 +855,9 @@ au BufNewFile,BufRead *.jov,*.j73,*.jovial	setf jovial
 " JSON
 au BufNewFile,BufRead *.json,*.jsonp,*.webmanifest	setf json
 
+" Jupyter Notebook is also json
+au BufNewFile,BufRead *.ipynb				setf json
+
 " Kixtart
 au BufNewFile,BufRead *.kix			setf kix
 
@@ -1496,7 +1499,7 @@ au BufNewFile,BufRead *.sass			setf sass
 au BufNewFile,BufRead *.sa			setf sather
 
 " Scala
-au BufNewFile,BufRead *.scala			setf scala
+au BufNewFile,BufRead *.scala,*.sc		setf scala
 
 " SBT - Scala Build Tool
 au BufNewFile,BufRead *.sbt			setf sbt

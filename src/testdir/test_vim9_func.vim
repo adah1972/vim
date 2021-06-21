@@ -74,6 +74,22 @@ def TestCompilingErrorInTry()
   delete('Xdir', 'rf')
 enddef
 
+def Test_compile_error_in_called_function()
+  var lines =<< trim END
+      vim9script
+      var n: number
+      def Foo()
+        &hls = n
+      enddef
+      def Bar()
+        Foo()
+      enddef
+      silent! Foo()
+      Bar()
+  END
+  CheckScriptFailureList(lines, ['E1012:', 'E1191:'])
+enddef
+
 def Test_autoload_name_mismatch()
   var dir = 'Xdir/autoload'
   mkdir(dir, 'p')
@@ -93,6 +109,34 @@ def Test_autoload_name_mismatch()
       call script#Function()
   END
   CheckScriptFailure(lines, 'E746:', 2)
+
+  &rtp = save_rtp
+  delete(dir, 'rf')
+enddef
+
+def Test_autoload_names()
+  var dir = 'Xdir/autoload'
+  mkdir(dir, 'p')
+
+  var lines =<< trim END
+      func foobar#function()
+        return 'yes'
+      endfunc
+      let foobar#var = 'no'
+  END
+  writefile(lines, dir .. '/foobar.vim')
+
+  var save_rtp = &rtp
+  exe 'set rtp=' .. getcwd() .. '/Xdir'
+
+  lines =<< trim END
+      assert_equal('yes', foobar#function())
+      var Function = foobar#function
+      assert_equal('yes', Function())
+
+      assert_equal('no', foobar#var)
+  END
+  CheckDefAndScriptSuccess(lines)
 
   &rtp = save_rtp
   delete(dir, 'rf')
@@ -904,6 +948,26 @@ def Test_lambda_return_type()
       echo FilterWithCond('foo', (v) => v .. '^b')
   END
   CheckDefAndScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected func(string): bool but got func(any): string', 1)
+
+  lines =<< trim END
+      var Lambda1 = (x) => {
+              return x
+              }
+      assert_equal('asdf', Lambda1('asdf'))
+      var Lambda2 = (x): string => {
+              return x
+              }
+      assert_equal('foo', Lambda2('foo'))
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      var Lambda = (x): string => {
+              return x
+              }
+      echo Lambda(['foo'])
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1012:')
 enddef
 
 def Test_lambda_uses_assigned_var()
@@ -2112,6 +2176,19 @@ def Test_nested_lambda()
   CheckScriptSuccess(lines)
 enddef
 
+def Test_double_nested_lambda()
+  var lines =<< trim END
+      vim9script
+      def F(head: string): func(string): func(string): string
+        return (sep: string): func(string): string => ((tail: string): string => {
+            return head .. sep .. tail
+          })
+      enddef
+      assert_equal('hello-there', F('hello')('-')('there'))
+  END
+  CheckScriptSuccess(lines)
+enddef
+
 def Test_nested_inline_lambda()
   # TODO: use the "text" argument
   var lines =<< trim END
@@ -2205,6 +2282,15 @@ def Test_legacy_lambda()
       legacy call s:Func()
   END
   CheckScriptSuccess(lines)
+enddef
+
+def Test_legacy_errors()
+  for cmd in ['if', 'elseif', 'else', 'endif',
+              'for', 'endfor', 'continue', 'break',
+              'while', 'endwhile',
+              'try', 'catch', 'finally', 'endtry']
+    CheckDefFailure(['legacy ' .. cmd .. ' expr'], 'E1189:')
+  endfor
 enddef
 
 def DoFilterThis(a: string): list<string>
@@ -2748,6 +2834,34 @@ def Test_closing_brace_at_start_of_line()
   END
   call CheckDefAndScriptSuccess(lines)
 enddef
+
+if has('python3')
+  def Test_python3_heredoc()
+    py3 << trim EOF
+      import vim
+      vim.vars['didit'] = 'yes'
+    EOF
+    assert_equal('yes', g:didit)
+
+    python3 << trim EOF
+      import vim
+      vim.vars['didit'] = 'again'
+    EOF
+    assert_equal('again', g:didit)
+  enddef
+endif
+
+" This messes up syntax highlight, keep near the end.
+if has('lua')
+  def Test_lua_heredoc()
+    g:d = {}
+    lua << trim EOF
+        x = vim.eval('g:d')
+        x['key'] = 'val'
+    EOF
+    assert_equal('val', g:d.key)
+  enddef
+endif
 
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

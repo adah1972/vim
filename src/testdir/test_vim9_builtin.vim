@@ -324,6 +324,18 @@ def Test_executable()
   CheckDefExecFailure(['echo executable(true)'], 'E1174:')
 enddef
 
+def Test_execute()
+  var res = execute("echo 'hello'")
+  assert_equal("\nhello", res)
+  res = execute(["echo 'here'", "echo 'there'"])
+  assert_equal("\nhere\nthere", res)
+
+  CheckDefFailure(['echo execute(123)'], 'E1013: Argument 1: type mismatch, expected string but got number')
+  CheckDefFailure(['echo execute([123])'], 'E1013: Argument 1: type mismatch, expected list<string> but got list<number>')
+  CheckDefExecFailure(['echo execute(["xx", 123])'], 'E492')
+  CheckDefFailure(['echo execute("xx", 123)'], 'E1013: Argument 2: type mismatch, expected string but got number')
+enddef
+
 def Test_exepath()
   CheckDefExecFailure(['echo exepath(true)'], 'E1174:')
   CheckDefExecFailure(['echo exepath(v:null)'], 'E1174:')
@@ -810,6 +822,15 @@ def Test_map_function_arg()
       assert_equal(['0:a', '1:b', '2:c'], l)
   END
   CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      range(3)->map((a, b, c) => a + b + c)
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1190: One argument too few')
+  lines =<< trim END
+      range(3)->map((a, b, c, d) => a + b + c + d)
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1190: 2 arguments too few')
 enddef
 
 def Test_map_item_type()
@@ -1095,7 +1116,7 @@ def Test_set_get_bufline()
       assert_equal([], getbufline(b, 2, 1))
 
       if has('job')
-        setbufline(b, 2, [function('eval'), {key: 123}, test_null_job()])
+        setbufline(b, 2, [function('eval'), {key: 123}, string(test_null_job())])
         assert_equal(["function('eval')",
                         "{'key': 123}",
                         "no process"],
@@ -1239,6 +1260,16 @@ def Test_submatch()
   var actual = substitute('A123456789', pat, Rep, '')
   var expected = "[['A123456789'], ['1'], ['2'], ['3'], ['4'], ['5'], ['6'], ['7'], ['8'], ['9']]"
   actual->assert_equal(expected)
+enddef
+
+def Test_substitute()
+  var res = substitute('A1234', '\d', 'X', '')
+  assert_equal('AX234', res)
+
+  if has('job')
+    assert_fails('"text"->substitute(".*", () => job_start(":"), "")', 'E908: using an invalid value as a String: job')
+    assert_fails('"text"->substitute(".*", () => job_start(":")->job_getchannel(), "")', 'E908: using an invalid value as a String: channel')
+  endif
 enddef
 
 def Test_synID()

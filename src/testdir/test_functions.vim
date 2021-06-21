@@ -4,6 +4,7 @@ source shared.vim
 source check.vim
 source term_util.vim
 source screendump.vim
+source vim9.vim
 
 " Must be done first, since the alternate buffer must be unset.
 func Test_00_bufexists()
@@ -85,13 +86,13 @@ func Test_empty()
 endfunc
 
 func Test_test_void()
-  call assert_fails('echo 1 == test_void()', 'E685:')
+  call assert_fails('echo 1 == test_void()', 'E1031:')
   if has('float')
-    call assert_fails('echo 1.0 == test_void()', 'E685:')
+    call assert_fails('echo 1.0 == test_void()', 'E1031:')
   endif
   call assert_fails('let x = json_encode(test_void())', 'E685:')
   call assert_fails('let x = copy(test_void())', 'E685:')
-  call assert_fails('let x = copy([test_void()])', 'E685:')
+  call assert_fails('let x = copy([test_void()])', 'E1031:')
 endfunc
 
 func Test_len()
@@ -164,10 +165,12 @@ func Test_strwidth()
     call assert_fails('call strwidth({->0})', 'E729:')
     call assert_fails('call strwidth([])', 'E730:')
     call assert_fails('call strwidth({})', 'E731:')
-    if has('float')
-      call assert_fails('call strwidth(1.2)', 'E806:')
-    endif
   endfor
+
+  if has('float')
+    call assert_equal(3, strwidth(1.2))
+    call CheckDefExecAndScriptFailure(['echo strwidth(1.2)'], 'E806:')
+  endif
 
   set ambiwidth&
 endfunc
@@ -232,7 +235,9 @@ func Test_str2nr()
   call assert_fails('call str2nr([])', 'E730:')
   call assert_fails('call str2nr({->2})', 'E729:')
   if has('float')
-    call assert_fails('call str2nr(1.2)', 'E806:')
+    call assert_equal(1, str2nr(1.2))
+    call CheckDefExecFailure(['echo str2nr(1.2)'], 'E1013:')
+    call CheckScriptFailure(['vim9script', 'echo str2nr(1.2)'], 'E806:')
   endif
   call assert_fails('call str2nr(10, [])', 'E745:')
 endfunc
@@ -493,7 +498,8 @@ func Test_simplify()
   call assert_fails('call simplify([])', 'E730:')
   call assert_fails('call simplify({})', 'E731:')
   if has('float')
-    call assert_fails('call simplify(1.2)', 'E806:')
+    call assert_equal('1.2', simplify(1.2))
+    call CheckDefExecAndScriptFailure(['echo simplify(1.2)'], 'E806:')
   endif
 endfunc
 
@@ -1723,6 +1729,13 @@ endfunc
 func Test_getchar()
   call feedkeys('a', '')
   call assert_equal(char2nr('a'), getchar())
+  call assert_equal(0, getchar(0))
+  call assert_equal(0, getchar(1))
+
+  call feedkeys('a', '')
+  call assert_equal('a', getcharstr())
+  call assert_equal('', getcharstr(0))
+  call assert_equal('', getcharstr(1))
 
   call setline(1, 'xxxx')
   call test_setmouse(1, 3)
@@ -2161,9 +2174,11 @@ func Test_call()
   call assert_fails("call call('Mylen', [], 0)", 'E715:')
   call assert_fails('call foo', 'E107:')
 
-  " This once caused a crash.
+  " These once caused a crash.
   call call(test_null_function(), [])
   call call(test_null_partial(), [])
+  call assert_fails('call test_null_function()()', 'E1192:')
+  call assert_fails('call test_null_partial()()', 'E117:')
 endfunc
 
 func Test_char2nr()
@@ -2680,5 +2695,23 @@ endfunc
 func Test_gettext()
   call assert_fails('call gettext(1)', 'E475:')
 endfunc
+
+func Test_builtin_check()
+  call assert_fails('let g:["trim"] = {x -> " " .. x}', 'E704:')
+  call assert_fails('let g:.trim = {x -> " " .. x}', 'E704:')
+  call assert_fails('let l:["trim"] = {x -> " " .. x}', 'E704:')
+  call assert_fails('let l:.trim = {x -> " " .. x}', 'E704:')
+  let lines =<< trim END
+    vim9script
+    var s:trim = (x) => " " .. x
+  END
+  call CheckScriptFailure(lines, 'E704:')
+
+  call assert_fails('call extend(g:, #{foo: { -> "foo" }})', 'E704:')
+  let g:bar = 123
+  call extend(g:, #{bar: { -> "foo" }}, "keep")
+  call assert_fails('call extend(g:, #{bar: { -> "foo" }}, "force")', 'E704:')
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

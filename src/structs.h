@@ -1629,6 +1629,11 @@ typedef struct
 # endif
 
     garray_T	uf_lines;	// function lines
+
+    int		uf_debug_tick;	// when last checked for a breakpoint in this
+				// function.
+    int		uf_has_breakpoint;  // TRUE when a breakpoint has been set in
+				    // this function.
 # ifdef FEAT_PROFILE
     int		uf_profiling;	// TRUE when func is being profiled
     int		uf_prof_initialized;
@@ -1995,7 +2000,7 @@ struct outer_S {
     garray_T	*out_stack;	    // stack from outer scope
     int		out_frame_idx;	    // index of stack frame in out_stack
     outer_T	*out_up;	    // outer scope of outer scope or NULL
-    int		out_up_is_copy;	    // don't free out_up
+    partial_T	*out_up_partial;    // partial owning out_up or NULL
 };
 
 struct partial_S
@@ -2513,11 +2518,12 @@ typedef struct {
 # define CRYPT_M_ZIP	0
 # define CRYPT_M_BF	1
 # define CRYPT_M_BF2	2
-# define CRYPT_M_COUNT	3 // number of crypt methods
+# define CRYPT_M_SOD    3
+# define CRYPT_M_COUNT	4 // number of crypt methods
 
 // Currently all crypt methods work inplace.  If one is added that isn't then
 // define this.
-//  # define CRYPT_NOT_INPLACE 1
+# define CRYPT_NOT_INPLACE 1
 #endif
 
 #ifdef FEAT_PROP_POPUP
@@ -3772,7 +3778,7 @@ typedef struct oparg_S
     int		use_reg_one;	// TRUE if delete uses reg 1 even when not
 				// linewise
     int		inclusive;	// TRUE if char motion is inclusive (only
-				// valid when motion_type is MCHAR
+				// valid when motion_type is MCHAR)
     int		end_adjusted;	// backuped b_op_end one char (only used by
 				// do_format())
     pos_T	start;		// start of the operator
@@ -3789,6 +3795,8 @@ typedef struct oparg_S
     colnr_T	end_vcol;	// end col for block mode operator
     long	prev_opcount;	// ca.opcount saved for K_CURSORHOLD
     long	prev_count0;	// ca.count0 saved for K_CURSORHOLD
+    int		excl_tr_ws;	// exclude trailing whitespace for yank of a
+				// block
 } oparg_T;
 
 /*

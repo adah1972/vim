@@ -2340,7 +2340,7 @@ def Test_expr7_dict()
   CheckScriptFailure(['vim9script', "var x = {xxx: 1,"], 'E723:', 2)
   CheckDefAndScriptFailure2(["var x = {['a']: xxx}"], 'E1001:', 'E121:', 1)
   CheckDefAndScriptFailure(["var x = {a: 1, a: 2}"], 'E721:', 1)
-  CheckDefExecAndScriptFailure2(["var x = g:anint.member"], 'E715:', 'E15:', 1)
+  CheckDefExecAndScriptFailure2(["var x = g:anint.member"], 'E715:', 'E488:', 1)
   CheckDefExecAndScriptFailure(["var x = g:dict_empty.member"], 'E716:', 1)
 
   CheckDefExecAndScriptFailure(['var x: dict<number> = {a: 234, b: "1"}'], 'E1012:', 1)
@@ -2478,6 +2478,25 @@ def Test_expr7_dict_vim9script()
   else
     CheckDefAndScriptFailure(lines, 'E117:', 0)
   endif
+enddef
+
+def Test_expr7_call_2bool()
+  var lines =<< trim END
+      vim9script
+
+      def BrokenCall(nr: number, mode: bool, use: string): void
+        assert_equal(3, nr)
+        assert_equal(false, mode)
+        assert_equal('ab', use)
+      enddef
+
+      def TestBrokenCall(): void
+        BrokenCall(3, 0, 'ab')
+      enddef
+
+      TestBrokenCall()
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 let g:oneString = 'one'
@@ -2924,7 +2943,9 @@ def Test_expr7_method_call()
       loclist->setloclist(0)
       assert_equal([{bufnr: bufnr,
                     lnum: 42,
+                    end_lnum: 0,
                     col: 17,
+                    end_col: 0,
                     text: 'wrong',
                     pattern: '',
                     valid: 1,
@@ -2942,8 +2963,26 @@ def Test_expr7_method_call()
 
       var Join = (l) => join(l, 'x')
       assert_equal('axb', ['a', 'b']->(Join)())
+      
+      var sorted = [3, 1, 2]
+                    -> sort()
+      assert_equal([1, 2, 3], sorted)
   END
   CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+    def RetVoid()
+    enddef
+    RetVoid()->byte2line()
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1031:')
+
+  lines =<< trim END
+    def RetVoid()
+    enddef
+    RetVoid()->byteidx(3)
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1031:')
 enddef
 
 
@@ -3015,7 +3054,7 @@ func Test_expr7_fails()
 
   call CheckDefAndScriptFailure2(["var x = [notfound]"], "E1001:", 'E121:', 1)
 
-  call CheckDefAndScriptFailure2(["var X = () => 123)"], "E488:", 'E15:', 1)
+  call CheckDefAndScriptFailure(["var X = () => 123)"], 'E488:', 1)
   call CheckDefAndScriptFailure(["var x = 123->((x) => x + 5)"], "E107:", 1)
 
   call CheckDefAndScriptFailure(["var x = &notexist"], 'E113:', 1)
@@ -3033,7 +3072,7 @@ func Test_expr7_fails()
   call CheckDefExecAndScriptFailure(["var x = +g:alist"], 'E745:', 1)
   call CheckDefExecAndScriptFailure(["var x = +g:adict"], 'E728:', 1)
 
-  call CheckDefAndScriptFailure2(["var x = ''", "var y = x.memb"], 'E715:', 'E15:', 2)
+  call CheckDefAndScriptFailure2(["var x = ''", "var y = x.memb"], 'E715:', 'E488:', 2)
 
   call CheckDefAndScriptFailure2(["'yes'->", "Echo()"], 'E488: Trailing characters: ->', 'E260: Missing name after ->', 1)
 
@@ -3317,8 +3356,8 @@ func Test_expr7_trailing_fails()
 endfunc
 
 func Test_expr_fails()
-  call CheckDefAndScriptFailure2(["var x = '1'is2"], 'E488:', 'E15:', 1)
-  call CheckDefAndScriptFailure2(["var x = '1'isnot2"], 'E488:', 'E15:', 1)
+  call CheckDefAndScriptFailure(["var x = '1'is2"], 'E488:', 1)
+  call CheckDefAndScriptFailure(["var x = '1'isnot2"], 'E488:', 1)
 
   call CheckDefAndScriptFailure2(["CallMe ('yes')"], 'E476:', 'E492:', 1)
 
