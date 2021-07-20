@@ -832,34 +832,6 @@ func Test_buftype()
   bwipe!
 endfunc
 
-" Test for the 'shell' option
-func Test_shell()
-  CheckUnix
-  let save_shell = &shell
-  set shell=
-  let caught_e91 = 0
-  try
-    shell
-  catch /E91:/
-    let caught_e91 = 1
-  endtry
-  call assert_equal(1, caught_e91)
-  let &shell = save_shell
-endfunc
-
-" Test for the 'shellquote' option
-func Test_shellquote()
-  CheckUnix
-  set shellquote=#
-  set verbose=20
-  redir => v
-  silent! !echo Hello
-  redir END
-  set verbose&
-  set shellquote&
-  call assert_match(': "#echo Hello#"', v)
-endfunc
-
 " Test for the 'rightleftcmd' option
 func Test_rightleftcmd()
   CheckFeature rightleft
@@ -959,6 +931,28 @@ func Test_opt_local_to_global()
   setlocal autoread<
   call assert_false(&autoread)
   set autoread&
+endfunc
+
+func Test_set_in_sandbox()
+  " Some boolean options cannot be set in sandbox, some can.
+  call assert_fails('sandbox set modelineexpr', 'E48:')
+  sandbox set number
+  call assert_true(&number)
+  set number&
+
+  " Some boolean options cannot be set in sandbox, some can.
+  if has('python') || has('python3')
+    call assert_fails('sandbox set pyxversion=3', 'E48:')
+  endif
+  sandbox set tabstop=4
+  call assert_equal(4, &tabstop)
+  set tabstop&
+
+  " Some string options cannot be set in sandbox, some can.
+  call assert_fails('sandbox set backupdir=/tmp', 'E48:')
+  sandbox set filetype=perl
+  call assert_equal('perl', &filetype)
+  set filetype&
 endfunc
 
 " Test for incrementing, decrementing and multiplying a number option value
@@ -1175,6 +1169,28 @@ func Test_opt_errorbells()
   set errorbells
   call assert_beeps('s/a1b2/x1y2/')
   set noerrorbells
+endfunc
+
+func Test_opt_scrolljump()
+  help
+  resize 10
+
+  " Test with positive 'scrolljump'.
+  set scrolljump=2
+  norm! Lj
+  call assert_equal({'lnum':11, 'leftcol':0, 'col':0, 'topfill':0,
+        \            'topline':3, 'coladd':0, 'skipcol':0, 'curswant':0},
+        \           winsaveview())
+
+  " Test with negative 'scrolljump' (percentage of window height).
+  set scrolljump=-40
+  norm! ggLj
+  call assert_equal({'lnum':11, 'leftcol':0, 'col':0, 'topfill':0,
+         \            'topline':5, 'coladd':0, 'skipcol':0, 'curswant':0},
+         \           winsaveview())
+
+  set scrolljump&
+  bw
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

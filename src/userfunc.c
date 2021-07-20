@@ -198,7 +198,7 @@ get_function_args(
 	ga_init2(newargs, (int)sizeof(char_u *), 3);
     if (argtypes != NULL)
 	ga_init2(argtypes, (int)sizeof(char_u *), 3);
-    if (default_args != NULL)
+    if (!skip && default_args != NULL)
 	ga_init2(default_args, (int)sizeof(char_u *), 3);
 
     if (varargs != NULL)
@@ -266,13 +266,19 @@ get_function_args(
 	}
 	else
 	{
+	    char_u *np;
+
 	    arg = p;
 	    p = one_function_arg(p, newargs, argtypes, types_optional,
 							 evalarg, FALSE, skip);
 	    if (p == arg)
 		break;
 
-	    if (*skipwhite(p) == '=' && default_args != NULL)
+	    // Recognize " = expr" but not " == expr".  A lambda can have
+	    // "(a = expr" but "(a == expr" and "(a =~ expr" are not a lambda.
+	    np = skipwhite(p);
+	    if (*np == '=' && np[1] != '=' && np[1] != '~'
+						       && default_args != NULL)
 	    {
 		typval_T	rettv;
 
@@ -284,24 +290,27 @@ get_function_args(
 		expr = p;
 		if (eval1(&p, &rettv, NULL) != FAIL)
 		{
-		    if (ga_grow(default_args, 1) == FAIL)
-			goto err_ret;
-
-		    // trim trailing whitespace
-		    while (p > expr && VIM_ISWHITE(p[-1]))
-			p--;
-		    c = *p;
-		    *p = NUL;
-		    expr = vim_strsave(expr);
-		    if (expr == NULL)
+		    if (!skip)
 		    {
-			*p = c;
-			goto err_ret;
-		    }
-		    ((char_u **)(default_args->ga_data))
+			if (ga_grow(default_args, 1) == FAIL)
+			    goto err_ret;
+
+			// trim trailing whitespace
+			while (p > expr && VIM_ISWHITE(p[-1]))
+			    p--;
+			c = *p;
+			*p = NUL;
+			expr = vim_strsave(expr);
+			if (expr == NULL)
+			{
+			    *p = c;
+			    goto err_ret;
+			}
+			((char_u **)(default_args->ga_data))
 						 [default_args->ga_len] = expr;
-		    default_args->ga_len++;
-		    *p = c;
+			default_args->ga_len++;
+			*p = c;
+		    }
 		}
 		else
 		    mustend = TRUE;
@@ -352,7 +361,7 @@ get_function_args(
 err_ret:
     if (newargs != NULL)
 	ga_clear_strings(newargs);
-    if (default_args != NULL)
+    if (!skip && default_args != NULL)
 	ga_clear_strings(default_args);
     return FAIL;
 }
@@ -625,6 +634,7 @@ get_function_body(
 						   || eap->cmdidx == CMD_block;
 #define MAX_FUNC_NESTING 50
     char	nesting_def[MAX_FUNC_NESTING];
+    char	nesting_inline[MAX_FUNC_NESTING];
     int		nesting = 0;
     getline_opt_T getline_options;
     int		indent = 2;
@@ -649,7 +659,8 @@ get_function_body(
 	    ((char_u **)(newlines->ga_data))[newlines->ga_len++] = NULL;
     }
 
-    nesting_def[nesting] = vim9_function;
+    nesting_def[0] = vim9_function;
+    nesting_inline[0] = eap->cmdidx == CMD_block;
     getline_options = vim9_function
 				? GETLINE_CONCAT_CONTBAR : GETLINE_CONCAT_CONT;
     for (;;)
@@ -696,10 +707,10 @@ get_function_body(
 	    SOURCING_LNUM = sourcing_lnum_top;
 	    if (skip_until != NULL)
 		semsg(_(e_missing_heredoc_end_marker_str), skip_until);
+	    else if (nesting_inline[nesting])
+		emsg(_(e_missing_end_block));
 	    else if (eap->cmdidx == CMD_def)
 		emsg(_(e_missing_enddef));
-	    else if (eap->cmdidx == CMD_block)
-		emsg(_(e_missing_end_block));
 	    else
 		emsg(_("E126: Missing :endfunction"));
 	    goto theend;
@@ -756,7 +767,8 @@ get_function_body(
 	}
 	else
 	{
-	    int c;
+	    int	    c;
+	    char_u  *end;
 
 	    // skip ':' and blanks
 	    for (p = theline; VIM_ISWHITE(*p) || *p == ':'; ++p)
@@ -764,7 +776,7 @@ get_function_body(
 
 	    // Check for "endfunction", "enddef" or "}".
 	    // When a ":" follows it must be a dict key; "enddef: value,"
-	    if ((nesting == 0 && eap->cmdidx == CMD_block)
+	    if (nesting_inline[nesting]
 		    ? *p == '}'
 		    : (checkforcmd(&p, nesting_def[nesting]
 						? "enddef" : "endfunction", 4)
@@ -848,7 +860,35 @@ get_function_body(
 		    {
 			++nesting;
 			nesting_def[nesting] = (c == 'd');
+			nesting_inline[nesting] = FALSE;
 			indent += 2;
+		    }
+		}
+	    }
+
+	    if (nesting_def[nesting] ? *p != '#' : *p != '"')
+	    {
+		// Not a comment line: check for nested inline function.
+		end = p + STRLEN(p) - 1;
+		while (end > p && VIM_ISWHITE(*end))
+		    --end;
+		if (end > p && *end == '{')
+		{
+		    --end;
+		    while (end > p && VIM_ISWHITE(*end))
+			--end;
+		    if (end > p + 2 && end[-1] == '=' && end[0] == '>')
+		    {
+			// found trailing "=> {", start of an inline function
+			if (nesting == MAX_FUNC_NESTING - 1)
+			    emsg(_(e_function_nesting_too_deep));
+			else
+			{
+			    ++nesting;
+			    nesting_def[nesting] = TRUE;
+			    nesting_inline[nesting] = TRUE;
+			    indent += 2;
+			}
 		    }
 		}
 	    }
@@ -1222,7 +1262,7 @@ get_lambda_tv(
     s = *arg + 1;
     ret = get_function_args(&s, equal_arrow ? ')' : '-', NULL,
 	    types_optional ? &argtypes : NULL, types_optional, evalarg,
-						 NULL, NULL, TRUE, NULL, NULL);
+					NULL, &default_args, TRUE, NULL, NULL);
     if (ret == FAIL || skip_arrow(s, equal_arrow, &ret_type, NULL) == NULL)
     {
 	if (types_optional)
@@ -3094,6 +3134,7 @@ call_func(
     int		argv_clear = 0;
     int		argv_base = 0;
     partial_T	*partial = funcexe->partial;
+    type_T	check_type;
 
     // Initialize rettv so that it is safe for caller to invoke clear_tv(rettv)
     // even when call_func() returns FAIL.
@@ -3137,6 +3178,17 @@ call_func(
 		argv[i + argv_clear] = argvars_in[i];
 	    argvars = argv;
 	    argcount = partial->pt_argc + argcount_in;
+
+	    if (funcexe->check_type != NULL
+				     && funcexe->check_type->tt_argcount != -1)
+	    {
+		// Now funcexe->check_type is missing the added arguments, make
+		// a copy of the type with the correction.
+		check_type = *funcexe->check_type;
+		funcexe->check_type = &check_type;
+		check_type.tt_argcount += partial->pt_argc;
+		check_type.tt_min_argcount += partial->pt_argc;
+	    }
 	}
     }
 
@@ -3595,7 +3647,8 @@ trans_function_name(
 		lead += (int)STRLEN(sid_buf);
 	}
     }
-    else if (!(flags & TFN_INT) && builtin_function(lv.ll_name, len))
+    else if (!(flags & TFN_INT) && (builtin_function(lv.ll_name, len)
+				   || (in_vim9script() && *lv.ll_name == '_')))
     {
 	semsg(_("E128: Function name must start with a capital or \"s:\": %s"),
 								       start);
@@ -4854,7 +4907,7 @@ ex_call(exarg_T *eap)
 	    {
 		// If the function deleted lines or switched to another buffer
 		// the line number may become invalid.
-		emsg(_(e_invrange));
+		emsg(_(e_invalid_range));
 		break;
 	    }
 	    curwin->w_cursor.lnum = lnum;
@@ -5468,35 +5521,32 @@ find_var_in_scoped_ht(char_u *name, int no_autoload)
     int
 set_ref_in_previous_funccal(int copyID)
 {
-    int		abort = FALSE;
     funccall_T	*fc;
 
-    for (fc = previous_funccal; !abort && fc != NULL; fc = fc->caller)
+    for (fc = previous_funccal; fc != NULL; fc = fc->caller)
     {
 	fc->fc_copyID = copyID + 1;
-	abort = abort
-	    || set_ref_in_ht(&fc->l_vars.dv_hashtab, copyID + 1, NULL)
-	    || set_ref_in_ht(&fc->l_avars.dv_hashtab, copyID + 1, NULL)
-	    || set_ref_in_list_items(&fc->l_varlist, copyID + 1, NULL);
+	if (set_ref_in_ht(&fc->l_vars.dv_hashtab, copyID + 1, NULL)
+		|| set_ref_in_ht(&fc->l_avars.dv_hashtab, copyID + 1, NULL)
+		|| set_ref_in_list_items(&fc->l_varlist, copyID + 1, NULL))
+	    return TRUE;
     }
-    return abort;
+    return FALSE;
 }
 
     static int
 set_ref_in_funccal(funccall_T *fc, int copyID)
 {
-    int abort = FALSE;
-
     if (fc->fc_copyID != copyID)
     {
 	fc->fc_copyID = copyID;
-	abort = abort
-	    || set_ref_in_ht(&fc->l_vars.dv_hashtab, copyID, NULL)
-	    || set_ref_in_ht(&fc->l_avars.dv_hashtab, copyID, NULL)
-	    || set_ref_in_list_items(&fc->l_varlist, copyID, NULL)
-	    || set_ref_in_func(NULL, fc->func, copyID);
+	if (set_ref_in_ht(&fc->l_vars.dv_hashtab, copyID, NULL)
+		|| set_ref_in_ht(&fc->l_avars.dv_hashtab, copyID, NULL)
+		|| set_ref_in_list_items(&fc->l_varlist, copyID, NULL)
+		|| set_ref_in_func(NULL, fc->func, copyID))
+	    return TRUE;
     }
-    return abort;
+    return FALSE;
 }
 
 /*
@@ -5505,19 +5555,19 @@ set_ref_in_funccal(funccall_T *fc, int copyID)
     int
 set_ref_in_call_stack(int copyID)
 {
-    int			abort = FALSE;
     funccall_T		*fc;
     funccal_entry_T	*entry;
 
-    for (fc = current_funccal; !abort && fc != NULL; fc = fc->caller)
-	abort = abort || set_ref_in_funccal(fc, copyID);
+    for (fc = current_funccal; fc != NULL; fc = fc->caller)
+	if (set_ref_in_funccal(fc, copyID))
+	    return TRUE;
 
     // Also go through the funccal_stack.
-    for (entry = funccal_stack; !abort && entry != NULL; entry = entry->next)
-	for (fc = entry->top_funccal; !abort && fc != NULL; fc = fc->caller)
-	    abort = abort || set_ref_in_funccal(fc, copyID);
-
-    return abort;
+    for (entry = funccal_stack; entry != NULL; entry = entry->next)
+	for (fc = entry->top_funccal; fc != NULL; fc = fc->caller)
+	    if (set_ref_in_funccal(fc, copyID))
+		return TRUE;
+    return FALSE;
 }
 
 /*
@@ -5528,7 +5578,6 @@ set_ref_in_functions(int copyID)
 {
     int		todo;
     hashitem_T	*hi = NULL;
-    int		abort = FALSE;
     ufunc_T	*fp;
 
     todo = (int)func_hashtab.ht_used;
@@ -5538,11 +5587,12 @@ set_ref_in_functions(int copyID)
 	{
 	    --todo;
 	    fp = HI2UF(hi);
-	    if (!func_name_refcount(fp->uf_name))
-		abort = abort || set_ref_in_func(NULL, fp, copyID);
+	    if (!func_name_refcount(fp->uf_name)
+					  && set_ref_in_func(NULL, fp, copyID))
+		return TRUE;
 	}
     }
-    return abort;
+    return FALSE;
 }
 
 /*
@@ -5552,12 +5602,12 @@ set_ref_in_functions(int copyID)
 set_ref_in_func_args(int copyID)
 {
     int i;
-    int abort = FALSE;
 
     for (i = 0; i < funcargs.ga_len; ++i)
-	abort = abort || set_ref_in_item(((typval_T **)funcargs.ga_data)[i],
-							  copyID, NULL, NULL);
-    return abort;
+	if (set_ref_in_item(((typval_T **)funcargs.ga_data)[i],
+							  copyID, NULL, NULL))
+	    return TRUE;
+    return FALSE;
 }
 
 /*

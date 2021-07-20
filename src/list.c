@@ -597,13 +597,17 @@ list_append(list_T *l, listitem_T *item)
 
 /*
  * Append typval_T "tv" to the end of list "l".  "tv" is copied.
- * Return FAIL when out of memory.
+ * Return FAIL when out of memory or the type is wrong.
  */
     int
 list_append_tv(list_T *l, typval_T *tv)
 {
-    listitem_T	*li = listitem_alloc();
+    listitem_T	*li;
 
+    if (l->lv_type != NULL && l->lv_type->tt_member != NULL
+		&& check_typval_arg_type(l->lv_type->tt_member, tv, 0) == FAIL)
+	return FAIL;
+    li = listitem_alloc();
     if (li == NULL)
 	return FAIL;
     copy_tv(tv, &li->li_tv);
@@ -1556,18 +1560,38 @@ list_remove(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg)
 			break;
 		}
 		if (li == NULL)  // didn't find "item2" after "item"
-		    emsg(_(e_invrange));
+		    emsg(_(e_invalid_range));
 		else
 		{
 		    vimlist_remove(l, item, item2);
 		    if (rettv_list_alloc(rettv) == OK)
 		    {
-			l = rettv->vval.v_list;
-			l->lv_first = item;
-			l->lv_u.mat.lv_last = item2;
-			item->li_prev = NULL;
-			item2->li_next = NULL;
-			l->lv_len = cnt;
+			list_T *rl = rettv->vval.v_list;
+
+			if (l->lv_with_items > 0)
+			{
+			    // need to copy the list items and move the value
+			    while (item != NULL)
+			    {
+				li = listitem_alloc();
+				if (li == NULL)
+				    return;
+				li->li_tv = item->li_tv;
+				init_tv(&item->li_tv);
+				list_append(rl, li);
+				if (item == item2)
+				    break;
+				item = item->li_next;
+			    }
+			}
+			else
+			{
+			    rl->lv_first = item;
+			    rl->lv_u.mat.lv_last = item2;
+			    item->li_prev = NULL;
+			    item2->li_next = NULL;
+			    rl->lv_len = cnt;
+			}
 		    }
 		}
 	    }

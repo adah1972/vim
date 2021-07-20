@@ -932,7 +932,7 @@ func Test_Backtrace_DefFunction()
   call delete('Xtest2.vim')
 endfunc
 
-func Test_debug_DefFunction()
+func Test_debug_def_and_legacy_function()
   CheckCWD
   let file =<< trim END
     vim9script
@@ -947,7 +947,7 @@ func Test_debug_DefFunction()
     def LocalFunc()
       echo "first"
       echo "second"
-      breakadd func 1 LegacyFunc
+      breakadd func LegacyFunc
       LegacyFunc()
     enddef
 
@@ -975,8 +975,7 @@ func Test_debug_DefFunction()
   call RunDbgCmd(buf, 'cont')
 
   call StopVimInTerminal(buf)
-  call delete('Xtest1.vim')
-  call delete('Xtest2.vim')
+  call delete('XtestDebug.vim')
 endfunc
 
 func Test_debug_def_function()
@@ -1007,8 +1006,29 @@ func Test_debug_def_function()
          }
          # comment
          def Inner()
-           eval 1
+           eval 1 + 2
          enddef
+    enddef
+
+    def g:FuncComment()
+      # comment
+      echo "first"
+         .. "one"
+      # comment
+      echo "second"
+    enddef
+
+    def g:FuncForLoop()
+      eval 1 + 2
+      for i in [11, 22, 33]
+        eval i + 2
+      endfor
+      echo "done"
+    enddef
+
+    def g:FuncWithSplitLine()
+        eval 1 + 2
+           | eval 2 + 3
     enddef
   END
   call writefile(file, 'Xtest.vim')
@@ -1049,10 +1069,58 @@ func Test_debug_def_function()
                 \ ['cmd: call FuncWithDict()'])
   call RunDbgCmd(buf, 'step', ['line 1: var d = {  a: 1,  b: 2,  }'])
   call RunDbgCmd(buf, 'step', ['line 6: def Inner()'])
+  call RunDbgCmd(buf, 'cont')
+
+  call RunDbgCmd(buf, ':breakadd func 1 FuncComment')
+  call RunDbgCmd(buf, ':call FuncComment()', ['function FuncComment', 'line 2: echo "first"  .. "one"'])
+  call RunDbgCmd(buf, ':breakadd func 3 FuncComment')
+  call RunDbgCmd(buf, 'cont', ['function FuncComment', 'line 5: echo "second"'])
+  call RunDbgCmd(buf, 'cont')
+
+  call RunDbgCmd(buf, ':breakadd func 2 FuncForLoop')
+  call RunDbgCmd(buf, ':call FuncForLoop()', ['function FuncForLoop', 'line 2: for i in [11, 22, 33]'])
+  call RunDbgCmd(buf, 'echo i', ['11'])
+  call RunDbgCmd(buf, 'next', ['function FuncForLoop', 'line 3: eval i + 2'])
+  call RunDbgCmd(buf, 'next', ['function FuncForLoop', 'line 4: endfor'])
+  call RunDbgCmd(buf, 'next', ['function FuncForLoop', 'line 2: for i in [11, 22, 33]'])
+  call RunDbgCmd(buf, 'echo i', ['22'])
+
+  call RunDbgCmd(buf, 'breakdel *')
+  call RunDbgCmd(buf, 'cont')
+
+  call RunDbgCmd(buf, ':breakadd func FuncWithSplitLine')
+  call RunDbgCmd(buf, ':call FuncWithSplitLine()', ['function FuncWithSplitLine', 'line 1: eval 1 + 2 | eval 2 + 3'])
 
   call RunDbgCmd(buf, 'cont')
   call StopVimInTerminal(buf)
   call delete('Xtest.vim')
+endfunc
+
+func Test_debug_def_function_with_lambda()
+  CheckCWD
+  let lines =<< trim END
+     vim9script
+     def g:Func()
+       var s = 'a'
+       ['b']->map((_, v) => s)
+       echo "done"
+     enddef
+     breakadd func 2 g:Func
+  END
+  call writefile(lines, 'XtestLambda.vim')
+
+  let buf = RunVimInTerminal('-S XtestLambda.vim', {})
+
+  call RunDbgCmd(buf,
+                \ ':call g:Func()',
+                \ ['function Func', 'line 2: [''b'']->map((_, v) => s)'])
+  call RunDbgCmd(buf,
+                \ 'next',
+                \ ['function Func', 'line 3: echo "done"'])
+
+  call RunDbgCmd(buf, 'cont')
+  call StopVimInTerminal(buf)
+  call delete('XtestLambda.vim')
 endfunc
 
 func Test_debug_backtrace_level()

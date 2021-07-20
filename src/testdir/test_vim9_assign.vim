@@ -228,16 +228,6 @@ def Test_assignment()
   CheckDefFailure(['$SOME_ENV_VAR += "more"'], 'E1051:')
   CheckDefFailure(['$SOME_ENV_VAR += 123'], 'E1012:')
 
-  lines =<< trim END
-    @c = 'areg'
-    @c ..= 'add'
-    assert_equal('aregadd', @c)
-  END
-  CheckDefAndScriptSuccess(lines)
-
-  CheckDefFailure(['@a += "more"'], 'E1051:')
-  CheckDefFailure(['@a += 123'], 'E1012:')
-
   v:errmsg = 'none'
   v:errmsg ..= 'again'
   assert_equal('noneagain', v:errmsg)
@@ -247,6 +237,21 @@ def Test_assignment()
   var text =<< trim END
     some text
   END
+enddef
+
+def Test_assign_register()
+  var lines =<< trim END
+    @c = 'areg'
+    @c ..= 'add'
+    assert_equal('aregadd', @c)
+
+    @@ = 'some text'
+    assert_equal('some text', getreg('"'))
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  CheckDefFailure(['@a += "more"'], 'E1051:')
+  CheckDefFailure(['@a += 123'], 'E1012:')
 enddef
 
 def Test_reserved_name()
@@ -283,6 +288,39 @@ def Test_assign_unpack()
     [v1, v2; _] = [1, 2, 3, 4, 5]
     assert_equal(1, v1)
     assert_equal(2, v2)
+
+    var reslist = []
+    for text in ['aaa {bbb} ccc', 'ddd {eee} fff']
+      var before: string
+      var middle: string
+      var after: string
+      [_, before, middle, after; _] = text->matchlist('\(.\{-\}\){\(.\{-\}\)}\(.*\)')
+      reslist->add(before)->add(middle)->add(after)
+    endfor
+    assert_equal(['aaa ', 'bbb', ' ccc', 'ddd ', 'eee', ' fff'], reslist)
+
+    var a = 1
+    var b = 3
+    [a, b] += [2, 4]
+    assert_equal(3, a)
+    assert_equal(7, b)
+
+    [a, b] -= [1, 2]
+    assert_equal(2, a)
+    assert_equal(5, b)
+
+    [a, b] *= [3, 2]
+    assert_equal(6, a)
+    assert_equal(10, b)
+
+    [a, b] /= [2, 4]
+    assert_equal(3, a)
+    assert_equal(2, b)
+
+    [a, b] = [17, 15]
+    [a, b] %= [5, 3]
+    assert_equal(2, a)
+    assert_equal(0, b)
   END
   CheckDefAndScriptSuccess(lines)
 
@@ -350,6 +388,16 @@ def Test_assign_linebreak()
           ->copy()
   END
   CheckDefFailure(lines, 'E1012:', 2)
+
+  lines =<< trim END
+      var x: any
+      x.key = 1
+          + 2
+          + 3
+          + 4
+          + 5
+  END
+  CheckDefExecAndScriptFailure2(lines, 'E1148:', 'E1203:', 2)
 enddef
 
 def Test_assign_index()
@@ -612,6 +660,37 @@ def Test_assignment_list()
     d.dd[0] = 0
   END
   CheckDefExecFailure(lines, 'E1147:', 2)
+
+  lines =<< trim END
+      def OneArg(x: bool)
+      enddef
+      def TwoArgs(x: bool, y: bool)
+      enddef
+      var fl: list<func(bool, bool, bool)> = [OneArg, TwoArgs]
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1012:', 5)
+enddef
+
+def PartFuncBool(b: bool): string
+  return 'done'
+enddef
+
+def Test_assignment_partial()
+  var lines =<< trim END
+      var Partial: func(): string = function(PartFuncBool, [true])
+      assert_equal('done', Partial())
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      def Func(b: bool)
+      enddef
+      var Ref: func = function(Func, [true])
+      assert_equal('func()', typename(Ref))
+      Ref()
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 def Test_assignment_list_any_index()
@@ -749,6 +828,12 @@ def Test_assignment_dict()
     d.dd[0] = 0
   END
   CheckDefExecFailure(lines, 'E1148:', 2)
+
+  lines =<< trim END
+    var n: any
+    n.key = 5
+  END
+  CheckDefExecAndScriptFailure2(lines, 'E1148:', 'E1203: Dot can only be used on a dictionary: n.key = 5', 2)
 enddef
 
 def Test_assignment_local()
@@ -1058,21 +1143,30 @@ def Test_assignment_failure()
 enddef
 
 def Test_assign_list()
-  var l: list<string> = []
-  l[0] = 'value'
-  assert_equal('value', l[0])
+  var lines =<< trim END
+      var l: list<string> = []
+      l[0] = 'value'
+      assert_equal('value', l[0])
 
-  l[1] = 'asdf'
-  assert_equal('value', l[0])
-  assert_equal('asdf', l[1])
-  assert_equal('asdf', l[-1])
-  assert_equal('value', l[-2])
+      l[1] = 'asdf'
+      assert_equal('value', l[0])
+      assert_equal('asdf', l[1])
+      assert_equal('asdf', l[-1])
+      assert_equal('value', l[-2])
 
-  var nrl: list<number> = []
-  for i in range(5)
-    nrl[i] = i
-  endfor
-  assert_equal([0, 1, 2, 3, 4], nrl)
+      var nrl: list<number> = []
+      for i in range(5)
+        nrl[i] = i
+      endfor
+      assert_equal([0, 1, 2, 3, 4], nrl)
+
+      var ul: list<any>
+      ul[0] = 1
+      ul[1] = 2
+      ul[2] = 3
+      assert_equal([1, 2, 3], ul)
+  END
+  CheckDefAndScriptSuccess(lines)
 
   CheckDefFailure(["var l: list<number> = ['', true]"], 'E1012: Type mismatch; expected list<number> but got list<any>', 1)
   CheckDefFailure(["var l: list<list<number>> = [['', true]]"], 'E1012: Type mismatch; expected list<list<number>> but got list<list<any>>', 1)
@@ -1538,6 +1632,13 @@ def Test_script_local_in_legacy()
     let s:legvar = 'one'
   END
   CheckScriptFailure(lines, 'E476:', 1)
+
+  edit! Xfile
+  lines =<< trim END
+      var edit: bool
+      legacy edit
+  END
+  CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_var_type_check()
@@ -1571,6 +1672,16 @@ def Test_var_type_check()
     vim9script
     var s:d: dict<number>
     s:d = {}
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+    vim9script
+    var d = {a: 1, b: [2]}
+    def Func(b: bool)
+      var l: list<number> = b ? d.b : [3]
+    enddef
+    defcompile
   END
   CheckScriptSuccess(lines)
 enddef
@@ -1866,6 +1977,10 @@ def Test_inc_dec()
       assert_equal(8, nr)
       --nr
       assert_equal(7, nr)
+      ++nr | ++nr
+      assert_equal(9, nr)
+      ++nr # comment
+      assert_equal(10, nr)
 
       var ll = [1, 2]
       --ll[0]
@@ -1879,6 +1994,12 @@ def Test_inc_dec()
       unlet g:count
   END
   CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      var nr = 7
+      ++ nr
+  END
+  CheckDefAndScriptFailure(lines, "E1202: No white space allowed after '++': ++ nr")
 enddef
 
 

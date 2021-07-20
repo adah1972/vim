@@ -497,7 +497,8 @@ ml_set_crypt_key(
 	return;  // no memfile yet, nothing to do
     old_method = crypt_method_nr_from_name(old_cm);
 
-    if (old_method == CRYPT_M_SOD || crypt_get_method_nr(buf) == CRYPT_M_SOD)
+    // Swapfile encryption not supported by XChaCha20
+    if (crypt_get_method_nr(buf) == CRYPT_M_SOD && *buf->b_p_key != NUL)
     {
 	// close the swapfile
 	mf_close_file(buf, TRUE);
@@ -1103,6 +1104,7 @@ add_b0_fenc(
 # include <sys/sysinfo.h>
 #endif
 
+#if defined(UNIX) || defined(MSWIN)
 /*
  * Return TRUE if the process with number "b0p->b0_pid" is still running.
  * "swap_fname" is the name of the swap file, if it's from before a reboot then
@@ -1111,7 +1113,7 @@ add_b0_fenc(
     static int
 swapfile_process_running(ZERO_BL *b0p, char_u *swap_fname UNUSED)
 {
-#ifdef HAVE_SYSINFO_UPTIME
+# ifdef HAVE_SYSINFO_UPTIME
     stat_T	    st;
     struct sysinfo  sinfo;
 
@@ -1120,14 +1122,15 @@ swapfile_process_running(ZERO_BL *b0p, char_u *swap_fname UNUSED)
     if (mch_stat((char *)swap_fname, &st) != -1
 	    && sysinfo(&sinfo) == 0
 	    && st.st_mtime < time(NULL) - (
-# ifdef FEAT_EVAL
+#  ifdef FEAT_EVAL
 		override_sysinfo_uptime >= 0 ? override_sysinfo_uptime :
-# endif
+#  endif
 		sinfo.uptime))
 	return FALSE;
-#endif
+# endif
     return mch_process_running(char_to_long(b0p->b0_pid));
 }
+#endif
 
 /*
  * Try to recover curbuf from the .swp file.
@@ -3661,7 +3664,7 @@ ml_delete_int(buf_T *buf, linenr_T lnum, int flags)
 #ifdef FEAT_PROP_POPUP
     // If there are text properties, make a copy, so that we can update
     // properties in preceding and following lines.
-    if (buf->b_has_textprop && !(flags & ML_DEL_UNDO))
+    if (buf->b_has_textprop && !(flags & (ML_DEL_UNDO | ML_DEL_NOPROP)))
     {
 	size_t	textlen = STRLEN((char_u *)dp + line_start) + 1;
 
@@ -3764,9 +3767,11 @@ theend:
     {
 	// Adjust text properties in the line above and below.
 	if (lnum > 1)
-	    adjust_text_props_for_delete(buf, lnum - 1, textprop_save, textprop_save_len, TRUE);
+	    adjust_text_props_for_delete(buf, lnum - 1, textprop_save,
+						      textprop_save_len, TRUE);
 	if (lnum <= buf->b_ml.ml_line_count)
-	    adjust_text_props_for_delete(buf, lnum, textprop_save, textprop_save_len, FALSE);
+	    adjust_text_props_for_delete(buf, lnum, textprop_save,
+						     textprop_save_len, FALSE);
     }
     vim_free(textprop_save);
 #endif
@@ -4020,7 +4025,7 @@ ml_flush_line(buf_T *buf)
 			     | ML_APPEND_NOPROP
 #endif
 			 );
-		(void)ml_delete_int(buf, lnum, 0);
+		(void)ml_delete_int(buf, lnum, ML_DEL_NOPROP);
 	    }
 	}
 	vim_free(new_line);

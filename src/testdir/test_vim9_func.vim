@@ -90,6 +90,24 @@ def Test_compile_error_in_called_function()
   CheckScriptFailureList(lines, ['E1012:', 'E1191:'])
 enddef
 
+def Test_wrong_function_name()
+  var lines =<< trim END
+      vim9script
+      func _Foo()
+        echo 'foo'
+      endfunc
+  END
+  CheckScriptFailure(lines, 'E128:')
+
+  lines =<< trim END
+      vim9script
+      def _Foo()
+        echo 'foo'
+      enddef
+  END
+  CheckScriptFailure(lines, 'E128:')
+enddef
+
 def Test_autoload_name_mismatch()
   var dir = 'Xdir/autoload'
   mkdir(dir, 'p')
@@ -434,6 +452,12 @@ def Test_call_default_args()
       MyDefaultThird('->', 'xx', v:none)->assert_equal('->xxbb')
       MyDefaultThird('->', v:none, 'yy')->assert_equal('->aayy')
       MyDefaultThird('->', 'xx', 'yy')->assert_equal('->xxyy')
+
+      def DefArg(mandatory: any, optional = mandatory): string
+        return mandatory .. optional
+      enddef
+      DefArg(1234)->assert_equal('12341234')
+      DefArg("ok")->assert_equal('okok')
   END
   CheckDefAndScriptSuccess(lines)
 
@@ -900,6 +924,22 @@ def Test_call_lambda_args()
   CheckScriptFailure(['vim9script'] + lines, 'E1168:')
 
   lines =<< trim END
+    var Ref: func(any, ?any): bool
+    Ref = (_, y = 1) => false
+  END
+  CheckDefAndScriptFailure(lines, 'E1172:')
+
+  lines =<< trim END
+      var a = 0
+      var b = (a == 0 ? 1 : 2)
+      assert_equal(1, b)
+      var txt = 'a'
+      b = (txt =~ 'x' ? 1 : 2)
+      assert_equal(2, b)
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
       def ShadowLocal()
         var one = 1
         var l = [1, 2, 3]
@@ -985,6 +1025,20 @@ def Test_pass_legacy_lambda_to_def_func()
       def Bar(y: any)
       enddef
       Foo()
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      def g:TestFunc(f: func)
+      enddef
+      legacy call g:TestFunc({-> 0})
+      delfunc g:TestFunc
+
+      def g:TestFunc(f: func(number))
+      enddef
+      legacy call g:TestFunc({nr -> 0})
+      delfunc g:TestFunc
   END
   CheckScriptSuccess(lines)
 enddef
@@ -2201,6 +2255,32 @@ def Test_nested_inline_lambda()
       assert_equal('--there', F('unused')('there')('--'))
   END
   CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      echo range(4)->mapnew((_, v) => {
+        return range(v) ->mapnew((_, s) => {
+          return string(s)
+          })
+        })
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+
+      def s:func()
+        range(10)
+          ->mapnew((_, _) => ({
+            key: range(10)->mapnew((_, _) => {
+              return ' '
+            }),
+          }))
+      enddef
+
+      defcomp
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 def Shadowed(): list<number>
@@ -2280,6 +2360,23 @@ def Test_legacy_lambda()
         echo (() => 'no error')()
       enddef
       legacy call s:Func()
+  END
+  CheckScriptSuccess(lines)
+enddef
+
+def Test_legacy()
+  var lines =<< trim END
+      vim9script
+      func g:LegacyFunction()
+        let g:legacyvar = 1
+      endfunc
+      def Testit()
+        legacy call g:LegacyFunction()
+      enddef
+      Testit()
+      assert_equal(1, g:legacyvar)
+      unlet g:legacyvar
+      delfunc g:LegacyFunction
   END
   CheckScriptSuccess(lines)
 enddef
@@ -2467,7 +2564,7 @@ def Test_restore_modifiers()
       set eventignore=
       autocmd QuickFixCmdPost * copen
       def AutocmdsDisabled()
-        eval 0
+        eval 1 + 2
       enddef
       func Func()
         noautocmd call s:AutocmdsDisabled()
@@ -2480,8 +2577,8 @@ def Test_restore_modifiers()
 enddef
 
 def StackTop()
-  eval 1
-  eval 2
+  eval 1 + 2
+  eval 2 + 3
   # call not on fourth line
   StackBot()
 enddef

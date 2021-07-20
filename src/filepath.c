@@ -856,7 +856,7 @@ f_delete(typval_T *argvars, typval_T *rettv)
 	// delete a directory recursively
 	rettv->vval.v_number = delete_recursive(name);
     else
-	semsg(_(e_invexpr2), flags);
+	semsg(_(e_invalid_expression_str), flags);
 }
 
 /*
@@ -1447,6 +1447,12 @@ f_pathshorten(typval_T *argvars, typval_T *rettv)
     char_u	*p;
     int		trim_len = 1;
 
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| (argvars[1].v_type != VAR_UNKNOWN
+		    && check_for_number_arg(argvars, 1) == FAIL)))
+	return;
+
     if (argvars[1].v_type != VAR_UNKNOWN)
     {
 	trim_len = (int)tv_get_number(&argvars[1]);
@@ -1685,7 +1691,7 @@ read_file_or_blob(typval_T *argvars, typval_T *rettv, int always_blob)
 
     if (mch_isdir(fname))
     {
-	semsg(_(e_isadir2), fname);
+	semsg(_(e_src_is_directory), fname);
 	return;
     }
     if (*fname == NUL || (fd = mch_fopen((char *)fname, READBIN)) == NULL)

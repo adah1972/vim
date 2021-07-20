@@ -932,6 +932,27 @@ set_init_3(void)
 		options[idx_srr].def_val[VI_DEFAULT] = p_srr;
 	    }
 	}
+# ifdef MSWIN
+	// Windows PowerShell output is UTF-16 with BOM so re-encode to the
+	// current codepage.
+	else if (   fnamecmp(p, "powershell") == 0
+		    || fnamecmp(p, "powershell.exe") == 0
+		)
+	{
+# if defined(FEAT_QUICKFIX)
+		if (do_sp)
+		{
+		    p_sp = (char_u *)"2>&1 | Out-File -Encoding default";
+		    options[idx_sp].def_val[VI_DEFAULT] = p_sp;
+		}
+# endif
+		if (do_srr)
+		{
+		    p_srr = (char_u *)"2>&1 | Out-File -Encoding default";
+		    options[idx_srr].def_val[VI_DEFAULT] = p_srr;
+		}
+	}
+#endif
 	else
 	    // Always use POSIX shell style redirection if we reach this
 	    if (       fnamecmp(p, "sh") == 0
@@ -944,6 +965,7 @@ set_init_3(void)
 		    || fnamecmp(p, "fish") == 0
 		    || fnamecmp(p, "ash") == 0
 		    || fnamecmp(p, "dash") == 0
+		    || fnamecmp(p, "pwsh") == 0
 # ifdef MSWIN
 		    || fnamecmp(p, "cmd") == 0
 		    || fnamecmp(p, "sh.exe") == 0
@@ -955,6 +977,7 @@ set_init_3(void)
 		    || fnamecmp(p, "bash.exe") == 0
 		    || fnamecmp(p, "cmd.exe") == 0
 		    || fnamecmp(p, "dash.exe") == 0
+		    || fnamecmp(p, "pwsh.exe") == 0
 # endif
 		    )
 	    {
@@ -964,7 +987,10 @@ set_init_3(void)
 #  ifdef MSWIN
 		    p_sp = (char_u *)">%s 2>&1";
 #  else
-		    p_sp = (char_u *)"2>&1| tee";
+		    if (fnamecmp(p, "pwsh") == 0)
+			p_sp = (char_u *)">%s 2>&1";
+		    else
+			p_sp = (char_u *)"2>&1| tee";
 #  endif
 		    options[idx_sp].def_val[VI_DEFAULT] = p_sp;
 		}
@@ -984,11 +1010,36 @@ set_init_3(void)
      * Set 'shellcmdflag', 'shellxquote', and 'shellquote' depending on the
      * 'shell' option.
      * This is done after other initializations, where 'shell' might have been
-     * set, but only if they have not been set before.  Default for p_shcf is
-     * "/c", for p_shq is "".  For "sh" like  shells it is changed here to
-     * "-c" and "\"".  And for Win32 we need to set p_sxq instead.
+     * set, but only if they have not been set before.
+     * Default values depend on shell (cmd.exe is default shell):
+     *
+     *			    p_shcf	p_sxq
+     * cmd.exe          -   "/c"	"("
+     * powershell.exe   -   "-Command"	"\""
+     * pwsh.exe		-   "-c"	"\""
+     * "sh" like shells -   "-c"	"\""
+     *
+     * For Win32 p_sxq is set instead of p_shq to include shell redirection.
      */
-    if (strstr((char *)gettail(p_sh), "sh") != NULL)
+    if (strstr((char *)gettail(p_sh), "powershell") != NULL)
+    {
+	int	idx_opt;
+
+	idx_opt = findoption((char_u *)"shcf");
+	if (idx_opt >= 0 && !(options[idx_opt].flags & P_WAS_SET))
+	{
+	    p_shcf = (char_u*)"-Command";
+	    options[idx_opt].def_val[VI_DEFAULT] = p_shcf;
+	}
+
+	idx_opt = findoption((char_u *)"sxq");
+	if (idx_opt >= 0 && !(options[idx_opt].flags & P_WAS_SET))
+	{
+	    p_sxq = (char_u*)"\"";
+	    options[idx_opt].def_val[VI_DEFAULT] = p_sxq;
+	}
+    }
+    else if (strstr((char *)gettail(p_sh), "sh") != NULL)
     {
 	int	idx3;
 
@@ -1179,9 +1230,10 @@ ex_set(exarg_T *eap)
  */
     int
 do_set(
-    char_u	*arg,		// option string (may be written to!)
+    char_u	*arg_start,	// option string (may be written to!)
     int		opt_flags)
 {
+    char_u	*arg = arg_start;
     int		opt_idx;
     char	*errmsg;
     char	errbuf[80];
@@ -1306,7 +1358,22 @@ do_set(
 	    // remember character after option name
 	    afterchar = arg[len];
 
-	    if (!in_vim9script())
+	    if (in_vim9script())
+	    {
+		char_u *p = skipwhite(arg + len);
+
+		// disallow white space before =val, +=val, -=val, ^=val
+		if (p > arg + len && (p[0] == '='
+			|| (vim_strchr((char_u *)"+-^", p[0]) != NULL
+							      && p[1] == '=')))
+		{
+		    errmsg = e_no_white_space_allowed_between_option_and;
+		    arg = p;
+		    startarg = p;
+		    goto skip;
+		}
+	    }
+	    else
 		// skip white space, allow ":set ai  ?", ":set hlsearch  !"
 		while (VIM_ISWHITE(arg[len]))
 		    ++len;
@@ -1336,7 +1403,11 @@ do_set(
 
 	    if (opt_idx == -1 && key == 0)	// found a mismatch: skip
 	    {
-		errmsg = N_("E518: Unknown option");
+		if (in_vim9script() && arg > arg_start
+				  && vim_strchr((char_u *)"!&<", *arg) != NULL)
+		    errmsg = e_no_white_space_allowed_between_option_and;
+		else
+		    errmsg = N_("E518: Unknown option");
 		goto skip;
 	    }
 

@@ -452,6 +452,37 @@ def Test_disassemble_list_assign()
         res)
 enddef
 
+def s:ListAssignWithOp()
+  var a = 2
+  var b = 3
+  [a, b] += [4, 5]
+enddef
+
+def Test_disassemble_list_assign_with_op()
+  var res = execute('disass s:ListAssignWithOp')
+  assert_match('<SNR>\d*_ListAssignWithOp\_s*' ..
+        'var a = 2\_s*' ..
+        '\d STORE 2 in $0\_s*' ..
+        'var b = 3\_s*' ..
+        '\d STORE 3 in $1\_s*' ..
+        '\[a, b\] += \[4, 5\]\_s*' ..
+        '\d\+ PUSHNR 4\_s*' ..
+        '\d\+ PUSHNR 5\_s*' ..
+        '\d\+ NEWLIST size 2\_s*' ..
+        '\d\+ CHECKLEN 2\_s*' ..
+        '\d\+ LOAD $0\_s*' ..
+        '\d\+ ITEM 0 with op\_s*' ..
+        '\d\+ OPNR +\_s*' ..
+        '\d\+ STORE $0\_s*' ..
+        '\d\+ LOAD $1\_s*' ..
+        '\d\+ ITEM 1 with op\_s*' ..
+        '\d\+ OPNR +\_s*' ..
+        '\d\+ STORE $1\_s*' ..
+        '\d\+ DROP\_s*' ..
+        '\d\+ RETURN void',
+        res)
+enddef
+
 def s:ListAdd()
   var l: list<number> = []
   add(l, 123)
@@ -2145,7 +2176,9 @@ def Test_silent_return()
 enddef
 
 def s:Profiled(): string
+  # comment
   echo "profiled"
+  # comment
   var some = "some text"
   return "done"
 enddef
@@ -2156,18 +2189,20 @@ def Test_profiled()
   endif
   var res = execute('disass profile s:Profiled')
   assert_match('<SNR>\d*_Profiled\_s*' ..
+        '# comment\_s*' ..
         'echo "profiled"\_s*' ..
-        '\d PROFILE START line 1\_s*' ..
+        '\d PROFILE START line 2\_s*' ..
         '\d PUSHS "profiled"\_s*' ..
         '\d ECHO 1\_s*' ..
+        '# comment\_s*' ..
         'var some = "some text"\_s*' ..
         '\d PROFILE END\_s*' ..
-        '\d PROFILE START line 2\_s*' ..
+        '\d PROFILE START line 4\_s*' ..
         '\d PUSHS "some text"\_s*' ..
         '\d STORE $0\_s*' ..
         'return "done"\_s*' ..
         '\d PROFILE END\_s*' ..
-        '\d PROFILE START line 3\_s*' ..
+        '\d PROFILE START line 5\_s*' ..
         '\d PUSHS "done"\_s*' ..
         '\d\+ RETURN\_s*' ..
         '\d\+ PROFILE END',
@@ -2177,16 +2212,18 @@ enddef
 def Test_debugged()
   var res = execute('disass debug s:Profiled')
   assert_match('<SNR>\d*_Profiled\_s*' ..
+        '# comment\_s*' ..
         'echo "profiled"\_s*' ..
-        '\d DEBUG line 1 varcount 0\_s*' ..
+        '\d DEBUG line 1-2 varcount 0\_s*' ..
         '\d PUSHS "profiled"\_s*' ..
         '\d ECHO 1\_s*' ..
+        '# comment\_s*' ..
         'var some = "some text"\_s*' ..
-        '\d DEBUG line 2 varcount 0\_s*' ..
+        '\d DEBUG line 3-4 varcount 0\_s*' ..
         '\d PUSHS "some text"\_s*' ..
         '\d STORE $0\_s*' ..
         'return "done"\_s*' ..
-        '\d DEBUG line 3 varcount 1\_s*' ..
+        '\d DEBUG line 5-5 varcount 1\_s*' ..
         '\d PUSHS "done"\_s*' ..
         '\d RETURN\_s*',
         res)

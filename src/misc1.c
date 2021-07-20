@@ -695,7 +695,8 @@ f_mode(typval_T *argvars, typval_T *rettv)
 	if (finish_op)
 	{
 	    buf[1] = 'o';
-	    // to be able to detect force-linewise/blockwise/characterwise operations
+	    // to be able to detect force-linewise/blockwise/characterwise
+	    // operations
 	    buf[2] = motion_force;
 	}
 	else if (restart_edit == 'I' || restart_edit == 'R'
@@ -2099,29 +2100,6 @@ match_user(char_u *name)
     return result;
 }
 
-/*
- * Concatenate two strings and return the result in allocated memory.
- * Returns NULL when out of memory.
- */
-    char_u  *
-concat_str(char_u *str1, char_u *str2)
-{
-    char_u  *dest;
-    size_t  l = str1 == NULL ? 0 : STRLEN(str1);
-
-    dest = alloc(l + (str2 == NULL ? 0 : STRLEN(str2)) + 1L);
-    if (dest != NULL)
-    {
-	if (str1 == NULL)
-	    *dest = NUL;
-	else
-	    STRCPY(dest, str1);
-	if (str2 != NULL)
-	    STRCPY(dest + l, str2);
-    }
-    return dest;
-}
-
     static void
 prepare_to_exit(void)
 {
@@ -2622,8 +2600,8 @@ path_is_url(char_u *p)
 }
 
 /*
- * Check if "fname" starts with "name://".  Return URL_SLASH if it does.
- * Return URL_BACKSLASH for "name:\\".
+ * Check if "fname" starts with "name://" or "name:\\".
+ * Return URL_SLASH for "name://", URL_BACKSLASH for "name:\\".
  * Return zero otherwise.
  */
     int
@@ -2631,7 +2609,22 @@ path_with_url(char_u *fname)
 {
     char_u *p;
 
-    for (p = fname; isalpha(*p); ++p)
+    // We accept alphabetic characters and a dash in scheme part.
+    // RFC 3986 allows for more, but it increases the risk of matching
+    // non-URL text.
+
+    // first character must be alpha
+    if (!isalpha(*fname))
+	return 0;
+
+    // check body: alpha or dash
+    for (p = fname; (isalpha(*p) || (*p == '-')); ++p)
 	;
+
+    // check last char is not a dash
+    if (p[-1] == '-')
+	return 0;
+
+    // "://" or ":\\" must follow
     return path_is_url(p);
 }

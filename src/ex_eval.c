@@ -208,7 +208,7 @@ cause_errthrow(
      * not skipped.  Errors in those commands may affect what of the subsequent
      * commands are regarded part of catch and finally clauses.  Catching the
      * exception would then cause execution of commands not intended by the
-     * user, who wouldn't even get aware of the problem.  Therefor, discard the
+     * user, who wouldn't even get aware of the problem.  Therefore, discard the
      * exception currently being thrown to prevent it from being caught.  Just
      * execute finally clauses and terminate.
      */
@@ -896,11 +896,28 @@ ex_eval(exarg_T *eap)
 {
     typval_T	tv;
     evalarg_T	evalarg;
+    int		name_only = FALSE;
+    char_u	*p;
+    long	lnum = SOURCING_LNUM;
+
+    if (in_vim9script())
+    {
+	char_u	*alias;
+
+	p = eap->arg;
+	get_name_len(&p, &alias, FALSE, FALSE);
+	name_only = ends_excmd2(eap->arg, skipwhite(p));
+	vim_free(alias);
+    }
 
     fill_evalarg_from_eap(&evalarg, eap, eap->skip);
 
     if (eval0(eap->arg, &tv, eap, &evalarg) == OK)
+    {
 	clear_tv(&tv);
+	if (in_vim9script() && name_only && lnum == SOURCING_LNUM)
+	    semsg(_(e_expression_without_effect_str), eap->arg);
+    }
 
     clear_evalarg(&evalarg, eap);
 }
@@ -1225,9 +1242,14 @@ ex_while(exarg_T *eap)
 	    }
 	    else
 	    {
+		long save_lnum = SOURCING_LNUM;
+
 		// Evaluate the argument and get the info in a structure.
 		fi = eval_for_line(eap->arg, &error, eap, &evalarg);
 		cstack->cs_forinfo[cstack->cs_idx] = fi;
+
+		// Errors should use the first line number.
+		SOURCING_LNUM = save_lnum;
 	    }
 
 	    // use the element at the start of the list and advance
@@ -1282,7 +1304,7 @@ ex_continue(exarg_T *eap)
     {
 	// Try to find the matching ":while".  This might stop at a try
 	// conditional not in its finally clause (which is then to be executed
-	// next).  Therefor, inactivate all conditionals except the ":while"
+	// next).  Therefore, inactivate all conditionals except the ":while"
 	// itself (if reached).
 	idx = cleanup_conditionals(cstack, CSF_WHILE | CSF_FOR, FALSE);
 	if (idx >= 0 && (cstack->cs_flags[idx] & (CSF_WHILE | CSF_FOR)))
@@ -1670,6 +1692,8 @@ ex_catch(exarg_T *eap)
 	for (idx = cstack->cs_idx; idx > 0; --idx)
 	    if (cstack->cs_flags[idx] & CSF_TRY)
 		break;
+	if (cstack->cs_flags[idx] & CSF_TRY)
+	    cstack->cs_flags[idx] |= CSF_CATCH;
 	if (cstack->cs_flags[idx] & CSF_FINALLY)
 	{
 	    // Give up for a ":catch" after ":finally" and ignore it.
@@ -1963,8 +1987,8 @@ ex_endtry(exarg_T *eap)
 	 * made inactive by a ":continue", ":break", ":return", or ":finish" in
 	 * the finally clause.  The latter case need not be tested since then
 	 * anything pending has already been discarded. */
-	skip = did_emsg || got_int || did_throw ||
-	    !(cstack->cs_flags[cstack->cs_idx] & CSF_TRUE);
+	skip = did_emsg || got_int || did_throw
+			     || !(cstack->cs_flags[cstack->cs_idx] & CSF_TRUE);
 
 	if (!(cstack->cs_flags[cstack->cs_idx] & CSF_TRY))
 	{
@@ -1991,6 +2015,14 @@ ex_endtry(exarg_T *eap)
 	else
 	{
 	    idx = cstack->cs_idx;
+
+	    if (in_vim9script()
+		     && (cstack->cs_flags[idx] & (CSF_CATCH|CSF_FINALLY)) == 0)
+	    {
+		// try/endtry without any catch or finally: give an error and
+		// continue.
+		eap->errmsg = _(e_missing_catch_or_finally);
+	    }
 
 	    /*
 	     * If we stopped with the exception currently being thrown at this

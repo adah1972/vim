@@ -549,7 +549,7 @@ f_prop_clear(typval_T *argvars, typval_T *rettv UNUSED)
     }
     if (start < 1 || end < 1)
     {
-	emsg(_(e_invrange));
+	emsg(_(e_invalid_range));
 	return;
     }
 
@@ -605,7 +605,7 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
 
     if (argvars[0].v_type != VAR_DICT || argvars[0].vval.v_dict == NULL)
     {
-	emsg(_(e_invarg));
+	emsg(_(e_dictreq));
 	return;
     }
     dict = argvars[0].vval.v_dict;
@@ -646,7 +646,7 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
 
     if (lnum < 1 || lnum > buf->b_ml.ml_line_count)
     {
-	emsg(_(e_invrange));
+	emsg(_(e_invalid_range));
 	return;
     }
 
@@ -769,9 +769,16 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
     void
 f_prop_list(typval_T *argvars, typval_T *rettv)
 {
-    linenr_T lnum = tv_get_number(&argvars[0]);
+    linenr_T lnum;
     buf_T    *buf = curbuf;
 
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| (argvars[1].v_type != VAR_UNKNOWN &&
+		    check_for_dict_arg(argvars, 1) == FAIL)))
+	return;
+
+    lnum = tv_get_number(&argvars[0]);
     if (argvars[1].v_type != VAR_UNKNOWN)
     {
 	if (get_bufnr_from_arg(&argvars[1], &buf) == FAIL)
@@ -779,7 +786,7 @@ f_prop_list(typval_T *argvars, typval_T *rettv)
     }
     if (lnum < 1 || lnum > buf->b_ml.ml_line_count)
     {
-	emsg(_(e_invrange));
+	emsg(_(e_invalid_range));
 	return;
     }
 
@@ -839,7 +846,7 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 	    end = tv_get_number(&argvars[2]);
 	if (start < 1 || end < 1)
 	{
-	    emsg(_(e_invrange));
+	    emsg(_(e_invalid_range));
 	    return;
 	}
     }

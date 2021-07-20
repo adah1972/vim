@@ -168,8 +168,7 @@ typedef enum {
     ISN_PROF_START, // start a line for profiling
     ISN_PROF_END,   // end a line for profiling
 
-    ISN_DEBUG,	    // check for debug breakpoint, isn_arg.number is current
-		    // number of local variables
+    ISN_DEBUG,	    // check for debug breakpoint, uses isn_arg.debug
 
     ISN_UNPACK,	    // unpack list into items, uses isn_arg.unpack
     ISN_SHUFFLE,    // move item on stack up or down
@@ -208,6 +207,12 @@ typedef struct {
     char_u  *cuf_name;
     int	    cuf_argcount;   // number of arguments on top of stack
 } cufunc_T;
+
+// arguments to ISN_GETITEM
+typedef struct {
+    varnumber_T	gi_index;
+    int		gi_with_op;
+} getitem_T;
 
 typedef enum {
     JUMP_ALWAYS,
@@ -385,6 +390,12 @@ typedef struct {
     int		invert;
 } tobool_T;
 
+// arguments to ISN_DEBUG
+typedef struct {
+    varnumber_T	dbg_var_names_len;  // current number of local variables
+    int		dbg_break_lnum;	    // first line to break after
+} debug_T;
+
 /*
  * Instruction
  */
@@ -432,6 +443,8 @@ struct isn_S {
 	isn_T		    *instr;
 	tostring_T	    tostring;
 	tobool_T	    tobool;
+	getitem_T	    getitem;
+	debug_T		    debug;
     } isn_arg;
 };
 
@@ -505,7 +518,7 @@ extern garray_T def_functions;
 		: (dfunc)->df_instr))
 #else
 # define INSTRUCTIONS(dfunc) \
-	(debug_break_level > 0 \
+	(debug_break_level > 0 || dfunc->df_ufunc->uf_has_breakpoint \
 		? (dfunc)->df_instr_debug \
 		: (dfunc)->df_instr)
 #endif

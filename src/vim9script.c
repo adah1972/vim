@@ -166,19 +166,30 @@ vim9_comment_start(char_u *p)
 ex_incdec(exarg_T *eap)
 {
     char_u	*cmd = eap->cmd;
-    size_t	len = STRLEN(eap->cmd) + 6;
+    char_u	*nextcmd = eap->nextcmd;
+    size_t	len = STRLEN(eap->cmd) + 8;
+
+    if (VIM_ISWHITE(cmd[2]))
+    {
+	semsg(_(e_no_white_space_allowed_after_str_str),
+			 eap->cmdidx == CMD_increment ? "++" : "--", eap->cmd);
+	return;
+    }
 
     // This works like "nr += 1" or "nr -= 1".
+    // Add a '|' to avoid looking in the next line.
     eap->cmd = alloc(len);
     if (eap->cmd == NULL)
 	return;
-    vim_snprintf((char *)eap->cmd, len, "%s %c= 1", cmd + 2,
+    vim_snprintf((char *)eap->cmd, len, "%s %c= 1 |", cmd + 2,
 				     eap->cmdidx == CMD_increment ? '+' : '-');
     eap->arg = eap->cmd;
     eap->cmdidx = CMD_var;
+    eap->nextcmd = NULL;
     ex_let(eap);
     vim_free(eap->cmd);
     eap->cmd = cmd;
+    eap->nextcmd = nextcmd;
 }
 
 /*
@@ -401,6 +412,7 @@ handle_import(
     garray_T	names;
     garray_T	as_names;
 
+    tv.v_type = VAR_UNKNOWN;
     ga_init2(&names, sizeof(char_u *), 10);
     ga_init2(&as_names, sizeof(char_u *), 10);
     if (*arg == '{')
@@ -485,14 +497,14 @@ handle_import(
 	goto erret;
     }
 
+    // The name of the file can be an expression, which must evaluate to a
+    // string.
     arg = skipwhite_and_linebreak(arg + 4, evalarg);
-    tv.v_type = VAR_UNKNOWN;
-    // TODO: should we accept any expression?
-    if (*arg == '\'')
-	ret = eval_lit_string(&arg, &tv, TRUE);
-    else if (*arg == '"')
-	ret = eval_string(&arg, &tv, TRUE);
-    if (ret == FAIL || tv.vval.v_string == NULL || *tv.vval.v_string == NUL)
+    ret = eval0(arg, &tv, NULL, evalarg);
+    if (ret == FAIL)
+	goto erret;
+    if (tv.v_type != VAR_STRING
+		       || tv.vval.v_string == NULL || *tv.vval.v_string == NUL)
     {
 	emsg(_(e_invalid_string_after_from));
 	goto erret;
@@ -513,10 +525,7 @@ handle_import(
 	len = STRLEN(si->sn_name) - STRLEN(tail) + STRLEN(tv.vval.v_string) + 2;
 	from_name = alloc((int)len);
 	if (from_name == NULL)
-	{
-	    clear_tv(&tv);
 	    goto erret;
-	}
 	vim_strncpy(from_name, si->sn_name, tail - si->sn_name);
 	add_pathsep(from_name);
 	STRCAT(from_name, tv.vval.v_string);
@@ -539,7 +548,6 @@ handle_import(
 	from_name = alloc((int)len);
 	if (from_name == NULL)
 	{
-	    clear_tv(&tv);
 	    goto erret;
 	}
 	vim_snprintf((char *)from_name, len, "import/%s", tv.vval.v_string);
@@ -550,10 +558,8 @@ handle_import(
     if (res == FAIL || sid <= 0)
     {
 	semsg(_(e_could_not_import_str), tv.vval.v_string);
-	clear_tv(&tv);
 	goto erret;
     }
-    clear_tv(&tv);
 
     if (*arg_start == '*')
     {
@@ -605,7 +611,7 @@ handle_import(
 	    if (idx < 0 && ufunc == NULL)
 		goto erret;
 
-	    // If already imported with the same propertis and the
+	    // If already imported with the same properties and the
 	    // IMP_FLAGS_RELOAD set then we keep that entry.  Otherwise create
 	    // a new one (and give an error for an existing import).
 	    imported = find_imported(name, len, cctx);
@@ -658,6 +664,7 @@ handle_import(
 	}
     }
 erret:
+    clear_tv(&tv);
     ga_clear_strings(&names);
     ga_clear_strings(&as_names);
     return cmd_end;
@@ -911,7 +918,7 @@ free_all_script_vars(scriptitem_T *si)
 
 /*
  * Find the script-local variable that links to "dest".
- * Returns NULL if not found.
+ * Returns NULL if not found and give an internal error.
  */
     svar_T *
 find_typval_in_script(typval_T *dest)
