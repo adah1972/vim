@@ -34,6 +34,18 @@ in_vim9script(void)
 
 #if defined(FEAT_EVAL) || defined(PROTO)
 /*
+ * Return TRUE when currently in a script with script version smaller than
+ * "max_version" or command modifiers forced it.
+ */
+    int
+in_old_script(int max_version)
+{
+    return (current_sctx.sc_version < max_version
+					&& !(cmdmod.cmod_flags & CMOD_VIM9CMD))
+		|| (cmdmod.cmod_flags & CMOD_LEGACY);
+}
+
+/*
  * Return TRUE if the current script is Vim9 script.
  * This also returns TRUE in a legacy function in a Vim9 script.
  */
@@ -246,6 +258,48 @@ new_imported(garray_T *gap)
 }
 
 /*
+ * Free the script variables from "sn_all_vars".
+ */
+    static void
+free_all_script_vars(scriptitem_T *si)
+{
+    int		todo;
+    hashtab_T	*ht = &si->sn_all_vars.dv_hashtab;
+    hashitem_T	*hi;
+    sallvar_T	*sav;
+    sallvar_T	*sav_next;
+
+    hash_lock(ht);
+    todo = (int)ht->ht_used;
+    for (hi = ht->ht_array; todo > 0; ++hi)
+    {
+	if (!HASHITEM_EMPTY(hi))
+	{
+	    --todo;
+
+	    // Free the variable.  Don't remove it from the hashtab, ht_array
+	    // might change then.  hash_clear() takes care of it later.
+	    sav = HI2SAV(hi);
+	    while (sav != NULL)
+	    {
+		sav_next = sav->sav_next;
+		if (sav->sav_di == NULL)
+		    clear_tv(&sav->sav_tv);
+		vim_free(sav);
+		sav = sav_next;
+	    }
+	}
+    }
+    hash_clear(ht);
+    hash_init(ht);
+
+    ga_clear(&si->sn_var_vals);
+
+    // existing commands using script variable indexes are no longer valid
+    si->sn_script_seq = current_sctx.sc_seq;
+}
+
+/*
  * Free all imported items in script "sid".
  */
     void
@@ -286,115 +340,12 @@ mark_imports_for_reload(int sid)
 }
 
 /*
- * ":import Item from 'filename'"
- * ":import Item as Alias from 'filename'"
- * ":import {Item} from 'filename'".
- * ":import {Item as Alias} from 'filename'"
- * ":import {Item, Item} from 'filename'"
- * ":import {Item, Item as Alias} from 'filename'"
- *
- * ":import * as Name from 'filename'"
- */
-    void
-ex_import(exarg_T *eap)
-{
-    char_u	*cmd_end;
-    evalarg_T	evalarg;
-
-    if (!getline_equal(eap->getline, eap->cookie, getsourceline))
-    {
-	emsg(_(e_import_can_only_be_used_in_script));
-	return;
-    }
-    fill_evalarg_from_eap(&evalarg, eap, eap->skip);
-
-    cmd_end = handle_import(eap->arg, NULL, current_sctx.sc_sid,
-							       &evalarg, NULL);
-    if (cmd_end != NULL)
-	eap->nextcmd = check_nextcmd(cmd_end);
-    clear_evalarg(&evalarg, eap);
-}
-
-/*
- * Find an exported item in "sid" matching the name at "*argp".
- * When it is a variable return the index.
- * When it is a user function return "*ufunc".
- * When not found returns -1 and "*ufunc" is NULL.
- */
-    int
-find_exported(
-	int	    sid,
-	char_u	    *name,
-	ufunc_T	    **ufunc,
-	type_T	    **type,
-	cctx_T	    *cctx,
-	int	    verbose)
-{
-    int		idx = -1;
-    svar_T	*sv;
-    scriptitem_T *script = SCRIPT_ITEM(sid);
-
-    // Find name in "script".
-    idx = get_script_item_idx(sid, name, 0, cctx);
-    if (idx >= 0)
-    {
-	sv = ((svar_T *)script->sn_var_vals.ga_data) + idx;
-	if (!sv->sv_export)
-	{
-	    if (verbose)
-		semsg(_(e_item_not_exported_in_script_str), name);
-	    return -1;
-	}
-	*type = sv->sv_type;
-	*ufunc = NULL;
-    }
-    else
-    {
-	char_u	buffer[200];
-	char_u	*funcname;
-
-	// it could be a user function.
-	if (STRLEN(name) < sizeof(buffer) - 15)
-	    funcname = buffer;
-	else
-	{
-	    funcname = alloc(STRLEN(name) + 15);
-	    if (funcname == NULL)
-		return -1;
-	}
-	funcname[0] = K_SPECIAL;
-	funcname[1] = KS_EXTRA;
-	funcname[2] = (int)KE_SNR;
-	sprintf((char *)funcname + 3, "%ld_%s", (long)sid, name);
-	*ufunc = find_func(funcname, FALSE, NULL);
-	if (funcname != buffer)
-	    vim_free(funcname);
-
-	if (*ufunc == NULL)
-	{
-	    if (verbose)
-		semsg(_(e_item_not_found_in_script_str), name);
-	    return -1;
-	}
-	else if (((*ufunc)->uf_flags & FC_EXPORT) == 0)
-	{
-	    if (verbose)
-		semsg(_(e_item_not_exported_in_script_str), name);
-	    *ufunc = NULL;
-	    return -1;
-	}
-    }
-
-    return idx;
-}
-
-/*
  * Handle an ":import" command and add the resulting imported_T to "gap", when
  * not NULL, or script "import_sid" sn_imports.
  * "cctx" is NULL at the script level.
  * Returns a pointer to after the command or NULL in case of failure
  */
-    char_u *
+    static char_u *
 handle_import(
 	char_u	    *arg_start,
 	garray_T    *gap,
@@ -411,6 +362,7 @@ handle_import(
     int		mult = FALSE;
     garray_T	names;
     garray_T	as_names;
+    long	start_lnum = SOURCING_LNUM;
 
     tv.v_type = VAR_UNKNOWN;
     ga_init2(&names, sizeof(char_u *), 10);
@@ -510,6 +462,9 @@ handle_import(
 	goto erret;
     }
     cmd_end = arg;
+
+    // Give error messages for the start of the line.
+    SOURCING_LNUM = start_lnum;
 
     /*
      * find script file
@@ -619,9 +574,10 @@ handle_import(
 		    && (imported->imp_flags & IMP_FLAGS_RELOAD)
 		    && imported->imp_sid == sid
 		    && (idx >= 0
-			? (equal_type(imported->imp_type, type)
+			? (equal_type(imported->imp_type, type, 0)
 			    && imported->imp_var_vals_idx == idx)
-			: (equal_type(imported->imp_type, ufunc->uf_func_type)
+			: (equal_type(imported->imp_type, ufunc->uf_func_type,
+							     ETYPE_ARG_UNKNOWN)
 			    && STRCMP(imported->imp_funcname,
 							ufunc->uf_name) == 0)))
 	    {
@@ -668,6 +624,109 @@ erret:
     ga_clear_strings(&names);
     ga_clear_strings(&as_names);
     return cmd_end;
+}
+
+/*
+ * ":import Item from 'filename'"
+ * ":import Item as Alias from 'filename'"
+ * ":import {Item} from 'filename'".
+ * ":import {Item as Alias} from 'filename'"
+ * ":import {Item, Item} from 'filename'"
+ * ":import {Item, Item as Alias} from 'filename'"
+ *
+ * ":import * as Name from 'filename'"
+ */
+    void
+ex_import(exarg_T *eap)
+{
+    char_u	*cmd_end;
+    evalarg_T	evalarg;
+
+    if (!getline_equal(eap->getline, eap->cookie, getsourceline))
+    {
+	emsg(_(e_import_can_only_be_used_in_script));
+	return;
+    }
+    fill_evalarg_from_eap(&evalarg, eap, eap->skip);
+
+    cmd_end = handle_import(eap->arg, NULL, current_sctx.sc_sid,
+							       &evalarg, NULL);
+    if (cmd_end != NULL)
+	set_nextcmd(eap, cmd_end);
+    clear_evalarg(&evalarg, eap);
+}
+
+/*
+ * Find an exported item in "sid" matching the name at "*argp".
+ * When it is a variable return the index.
+ * When it is a user function return "*ufunc".
+ * When not found returns -1 and "*ufunc" is NULL.
+ */
+    int
+find_exported(
+	int	    sid,
+	char_u	    *name,
+	ufunc_T	    **ufunc,
+	type_T	    **type,
+	cctx_T	    *cctx,
+	int	    verbose)
+{
+    int		idx = -1;
+    svar_T	*sv;
+    scriptitem_T *script = SCRIPT_ITEM(sid);
+
+    // Find name in "script".
+    idx = get_script_item_idx(sid, name, 0, cctx);
+    if (idx >= 0)
+    {
+	sv = ((svar_T *)script->sn_var_vals.ga_data) + idx;
+	if (!sv->sv_export)
+	{
+	    if (verbose)
+		semsg(_(e_item_not_exported_in_script_str), name);
+	    return -1;
+	}
+	*type = sv->sv_type;
+	*ufunc = NULL;
+    }
+    else
+    {
+	char_u	buffer[200];
+	char_u	*funcname;
+
+	// it could be a user function.
+	if (STRLEN(name) < sizeof(buffer) - 15)
+	    funcname = buffer;
+	else
+	{
+	    funcname = alloc(STRLEN(name) + 15);
+	    if (funcname == NULL)
+		return -1;
+	}
+	funcname[0] = K_SPECIAL;
+	funcname[1] = KS_EXTRA;
+	funcname[2] = (int)KE_SNR;
+	sprintf((char *)funcname + 3, "%ld_%s", (long)sid, name);
+	*ufunc = find_func(funcname, FALSE, NULL);
+	if (funcname != buffer)
+	    vim_free(funcname);
+
+	if (*ufunc == NULL)
+	{
+	    if (verbose)
+		semsg(_(e_item_not_found_in_script_str), name);
+	    return -1;
+	}
+	else if (((*ufunc)->uf_flags & FC_EXPORT) == 0)
+	{
+	    if (verbose)
+		semsg(_(e_item_not_exported_in_script_str), name);
+	    *ufunc = NULL;
+	    return -1;
+	}
+    }
+
+    return idx;
 }
 
 /*
@@ -758,47 +817,72 @@ update_vim9_script_var(
 {
     scriptitem_T    *si = SCRIPT_ITEM(current_sctx.sc_sid);
     hashitem_T	    *hi;
-    svar_T	    *sv;
+    svar_T	    *sv = NULL;
 
     if (create)
     {
-	sallvar_T	    *newsav;
+	sallvar_T   *newsav;
+	sallvar_T   *sav = NULL;
 
 	// Store a pointer to the typval_T, so that it can be found by index
 	// instead of using a hastab lookup.
 	if (ga_grow(&si->sn_var_vals, 1) == FAIL)
 	    return;
 
-	sv = ((svar_T *)si->sn_var_vals.ga_data) + si->sn_var_vals.ga_len;
-	newsav = (sallvar_T *)alloc_clear(
-				       sizeof(sallvar_T) + STRLEN(di->di_key));
-	if (newsav == NULL)
-	    return;
-
-	sv->sv_tv = &di->di_tv;
-	sv->sv_const = (flags & ASSIGN_FINAL) ? ASSIGN_FINAL
-				   : (flags & ASSIGN_CONST) ? ASSIGN_CONST : 0;
-	sv->sv_export = is_export;
-	newsav->sav_var_vals_idx = si->sn_var_vals.ga_len;
-	++si->sn_var_vals.ga_len;
-	STRCPY(&newsav->sav_key, di->di_key);
-	sv->sv_name = newsav->sav_key;
-	newsav->sav_di = di;
-	newsav->sav_block_id = si->sn_current_block_id;
-
-	hi = hash_find(&si->sn_all_vars.dv_hashtab, newsav->sav_key);
+	hi = hash_find(&si->sn_all_vars.dv_hashtab, di->di_key);
 	if (!HASHITEM_EMPTY(hi))
 	{
-	    sallvar_T *sav = HI2SAV(hi);
-
-	    // variable with this name exists in another block
-	    while (sav->sav_next != NULL)
-		sav = sav->sav_next;
-	    sav->sav_next = newsav;
+	    // Variable with this name exists, either in this block or in
+	    // another block.
+	    for (sav = HI2SAV(hi); ; sav = sav->sav_next)
+	    {
+		if (sav->sav_block_id == si->sn_current_block_id)
+		{
+		    // variable defined in a loop, re-use the entry
+		    sv = ((svar_T *)si->sn_var_vals.ga_data)
+						       + sav->sav_var_vals_idx;
+		    // unhide the variable
+		    if (sv->sv_tv == &sav->sav_tv)
+		    {
+			clear_tv(&sav->sav_tv);
+			sv->sv_tv = &di->di_tv;
+			sav->sav_di = di;
+		    }
+		    break;
+		}
+		if (sav->sav_next == NULL)
+		    break;
+	    }
 	}
-	else
-	    // new variable name
-	    hash_add(&si->sn_all_vars.dv_hashtab, newsav->sav_key);
+
+	if (sv == NULL)
+	{
+	    // Variable not defined or not defined in current block: Add a
+	    // svar_T and create a new sallvar_T.
+	    sv = ((svar_T *)si->sn_var_vals.ga_data) + si->sn_var_vals.ga_len;
+	    newsav = (sallvar_T *)alloc_clear(
+				       sizeof(sallvar_T) + STRLEN(di->di_key));
+	    if (newsav == NULL)
+		return;
+
+	    sv->sv_tv = &di->di_tv;
+	    sv->sv_const = (flags & ASSIGN_FINAL) ? ASSIGN_FINAL
+				   : (flags & ASSIGN_CONST) ? ASSIGN_CONST : 0;
+	    sv->sv_export = is_export;
+	    newsav->sav_var_vals_idx = si->sn_var_vals.ga_len;
+	    ++si->sn_var_vals.ga_len;
+	    STRCPY(&newsav->sav_key, di->di_key);
+	    sv->sv_name = newsav->sav_key;
+	    newsav->sav_di = di;
+	    newsav->sav_block_id = si->sn_current_block_id;
+
+	    if (HASHITEM_EMPTY(hi))
+		// new variable name
+		hash_add(&si->sn_all_vars.dv_hashtab, newsav->sav_key);
+	    else if (sav != NULL)
+		// existing name in a new block, append to the list
+		sav->sav_next = newsav;
+	}
     }
     else
     {
@@ -807,8 +891,7 @@ update_vim9_script_var(
     if (sv != NULL)
     {
 	if (*type == NULL)
-	    *type = typval2type(tv, get_copyID(), &si->sn_type_list,
-								    do_member);
+	    *type = typval2type(tv, get_copyID(), &si->sn_type_list, do_member);
 	sv->sv_type = *type;
     }
 
@@ -875,48 +958,6 @@ hide_script_var(scriptitem_T *si, int idx, int func_defined)
 }
 
 /*
- * Free the script variables from "sn_all_vars".
- */
-    void
-free_all_script_vars(scriptitem_T *si)
-{
-    int		todo;
-    hashtab_T	*ht = &si->sn_all_vars.dv_hashtab;
-    hashitem_T	*hi;
-    sallvar_T	*sav;
-    sallvar_T	*sav_next;
-
-    hash_lock(ht);
-    todo = (int)ht->ht_used;
-    for (hi = ht->ht_array; todo > 0; ++hi)
-    {
-	if (!HASHITEM_EMPTY(hi))
-	{
-	    --todo;
-
-	    // Free the variable.  Don't remove it from the hashtab, ht_array
-	    // might change then.  hash_clear() takes care of it later.
-	    sav = HI2SAV(hi);
-	    while (sav != NULL)
-	    {
-		sav_next = sav->sav_next;
-		if (sav->sav_di == NULL)
-		    clear_tv(&sav->sav_tv);
-		vim_free(sav);
-		sav = sav_next;
-	    }
-	}
-    }
-    hash_clear(ht);
-    hash_init(ht);
-
-    ga_clear(&si->sn_var_vals);
-
-    // existing commands using script variable indexes are no longer valid
-    si->sn_script_seq = current_sctx.sc_seq;
-}
-
-/*
  * Find the script-local variable that links to "dest".
  * Returns NULL if not found and give an internal error.
  */
@@ -962,7 +1003,7 @@ check_script_var_type(
     {
 	if (sv->sv_const != 0)
 	{
-	    semsg(_(e_readonlyvar), name);
+	    semsg(_(e_cannot_change_readonly_variable_str), name);
 	    return FAIL;
 	}
 	ret = check_typval_type(sv->sv_type, value, where);

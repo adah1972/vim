@@ -791,12 +791,13 @@ json_decode_item(js_read_T *reader, typval_T *res, int options)
 			    {
 				float_T f;
 
-				len = string2float(p, &f);
+				len = string2float(p, &f, FALSE);
 			    }
 			    else
 			    {
 				cur_item->v_type = VAR_FLOAT;
-				len = string2float(p, &cur_item->vval.v_float);
+				len = string2float(p, &cur_item->vval.v_float,
+									FALSE);
 			    }
 			}
 			else
@@ -1156,6 +1157,9 @@ f_js_decode(typval_T *argvars, typval_T *rettv)
 {
     js_read_T	reader;
 
+    if (in_vim9script() && check_for_string_arg(argvars, 0) == FAIL)
+	return;
+
     reader.js_buf = tv_get_string(&argvars[0]);
     reader.js_fill = NULL;
     reader.js_used = 0;
@@ -1180,6 +1184,9 @@ f_js_encode(typval_T *argvars, typval_T *rettv)
 f_json_decode(typval_T *argvars, typval_T *rettv)
 {
     js_read_T	reader;
+
+    if (in_vim9script() && check_for_string_arg(argvars, 0) == FAIL)
+	return;
 
     reader.js_buf = tv_get_string(&argvars[0]);
     reader.js_fill = NULL;

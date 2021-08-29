@@ -151,7 +151,6 @@ let s:filename_checks = {
     \ 'dosini': ['.editorconfig', '/etc/pacman.conf', '/etc/yum.conf', 'file.ini', 'npmrc', '.npmrc', 'php.ini', 'php.ini-5', 'php.ini-file', '/etc/yum.repos.d/file', 'any/etc/pacman.conf', 'any/etc/yum.conf', 'any/etc/yum.repos.d/file', 'file.wrap'],
     \ 'dot': ['file.dot', 'file.gv'],
     \ 'dracula': ['file.drac', 'file.drc', 'filelvs', 'filelpe', 'drac.file', 'lpe', 'lvs', 'some-lpe', 'some-lvs'],
-    \ 'dsl': ['file.dsl'],
     \ 'dtd': ['file.dtd'],
     \ 'dts': ['file.dts', 'file.dtsi'],
     \ 'dune': ['jbuild', 'dune', 'dune-project', 'dune-workspace'],
@@ -263,6 +262,7 @@ let s:filename_checks = {
     \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb'],
     \ 'jsonc': ['file.jsonc'],
     \ 'jsp': ['file.jsp'],
+    \ 'julia': ['file.jl'],
     \ 'kconfig': ['Kconfig', 'Kconfig.debug', 'Kconfig.file'],
     \ 'kivy': ['file.kv'],
     \ 'kix': ['file.kix'],
@@ -397,6 +397,7 @@ let s:filename_checks = {
     \ 'psf': ['file.psf'],
     \ 'psl': ['file.psl'],
     \ 'puppet': ['file.pp'],
+    \ 'pyret': ['file.arr'],
     \ 'pyrex': ['file.pyx', 'file.pxd'],
     \ 'python': ['file.py', 'file.pyw', '.pythonstartup', '.pythonrc', 'file.ptl', 'file.pyi', 'SConstruct'],
     \ 'quake': ['anybaseq2/file.cfg', 'anyid1/file.cfg', 'quake3/file.cfg', 'baseq2/file.cfg', 'id1/file.cfg', 'quake1/file.cfg', 'some-baseq2/file.cfg', 'some-id1/file.cfg', 'some-quake1/file.cfg'],
@@ -428,10 +429,11 @@ let s:filename_checks = {
     \ 'sather': ['file.sa'],
     \ 'sbt': ['file.sbt'],
     \ 'scala': ['file.scala', 'file.sc'],
-    \ 'scheme': ['file.scm', 'file.ss', 'file.rkt'],
+    \ 'scheme': ['file.scm', 'file.ss', 'file.rkt', 'file.rktd', 'file.rktl'],
     \ 'scilab': ['file.sci', 'file.sce'],
     \ 'screen': ['.screenrc', 'screenrc'],
     \ 'sexplib': ['file.sexp'],
+    \ 'scdoc': ['file.scd'],
     \ 'scss': ['file.scss'],
     \ 'sd': ['file.sd'],
     \ 'sdc': ['file.sdc'],
@@ -778,6 +780,7 @@ func Test_pp_file()
   split Xfile.pp
   call assert_equal('pascal', &filetype)
   bwipe!
+  unlet g:filetype_pp
 
   " Test dist#ft#FTpp()
   call writefile(['{ pascal comment'], 'Xfile.pp')
@@ -828,6 +831,23 @@ func Test_ex_file()
   bwipe!
 
   call delete('Xfile.ex')
+  filetype off
+endfunc
+
+func Test_dsl_file()
+  filetype on
+
+  call writefile(['  <!doctype dsssl-spec ['], 'dslfile.dsl')
+  split dslfile.dsl
+  call assert_equal('dsl', &filetype)
+  bwipe!
+
+  call writefile(['workspace {'], 'dslfile.dsl')
+  split dslfile.dsl
+  call assert_equal('structurizr', &filetype)
+  bwipe!
+
+  call delete('dslfile.dsl')
   filetype off
 endfunc
 

@@ -56,7 +56,7 @@ static char *(p_tbis_values[]) = {"tiny", "small", "medium", "large", "huge", "g
 #if defined(UNIX) || defined(VMS)
 static char *(p_ttym_values[]) = {"xterm", "xterm2", "dec", "netterm", "jsbterm", "pterm", "urxvt", "sgr", NULL};
 #endif
-static char *(p_ve_values[]) = {"block", "insert", "all", "onemore", NULL};
+static char *(p_ve_values[]) = {"block", "insert", "all", "onemore", "none", "NONE", NULL};
 static char *(p_wop_values[]) = {"tagfile", NULL};
 #ifdef FEAT_WAK
 static char *(p_wak_values[]) = {"yes", "menu", "no", NULL};
@@ -2075,16 +2075,31 @@ ambw_end:
 #endif
 
     // 'virtualedit'
-    else if (varp == &p_ve)
+    else if (gvarp == &p_ve)
     {
-	if (opt_strings_flags(p_ve, p_ve_values, &ve_flags, TRUE) != OK)
-	    errmsg = e_invarg;
-	else if (STRCMP(p_ve, oldval) != 0)
+	char_u		*ve = p_ve;
+	unsigned int	*flags = &ve_flags;
+
+	if (opt_flags & OPT_LOCAL)
 	{
-	    // Recompute cursor position in case the new 've' setting
-	    // changes something.
-	    validate_virtcol();
-	    coladvance(curwin->w_virtcol);
+	    ve = curwin->w_p_ve;
+	    flags = &curwin->w_ve_flags;
+	}
+
+	if ((opt_flags & OPT_LOCAL) && *ve == NUL)
+	    // make the local value empty: use the global value
+	    *flags = 0;
+	else
+	{
+	    if (opt_strings_flags(ve, p_ve_values, flags, TRUE) != OK)
+		errmsg = e_invarg;
+	    else if (STRCMP(p_ve, oldval) != 0)
+	    {
+		// Recompute cursor position in case the new 've' setting
+		// changes something.
+		validate_virtcol();
+		coladvance(curwin->w_virtcol);
+	    }
 	}
     }
 

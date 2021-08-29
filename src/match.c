@@ -64,7 +64,7 @@ match_add(
     }
     if ((hlg_id = syn_namen2id(grp, (int)STRLEN(grp))) == 0)
     {
-	semsg(_(e_nogroup), grp);
+	semsg(_(e_no_such_highlight_group_name_str), grp);
 	return -1;
     }
     if (pat != NULL && (regprog = vim_regcomp(pat, RE_MAGIC)) == NULL)
@@ -959,8 +959,12 @@ matchadd_dict_arg(typval_T *tv, char_u **conceal_char, win_T **win)
 f_clearmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 {
 #ifdef FEAT_SEARCH_EXTRA
-    win_T   *win = get_optional_window(argvars, 0);
+    win_T   *win;
 
+    if (in_vim9script() && check_for_opt_number_arg(argvars, 0) == FAIL)
+	return;
+
+    win = get_optional_window(argvars, 0);
     if (win != NULL)
 	clear_matches(win);
 #endif
@@ -976,8 +980,12 @@ f_getmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     dict_T	*dict;
     matchitem_T	*cur;
     int		i;
-    win_T	*win = get_optional_window(argvars, 0);
+    win_T	*win;
 
+    if (in_vim9script() && check_for_opt_number_arg(argvars, 0) == FAIL)
+	return;
+
+    win = get_optional_window(argvars, 0);
     if (rettv_list_alloc(rettv) == FAIL || win == NULL)
 	return;
 
@@ -1045,14 +1053,21 @@ f_setmatches(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     listitem_T	*li;
     dict_T	*d;
     list_T	*s = NULL;
-    win_T	*win = get_optional_window(argvars, 1);
+    win_T	*win;
 
     rettv->vval.v_number = -1;
+
+    if (in_vim9script()
+	    && (check_for_list_arg(argvars, 0) == FAIL
+		|| check_for_opt_number_arg(argvars, 1) == FAIL))
+	return;
+
     if (argvars[0].v_type != VAR_LIST)
     {
 	emsg(_(e_listreq));
 	return;
     }
+    win = get_optional_window(argvars, 1);
     if (win == NULL)
 	return;
 
@@ -1156,8 +1171,8 @@ f_matchadd(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 {
 # ifdef FEAT_SEARCH_EXTRA
     char_u	buf[NUMBUFLEN];
-    char_u	*grp = tv_get_string_buf_chk(&argvars[0], buf);	// group
-    char_u	*pat = tv_get_string_buf_chk(&argvars[1], buf);	// pattern
+    char_u	*grp;		// group
+    char_u	*pat;		// pattern
     int		prio = 10;	// default priority
     int		id = -1;
     int		error = FALSE;
@@ -1166,6 +1181,18 @@ f_matchadd(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 
     rettv->vval.v_number = -1;
 
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL
+		|| check_for_opt_number_arg(argvars, 2) == FAIL
+		|| (argvars[2].v_type != VAR_UNKNOWN
+		    && (check_for_opt_number_arg(argvars, 3) == FAIL
+			|| (argvars[3].v_type != VAR_UNKNOWN
+			    && check_for_opt_dict_arg(argvars, 4) == FAIL)))))
+	return;
+
+    grp = tv_get_string_buf_chk(&argvars[0], buf);	// group
+    pat = tv_get_string_buf_chk(&argvars[1], buf);	// pattern
     if (grp == NULL || pat == NULL)
 	return;
     if (argvars[2].v_type != VAR_UNKNOWN)
@@ -1209,6 +1236,16 @@ f_matchaddpos(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     win_T	*win = curwin;
 
     rettv->vval.v_number = -1;
+
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_list_arg(argvars, 1) == FAIL
+		|| check_for_opt_number_arg(argvars, 2) == FAIL
+		|| (argvars[2].v_type != VAR_UNKNOWN
+		    && (check_for_opt_number_arg(argvars, 3) == FAIL
+			|| (argvars[3].v_type != VAR_UNKNOWN
+			    && check_for_opt_dict_arg(argvars, 4) == FAIL)))))
+	return;
 
     group = tv_get_string_buf_chk(&argvars[0], buf);
     if (group == NULL)
@@ -1259,9 +1296,13 @@ f_matcharg(typval_T *argvars UNUSED, typval_T *rettv)
     if (rettv_list_alloc(rettv) == OK)
     {
 # ifdef FEAT_SEARCH_EXTRA
-	int	    id = (int)tv_get_number(&argvars[0]);
+	int	    id;
 	matchitem_T *m;
 
+	if (in_vim9script() && check_for_number_arg(argvars, 0) == FAIL)
+	    return;
+
+	id = (int)tv_get_number(&argvars[0]);
 	if (id >= 1 && id <= 3)
 	{
 	    if ((m = (matchitem_T *)get_match(curwin, id)) != NULL)
@@ -1287,8 +1328,14 @@ f_matcharg(typval_T *argvars UNUSED, typval_T *rettv)
 f_matchdelete(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 {
 # ifdef FEAT_SEARCH_EXTRA
-    win_T   *win = get_optional_window(argvars, 1);
+    win_T   *win;
 
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_opt_number_arg(argvars, 1) == FAIL))
+	return;
+
+    win = get_optional_window(argvars, 1);
     if (win == NULL)
 	rettv->vval.v_number = -1;
     else

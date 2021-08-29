@@ -435,16 +435,17 @@ def Test_disassemble_list_assign()
         '\d STORE $1\_s*' ..
         'var l: list<any>\_s*' ..
         '\d NEWLIST size 0\_s*' ..
+        '\d SETTYPE list<any>\_s*' ..
         '\d STORE $2\_s*' ..
         '\[x, y; l\] = g:stringlist\_s*' ..
         '\d LOADG g:stringlist\_s*' ..
         '\d CHECKTYPE list<any> stack\[-1\]\_s*' ..
         '\d CHECKLEN >= 2\_s*' ..
         '\d\+ ITEM 0\_s*' ..
-        '\d\+ CHECKTYPE string stack\[-1\]\_s*' ..
+        '\d\+ CHECKTYPE string stack\[-1\] arg 1\_s*' ..
         '\d\+ STORE $0\_s*' ..
         '\d\+ ITEM 1\_s*' ..
-        '\d\+ CHECKTYPE string stack\[-1\]\_s*' ..
+        '\d\+ CHECKTYPE string stack\[-1\] arg 2\_s*' ..
         '\d\+ STORE $1\_s*' ..
         '\d\+ SLICE 2\_s*' ..
         '\d\+ STORE $2\_s*' ..
@@ -584,6 +585,25 @@ def Test_disassemble_unlet()
         '\d UNLET! g:somevar\_s*' ..
         'unlet $SOMEVAR\_s*' ..
         '\d UNLETENV $SOMEVAR\_s*',
+        res)
+enddef
+
+def s:LockLocal()
+  var d = {a: 1}
+  lockvar d.a
+enddef
+
+def Test_disassemble_locl_local()
+  var res = execute('disass s:LockLocal')
+  assert_match('<SNR>\d*_LockLocal\_s*' ..
+        'var d = {a: 1}\_s*' ..
+        '\d PUSHS "a"\_s*' ..
+        '\d PUSHNR 1\_s*' ..
+        '\d NEWDICT size 1\_s*' ..
+        '\d STORE $0\_s*' ..
+        'lockvar d.a\_s*' ..
+        '\d LOAD $0\_s*' ..
+        '\d LOCKUNLOCK lockvar d.a\_s*',
         res)
 enddef
 
@@ -1254,7 +1274,7 @@ def Test_disassemble_for_loop_eval()
         'res ..= str\_s*' ..
         '\d\+ LOAD $0\_s*' ..
         '\d\+ LOAD $2\_s*' ..
-        '\d\+ CHECKTYPE string stack\[-1\]\_s*' ..
+        '\d 2STRING_ANY stack\[-1\]\_s*' ..
         '\d\+ CONCAT\_s*' ..
         '\d\+ STORE $0\_s*' ..
         'endfor\_s*' ..
@@ -1660,25 +1680,27 @@ def Test_disassemble_any_slice()
 enddef
 
 def NegateNumber(): number
-  var nr = 9
-  var plus = +nr
-  var res = -nr
-  return res
+  g:nr = 9
+  var plus = +g:nr
+  var minus = -g:nr
+  return minus
 enddef
 
 def Test_disassemble_negate_number()
   var instr = execute('disassemble NegateNumber')
   assert_match('NegateNumber\_s*' ..
-        'var nr = 9\_s*' ..
-        '\d STORE 9 in $0\_s*' ..
-        'var plus = +nr\_s*' ..
-        '\d LOAD $0\_s*' ..
-        '\d CHECKNR\_s*' ..
-        '\d STORE $1\_s*' ..
-        'var res = -nr\_s*' ..
-        '\d LOAD $0\_s*' ..
+        'g:nr = 9\_s*' ..
+        '\d PUSHNR 9\_s*' ..
+        '\d STOREG g:nr\_s*' ..
+        'var plus = +g:nr\_s*' ..
+        '\d LOADG g:nr\_s*' ..
+        '\d CHECKTYPE number stack\[-1\]\_s*' ..
+        '\d STORE $0\_s*' ..
+        'var minus = -g:nr\_s*' ..
+        '\d LOADG g:nr\_s*' ..
+        '\d CHECKTYPE number stack\[-1\]\_s*' ..
         '\d NEGATENR\_s*' ..
-        '\d STORE $2\_s*',
+        '\d STORE $1\_s*',
         instr)
   assert_equal(-9, NegateNumber())
 enddef
@@ -1938,6 +1960,7 @@ enddef
 
 def s:Echomsg()
   echomsg 'some' 'message'
+  echoconsole 'nothing'
   echoerr 'went' .. 'wrong'
 enddef
 
@@ -1948,6 +1971,9 @@ def Test_disassemble_echomsg()
         '\d PUSHS "some"\_s*' ..
         '\d PUSHS "message"\_s*' ..
         '\d ECHOMSG 2\_s*' ..
+        "echoconsole 'nothing'\\_s*" ..
+        '\d PUSHS "nothing"\_s*' ..
+        '\d ECHOCONSOLE 1\_s*' ..
         "echoerr 'went' .. 'wrong'\\_s*" ..
         '\d PUSHS "wentwrong"\_s*' ..
         '\d ECHOERR 1\_s*' ..
@@ -2229,6 +2255,53 @@ def Test_debugged()
         res)
 enddef
 
+def s:DebugElseif()
+  var b = false
+  if b
+    eval 1 + 0
+  silent elseif !b
+    eval 2 + 0
+  endif
+enddef
+
+def Test_debug_elseif()
+  var res = execute('disass debug s:DebugElseif')
+  assert_match('<SNR>\d*_DebugElseif\_s*' ..
+          'var b = false\_s*' ..
+          '0 DEBUG line 1-1 varcount 0\_s*' ..
+          '1 PUSH false\_s*' ..
+          '2 STORE $0\_s*' ..
+
+          'if b\_s*' ..
+          '3 DEBUG line 2-2 varcount 1\_s*' ..
+          '4 LOAD $0\_s*' ..
+          '5 JUMP_IF_FALSE -> 10\_s*' ..
+
+          'eval 1 + 0\_s*' ..
+          '6 DEBUG line 3-3 varcount 1\_s*' ..
+          '7 PUSHNR 1\_s*' ..
+          '8 DROP\_s*' ..
+
+          'silent elseif !b\_s*' ..
+          '9 JUMP -> 20\_s*' ..
+          '10 CMDMOD silent\_s*' ..
+          '11 DEBUG line 4-4 varcount 1\_s*' ..
+          '12 LOAD $0\_s*' ..
+          '13 INVERT -1 (!val)\_s*' ..
+          '14 CMDMOD_REV\_s*' ..
+          '15 JUMP_IF_FALSE -> 20\_s*' ..
+
+          'eval 2 + 0\_s*' ..
+          '16 DEBUG line 5-5 varcount 1\_s*' ..
+          '17 PUSHNR 2\_s*' ..
+          '18 DROP\_s*' ..
+
+          'endif\_s*' ..
+          '19 DEBUG line 6-6 varcount 1\_s*' ..
+          '20 RETURN void*',
+        res)
+enddef
+
 def s:EchoMessages()
   echohl ErrorMsg | echom v:exception | echohl NONE
 enddef
@@ -2239,6 +2312,54 @@ def Test_disassemble_nextcmd()
   assert_match('<SNR>\d*_EchoMessages\_s*' ..
         'echohl ErrorMsg | echom v:exception | echohl NONE',
         res)
+enddef
+
+def Test_disassemble_after_reload()
+    var lines =<< trim END
+        vim9script
+        if exists('g:ThisFunc')
+          finish
+        endif
+        var name: any
+        def g:ThisFunc(): number
+          g:name = name
+          return 0
+        enddef
+        def g:ThatFunc(): number
+          name = g:name
+          return 0
+        enddef
+    END
+    lines->writefile('Xreload.vim')
+
+    source Xreload.vim
+    g:ThisFunc()
+    g:ThatFunc()
+
+    source Xreload.vim
+    var res = execute('disass g:ThisFunc')
+    assert_match('ThisFunc\_s*' ..
+          'g:name = name\_s*' ..
+          '\d LOADSCRIPT \[deleted\] from .*/Xreload.vim\_s*' ..
+          '\d STOREG g:name\_s*' ..
+          'return 0\_s*' ..
+          '\d PUSHNR 0\_s*' ..
+          '\d RETURN\_s*',
+          res)
+
+    res = execute('disass g:ThatFunc')
+    assert_match('ThatFunc\_s*' ..
+          'name = g:name\_s*' ..
+          '\d LOADG g:name\_s*' ..
+          '\d STORESCRIPT \[deleted\] in .*/Xreload.vim\_s*' ..
+          'return 0\_s*' ..
+          '\d PUSHNR 0\_s*' ..
+          '\d RETURN\_s*',
+          res)
+
+    delete('Xreload.vim')
+    delfunc g:ThisFunc
+    delfunc g:ThatFunc
 enddef
 
 

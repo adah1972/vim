@@ -1582,7 +1582,7 @@ invoke_prompt_interrupt(void)
 /*
  * Return the effective prompt for the specified buffer.
  */
-    char_u *
+    static char_u *
 buf_prompt_text(buf_T* buf)
 {
     if (buf->b_prompt_text == NULL)
@@ -1658,6 +1658,10 @@ f_prompt_setcallback(typval_T *argvars, typval_T *rettv UNUSED)
 
     if (check_secure())
 	return;
+
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
     buf = tv_get_buf(&argvars[0], FALSE);
     if (buf == NULL)
 	return;
@@ -1681,6 +1685,10 @@ f_prompt_setinterrupt(typval_T *argvars, typval_T *rettv UNUSED)
 
     if (check_secure())
 	return;
+
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
     buf = tv_get_buf(&argvars[0], FALSE);
     if (buf == NULL)
 	return;
@@ -1706,6 +1714,9 @@ f_prompt_getprompt(typval_T *argvars, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
     buf = tv_get_buf_from_arg(&argvars[0]);
     if (buf == NULL)
 	return;
@@ -1726,9 +1737,7 @@ f_prompt_setprompt(typval_T *argvars, typval_T *rettv UNUSED)
     char_u	*text;
 
     if (in_vim9script()
-	    && ((argvars[0].v_type != VAR_STRING
-		    && argvars[0].v_type != VAR_NUMBER
-		    && check_for_string_arg(argvars, 0) == FAIL)
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
 		|| check_for_string_arg(argvars, 1) == FAIL))
 	return;
 
@@ -1770,8 +1779,12 @@ get_job_arg(typval_T *tv)
     void
 f_job_getchannel(typval_T *argvars, typval_T *rettv)
 {
-    job_T	*job = get_job_arg(&argvars[0]);
+    job_T	*job;
 
+    if (in_vim9script() && check_for_job_arg(argvars, 0) == FAIL)
+	return;
+
+    job = get_job_arg(&argvars[0]);
     if (job != NULL)
     {
 	rettv->v_type = VAR_CHANNEL;
@@ -1858,10 +1871,14 @@ job_info_all(list_T *l)
     void
 f_job_info(typval_T *argvars, typval_T *rettv)
 {
+    if (in_vim9script() && check_for_opt_job_arg(argvars, 0) == FAIL)
+	return;
+
     if (argvars[0].v_type != VAR_UNKNOWN)
     {
-	job_T	*job = get_job_arg(&argvars[0]);
+	job_T	*job;
 
+	job = get_job_arg(&argvars[0]);
 	if (job != NULL && rettv_dict_alloc(rettv) != FAIL)
 	    job_info(job, rettv->vval.v_dict);
     }
@@ -1875,9 +1892,15 @@ f_job_info(typval_T *argvars, typval_T *rettv)
     void
 f_job_setoptions(typval_T *argvars, typval_T *rettv UNUSED)
 {
-    job_T	*job = get_job_arg(&argvars[0]);
+    job_T	*job;
     jobopt_T	opt;
 
+    if (in_vim9script()
+	    && (check_for_job_arg(argvars, 0) == FAIL
+		|| check_for_dict_arg(argvars, 1) == FAIL))
+	return;
+
+    job = get_job_arg(&argvars[0]);
     if (job == NULL)
 	return;
     clear_job_options(&opt);
@@ -1895,6 +1918,12 @@ f_job_start(typval_T *argvars, typval_T *rettv)
     rettv->v_type = VAR_JOB;
     if (check_restricted() || check_secure())
 	return;
+
+    if (in_vim9script()
+	    && (check_for_string_or_list_arg(argvars, 0) == FAIL
+		|| check_for_opt_dict_arg(argvars, 1) == FAIL))
+	return;
+
     rettv->vval.v_job = job_start(argvars, NULL, NULL, NULL);
 }
 
@@ -1904,6 +1933,9 @@ f_job_start(typval_T *argvars, typval_T *rettv)
     void
 f_job_status(typval_T *argvars, typval_T *rettv)
 {
+    if (in_vim9script() && check_for_job_arg(argvars, 0) == FAIL)
+	return;
+
     if (argvars[0].v_type == VAR_JOB && argvars[0].vval.v_job == NULL)
     {
 	// A job that never started returns "fail".
@@ -1928,8 +1960,14 @@ f_job_status(typval_T *argvars, typval_T *rettv)
     void
 f_job_stop(typval_T *argvars, typval_T *rettv)
 {
-    job_T	*job = get_job_arg(&argvars[0]);
+    job_T	*job;
 
+    if (in_vim9script()
+	    && (check_for_job_arg(argvars, 0) == FAIL
+		|| check_for_opt_string_or_number_arg(argvars, 1) == FAIL))
+	return;
+
+    job = get_job_arg(&argvars[0]);
     if (job != NULL)
 	rettv->vval.v_number = job_stop(job, argvars, NULL);
 }
@@ -1945,7 +1983,10 @@ job_to_string_buf(typval_T *varp, char_u *buf)
     char  *status;
 
     if (job == NULL)
-	return (char_u *)"no process";
+    {
+	vim_snprintf((char *)buf, NUMBUFLEN, "no process");
+	return buf;
+    }
     status = job->jv_status == JOB_FAILED ? "fail"
 		    : job->jv_status >= JOB_ENDED ? "dead"
 		    : "run";

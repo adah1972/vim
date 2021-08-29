@@ -188,8 +188,7 @@ def Test_const()
     var varlist = [7, 8]
     const constlist = [1, varlist, 3]
     varlist[0] = 77
-    # TODO: does not work yet
-    # constlist[1][1] = 88
+    constlist[1][1] = 88
     var cl = constlist[1]
     cl[1] = 88
     constlist->assert_equal([1, [77, 88], 3])
@@ -197,8 +196,7 @@ def Test_const()
     var vardict = {five: 5, six: 6}
     const constdict = {one: 1, two: vardict, three: 3}
     vardict['five'] = 55
-    # TODO: does not work yet
-    # constdict['two']['six'] = 66
+    constdict['two']['six'] = 66
     var cd = constdict['two']
     cd['six'] = 66
     constdict->assert_equal({one: 1, two: {five: 55, six: 66}, three: 3})
@@ -334,6 +332,34 @@ def Test_block_local_vars_with_func()
   CheckScriptSuccess(lines)
 enddef
 
+" legacy func for command that's defined later
+func InvokeSomeCommand()
+  SomeCommand
+endfunc
+
+def Test_autocommand_block()
+  com SomeCommand {
+      g:someVar = 'some'
+    }
+  InvokeSomeCommand()
+  assert_equal('some', g:someVar)
+
+  delcommand SomeCommand
+  unlet g:someVar
+enddef
+
+def Test_command_block()
+  au BufNew *.xml {
+      g:otherVar = 'other'
+    }
+  split other.xml
+  assert_equal('other', g:otherVar)
+
+  bwipe!
+  au! BufNew *.xml
+  unlet g:otherVar
+enddef
+
 func g:NoSuchFunc()
   echo 'none'
 endfunc
@@ -443,21 +469,21 @@ def Test_try_catch_throw()
 
   try
     n = -g:astring
-  catch /E39:/
+  catch /E1012:/
     n = 233
   endtry
   assert_equal(233, n)
 
   try
     n = +g:astring
-  catch /E1030:/
+  catch /E1012:/
     n = 244
   endtry
   assert_equal(244, n)
 
   try
     n = +g:alist
-  catch /E745:/
+  catch /E1012:/
     n = 255
   endtry
   assert_equal(255, n)
@@ -521,8 +547,8 @@ def Test_try_catch_throw()
   assert_equal(344, n)
 
   try
-    echo len(v:true)
-  catch /E701:/
+    echo range(1, 2, 0)
+  catch /E726:/
     n = 355
   endtry
   assert_equal(355, n)
@@ -581,6 +607,9 @@ def Test_try_catch_throw()
   endfor
   assert_equal(4, counter)
 
+  # no requirement for spaces before |
+  try|echo 0|catch|endtry
+
   # return in finally after empty catch
   def ReturnInFinally(): number
     try
@@ -601,7 +630,7 @@ def Test_try_catch_throw()
       endtry
   END
   CheckScriptSuccess(lines)
-  assert_match('E808: Number or Float required', g:caught)
+  assert_match('E1219: Float or Number required for argument 1', g:caught)
   unlet g:caught
 
   # missing catch and/or finally
@@ -612,6 +641,20 @@ def Test_try_catch_throw()
       endtry
   END
   CheckScriptFailure(lines, 'E1032:')
+
+  # skipping try-finally-endtry when try-finally-endtry is used in another block
+  lines =<< trim END
+      if v:true
+        try
+        finally
+        endtry
+      else
+        try
+        finally
+        endtry
+      endif
+  END
+  CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_try_in_catch()
@@ -1220,6 +1263,16 @@ def Test_vim9_import_export()
   writefile(import_star_as_lines_dot_space, 'Ximport.vim')
   assert_fails('source Ximport.vim', 'E1074:', '', 1, 'Func')
 
+  var import_func_duplicated =<< trim END
+    vim9script
+    import ExportedInc from './Xexport.vim'
+    import ExportedInc from './Xexport.vim'
+
+    ExportedInc()
+  END
+  writefile(import_func_duplicated, 'Ximport.vim')
+  assert_fails('source Ximport.vim', 'E1073:', '', 3, 'Ximport.vim')
+
   var import_star_as_duplicated =<< trim END
     vim9script
     import * as Export from './Xexport.vim'
@@ -1613,6 +1666,9 @@ def Test_vim9script_reload_noclear()
   var lines =<< trim END
     vim9script
     export var exported = 'thexport'
+
+    export def TheFunc(x = 0)
+    enddef
   END
   writefile(lines, 'XExportReload')
   lines =<< trim END
@@ -1624,6 +1680,9 @@ def Test_vim9script_reload_noclear()
     def Again(): string
       return 'again'
     enddef
+
+    import TheFunc from './XExportReload'
+    TheFunc()
 
     if exists('s:loaded') | finish | endif
     var s:loaded = true
@@ -2313,6 +2372,14 @@ def Test_if_const_expr()
   if false
     burp
   endif
+
+  # expression with line breaks skipped
+  if false
+      ('aaa'
+      .. 'bbb'
+      .. 'ccc'
+      )->setline(1)
+  endif
 enddef
 
 def Test_if_const_expr_fails()
@@ -2434,10 +2501,11 @@ def Test_echomsg_cmd_vimscript()
 enddef
 
 def Test_echoerr_cmd()
+  var local = 'local'
   try
-    echoerr 'something' 'wrong' # comment
+    echoerr 'something' local 'wrong' # comment
   catch
-    assert_match('something wrong', v:exception)
+    assert_match('something local wrong', v:exception)
   endtry
 enddef
 
@@ -2454,6 +2522,12 @@ def Test_echoerr_cmd_vimscript()
       endtry
   END
   CheckScriptSuccess(lines)
+enddef
+
+def Test_echoconsole_cmd()
+  var local = 'local'
+  echoconsole 'something' local # comment
+  # output goes anywhere
 enddef
 
 def Test_for_outside_of_function()
@@ -2476,6 +2550,70 @@ def Test_for_outside_of_function()
   writefile(lines, 'Xvim9for.vim')
   source Xvim9for.vim
   delete('Xvim9for.vim')
+enddef
+
+def Test_for_skipped_block()
+  # test skipped blocks at outside of function
+  var lines =<< trim END
+    var result = []
+    if true
+      for n in [1, 2]
+        result += [n]
+      endfor
+    else
+      for n in [3, 4]
+        result += [n]
+      endfor
+    endif
+    assert_equal([1, 2], result)
+
+    result = []
+    if false
+      for n in [1, 2]
+        result += [n]
+      endfor
+    else
+      for n in [3, 4]
+        result += [n]
+      endfor
+    endif
+    assert_equal([3, 4], result)
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  # test skipped blocks at inside of function
+  lines =<< trim END
+    def DefTrue()
+      var result = []
+      if true
+        for n in [1, 2]
+          result += [n]
+        endfor
+      else
+        for n in [3, 4]
+          result += [n]
+        endfor
+      endif
+      assert_equal([1, 2], result)
+    enddef
+    DefTrue()
+
+    def DefFalse()
+      var result = []
+      if false
+        for n in [1, 2]
+          result += [n]
+        endfor
+      else
+        for n in [3, 4]
+          result += [n]
+        endfor
+      endif
+      assert_equal([3, 4], result)
+    enddef
+    DefFalse()
+  END
+  CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_for_loop()
@@ -2585,6 +2723,34 @@ def Test_for_loop()
         reslist->add('x')
       endfor
       assert_equal(['x', 'x', 'x'], reslist)
+  END
+  CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_for_loop_with_closure()
+  var lines =<< trim END
+      var flist: list<func>
+      for i in range(5)
+        var inloop = i
+        flist[i] = () => inloop
+      endfor
+      for i in range(5)
+        assert_equal(4, flist[i]())
+      endfor
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      var flist: list<func>
+      for i in range(5)
+        var inloop = i
+        flist[i] = () => {
+              return inloop
+            }
+      endfor
+      for i in range(5)
+        assert_equal(4, flist[i]())
+      endfor
   END
   CheckDefAndScriptSuccess(lines)
 enddef
@@ -2750,6 +2916,89 @@ def Test_for_loop_with_try_continue()
       endfor
       assert_equal(3, looped)
       assert_equal(3, cleanup)
+  END
+  CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_while_skipped_block()
+  # test skipped blocks at outside of function
+  var lines =<< trim END
+    var result = []
+    var n = 0
+    if true
+      n = 1
+      while n < 3
+        result += [n]
+        n += 1
+      endwhile
+    else
+      n = 3
+      while n < 5
+        result += [n]
+        n += 1
+      endwhile
+    endif
+    assert_equal([1, 2], result)
+
+    result = []
+    if false
+      n = 1
+      while n < 3
+        result += [n]
+        n += 1
+      endwhile
+    else
+      n = 3
+      while n < 5
+        result += [n]
+        n += 1
+      endwhile
+    endif
+    assert_equal([3, 4], result)
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  # test skipped blocks at inside of function
+  lines =<< trim END
+    def DefTrue()
+      var result = []
+      var n = 0
+      if true
+        n = 1
+        while n < 3
+          result += [n]
+          n += 1
+        endwhile
+      else
+        n = 3
+        while n < 5
+          result += [n]
+          n += 1
+        endwhile
+      endif
+      assert_equal([1, 2], result)
+    enddef
+    DefTrue()
+
+    def DefFalse()
+      var result = []
+      var n = 0
+      if false
+        n = 1
+        while n < 3
+          result += [n]
+          n += 1
+        endwhile
+      else
+        n = 3
+        while n < 5
+          result += [n]
+          n += 1
+        endwhile
+      endif
+      assert_equal([3, 4], result)
+    enddef
+    DefFalse()
   END
   CheckDefAndScriptSuccess(lines)
 enddef
@@ -3310,7 +3559,7 @@ def Test_vim9_comment_gui()
   CheckScriptFailure([
       'vim9script',
       'gui -f#comment'
-      ], 'E499:')
+      ], 'E194:')
 enddef
 
 def Test_vim9_comment_not_compiled()

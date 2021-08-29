@@ -357,13 +357,13 @@ func Test_blob_add()
       VAR b = 0z0011
       call add(b, [9])
   END
-  call CheckLegacyAndVim9Failure(lines, ['E745:', 'E1012:', 'E745:'])
+  call CheckLegacyAndVim9Failure(lines, ['E745:', 'E1012:', 'E1210:'])
 
   let lines =<< trim END
       VAR b = 0z0011
       call add("", 0x01)
   END
-  call CheckLegacyAndVim9Failure(lines, 'E897:')
+  call CheckLegacyAndVim9Failure(lines, ['E897:', 'E1013:', 'E1226:'])
 
   let lines =<< trim END
       add(test_null_blob(), 0x22)
@@ -425,27 +425,26 @@ func Test_blob_func_remove()
 
   let lines =<< trim END
       VAR b = 0zDEADBEEF
-      call remove(1, 0)
-  END
-  call CheckLegacyAndVim9Failure(lines, 'E896:')
-
-  let lines =<< trim END
-      VAR b = 0zDEADBEEF
-      call remove(b, b)
-  END
-  call CheckLegacyAndVim9Failure(lines, 'E974:')
-
-  let lines =<< trim END
-      VAR b = 0zDEADBEEF
-      call remove(b, 1, [])
-  END
-  call CheckLegacyAndVim9Failure(lines, 'E745:')
-
-  let lines =<< trim END
-      VAR b = 0zDEADBEEF
       call remove(test_null_blob(), 1, 2)
   END
   call CheckLegacyAndVim9Failure(lines, 'E979:')
+
+  let lines =<< trim END
+      let b = 0zDEADBEEF
+      lockvar b
+      call remove(b, 0)
+      unlockvar b
+  END
+  call CheckScriptFailure(lines, 'E741:')
+
+  " can only check at script level, not in a :def function
+  let lines =<< trim END
+      vim9script
+      var b = 0zDEADBEEF
+      lockvar b
+      remove(b, 0)
+  END
+  call CheckScriptFailure(lines, 'E741:')
 endfunc
 
 func Test_blob_read_write()
@@ -504,16 +503,6 @@ func Test_blob_index()
       call assert_equal(-1, index(test_null_blob(), 1))
   END
   call CheckLegacyAndVim9Success(lines)
-
-  let lines =<< trim END
-      echo index(0z11110111, 0x11, [])
-  END
-  call CheckLegacyAndVim9Failure(lines, 'E745:')
-
-  let lines =<< trim END
-      call index("asdf", 0)
-  END
-  call CheckLegacyAndVim9Failure(lines, 'E897:')
 endfunc
 
 func Test_blob_insert()
@@ -547,7 +536,7 @@ func Test_blob_insert()
       VAR b = 0zDEADBEEF
       call insert(b, 0, [9])
   END
-  call CheckLegacyAndVim9Failure(lines, ['E745:', 'E1013:', 'E745:'])
+  call CheckLegacyAndVim9Failure(lines, ['E745:', 'E1013:', 'E1210:'])
 
   let lines =<< trim END
       VAR b = 0zDEADBEEF
@@ -565,12 +554,28 @@ func Test_blob_insert()
       VAR b = 0zDEADBEEF
       call insert(b, [])
   END
-  call CheckLegacyAndVim9Failure(lines, ['E745:', 'E1013:', 'E745:'])
+  call CheckLegacyAndVim9Failure(lines, ['E745:', 'E1013:', 'E1210:'])
 
   let lines =<< trim END
       insert(test_null_blob(), 0x33)
   END
   call CheckDefExecAndScriptFailure(lines, 'E1131:')
+
+  let lines =<< trim END
+      let b = 0zDEADBEEF
+      lockvar b
+      call insert(b, 3)
+      unlockvar b
+  END
+  call CheckScriptFailure(lines, 'E741:')
+
+  let lines =<< trim END
+      vim9script
+      var b = 0zDEADBEEF
+      lockvar b
+      insert(b, 3)
+  END
+  call CheckScriptFailure(lines, 'E741:')
 endfunc
 
 func Test_blob_reverse()

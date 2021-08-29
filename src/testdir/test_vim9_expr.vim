@@ -372,9 +372,9 @@ enddef
 
 def Test_expr2_fails()
   var msg = "White space required before and after '||'"
-  call CheckDefAndScriptFailure(["var x = 1||2"], msg, 1)
-  call CheckDefAndScriptFailure(["var x = 1 ||2"], msg, 1)
-  call CheckDefAndScriptFailure(["var x = 1|| 2"], msg, 1)
+  call CheckDefAndScriptFailure(["var x = 1||0"], msg, 1)
+  call CheckDefAndScriptFailure(["var x = 1 ||0"], msg, 1)
+  call CheckDefAndScriptFailure(["var x = 1|| 0"], msg, 1)
 
   call CheckDefFailure(["var x = false || "], 'E1097:', 3)
   call CheckScriptFailure(['vim9script', "var x = false || "], 'E15:', 2)
@@ -386,8 +386,8 @@ def Test_expr2_fails()
 
   call CheckDefAndScriptFailure2(["if 'yes' || 0", 'echo 0', 'endif'], 'E1012: Type mismatch; expected bool but got string', 'E1135: Using a String as a Bool', 1)
 
-  # TODO: should fail at compile time
-  call CheckDefExecAndScriptFailure(["var x = 3 || 7"], 'E1023:', 1)
+  call CheckDefAndScriptFailure2(["var x = 3 || false"], 'E1012:', 'E1023:', 1)
+  call CheckDefAndScriptFailure2(["var x = false || 3"], 'E1012:', 'E1023:', 1)
 
   call CheckDefAndScriptFailure(["if 3"], 'E1023:', 1)
   call CheckDefExecAndScriptFailure(['var x = 3', 'if x', 'endif'], 'E1023:', 2)
@@ -505,15 +505,15 @@ enddef
 
 def Test_expr3_fails()
   var msg = "White space required before and after '&&'"
-  CheckDefAndScriptFailure(["var x = 1&&2"], msg, 1)
-  CheckDefAndScriptFailure(["var x = 1 &&2"], msg, 1)
-  CheckDefAndScriptFailure(["var x = 1&& 2"], msg, 1)
+  CheckDefAndScriptFailure(["var x = 1&&0"], msg, 1)
+  CheckDefAndScriptFailure(["var x = 1 &&0"], msg, 1)
+  CheckDefAndScriptFailure(["var x = 1&& 0"], msg, 1)
   var lines =<< trim END
     var x = 1
-      &&2
+      &&0
     # comment
   END
-  CheckDefAndScriptFailure(lines, 'E1004: White space required before and after ''&&'' at "&&2"', 2)
+  CheckDefAndScriptFailure(lines, 'E1004: White space required before and after ''&&'' at "&&0"', 2)
 
   g:vals = []
   CheckDefAndScriptFailure2(["if 'yes' && 0", 'echo 0', 'endif'], 'E1012: Type mismatch; expected bool but got string', 'E1135: Using a String as a Bool', 1)
@@ -525,7 +525,14 @@ def Test_expr3_fails()
           && true
       endif
   END
-  CheckDefExecAndScriptFailure(lines, 'E1023:', 1)
+  CheckDefAndScriptFailure2(lines, 'E1012:', 'E1023:', 1)
+
+  lines =<< trim END
+      if true
+          && 3
+      endif
+  END
+  CheckDefAndScriptFailure2(lines, 'E1012:', 'E1023:', 2)
 
   lines =<< trim END
       if 'yes'
@@ -1341,7 +1348,7 @@ enddef
 
 def Test_expr5_vim9script_channel()
   if !has('channel')
-    MissingFeature 'float'
+    MissingFeature 'channel'
   else
     var lines =<< trim END
         echo 'a' .. test_null_job()
@@ -1495,6 +1502,18 @@ def Test_expr6()
 
   CheckDefExecAndScriptFailure(['echo 1 / 0'], 'E1154', 1)
   CheckDefExecAndScriptFailure(['echo 1 % 0'], 'E1154', 1)
+
+  lines =<< trim END
+    var n = 0
+    eval 1 / n
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1154', 2)
+
+  lines =<< trim END
+    var n = 0
+    eval 1 % n
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1154', 2)
 enddef
 
 def Test_expr6_vim9script()
@@ -2813,14 +2832,47 @@ def Test_expr7_namespace()
       assert_equal('some', get(t:, 'some_var', 'xxx'))
       assert_equal('xxx', get(t:, 'no_var', 'xxx'))
       unlet t:some_var
-
-      # check using g: in a for loop more than DO_NOT_FREE_CNT times
-      for i in range(100000)
-        if has_key(g:, 'does-not-exist')
-        endif
-      endfor
   END
   CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_expr7_namespace_loop_def()
+  var lines =<< trim END
+      # check using g: in a for loop more than DO_NOT_FREE_CNT times
+      var exists = 0
+      var exists_not = 0
+      for i in range(100000)
+        if has_key(g:, 'does-not-exist')
+          exists += 1
+        else
+          exists_not += 1
+        endif
+      endfor
+      assert_equal(0, exists)
+      assert_equal(100000, exists_not)
+  END
+  CheckDefSuccess(lines)
+enddef
+
+" NOTE: this is known to be slow.  To skip use:
+"   :let $TEST_SKIP_PAT = 'Test_expr7_namespace_loop_script'
+def Test_expr7_namespace_loop_script()
+  var lines =<< trim END
+      vim9script
+      # check using g: in a for loop more than DO_NOT_FREE_CNT times
+      var exists = 0
+      var exists_not = 0
+      for i in range(100000)
+        if has_key(g:, 'does-not-exist')
+          exists += 1
+        else
+          exists_not += 1
+        endif
+      endfor
+      assert_equal(0, exists)
+      assert_equal(100000, exists_not)
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 def Test_expr7_parens()
@@ -3071,6 +3123,17 @@ def Test_expr7_not()
   CheckDefAndScriptSuccess(lines)
 enddef
 
+let g:anumber = 42
+
+def Test_expr7_negate()
+  var lines =<< trim END
+      var nr = 1
+      assert_equal(-1, -nr)
+      assert_equal(-42, -g:anumber)
+  END
+  CheckDefAndScriptSuccess(lines)
+enddef
+
 func Test_expr7_fails()
   call CheckDefFailure(["var x = (12"], "E1097:", 3)
   call CheckScriptFailure(['vim9script', "var x = (12"], 'E110:', 2)
@@ -3078,8 +3141,8 @@ func Test_expr7_fails()
   call CheckDefAndScriptFailure(["var x = -'xx'"], "E1030:", 1)
   call CheckDefAndScriptFailure(["var x = +'xx'"], "E1030:", 1)
   call CheckDefAndScriptFailure(["var x = -0z12"], "E974:", 1)
-  call CheckDefExecAndScriptFailure2(["var x = -[8]"], "E39:", 'E745:', 1)
-  call CheckDefExecAndScriptFailure2(["var x = -{a: 1}"], "E39:", 'E728:', 1)
+  call CheckDefExecAndScriptFailure2(["var x = -[8]"], "E1012:", 'E745:', 1)
+  call CheckDefExecAndScriptFailure2(["var x = -{a: 1}"], "E1012:", 'E728:', 1)
 
   call CheckDefAndScriptFailure(["var x = @"], "E1002:", 1)
   call CheckDefAndScriptFailure(["var x = @<"], "E354:", 1)
@@ -3102,12 +3165,12 @@ func Test_expr7_fails()
   call CheckDefAndScriptFailure2(["echo l:somevar"], 'E1075:', 'E121:', 1)
   call CheckDefAndScriptFailure2(["echo x:somevar"], 'E1075:', 'E121:', 1)
 
-  call CheckDefExecAndScriptFailure(["var x = +g:astring"], 'E1030:', 1)
-  call CheckDefExecAndScriptFailure(["var x = +g:ablob"], 'E974:', 1)
-  call CheckDefExecAndScriptFailure(["var x = +g:alist"], 'E745:', 1)
-  call CheckDefExecAndScriptFailure(["var x = +g:adict"], 'E728:', 1)
+  call CheckDefExecAndScriptFailure2(["var x = +g:astring"], 'E1012:', 'E1030:', 1)
+  call CheckDefExecAndScriptFailure2(["var x = +g:ablob"], 'E1012:', 'E974:', 1)
+  call CheckDefExecAndScriptFailure2(["var x = +g:alist"], 'E1012:', 'E745:', 1)
+  call CheckDefExecAndScriptFailure2(["var x = +g:adict"], 'E1012:', 'E728:', 1)
 
-  call CheckDefAndScriptFailure2(["var x = ''", "var y = x.memb"], 'E715:', 'E488:', 2)
+  call CheckDefAndScriptFailure2(["var x = ''", "var y = x.memb"], 'E1229: Expected dictionary for using key "memb", but got string', 'E488:', 2)
 
   call CheckDefAndScriptFailure2(["'yes'->", "Echo()"], 'E488: Trailing characters: ->', 'E260: Missing name after ->', 1)
 

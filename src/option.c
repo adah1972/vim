@@ -807,7 +807,7 @@ free_all_options(void)
 	else if (options[i].var != VAR_WIN
 		&& (options[i].flags & P_STRING))
 	    // buffer-local option: free global value
-	    free_string_option(*(char_u **)options[i].var);
+	    clear_string_option((char_u **)options[i].var);
     }
 }
 #endif
@@ -1485,7 +1485,7 @@ do_set(
 	    // Disallow changing some options in the sandbox
 	    if (sandbox != 0 && (flags & P_SECURE))
 	    {
-		errmsg = e_sandbox;
+		errmsg = e_not_allowed_in_sandbox;
 		goto skip;
 	    }
 #endif
@@ -3757,7 +3757,7 @@ set_num_option(
 	if (pp == &(curwin->w_p_scr))
 	{
 	    if (curwin->w_p_scr != 0)
-		errmsg = e_scroll;
+		errmsg = e_invalid_scroll_size;
 	    win_comp_scroll(curwin);
 	}
 	// If 'scroll' became invalid because of a side effect silently adjust
@@ -3793,7 +3793,7 @@ set_num_option(
 	    p_sj = Rows / 2;
 	else
 	{
-	    errmsg = e_scroll;
+	    errmsg = e_invalid_scroll_size;
 	    p_sj = 1;
 	}
     }
@@ -4366,7 +4366,7 @@ set_option_value(
 	// Disallow changing some options in the sandbox
 	if (sandbox > 0 && (flags & P_SECURE))
 	{
-	    emsg(_(e_sandbox));
+	    emsg(_(e_not_allowed_in_sandbox));
 	    return NULL;
 	}
 #endif
@@ -5181,6 +5181,10 @@ unset_global_local_option(char_u *name, void *from)
 	    set_chars_option((win_T *)from, &((win_T *)from)->w_p_lcs);
 	    redraw_later(NOT_VALID);
 	    break;
+	case PV_VE:
+	    clear_string_option(&((win_T *)from)->w_p_ve);
+	    ((win_T *)from)->w_ve_flags = 0;
+	    break;
     }
 }
 #endif
@@ -5239,7 +5243,8 @@ get_varp_scope(struct vimoption *p, int opt_flags)
 #endif
 	    case PV_BKC:  return (char_u *)&(curbuf->b_p_bkc);
 	    case PV_MENC: return (char_u *)&(curbuf->b_p_menc);
-	    case PV_LCS: return (char_u *)&(curwin->w_p_lcs);
+	    case PV_LCS:  return (char_u *)&(curwin->w_p_lcs);
+	    case PV_VE:	  return (char_u *)&(curwin->w_p_ve);
 
 	}
 	return NULL; // "cannot happen"
@@ -5340,6 +5345,8 @@ get_varp(struct vimoption *p)
 	case PV_LIST:	return (char_u *)&(curwin->w_p_list);
 	case PV_LCS:	return *curwin->w_p_lcs != NUL
 				    ? (char_u *)&(curwin->w_p_lcs) : p->var;
+	case PV_VE:	return *curwin->w_p_ve != NUL
+				    ? (char_u *)&(curwin->w_p_ve) : p->var;
 #ifdef FEAT_SPELL
 	case PV_SPELL:	return (char_u *)&(curwin->w_p_spell);
 #endif
@@ -5586,6 +5593,8 @@ copy_winopt(winopt_T *from, winopt_T *to)
     to->wo_lcs = vim_strsave(from->wo_lcs);
     to->wo_nu = from->wo_nu;
     to->wo_rnu = from->wo_rnu;
+    to->wo_ve = vim_strsave(from->wo_ve);
+    to->wo_ve_flags = from->wo_ve_flags;
 #ifdef FEAT_LINEBREAK
     to->wo_nuw = from->wo_nuw;
 #endif
@@ -5719,6 +5728,7 @@ check_winopt(winopt_T *wop UNUSED)
 #endif
     check_string_option(&wop->wo_wcr);
     check_string_option(&wop->wo_lcs);
+    check_string_option(&wop->wo_ve);
 }
 
 /*
@@ -5765,6 +5775,7 @@ clear_winopt(winopt_T *wop UNUSED)
     clear_string_option(&wop->wo_tws);
 #endif
     clear_string_option(&wop->wo_lcs);
+    clear_string_option(&wop->wo_ve);
 }
 
 #ifdef FEAT_EVAL
@@ -7024,6 +7035,16 @@ get_sidescrolloff_value(void)
 get_bkc_value(buf_T *buf)
 {
     return buf->b_bkc_flags ? buf->b_bkc_flags : bkc_flags;
+}
+
+/*
+ * Get the local or global value of the 'virtualedit' flags.
+ */
+    unsigned int
+get_ve_flags(void)
+{
+    return (curwin->w_ve_flags ? curwin->w_ve_flags : ve_flags)
+	    & ~(VE_NONE | VE_NONEU);
 }
 
 #if defined(FEAT_LINEBREAK) || defined(PROTO)

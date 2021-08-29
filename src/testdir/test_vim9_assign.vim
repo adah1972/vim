@@ -223,6 +223,12 @@ def Test_assignment()
   g:inc_counter += 1
   assert_equal(2, g:inc_counter)
 
+  if has('float')
+    var f: float
+    f += 1
+    assert_equal(1.0, f)
+  endif
+
   $SOME_ENV_VAR ..= 'more'
   assert_equal('somemore', $SOME_ENV_VAR)
   CheckDefFailure(['$SOME_ENV_VAR += "more"'], 'E1051:')
@@ -237,6 +243,49 @@ def Test_assignment()
   var text =<< trim END
     some text
   END
+enddef
+
+def Test_float_and_number()
+  if !has('float')
+    MissingFeature float
+  else
+    var lines =<< trim END
+         var f: float
+         f += 2
+         f -= 1
+         assert_equal(1.0, f)
+         ++f
+         --f
+         assert_equal(1.0, f)
+    END
+    CheckDefAndScriptSuccess(lines)
+  endif
+enddef
+
+let g:someNumber = 43
+
+def Test_assign_concat()
+  var lines =<< trim END
+    var s = '-'
+    s ..= 99
+    s ..= true
+    s ..= '-'
+    s ..= v:null
+    s ..= g:someNumber
+    assert_equal('-99true-null43', s)
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+    var s = '-'
+    s ..= [1, 2]
+  END
+  CheckDefAndScriptFailure2(lines, 'E1105: Cannot convert list to string', 'E734: Wrong variable type for .=', 2)
+  lines =<< trim END
+    var s = '-'
+    s ..= {a: 2}
+  END
+  CheckDefAndScriptFailure2(lines, 'E1105: Cannot convert dict to string', 'E734: Wrong variable type for .=', 2)
 enddef
 
 def Test_assign_register()
@@ -365,6 +414,22 @@ def Test_assign_unpack()
     [x, y] = g:values
   END
   CheckDefExecAndScriptFailure(lines, 'E1163: Variable 2: type mismatch, expected string but got number')
+
+  lines =<< trim END
+    var x: number
+    var y: number
+    var z: string
+    [x, y, z] = [1, 2, 3]
+  END
+  CheckDefAndScriptFailure(lines, 'E1163: Variable 3: type mismatch, expected string but got number')
+
+  lines =<< trim END
+    var x: number
+    var y: string
+    var z: string
+    [x, y, z] = [1, '2', 3]
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1163: Variable 3: type mismatch, expected string but got number')
 enddef
 
 def Test_assign_linebreak()
@@ -439,6 +504,12 @@ def Test_assign_index()
   d3.one.two = {}
   d3.one.two.three = 123
   assert_equal({one: {two: {three: 123}}}, d3)
+
+  # should not read the next line when generating "a.b"
+  var a = {}
+  a.b = {}
+  a.b.c = {}
+          ->copy()
 
   lines =<< trim END
       var d3: dict<dict<number>>
@@ -1190,22 +1261,10 @@ def Test_assign_dict()
 
       d.somekey = 'someval'
       assert_equal({key: 'value', '123': 'qwerty', somekey: 'someval'}, d)
-      # unlet d.somekey
-      # assert_equal({key: 'value', '123': 'qwerty'}, d)
+      unlet d.somekey
+      assert_equal({key: 'value', '123': 'qwerty'}, d)
   END
   CheckDefAndScriptSuccess(lines)
-
-  # TODO: move to above once "unlet d.somekey" in :def is implemented
-  lines =<< trim END
-      vim9script
-      var d: dict<string> = {}
-      d['key'] = 'value'
-      d.somekey = 'someval'
-      assert_equal({key: 'value', somekey: 'someval'}, d)
-      unlet d.somekey
-      assert_equal({key: 'value'}, d)
-  END
-  CheckScriptSuccess(lines)
 
   CheckDefFailure(["var d: dict<number> = {a: '', b: true}"], 'E1012: Type mismatch; expected dict<number> but got dict<any>', 1)
   CheckDefFailure(["var d: dict<dict<number>> = {x: {a: '', b: true}}"], 'E1012: Type mismatch; expected dict<dict<number>> but got dict<dict<any>>', 1)
@@ -1392,6 +1451,14 @@ def Test_heredoc()
   [END]
   CheckScriptFailure(lines, 'E1145: Missing heredoc end marker: END')
   delfunc! g:Func
+
+  lines =<< trim END
+      var lines: number =<< trim STOP
+        aaa
+        bbb
+      STOP
+  END
+  CheckDefAndScriptFailure(lines, 'E1012: Type mismatch; expected number but got list<string>', 1)
 enddef
 
 def Test_var_func_call()
@@ -1655,6 +1722,8 @@ def Test_var_type_check()
   END
   CheckScriptFailure(lines, 'E1069:')
 
+  CheckDefAndScriptFailure(['var n:number = 42'], 'E1069:')
+
   lines =<< trim END
     vim9script
     var name: asdf
@@ -1754,7 +1823,7 @@ def Test_unlet()
   CheckDefFailure([
     'var ll = [1, 2]',
     'll[1 : 2] = 7',
-    ], 'E1165:', 2)
+    ], 'E1012: Type mismatch; expected list<number> but got number', 2)
   CheckDefFailure([
     'var dd = {a: 1}',
     'unlet dd["a" : "a"]',
@@ -2001,6 +2070,21 @@ def Test_inc_dec()
   END
   CheckDefAndScriptFailure(lines, "E1202: No white space allowed after '++': ++ nr")
 enddef
+
+def Test_abort_after_error()
+  # should abort after strpart() fails, not give another type error
+  var lines =<< trim END
+      vim9script
+      var x: string
+      x = strpart(1, 2)
+  END
+  writefile(lines, 'Xtestscript')
+  var expected = 'E1174: String required for argument 1'
+  assert_fails('so Xtestscript', [expected, expected], 3)
+
+  delete('Xtestscript')
+enddef
+
 
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

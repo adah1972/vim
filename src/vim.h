@@ -486,6 +486,10 @@ typedef unsigned int u8char_T;	// int is 32 bits or more
 # endif
 #endif
 
+#ifdef HAVE_SODIUM
+# include <sodium.h>
+#endif
+
 // ================ end of the header file puzzle ===============
 
 /*
@@ -2128,8 +2132,21 @@ typedef struct _stat64 stat_T;
 typedef struct stat stat_T;
 #endif
 
-#if defined(__GNUC__) && !defined(__MINGW32__)
-# define USE_PRINTF_FORMAT_ATTRIBUTE
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__MINGW32__)
+# define ATTRIBUTE_FORMAT_PRINTF(fmt_idx, arg_idx) \
+    __attribute__((format(printf, fmt_idx, arg_idx)))
+#else
+# define ATTRIBUTE_FORMAT_PRINTF(fmt_idx, arg_idx)
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+# define likely(x)      __builtin_expect((x), 1)
+# define unlikely(x)    __builtin_expect((x), 0)
+# define ATTRIBUTE_COLD __attribute__((cold))
+#else
+# define unlikely(x)  (x)
+# define likely(x)    (x)
+# define ATTRIBUTE_COLD
 #endif
 
 typedef enum {
@@ -2731,5 +2748,13 @@ long elapsed(DWORD start_tick);
 
 // Maximum number of characters that can be fuzzy matched
 #define MAX_FUZZY_MATCHES	256
+
+// flags for equal_type()
+#define ETYPE_ARG_UNKNOWN 1
+
+// flags used by user commands and :autocmd
+#define UC_BUFFER	1	// -buffer: local to current buffer
+#define UC_VIM9		2	// {} argument: Vim9 syntax.
+
 
 #endif // VIM__H

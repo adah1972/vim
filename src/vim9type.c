@@ -24,7 +24,7 @@
  * Allocate memory for a type_T and add the pointer to type_gap, so that it can
  * be easily freed later.
  */
-    type_T *
+    static type_T *
 get_type_ptr(garray_T *type_gap)
 {
     type_T *type;
@@ -274,10 +274,12 @@ typval2type_int(typval_T *tv, int copyID, garray_T *type_gap, int do_member)
 	list_T	    *l = tv->vval.v_list;
 	listitem_T  *li;
 
-	if (l == NULL || l->lv_first == NULL)
+	if (l == NULL || (l->lv_first == NULL && l->lv_type == NULL))
 	    return &t_list_empty;
 	if (!do_member)
 	    return &t_list_any;
+	if (l->lv_type != NULL)
+	    return l->lv_type;
 	if (l->lv_first == &range_list_item)
 	    return &t_list_number;
 	if (l->lv_copyID == copyID)
@@ -299,10 +301,12 @@ typval2type_int(typval_T *tv, int copyID, garray_T *type_gap, int do_member)
 	typval_T	*value;
 	dict_T		*d = tv->vval.v_dict;
 
-	if (d == NULL || d->dv_hashtab.ht_used == 0)
+	if (d == NULL || (d->dv_hashtab.ht_used == 0 && d->dv_type == NULL))
 	    return &t_dict_empty;
 	if (!do_member)
 	    return &t_dict_any;
+	if (d->dv_type != NULL)
+	    return d->dv_type;
 	if (d->dv_copyID == copyID)
 	    // avoid recursion
 	    return &t_dict_any;
@@ -323,7 +327,7 @@ typval2type_int(typval_T *tv, int copyID, garray_T *type_gap, int do_member)
 	char_u	*name = NULL;
 	ufunc_T *ufunc = NULL;
 
-	if (tv->v_type == VAR_PARTIAL)
+	if (tv->v_type == VAR_PARTIAL && tv->vval.v_partial != NULL)
 	{
 	    if (tv->vval.v_partial->pt_func != NULL)
 		ufunc = tv->vval.v_partial->pt_func;
@@ -378,6 +382,12 @@ typval2type_int(typval_T *tv, int copyID, garray_T *type_gap, int do_member)
     type->tt_type = tv->v_type;
     type->tt_argcount = argcount;
     type->tt_min_argcount = min_argcount;
+    if (tv->v_type == VAR_PARTIAL && tv->vval.v_partial != NULL
+					    && tv->vval.v_partial->pt_argc > 0)
+    {
+	type->tt_argcount -= tv->vval.v_partial->pt_argc;
+	type->tt_min_argcount -= tv->vval.v_partial->pt_argc;
+    }
     type->tt_member = member_type;
 
     return type;
@@ -428,12 +438,16 @@ typval2type_vimvar(typval_T *tv, garray_T *type_gap)
 }
 
     int
-check_typval_arg_type(type_T *expected, typval_T *actual_tv, int arg_idx)
+check_typval_arg_type(
+	type_T	    *expected,
+	typval_T    *actual_tv,
+	char	    *func_name,
+	int	    arg_idx)
 {
-    where_T	where;
+    where_T	where = WHERE_INIT;
 
     where.wt_index = arg_idx;
-    where.wt_variable = FALSE;
+    where.wt_func_name = func_name;
     return check_typval_type(expected, actual_tv, where);
 }
 
@@ -447,6 +461,16 @@ check_typval_type(type_T *expected, typval_T *actual_tv, where_T where)
     garray_T	type_list;
     type_T	*actual_type;
     int		res = FAIL;
+
+    // For some values there is no type, assume an error will be given later
+    // for an invalid value.
+    if ((actual_tv->v_type == VAR_FUNC && actual_tv->vval.v_string == NULL)
+	    || (actual_tv->v_type == VAR_PARTIAL
+					 && actual_tv->vval.v_partial == NULL))
+    {
+	emsg(_(e_function_reference_is_not_set));
+	return FAIL;
+    }
 
     ga_init2(&type_list, sizeof(type_T *), 10);
     actual_type = typval2type(actual_tv, get_copyID(), &type_list, TRUE);
@@ -465,10 +489,9 @@ type_mismatch(type_T *expected, type_T *actual)
     void
 arg_type_mismatch(type_T *expected, type_T *actual, int arg_idx)
 {
-    where_T	where;
+    where_T	where = WHERE_INIT;
 
     where.wt_index = arg_idx;
-    where.wt_variable = FALSE;
     type_mismatch_where(expected, actual, where);
 }
 
@@ -481,14 +504,23 @@ type_mismatch_where(type_T *expected, type_T *actual, where_T where)
 
     if (where.wt_index > 0)
     {
-	semsg(_(where.wt_variable
-			? e_variable_nr_type_mismatch_expected_str_but_got_str
-			: e_argument_nr_type_mismatch_expected_str_but_got_str),
+	if (where.wt_func_name == NULL)
+	    semsg(_(where.wt_variable
+			 ? e_variable_nr_type_mismatch_expected_str_but_got_str
+		       : e_argument_nr_type_mismatch_expected_str_but_got_str),
 					 where.wt_index, typename1, typename2);
+	else
+	    semsg(_(where.wt_variable
+		  ? e_variable_nr_type_mismatch_expected_str_but_got_str_in_str
+		: e_argument_nr_type_mismatch_expected_str_but_got_str_in_str),
+		     where.wt_index, typename1, typename2, where.wt_func_name);
     }
-    else
+    else if (where.wt_func_name == NULL)
 	semsg(_(e_type_mismatch_expected_str_but_got_str),
 							 typename1, typename2);
+    else
+	semsg(_(e_type_mismatch_expected_str_but_got_str_in_str),
+				     typename1, typename2, where.wt_func_name);
     vim_free(tofree1);
     vim_free(tofree2);
 }
@@ -604,7 +636,7 @@ check_argument_types(
 	    expected = type->tt_args[type->tt_argcount - 1]->tt_member;
 	else
 	    expected = type->tt_args[i];
-	if (check_typval_arg_type(expected, &argvars[i], i + 1) == FAIL)
+	if (check_typval_arg_type(expected, &argvars[i], NULL, i + 1) == FAIL)
 	    return FAIL;
     }
     return OK;
@@ -942,9 +974,11 @@ parse_type(char_u **arg, garray_T *type_gap, int give_error)
 
 /*
  * Check if "type1" and "type2" are exactly the same.
+ * "flags" can have ETYPE_ARG_UNKNOWN, which means that an unknown argument
+ * type in "type1" is accepted.
  */
     int
-equal_type(type_T *type1, type_T *type2)
+equal_type(type_T *type1, type_T *type2, int flags)
 {
     int i;
 
@@ -969,17 +1003,19 @@ equal_type(type_T *type1, type_T *type2)
 	    break;  // not composite is always OK
 	case VAR_LIST:
 	case VAR_DICT:
-	    return equal_type(type1->tt_member, type2->tt_member);
+	    return equal_type(type1->tt_member, type2->tt_member, flags);
 	case VAR_FUNC:
 	case VAR_PARTIAL:
-	    if (!equal_type(type1->tt_member, type2->tt_member)
+	    if (!equal_type(type1->tt_member, type2->tt_member, flags)
 		    || type1->tt_argcount != type2->tt_argcount)
 		return FALSE;
 	    if (type1->tt_argcount < 0
 			   || type1->tt_args == NULL || type2->tt_args == NULL)
 		return TRUE;
 	    for (i = 0; i < type1->tt_argcount; ++i)
-		if (!equal_type(type1->tt_args[i], type2->tt_args[i]))
+		if ((flags & ETYPE_ARG_UNKNOWN) == 0
+			&& !equal_type(type1->tt_args[i], type2->tt_args[i],
+									flags))
 		    return FALSE;
 	    return TRUE;
     }
@@ -993,7 +1029,7 @@ equal_type(type_T *type1, type_T *type2)
     void
 common_type(type_T *type1, type_T *type2, type_T **dest, garray_T *type_gap)
 {
-    if (equal_type(type1, type2))
+    if (equal_type(type1, type2, 0))
     {
 	*dest = type1;
 	return;

@@ -774,7 +774,7 @@ ex_let(exarg_T *eap)
 	--argend;
     expr = skipwhite(argend);
     concat = expr[0] == '.'
-	&& ((expr[1] == '=' && current_sctx.sc_version < 2)
+	&& ((expr[1] == '=' && in_old_script(2))
 		|| (expr[1] == '.' && expr[2] == '='));
     has_assign =  *expr == '=' || (vim_strchr((char_u *)"+-*/%", *expr) != NULL
 							    && expr[1] == '=');
@@ -812,11 +812,12 @@ ex_let(exarg_T *eap)
 	    list_func_vars(&first);
 	    list_vim_vars(&first);
 	}
-	eap->nextcmd = check_nextcmd(arg);
+	set_nextcmd(eap, arg);
     }
     else if (expr[0] == '=' && expr[1] == '<' && expr[2] == '<')
     {
 	list_T	*l;
+	long	cur_lnum = SOURCING_LNUM;
 
 	// HERE document
 	l = heredoc_get(eap, expr + 3, FALSE);
@@ -825,6 +826,8 @@ ex_let(exarg_T *eap)
 	    rettv_list_set(&rettv, l);
 	    if (!eap->skip)
 	    {
+		// errors are for the assignment, not the end marker
+		SOURCING_LNUM = cur_lnum;
 		op[0] = '=';
 		op[1] = NUL;
 		(void)ex_let_vars(eap->arg, &rettv, FALSE, semicolon, var_count,
@@ -880,13 +883,7 @@ ex_let(exarg_T *eap)
 
 	    if (eap->skip)
 		++emsg_skip;
-	    CLEAR_FIELD(evalarg);
-	    evalarg.eval_flags = eap->skip ? 0 : EVAL_EVALUATE;
-	    if (getline_equal(eap->getline, eap->cookie, getsourceline))
-	    {
-		evalarg.eval_getline = eap->getline;
-		evalarg.eval_cookie = eap->cookie;
-	    }
+	    fill_evalarg_from_eap(&evalarg, eap, eap->skip);
 	    expr = skipwhite_and_linebreak(expr, &evalarg);
 	    cur_lnum = SOURCING_LNUM;
 	    i = eval0(expr, &rettv, eap, &evalarg);
@@ -1196,7 +1193,8 @@ list_arg_vars(exarg_T *eap, char_u *arg, int *first)
 	    if (!VIM_ISWHITE(*arg) && !ends_excmd(*arg))
 	    {
 		emsg_severe = TRUE;
-		semsg(_(e_trailing_arg), arg);
+		if (!did_emsg)
+		    semsg(_(e_trailing_arg), arg);
 		break;
 	    }
 	}
@@ -1632,7 +1630,7 @@ ex_unletlock(
 	arg = skipwhite(name_end);
     } while (!ends_excmd2(name_end, arg));
 
-    eap->nextcmd = check_nextcmd(arg);
+    set_nextcmd(eap, arg);
 }
 
     static int
@@ -2232,7 +2230,7 @@ set_vim_var_tv(int idx, typval_T *tv)
     // VV_RO is also checked when compiling, but let's check here as well.
     if (vimvars[idx].vv_flags & VV_RO)
     {
-	semsg(_(e_readonlyvar), vimvars[idx].vv_name);
+	semsg(_(e_cannot_change_readonly_variable_str), vimvars[idx].vv_name);
 	return FAIL;
     }
     if (sandbox && (vimvars[idx].vv_flags & VV_RO_SBX))
@@ -2638,6 +2636,8 @@ eval_variable(
 	{
 	    ufunc_T *ufunc = find_func(name, FALSE, NULL);
 
+	    // In Vim9 script we can get a function reference by using the
+	    // function name.
 	    if (ufunc != NULL)
 	    {
 		found = TRUE;
@@ -2645,6 +2645,8 @@ eval_variable(
 		{
 		    rettv->v_type = VAR_FUNC;
 		    rettv->vval.v_string = vim_strsave(ufunc->uf_name);
+		    if (rettv->vval.v_string != NULL)
+			func_ref(ufunc->uf_name);
 		}
 	    }
 	}
@@ -2934,7 +2936,7 @@ find_var_ht(char_u *name, char_u **varname)
 
 	// "version" is "v:version" in all scopes if scriptversion < 3.
 	// Same for a few other variables marked with VV_COMPAT.
-	if (current_sctx.sc_version < 3)
+	if (in_old_script(3))
 	{
 	    hi = hash_find(&compat_hashtab, name);
 	    if (!HASHITEM_EMPTY(hi))
@@ -3250,7 +3252,7 @@ set_var_const(
 	{
 	    scriptitem_T    *si = SCRIPT_ITEM(import->imp_sid);
 	    svar_T	    *sv;
-	    where_T	    where;
+	    where_T	    where = WHERE_INIT;
 
 	    // imported variable from another script
 	    if ((flags & ASSIGN_NO_DECL) == 0)
@@ -3260,7 +3262,6 @@ set_var_const(
 	    }
 	    sv = ((svar_T *)si->sn_var_vals.ga_data) + import->imp_var_vals_idx;
 
-	    where.wt_index = 0;
 	    where.wt_variable = TRUE;
 	    if (check_typval_type(sv->sv_type, tv, where) == FAIL
 		    || value_check_lock(sv->sv_tv->v_lock, name, FALSE))
@@ -3314,7 +3315,7 @@ set_var_const(
 
 		if (var_in_vim9script)
 		{
-		    where_T where;
+		    where_T where = WHERE_INIT;
 
 		    // check the type and adjust to bool if needed
 		    where.wt_index = var_idx;
@@ -3499,7 +3500,8 @@ var_check_ro(int flags, char_u *name, int use_gettext)
 {
     if (flags & DI_FLAGS_RO)
     {
-	semsg(_(e_readonlyvar), use_gettext ? (char_u *)_(name) : name);
+	semsg(_(e_cannot_change_readonly_variable_str),
+				       use_gettext ? (char_u *)_(name) : name);
 	return TRUE;
     }
     if ((flags & DI_FLAGS_RO_SBX) && sandbox)
@@ -4039,6 +4041,11 @@ f_gettabvar(typval_T *argvars, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL))
+	return;
+
     varname = tv_get_string_chk(&argvars[1]);
     tp = find_tabpage((int)tv_get_number_chk(&argvars[0], NULL));
     if (tp != NULL && varname != NULL)
@@ -4073,6 +4080,12 @@ f_gettabvar(typval_T *argvars, typval_T *rettv)
     void
 f_gettabwinvar(typval_T *argvars, typval_T *rettv)
 {
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_number_arg(argvars, 1) == FAIL
+		|| check_for_string_arg(argvars, 2) == FAIL))
+	return;
+
     getwinvar(argvars, rettv, 1);
 }
 
@@ -4082,6 +4095,11 @@ f_gettabwinvar(typval_T *argvars, typval_T *rettv)
     void
 f_getwinvar(typval_T *argvars, typval_T *rettv)
 {
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL))
+	return;
+
     getwinvar(argvars, rettv, 0);
 }
 
@@ -4095,6 +4113,11 @@ f_getbufvar(typval_T *argvars, typval_T *rettv)
     char_u	*varname;
     dictitem_T	*v;
     int		done = FALSE;
+
+    if (in_vim9script()
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL))
+	return;
 
     varname = tv_get_string_chk(&argvars[1]);
     buf = tv_get_buf_from_arg(&argvars[0]);
@@ -4165,6 +4188,11 @@ f_settabvar(typval_T *argvars, typval_T *rettv UNUSED)
     if (check_secure())
 	return;
 
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL))
+	return;
+
     tp = find_tabpage((int)tv_get_number_chk(&argvars[0], NULL));
     varname = tv_get_string_chk(&argvars[1]);
     varp = &argvars[2];
@@ -4195,6 +4223,12 @@ f_settabvar(typval_T *argvars, typval_T *rettv UNUSED)
     void
 f_settabwinvar(typval_T *argvars, typval_T *rettv UNUSED)
 {
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_number_arg(argvars, 1) == FAIL
+		|| check_for_string_arg(argvars, 2) == FAIL))
+	return;
+
     setwinvar(argvars, 1);
 }
 
@@ -4204,6 +4238,11 @@ f_settabwinvar(typval_T *argvars, typval_T *rettv UNUSED)
     void
 f_setwinvar(typval_T *argvars, typval_T *rettv UNUSED)
 {
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL))
+	return;
+
     setwinvar(argvars, 0);
 }
 
@@ -4219,6 +4258,12 @@ f_setbufvar(typval_T *argvars, typval_T *rettv UNUSED)
 
     if (check_secure())
 	return;
+
+    if (in_vim9script()
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL))
+	return;
+
     varname = tv_get_string_chk(&argvars[1]);
     buf = tv_get_buf_from_arg(&argvars[0]);
     varp = &argvars[2];

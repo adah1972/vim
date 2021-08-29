@@ -450,7 +450,7 @@ ex_sort(exarg_T *eap)
 	    unique = TRUE;
 	else if (*p == '"')	// comment start
 	    break;
-	else if (check_nextcmd(p) != NULL)
+	else if (eap->nextcmd == NULL && check_nextcmd(p) != NULL)
 	{
 	    eap->nextcmd = check_nextcmd(p);
 	    break;
@@ -466,7 +466,7 @@ ex_sort(exarg_T *eap)
 	    {
 		if (last_search_pat() == NULL)
 		{
-		    emsg(_(e_noprevre));
+		    emsg(_(e_no_previous_regular_expression));
 		    goto sortend;
 		}
 		regmatch.regprog = vim_regcomp(last_search_pat(), RE_MAGIC);
@@ -935,7 +935,7 @@ do_bang(
 	{
 	    if (prevcmd == NULL)
 	    {
-		emsg(_(e_noprev));
+		emsg(_(e_no_previous_command));
 		vim_free(newcmd);
 		return;
 	    }
@@ -2356,7 +2356,7 @@ check_readonly(int *forceit, buf_T *buf)
 	else
 #endif
 	if (buf->b_p_ro)
-	    emsg(_(e_readonly));
+	    emsg(_(e_readonly_option_is_set_add_bang_to_override));
 	else
 	    semsg(_("E505: \"%s\" is read-only (add ! to override)"),
 		    buf->b_fname);
@@ -2648,6 +2648,8 @@ do_ecmd(
      */
     if (other_file)
     {
+	int prev_alt_fnum = curwin->w_alt_fnum;
+
 	if (!(flags & (ECMD_ADDBUF | ECMD_ALTBUF)))
 	{
 	    if ((cmdmod.cmod_flags & CMOD_KEEPALT) == 0)
@@ -2691,6 +2693,10 @@ do_ecmd(
 	}
 	if (buf == NULL)
 	    goto theend;
+	if (curwin->w_alt_fnum == buf->b_fnum && prev_alt_fnum != 0)
+	    // reusing the buffer, keep the old alternate file
+	    curwin->w_alt_fnum = prev_alt_fnum;
+
 	if (buf->b_ml.ml_mfp == NULL)		// no memfile yet
 	{
 	    oldbuf = FALSE;
@@ -3596,7 +3602,7 @@ check_secure(void)
      */
     if (sandbox != 0)
     {
-	emsg(_(e_sandbox));
+	emsg(_(e_not_allowed_in_sandbox));
 	return TRUE;
     }
 #endif
@@ -3763,7 +3769,7 @@ ex_substitute(exarg_T *eap)
 	    {
 		if (old_sub == NULL)	// there is no previous command
 		{
-		    emsg(_(e_nopresub));
+		    emsg(_(e_no_previous_substitute_regular_expression));
 		    return;
 		}
 		sub = old_sub;
@@ -3779,7 +3785,7 @@ ex_substitute(exarg_T *eap)
     {
 	if (old_sub == NULL)	// there is no previous command
 	{
-	    emsg(_(e_nopresub));
+	    emsg(_(e_no_previous_substitute_regular_expression));
 	    return;
 	}
 	pat = NULL;		// search_regcomp() will use previous pattern
@@ -3930,7 +3936,7 @@ ex_substitute(exarg_T *eap)
     cmd = skipwhite(cmd);
     if (*cmd && *cmd != '"')	    // if not end-of-line or comment
     {
-	eap->nextcmd = check_nextcmd(cmd);
+	set_nextcmd(eap, cmd);
 	if (eap->nextcmd == NULL)
 	{
 	    semsg(_(e_trailing_arg), cmd);

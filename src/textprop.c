@@ -140,7 +140,8 @@ get_bufnr_from_arg(typval_T *arg, buf_T **buf)
     if (arg->vval.v_dict == NULL)
 	return OK;  // NULL dict is like an empty dict
     di = dict_find(arg->vval.v_dict, (char_u *)"bufnr", -1);
-    if (di != NULL)
+    if (di != NULL && (di->di_tv.v_type != VAR_NUMBER
+					      || di->di_tv.vval.v_number != 0))
     {
 	*buf = get_buf_arg(&di->di_tv);
 	if (*buf == NULL)
@@ -157,6 +158,12 @@ f_prop_add(typval_T *argvars, typval_T *rettv UNUSED)
 {
     linenr_T	start_lnum;
     colnr_T	start_col;
+
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_number_arg(argvars, 1) == FAIL
+		|| check_for_dict_arg(argvars, 2) == FAIL))
+	return;
 
     start_lnum = tv_get_number(&argvars[0]);
     start_col = tv_get_number(&argvars[1]);
@@ -176,6 +183,200 @@ f_prop_add(typval_T *argvars, typval_T *rettv UNUSED)
 }
 
 /*
+ * Attach a text property 'type_name' to the text starting
+ * at [start_lnum, start_col] and ending at [end_lnum, end_col] in
+ * the buffer 'buf' and assign identifier 'id'.
+ */
+    static int
+prop_add_one(
+	buf_T		*buf,
+	char_u		*type_name,
+	int		id,
+	linenr_T	start_lnum,
+	linenr_T	end_lnum,
+	colnr_T		start_col,
+	colnr_T		end_col)
+{
+    proptype_T	*type;
+    linenr_T	lnum;
+    int		proplen;
+    char_u	*props = NULL;
+    char_u	*newprops;
+    size_t	textlen;
+    char_u	*newtext;
+    int		i;
+    textprop_T	tmp_prop;
+
+    type = lookup_prop_type(type_name, buf);
+    if (type == NULL)
+	return FAIL;
+
+    if (start_lnum < 1 || start_lnum > buf->b_ml.ml_line_count)
+    {
+	semsg(_(e_invalid_lnum), (long)start_lnum);
+	return FAIL;
+    }
+    if (end_lnum < start_lnum || end_lnum > buf->b_ml.ml_line_count)
+    {
+	semsg(_(e_invalid_lnum), (long)end_lnum);
+	return FAIL;
+    }
+
+    if (buf->b_ml.ml_mfp == NULL)
+    {
+	emsg(_("E275: Cannot add text property to unloaded buffer"));
+	return FAIL;
+    }
+
+    for (lnum = start_lnum; lnum <= end_lnum; ++lnum)
+    {
+	colnr_T col;	// start column
+	long	length;	// in bytes
+
+	// Fetch the line to get the ml_line_len field updated.
+	proplen = get_text_props(buf, lnum, &props, TRUE);
+	textlen = buf->b_ml.ml_line_len - proplen * sizeof(textprop_T);
+
+	if (lnum == start_lnum)
+	    col = start_col;
+	else
+	    col = 1;
+	if (col - 1 > (colnr_T)textlen)
+	{
+	    semsg(_(e_invalid_col), (long)start_col);
+	    return FAIL;
+	}
+
+	if (lnum == end_lnum)
+	    length = end_col - col;
+	else
+	    length = (int)textlen - col + 1;
+	if (length > (long)textlen)
+	    length = (int)textlen;	// can include the end-of-line
+	if (length < 0)
+	    length = 0;		// zero-width property
+
+	// Allocate the new line with space for the new property.
+	newtext = alloc(buf->b_ml.ml_line_len + sizeof(textprop_T));
+	if (newtext == NULL)
+	    return FAIL;
+	// Copy the text, including terminating NUL.
+	mch_memmove(newtext, buf->b_ml.ml_line_ptr, textlen);
+
+	// Find the index where to insert the new property.
+	// Since the text properties are not aligned properly when stored with
+	// the text, we need to copy them as bytes before using it as a struct.
+	for (i = 0; i < proplen; ++i)
+	{
+	    mch_memmove(&tmp_prop, props + i * sizeof(textprop_T),
+							   sizeof(textprop_T));
+	    if (tmp_prop.tp_col >= col)
+		break;
+	}
+	newprops = newtext + textlen;
+	if (i > 0)
+	    mch_memmove(newprops, props, sizeof(textprop_T) * i);
+
+	tmp_prop.tp_col = col;
+	tmp_prop.tp_len = length;
+	tmp_prop.tp_id = id;
+	tmp_prop.tp_type = type->pt_id;
+	tmp_prop.tp_flags = (lnum > start_lnum ? TP_FLAG_CONT_PREV : 0)
+			  | (lnum < end_lnum ? TP_FLAG_CONT_NEXT : 0);
+	mch_memmove(newprops + i * sizeof(textprop_T), &tmp_prop,
+							   sizeof(textprop_T));
+
+	if (i < proplen)
+	    mch_memmove(newprops + (i + 1) * sizeof(textprop_T),
+					    props + i * sizeof(textprop_T),
+					    sizeof(textprop_T) * (proplen - i));
+
+	if (buf->b_ml.ml_flags & ML_LINE_DIRTY)
+	    vim_free(buf->b_ml.ml_line_ptr);
+	buf->b_ml.ml_line_ptr = newtext;
+	buf->b_ml.ml_line_len += sizeof(textprop_T);
+	buf->b_ml.ml_flags |= ML_LINE_DIRTY;
+    }
+
+    changed_lines_buf(buf, start_lnum, end_lnum + 1, 0);
+    return OK;
+}
+
+/*
+ * prop_add_list()
+ * First argument specifies the text property:
+ *   {'type': <str>, 'id': <num>, 'bufnr': <num>}
+ * Second argument is a List where each item is a List with the following
+ * entries: [lnum, start_col, end_col]
+ */
+    void
+f_prop_add_list(typval_T *argvars, typval_T *rettv UNUSED)
+{
+    dict_T	*dict;
+    char_u	*type_name;
+    buf_T	*buf = curbuf;
+    int		id = 0;
+    listitem_T	*li;
+    list_T	*pos_list;
+    linenr_T	start_lnum;
+    colnr_T	start_col;
+    linenr_T	end_lnum;
+    colnr_T	end_col;
+    int		error = FALSE;
+
+    if (check_for_dict_arg(argvars, 0) == FAIL
+	    || check_for_list_arg(argvars, 1) == FAIL)
+	return;
+
+    if (argvars[1].vval.v_list == NULL)
+    {
+	emsg(_(e_listreq));
+	return;
+    }
+
+    dict = argvars[0].vval.v_dict;
+    if (dict == NULL || dict_find(dict, (char_u *)"type", -1) == NULL)
+    {
+	emsg(_("E965: missing property type name"));
+	return;
+    }
+    type_name = dict_get_string(dict, (char_u *)"type", FALSE);
+
+    if (dict_find(dict, (char_u *)"id", -1) != NULL)
+	id = dict_get_number(dict, (char_u *)"id");
+
+    if (get_bufnr_from_arg(&argvars[0], &buf) == FAIL)
+	return;
+
+    FOR_ALL_LIST_ITEMS(argvars[1].vval.v_list, li)
+    {
+	if (li->li_tv.v_type != VAR_LIST || li->li_tv.vval.v_list == NULL)
+	{
+	    emsg(_(e_listreq));
+	    return;
+	}
+
+	pos_list = li->li_tv.vval.v_list;
+	start_lnum = list_find_nr(pos_list, 0L, &error);
+	start_col = list_find_nr(pos_list, 1L, &error);
+	end_lnum = list_find_nr(pos_list, 2L, &error);
+	end_col = list_find_nr(pos_list, 3L, &error);
+	if (error || start_lnum <= 0 || start_col <= 0
+		|| end_lnum <= 0 || end_col <= 0)
+	{
+	    emsg(_(e_invarg));
+	    return;
+	}
+	if (prop_add_one(buf, type_name, id, start_lnum, end_lnum,
+						start_col, end_col) == FAIL)
+	    return;
+    }
+
+    buf->b_has_textprop = TRUE;  // this is never reset
+    redraw_buf_later(buf, VALID);
+}
+
+/*
  * Shared between prop_add() and popup_create().
  * "dict_arg" is the function argument of a dict containing "bufnr".
  * it is NULL for popup_create().
@@ -188,20 +389,11 @@ prop_add_common(
 	buf_T	    *default_buf,
 	typval_T    *dict_arg)
 {
-    linenr_T	lnum;
     linenr_T	end_lnum;
     colnr_T	end_col;
     char_u	*type_name;
-    proptype_T	*type;
     buf_T	*buf = default_buf;
     int		id = 0;
-    char_u	*newtext;
-    int		proplen;
-    size_t	textlen;
-    char_u	*props = NULL;
-    char_u	*newprops;
-    textprop_T	tmp_prop;
-    int		i;
 
     if (dict == NULL || dict_find(dict, (char_u *)"type", -1) == NULL)
     {
@@ -253,99 +445,9 @@ prop_add_common(
     if (dict_arg != NULL && get_bufnr_from_arg(dict_arg, &buf) == FAIL)
 	return;
 
-    type = lookup_prop_type(type_name, buf);
-    if (type == NULL)
-	return;
-
-    if (start_lnum < 1 || start_lnum > buf->b_ml.ml_line_count)
-    {
-	semsg(_(e_invalid_lnum), (long)start_lnum);
-	return;
-    }
-    if (end_lnum < start_lnum || end_lnum > buf->b_ml.ml_line_count)
-    {
-	semsg(_(e_invalid_lnum), (long)end_lnum);
-	return;
-    }
-
-    if (buf->b_ml.ml_mfp == NULL)
-    {
-	emsg(_("E275: Cannot add text property to unloaded buffer"));
-	return;
-    }
-
-    for (lnum = start_lnum; lnum <= end_lnum; ++lnum)
-    {
-	colnr_T col;	// start column
-	long	length;	// in bytes
-
-	// Fetch the line to get the ml_line_len field updated.
-	proplen = get_text_props(buf, lnum, &props, TRUE);
-	textlen = buf->b_ml.ml_line_len - proplen * sizeof(textprop_T);
-
-	if (lnum == start_lnum)
-	    col = start_col;
-	else
-	    col = 1;
-	if (col - 1 > (colnr_T)textlen)
-	{
-	    semsg(_(e_invalid_col), (long)start_col);
-	    return;
-	}
-
-	if (lnum == end_lnum)
-	    length = end_col - col;
-	else
-	    length = (int)textlen - col + 1;
-	if (length > (long)textlen)
-	    length = (int)textlen;	// can include the end-of-line
-	if (length < 0)
-	    length = 0;		// zero-width property
-
-	// Allocate the new line with space for the new property.
-	newtext = alloc(buf->b_ml.ml_line_len + sizeof(textprop_T));
-	if (newtext == NULL)
-	    return;
-	// Copy the text, including terminating NUL.
-	mch_memmove(newtext, buf->b_ml.ml_line_ptr, textlen);
-
-	// Find the index where to insert the new property.
-	// Since the text properties are not aligned properly when stored with
-	// the text, we need to copy them as bytes before using it as a struct.
-	for (i = 0; i < proplen; ++i)
-	{
-	    mch_memmove(&tmp_prop, props + i * sizeof(textprop_T),
-							   sizeof(textprop_T));
-	    if (tmp_prop.tp_col >= col)
-		break;
-	}
-	newprops = newtext + textlen;
-	if (i > 0)
-	    mch_memmove(newprops, props, sizeof(textprop_T) * i);
-
-	tmp_prop.tp_col = col;
-	tmp_prop.tp_len = length;
-	tmp_prop.tp_id = id;
-	tmp_prop.tp_type = type->pt_id;
-	tmp_prop.tp_flags = (lnum > start_lnum ? TP_FLAG_CONT_PREV : 0)
-			  | (lnum < end_lnum ? TP_FLAG_CONT_NEXT : 0);
-	mch_memmove(newprops + i * sizeof(textprop_T), &tmp_prop,
-							   sizeof(textprop_T));
-
-	if (i < proplen)
-	    mch_memmove(newprops + (i + 1) * sizeof(textprop_T),
-					    props + i * sizeof(textprop_T),
-					    sizeof(textprop_T) * (proplen - i));
-
-	if (buf->b_ml.ml_flags & ML_LINE_DIRTY)
-	    vim_free(buf->b_ml.ml_line_ptr);
-	buf->b_ml.ml_line_ptr = newtext;
-	buf->b_ml.ml_line_len += sizeof(textprop_T);
-	buf->b_ml.ml_flags |= ML_LINE_DIRTY;
-    }
+    prop_add_one(buf, type_name, id, start_lnum, end_lnum, start_col, end_col);
 
     buf->b_has_textprop = TRUE;  // this is never reset
-    changed_lines_buf(buf, start_lnum, end_lnum + 1, 0);
     redraw_buf_later(buf, VALID);
 }
 
@@ -500,15 +602,27 @@ find_type_by_id(hashtab_T *ht, int id)
 prop_fill_dict(dict_T *dict, textprop_T *prop, buf_T *buf)
 {
     proptype_T *pt;
+    int buflocal = TRUE;
 
     dict_add_number(dict, "col", prop->tp_col);
     dict_add_number(dict, "length", prop->tp_len);
     dict_add_number(dict, "id", prop->tp_id);
     dict_add_number(dict, "start", !(prop->tp_flags & TP_FLAG_CONT_PREV));
     dict_add_number(dict, "end", !(prop->tp_flags & TP_FLAG_CONT_NEXT));
-    pt = text_prop_type_by_id(buf, prop->tp_type);
+
+    pt = find_type_by_id(buf->b_proptypes, prop->tp_type);
+    if (pt == NULL)
+    {
+	pt = find_type_by_id(global_proptypes, prop->tp_type);
+	buflocal = FALSE;
+    }
     if (pt != NULL)
 	dict_add_string(dict, "type", pt->pt_name);
+
+    if (buflocal)
+	dict_add_number(dict, "type_bufnr", buf->b_fnum);
+    else
+	dict_add_number(dict, "type_bufnr", 0);
 }
 
 /*
@@ -532,12 +646,21 @@ text_prop_type_by_id(buf_T *buf, int id)
     void
 f_prop_clear(typval_T *argvars, typval_T *rettv UNUSED)
 {
-    linenr_T start = tv_get_number(&argvars[0]);
-    linenr_T end = start;
+    linenr_T start;
+    linenr_T end;
     linenr_T lnum;
     buf_T    *buf = curbuf;
     int	    did_clear = FALSE;
 
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_opt_number_arg(argvars, 1) == FAIL
+		|| (argvars[1].v_type != VAR_UNKNOWN
+		    && check_for_opt_dict_arg(argvars, 2) == FAIL)))
+	return;
+
+    start = tv_get_number(&argvars[0]);
+    end = start;
     if (argvars[1].v_type != VAR_UNKNOWN)
     {
 	end = tv_get_number(&argvars[1]);
@@ -595,13 +718,19 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
     int		lnum_start;
     int		start_pos_has_prop = 0;
     int		seen_end = 0;
-    int		id = -1;
+    int		id = 0;
+    int		id_found = FALSE;
     int		type_id = -1;
     int		skipstart = 0;
     int		lnum = -1;
     int		col = -1;
     int		dir = 1;    // 1 = forward, -1 = backward
     int		both;
+
+    if (in_vim9script()
+	    && (check_for_dict_arg(argvars, 0) == FAIL
+		|| check_for_opt_string_arg(argvars, 1) == FAIL))
+	return;
 
     if (argvars[0].v_type != VAR_DICT || argvars[0].vval.v_dict == NULL)
     {
@@ -653,7 +782,10 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
     skipstart = dict_get_bool(dict, (char_u *)"skipstart", 0);
 
     if (dict_find(dict, (char_u *)"id", -1) != NULL)
+    {
 	id = dict_get_number(dict, (char_u *)"id");
+	id_found = TRUE;
+    }
     if (dict_find(dict, (char_u *)"type", -1))
     {
 	char_u	    *name = dict_get_string(dict, (char_u *)"type", FALSE);
@@ -664,12 +796,12 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
 	type_id = type->pt_id;
     }
     both = dict_get_bool(dict, (char_u *)"both", FALSE);
-    if (id == -1 && type_id == -1)
+    if (!id_found && type_id == -1)
     {
 	emsg(_("E968: Need at least one of 'id' or 'type'"));
 	return;
     }
-    if (both && (id == -1 || type_id == -1))
+    if (both && (!id_found || type_id == -1))
     {
 	emsg(_("E860: Need 'id' and 'type' with 'both'"));
 	return;
@@ -707,7 +839,8 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
 		    continue;
 	    }
 	    if (both ? prop.tp_id == id && prop.tp_type == type_id
-		     : prop.tp_id == id || prop.tp_type == type_id)
+		     : (id_found && prop.tp_id == id)
+						    || prop.tp_type == type_id)
 	    {
 		// Check if the starting position has text props.
 		if (lnum_start == lnum
@@ -774,8 +907,7 @@ f_prop_list(typval_T *argvars, typval_T *rettv)
 
     if (in_vim9script()
 	    && (check_for_number_arg(argvars, 0) == FAIL
-		|| (argvars[1].v_type != VAR_UNKNOWN &&
-		    check_for_dict_arg(argvars, 1) == FAIL)))
+		|| check_for_opt_dict_arg(argvars, 1) == FAIL))
 	return;
 
     lnum = tv_get_number(&argvars[0]);
@@ -832,6 +964,14 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
     int		both;
 
     rettv->vval.v_number = 0;
+
+    if (in_vim9script()
+	    && (check_for_dict_arg(argvars, 0) == FAIL
+		|| check_for_opt_number_arg(argvars, 1) == FAIL
+		|| (argvars[1].v_type != VAR_UNKNOWN
+		    && check_for_opt_number_arg(argvars, 2) == FAIL)))
+	return;
+
     if (argvars[0].v_type != VAR_DICT || argvars[0].vval.v_dict == NULL)
     {
 	emsg(_(e_invarg));
@@ -963,6 +1103,11 @@ prop_type_set(typval_T *argvars, int add)
     dictitem_T  *di;
     proptype_T	*prop;
 
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_dict_arg(argvars, 1) == FAIL))
+	return;
+
     name = tv_get_string(&argvars[0]);
     if (*name == NUL)
     {
@@ -1093,6 +1238,11 @@ f_prop_type_delete(typval_T *argvars, typval_T *rettv UNUSED)
     buf_T	*buf = NULL;
     hashitem_T	*hi;
 
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_opt_dict_arg(argvars, 1) == FAIL))
+	return;
+
     name = tv_get_string(&argvars[0]);
     if (*name == NUL)
     {
@@ -1122,13 +1272,19 @@ f_prop_type_delete(typval_T *argvars, typval_T *rettv UNUSED)
 }
 
 /*
- * prop_type_get({name} [, {bufnr}])
+ * prop_type_get({name} [, {props}])
  */
     void
 f_prop_type_get(typval_T *argvars, typval_T *rettv)
 {
-    char_u *name = tv_get_string(&argvars[0]);
+    char_u *name;
 
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_opt_dict_arg(argvars, 1) == FAIL))
+	return;
+
+    name = tv_get_string(&argvars[0]);
     if (*name == NUL)
     {
 	emsg(_(e_invarg));
@@ -1194,6 +1350,9 @@ f_prop_type_list(typval_T *argvars, typval_T *rettv UNUSED)
 
     if (rettv_list_alloc(rettv) == OK)
     {
+	if (in_vim9script() && check_for_opt_dict_arg(argvars, 0) == FAIL)
+	    return;
+
 	if (argvars[0].v_type != VAR_UNKNOWN)
 	{
 	    if (get_bufnr_from_arg(&argvars[0], &buf) == FAIL)

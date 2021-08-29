@@ -1240,7 +1240,7 @@ spell_valid_case(
 /*
  * Return TRUE if spell checking is not enabled.
  */
-    int
+    static int
 no_spell_checking(win_T *wp)
 {
     if (!wp->w_p_spell || *wp->w_s->b_p_spl == NUL
@@ -2137,7 +2137,7 @@ did_set_spelllang(win_T *wp)
 		    if (ga_grow(&ga, 1) == FAIL)
 		    {
 			ga_clear(&ga);
-			ret_msg = e_outofmem;
+			ret_msg = e_out_of_memory;
 			goto theend;
 		    }
 		    LANGP_ENTRY(ga, ga.ga_len)->lp_slang = slang;

@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.2.  Last change: 2021 Jun 20
+*options.txt*	For Vim version 8.2.  Last change: 2021 Jul 22
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -540,6 +540,15 @@ chance that a normal word like "lex:" is caught.  There is one exception:
 "vi:" and "vim:" can also be at the start of the line (for compatibility with
 version 3.0).  Using "ex:" at the start of the line will be ignored (this
 could be short for "example:").
+
+If the modeline is disabled within a modeline, subsequent modelines will be
+ignored.  This is to allow turning off modeline on a per-file basis.  This is
+useful when a line looks like a modeline but isn't.  For example, it would be
+good to start a YAML file containing strings like "vim:" with
+    # vim: nomodeline ~
+so as to avoid modeline misdetection.  Following options on the same line
+after modeline deactivation, if any, are still evaluated (but you would
+normally not have any).
 
 							*modeline-local*
 The options are set like with ":setlocal": The new value only applies to the
@@ -1326,9 +1335,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 			    continuation (positive).
 		sbr	    Display the 'showbreak' value before applying the
 			    additional indent.
-		list:{n}    Adds an additional indent for lines that match a 
+		list:{n}    Adds an additional indent for lines that match a
 			    numbered or bulleted list (using the
 			    'formatlistpat' setting).
+		list:-1	    Uses the length of a match with 'formatlistpat'
+			    for indentation.
 	The default value for min is 20, shift and list is 0.
 
 						*'browsedir'* *'bsdir'*
@@ -8641,12 +8652,16 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 					    *'virtualedit'* *'ve'*
 'virtualedit' 've'	string	(default "")
-			global
+			global or local to window |global-local|
 	A comma separated list of these words:
 	    block	Allow virtual editing in Visual block mode.
 	    insert	Allow virtual editing in Insert mode.
 	    all		Allow virtual editing in all modes.
 	    onemore	Allow the cursor to move just past the end of the line
+	    none	When used as the local value, do not allow virtual
+			editing even when the global value is set.  When used
+			as the global value, "none" is the same as "".
+	    NONE	Alternative spelling of "none".
 
 	Virtual editing means that the cursor can be positioned where there is
 	no actual character.  This can be halfway into a tab or beyond the end
@@ -8663,6 +8678,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	The `g$` command will move to the end of the screen line.
 	It doesn't make sense to combine "all" with "onemore", but you will
 	not get a warning for it.
+	When combined with other words, "none" is ignored.
 	NOTE: This option is set to "" when 'compatible' is set.
 
 			*'visualbell'* *'vb'* *'novisualbell'* *'novb'* *beep*

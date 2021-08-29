@@ -9,6 +9,10 @@ func Test_complete_tab()
   call writefile(['testfile'], 'Xtestfile')
   call feedkeys(":e Xtest\t\r", "tx")
   call assert_equal('testfile', getline(1))
+
+  " Pressing <Tab> after '%' completes the current file, also on MS-Windows
+  call feedkeys(":e %\t\r", "tx")
+  call assert_equal('e Xtestfile', @:)
   call delete('Xtestfile')
 endfunc
 
@@ -650,13 +654,26 @@ endfunc
 
 func Test_cmdline_complete_user_func()
   call feedkeys(":func Test_cmdline_complete_user\<Tab>\<Home>\"\<cr>", 'tx')
-  call assert_match('"func Test_cmdline_complete_user', @:)
+  call assert_match('"func Test_cmdline_complete_user_', @:)
   call feedkeys(":func s:ScriptL\<Tab>\<Home>\"\<cr>", 'tx')
   call assert_match('"func <SNR>\d\+_ScriptLocalFunction', @:)
 
   " g: prefix also works
   call feedkeys(":echo g:Test_cmdline_complete_user_f\<Tab>\<Home>\"\<cr>", 'tx')
   call assert_match('"echo g:Test_cmdline_complete_user_func', @:)
+
+  " using g: prefix does not result in just "g:" matches from a lambda
+  let Fx = { a ->  a }
+  call feedkeys(":echo g:\<Tab>\<Home>\"\<cr>", 'tx')
+  call assert_match('"echo g:[A-Z]', @:)
+
+  " existence of script-local dict function does not break user function name
+  " completion
+  function s:a_dict_func() dict
+  endfunction
+  call feedkeys(":call Test_cmdline_complete_user\<Tab>\<Home>\"\<cr>", 'tx')
+  call assert_match('"call Test_cmdline_complete_user_', @:)
+  delfunction s:a_dict_func
 endfunc
 
 func Test_cmdline_complete_user_names()
@@ -736,6 +753,11 @@ func Test_cmdline_complete_expression()
     call assert_match('"' .. cmd .. ' foo SomeVar', @:)
   endfor
   unlet g:SomeVar
+endfunc
+
+" Unique function name for completion below
+func s:WeirdFunc()
+  echo 'weird'
 endfunc
 
 " Test for various command-line completion
@@ -819,6 +841,11 @@ func Test_cmdline_complete_various()
   call assert_equal("\"disas debug Test_cmdline_complete_various", @:)
   call feedkeys(":disas profile Test_cmdline_complete_var\<C-A>\<C-B>\"\<CR>", 'xt')
   call assert_equal("\"disas profile Test_cmdline_complete_various", @:)
+  call feedkeys(":disas Test_cmdline_complete_var\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal("\"disas Test_cmdline_complete_various", @:)
+
+  call feedkeys(":disas s:WeirdF\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_match('"disas <SNR>\d\+_WeirdFunc', @:)
 
   " completion for the :match command
   call feedkeys(":match Search /pat/\<C-A>\<C-B>\"\<CR>", 'xt')
@@ -839,6 +866,14 @@ func Test_cmdline_complete_various()
   " completion of autocmd group after comma
   call feedkeys(":doautocmd BufNew,BufEn\<C-A>\<C-B>\"\<CR>", 'xt')
   call assert_equal("\"doautocmd BufNew,BufEnter", @:)
+
+  " completion of file name in :doautocmd
+  call writefile([], 'Xfile1')
+  call writefile([], 'Xfile2')
+  call feedkeys(":doautocmd BufEnter Xfi\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal("\"doautocmd BufEnter Xfile1 Xfile2", @:)
+  call delete('Xfile1')
+  call delete('Xfile2')
 
   " completion for the :augroup command
   augroup XTest
@@ -1344,7 +1379,7 @@ endfunc
 " Test for expanding special keywords in cmdline
 func Test_cmdline_expand_special()
   %bwipe!
-  call assert_fails('e #', 'E499:')
+  call assert_fails('e #', 'E194:')
   call assert_fails('e <afile>', 'E495:')
   call assert_fails('e <abuf>', 'E496:')
   call assert_fails('e <amatch>', 'E497:')
@@ -1409,6 +1444,10 @@ func Test_cmd_backtick()
   %argd
   argadd `=['a', 'b', 'c']`
   call assert_equal(['a', 'b', 'c'], argv())
+  %argd
+
+  argadd `echo abc def`
+  call assert_equal(['abc def'], argv())
   %argd
 endfunc
 

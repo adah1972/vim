@@ -2810,5 +2810,29 @@ func Test_autocmd_vimgrep()
   augroup END
 endfunc
 
+func Test_autocmd_with_block()
+  augroup block_testing
+    au BufReadPost *.xml {
+            setlocal matchpairs+=<:>
+            /<start
+          }
+    au CursorHold * {
+        autocmd BufReadPre * ++once echo 'one' | echo 'two'
+        g:gotSafeState = 77
+      }
+  augroup END
+
+  let expected = "\n--- Autocommands ---\nblock_testing  BufRead\n    *.xml     {^@            setlocal matchpairs+=<:>^@            /<start^@          }"
+  call assert_equal(expected, execute('au BufReadPost *.xml'))
+
+  doautocmd CursorHold
+  call assert_equal(77, g:gotSafeState)
+  unlet g:gotSafeState
+
+  augroup block_testing
+    au!
+  augroup END
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

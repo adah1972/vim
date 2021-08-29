@@ -231,6 +231,10 @@ typedef struct
 #define w_p_nu w_onebuf_opt.wo_nu	// 'number'
     int		wo_rnu;
 #define w_p_rnu w_onebuf_opt.wo_rnu	// 'relativenumber'
+    char_u	*wo_ve;
+#define w_p_ve w_onebuf_opt.wo_ve	// 'virtualedit'
+    unsigned	wo_ve_flags;
+#define	w_ve_flags w_onebuf_opt.wo_ve_flags	// flags for 'virtualedit'
 #ifdef FEAT_LINEBREAK
     long	wo_nuw;
 # define w_p_nuw w_onebuf_opt.wo_nuw	// 'numberwidth'
@@ -328,8 +332,8 @@ struct wininfo_S
     wininfo_T	*wi_prev;	// previous entry or NULL for first entry
     win_T	*wi_win;	// pointer to window that did set wi_fpos
     pos_T	wi_fpos;	// last cursor position in the file
-    int		wi_optset;	// TRUE when wi_opt has useful values
     winopt_T	wi_opt;		// local window options
+    int		wi_optset;	// TRUE when wi_opt has useful values
 #ifdef FEAT_FOLDING
     int		wi_fold_manual;	// copy of w_fold_manual
     garray_T	wi_folds;	// clone of w_folds
@@ -1234,8 +1238,8 @@ struct mapblock
     char	m_silent;	// <silent> used, don't echo commands
     char	m_nowait;	// <nowait> used
 #ifdef FEAT_EVAL
-    sctx_T	m_script_ctx;	// SCTX where map was defined
     char	m_expr;		// <expr> used, m_str is an expression
+    sctx_T	m_script_ctx;	// SCTX where map was defined
 #endif
 };
 
@@ -1888,6 +1892,9 @@ typedef struct {
     // used when compiling a :def function, NULL otherwise
     cctx_T	*eval_cctx;
 
+    // used when executing commands from a script, NULL otherwise
+    cstack_T	*eval_cstack;
+
     // Used to collect lines while parsing them, so that they can be
     // concatenated later.  Used when "eval_ga.ga_itemsize" is not zero.
     // "eval_ga.ga_data" is a list of pointers to lines.
@@ -2010,12 +2017,12 @@ struct outer_S {
 struct partial_S
 {
     int		pt_refcount;	// reference count
+    int		pt_auto;	// when TRUE the partial was created for using
+				// dict.member in handle_subscript()
     char_u	*pt_name;	// function name; when NULL use
 				// pt_func->uf_name
     ufunc_T	*pt_func;	// function pointer; when NULL lookup function
 				// with pt_name
-    int		pt_auto;	// when TRUE the partial was created for using
-				// dict.member in handle_subscript()
 
     // For a compiled closure: the arguments and local variables scope
     outer_T	pt_outer;
@@ -2023,11 +2030,11 @@ struct partial_S
     funcstack_T	*pt_funcstack;	// copy of stack, used after context
 				// function returns
 
-    int		pt_argc;	// number of arguments
     typval_T	*pt_argv;	// arguments in allocated array
+    int		pt_argc;	// number of arguments
 
-    dict_T	*pt_dict;	// dict for "self"
     int		pt_copyID;	// funcstack may contain pointer to partial
+    dict_T	*pt_dict;	// dict for "self"
 };
 
 typedef struct AutoPatCmd_S AutoPatCmd;
@@ -2096,9 +2103,9 @@ struct jobvar_S
     PROCESS_INFORMATION	jv_proc_info;
     HANDLE		jv_job_object;
 #endif
+    jobstatus_T	jv_status;
     char_u	*jv_tty_in;	// controlling tty input, allocated
     char_u	*jv_tty_out;	// controlling tty output, allocated
-    jobstatus_T	jv_status;
     char_u	*jv_stoponexit;	// allocated
 #ifdef UNIX
     char_u	*jv_termsig;	// allocated
@@ -3918,8 +3925,8 @@ struct VimMenu
     char_u	*en_dname;	    // "dname" untranslated, NULL when "dname"
 				    // was not translated
 #endif
-    int		mnemonic;	    // mnemonic key (after '&')
     char_u	*actext;	    // accelerator text (after TAB)
+    int		mnemonic;	    // mnemonic key (after '&')
     int		priority;	    // Menu order priority
 #ifdef FEAT_GUI
     void	(*cb)(vimmenu_T *); // Call-back function
@@ -4438,7 +4445,10 @@ typedef enum {
 
 // Struct used to pass to error messages about where the error happened.
 typedef struct {
+    char    *wt_func_name;  // function name or NULL
     char    wt_index;	    // argument or variable index, 0 means unknown
     char    wt_variable;    // "variable" when TRUE, "argument" otherwise
 } where_T;
+
+#define WHERE_INIT {NULL, 0, 0}
 

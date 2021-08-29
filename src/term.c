@@ -100,7 +100,7 @@ char		*tgetstr(char *, char **);
     // Change this to "if 1" to debug what happens with termresponse.
 #  if 0
 #   define DEBUG_TERMRESPONSE
-static void log_tr(const char *fmt, ...);
+static void log_tr(const char *fmt, ...) ATTRIBUTE_FORMAT_PRINTF(1, 2);
 #   define LOG_TR(msg) log_tr msg
 #  else
 #   define LOG_TR(msg) do { /**/ } while (0)
@@ -1786,7 +1786,8 @@ report_term_error(char *error_msg, char_u *term)
     mch_errmsg("\r\n");
     for (termp = &(builtin_termcaps[0]); termp->bt_string != NULL; ++termp)
     {
-	if (termp->bt_entry == (int)KS_NAME)
+	if (termp->bt_entry == (int)KS_NAME
+		&& STRCMP(termp->bt_string, "gui") != 0)
 	{
 #ifdef HAVE_TGETENT
 	    mch_errmsg("    builtin_");

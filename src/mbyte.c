@@ -4902,7 +4902,8 @@ iconv_enabled(int verbose)
 	{
 	    verbose_enter();
 	    semsg(_(e_loadlib),
-		    hIconvDLL == 0 ? DYNAMIC_ICONV_DLL : DYNAMIC_MSVCRT_DLL);
+		    hIconvDLL == 0 ? DYNAMIC_ICONV_DLL : DYNAMIC_MSVCRT_DLL,
+		    GetWin32Error());
 	    verbose_leave();
 	}
 	iconv_end();
@@ -4975,6 +4976,12 @@ f_iconv(typval_T *argvars UNUSED, typval_T *rettv)
 
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
+
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL
+		|| check_for_string_arg(argvars, 2) == FAIL))
+	return;
 
     str = tv_get_string(&argvars[0]);
     from = enc_canonize(enc_skip(tv_get_string_buf(&argvars[1], buf1)));
@@ -5503,6 +5510,9 @@ f_setcellwidths(typval_T *argvars, typval_T *rettv UNUSED)
     int		    i;
     listitem_T	    **ptrs;
     cw_interval_T   *table;
+
+    if (in_vim9script() && check_for_list_arg(argvars, 0) == FAIL)
+	return;
 
     if (argvars[0].v_type != VAR_LIST || argvars[0].vval.v_list == NULL)
     {

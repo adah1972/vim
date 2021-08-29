@@ -2184,7 +2184,7 @@ check_map(
     return NULL;
 }
 
-    void
+    static void
 get_maparg(typval_T *argvars, typval_T *rettv, int exact)
 {
     char_u	*keys;
@@ -2288,6 +2288,40 @@ get_maparg(typval_T *argvars, typval_T *rettv, int exact)
 }
 
 /*
+ * "maparg()" function
+ */
+    void
+f_maparg(typval_T *argvars, typval_T *rettv)
+{
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_opt_string_arg(argvars, 1) == FAIL
+		|| (argvars[1].v_type != VAR_UNKNOWN
+		    && (check_for_opt_bool_arg(argvars, 2) == FAIL
+			|| (argvars[2].v_type != VAR_UNKNOWN
+			    && check_for_opt_bool_arg(argvars, 3) == FAIL)))))
+		return;
+
+    get_maparg(argvars, rettv, TRUE);
+}
+
+/*
+ * "mapcheck()" function
+ */
+    void
+f_mapcheck(typval_T *argvars, typval_T *rettv)
+{
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_opt_string_arg(argvars, 1) == FAIL
+		|| (argvars[1].v_type != VAR_UNKNOWN
+		    && check_for_opt_bool_arg(argvars, 2) == FAIL)))
+	return;
+
+    get_maparg(argvars, rettv, FALSE);
+}
+
+/*
  * "mapset()" function
  */
     void
@@ -2315,6 +2349,12 @@ f_mapset(typval_T *argvars, typval_T *rettv UNUSED)
     mapblock_T  **abbr_table = &first_abbr;
     int		nowait;
     char_u	*arg;
+
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_bool_arg(argvars, 1) == FAIL
+		|| check_for_dict_arg(argvars, 2) == FAIL))
+	return;
 
     which = tv_get_string_buf_chk(&argvars[0], buf);
     if (which == NULL)
@@ -2717,7 +2757,8 @@ do_exmap(exarg_T *eap, int isabbrev)
     {
 	case 1: emsg(_(e_invarg));
 		break;
-	case 2: emsg((isabbrev ? _(e_no_such_abbreviation) : _(e_nomap)));
+	case 2: emsg((isabbrev ? _(e_no_such_abbreviation)
+						      : _(e_no_such_mapping)));
 		break;
     }
 }

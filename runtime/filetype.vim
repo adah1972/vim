@@ -537,8 +537,13 @@ au BufNewFile,BufRead *.drac,*.drc,*lvs,*lpe	setf dracula
 " Datascript
 au BufNewFile,BufRead *.ds			setf datascript
 
-" dsl
-au BufNewFile,BufRead *.dsl			setf dsl
+" dsl: DSSSL or Structurizr
+au BufNewFile,BufRead *.dsl
+	\ if getline(1) =~ '^\s*<\!' |
+	\   setf dsl |
+	\ else |
+	\   setf structurizr |
+	\ endif
 
 " DTD (Document Type Definition for XML)
 au BufNewFile,BufRead *.dtd			setf dtd
@@ -873,6 +878,9 @@ au BufNewFile,BufRead *.ipynb				setf json
 
 " JSONC
 au BufNewFile,BufRead *.jsonc			setf jsonc
+
+" Julia
+au BufNewFile,BufRead *.jl			setf julia
 
 " Kixtart
 au BufNewFile,BufRead *.kix			setf kix
@@ -1375,6 +1383,9 @@ au BufNewFile,BufRead *.pk			setf poke
 " Protocols
 au BufNewFile,BufRead */etc/protocols		setf protocols
 
+" Pyret
+au BufNewFile,BufRead *.arr			setf pyret
+
 " Pyrex
 au BufNewFile,BufRead *.pyx,*.pxd		setf pyrex
 
@@ -1523,6 +1534,9 @@ au BufNewFile,BufRead *.sbt			setf sbt
 " Scilab
 au BufNewFile,BufRead *.sci,*.sce		setf scilab
 
+" scdoc
+au BufNewFile,BufRead *.scd			setf scdoc
+
 " SCSS
 au BufNewFile,BufRead *.scss			setf scss
 
@@ -1612,7 +1626,7 @@ au BufNewFile,BufRead .zshrc,.zshenv,.zlogin,.zlogout,.zcompdump setf zsh
 au BufNewFile,BufRead *.zsh			setf zsh
 
 " Scheme
-au BufNewFile,BufRead *.scm,*.ss,*.rkt		setf scheme
+au BufNewFile,BufRead *.scm,*.ss,*.rkt,*.rktd,*.rktl 	setf scheme
 
 " Screen RC
 au BufNewFile,BufRead .screenrc,screenrc	setf screen

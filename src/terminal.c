@@ -4756,7 +4756,7 @@ dump_term_color(FILE *fd, VTermColor *color)
     void
 f_term_dumpwrite(typval_T *argvars, typval_T *rettv UNUSED)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_dumpwrite()");
+    buf_T	*buf;
     term_T	*term;
     char_u	*fname;
     int		max_height = 0;
@@ -4771,6 +4771,14 @@ f_term_dumpwrite(typval_T *argvars, typval_T *rettv UNUSED)
 
     if (check_restricted() || check_secure())
 	return;
+
+    if (in_vim9script()
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL
+		|| check_for_opt_dict_arg(argvars, 2) == FAIL))
+	return;
+
+    buf = term_get_buf(argvars, "term_dumpwrite()");
     if (buf == NULL)
 	return;
     term = buf->b_term;
@@ -5276,11 +5284,6 @@ term_load_dump(typval_T *argvars, typval_T *rettv, int do_diff)
     FILE	*fd2 = NULL;
     char_u	*textline = NULL;
 
-    if (in_vim9script()
-	    && (check_for_string_arg(argvars, 0) == FAIL
-		|| check_for_dict_arg(argvars, 1) == FAIL))
-	return;
-
     // First open the files.  If this fails bail out.
     fname1 = tv_get_string_buf_chk(&argvars[0], buf1);
     if (do_diff)
@@ -5643,6 +5646,12 @@ term_swap_diff()
     void
 f_term_dumpdiff(typval_T *argvars, typval_T *rettv)
 {
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL
+		|| check_for_opt_dict_arg(argvars, 2) == FAIL))
+	return;
+
     term_load_dump(argvars, rettv, TRUE);
 }
 
@@ -5652,6 +5661,11 @@ f_term_dumpdiff(typval_T *argvars, typval_T *rettv)
     void
 f_term_dumpload(typval_T *argvars, typval_T *rettv)
 {
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_dict_arg(argvars, 1) == FAIL))
+	return;
+
     term_load_dump(argvars, rettv, FALSE);
 }
 
@@ -5661,8 +5675,12 @@ f_term_dumpload(typval_T *argvars, typval_T *rettv)
     void
 f_term_getaltscreen(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_getaltscreen()");
+    buf_T	*buf;
 
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
+    buf = term_get_buf(argvars, "term_getaltscreen()");
     if (buf == NULL)
 	return;
     rettv->vval.v_number = buf->b_term->tl_using_altscreen;
@@ -5715,13 +5733,18 @@ f_term_getattr(typval_T *argvars, typval_T *rettv)
     void
 f_term_getcursor(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_getcursor()");
+    buf_T	*buf;
     term_T	*term;
     list_T	*l;
     dict_T	*d;
 
     if (rettv_list_alloc(rettv) == FAIL)
 	return;
+
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
+    buf = term_get_buf(argvars, "term_getcursor()");
     if (buf == NULL)
 	return;
     term = buf->b_term;
@@ -5748,8 +5771,12 @@ f_term_getcursor(typval_T *argvars, typval_T *rettv)
     void
 f_term_getjob(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_getjob()");
+    buf_T	*buf;
 
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
+    buf = term_get_buf(argvars, "term_getjob()");
     if (buf == NULL)
     {
 	rettv->v_type = VAR_SPECIAL;
@@ -5779,11 +5806,18 @@ get_row_number(typval_T *tv, term_T *term)
     void
 f_term_getline(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	    *buf = term_get_buf(argvars, "term_getline()");
+    buf_T	    *buf;
     term_T	    *term;
     int		    row;
 
     rettv->v_type = VAR_STRING;
+
+    if (in_vim9script()
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_lnum_arg(argvars, 1) == FAIL))
+	return;
+
+    buf = term_get_buf(argvars, "term_getline()");
     if (buf == NULL)
 	return;
     term = buf->b_term;
@@ -5826,8 +5860,12 @@ f_term_getline(typval_T *argvars, typval_T *rettv)
     void
 f_term_getscrolled(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_getscrolled()");
+    buf_T	*buf;
 
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
+    buf = term_get_buf(argvars, "term_getscrolled()");
     if (buf == NULL)
 	return;
     rettv->vval.v_number = buf->b_term->tl_scrollback_scrolled;
@@ -5839,11 +5877,16 @@ f_term_getscrolled(typval_T *argvars, typval_T *rettv)
     void
 f_term_getsize(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_getsize()");
+    buf_T	*buf;
     list_T	*l;
 
     if (rettv_list_alloc(rettv) == FAIL)
 	return;
+
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
+    buf = term_get_buf(argvars, "term_getsize()");
     if (buf == NULL)
 	return;
 
@@ -5858,10 +5901,17 @@ f_term_getsize(typval_T *argvars, typval_T *rettv)
     void
 f_term_setsize(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_setsize()");
+    buf_T	*buf;
     term_T	*term;
     varnumber_T rows, cols;
 
+    if (in_vim9script()
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_number_arg(argvars, 1) == FAIL
+		|| check_for_number_arg(argvars, 2) == FAIL))
+	return;
+
+    buf = term_get_buf(argvars, "term_setsize()");
     if (buf == NULL)
     {
 	emsg(_("E955: Not a terminal buffer"));
@@ -5888,11 +5938,16 @@ f_term_setsize(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     void
 f_term_getstatus(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_getstatus()");
+    buf_T	*buf;
     term_T	*term;
     char_u	val[100];
 
     rettv->v_type = VAR_STRING;
+
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
+    buf = term_get_buf(argvars, "term_getstatus()");
     if (buf == NULL)
 	return;
     term = buf->b_term;
@@ -5912,9 +5967,14 @@ f_term_getstatus(typval_T *argvars, typval_T *rettv)
     void
 f_term_gettitle(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_gettitle()");
+    buf_T	*buf;
 
     rettv->v_type = VAR_STRING;
+
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
+    buf = term_get_buf(argvars, "term_gettitle()");
     if (buf == NULL)
 	return;
 
@@ -5928,11 +5988,17 @@ f_term_gettitle(typval_T *argvars, typval_T *rettv)
     void
 f_term_gettty(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_gettty()");
+    buf_T	*buf;
     char_u	*p = NULL;
     int		num = 0;
 
+    if (in_vim9script()
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_opt_bool_arg(argvars, 1) == FAIL))
+	return;
+
     rettv->v_type = VAR_STRING;
+    buf = term_get_buf(argvars, "term_gettty()");
     if (buf == NULL)
 	return;
     if (argvars[1].v_type != VAR_UNKNOWN)
@@ -5982,7 +6048,7 @@ f_term_list(typval_T *argvars UNUSED, typval_T *rettv)
     void
 f_term_scrape(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	    *buf = term_get_buf(argvars, "term_scrape()");
+    buf_T	    *buf;
     VTermScreen	    *screen = NULL;
     VTermPos	    pos;
     list_T	    *l;
@@ -5992,6 +6058,13 @@ f_term_scrape(typval_T *argvars, typval_T *rettv)
 
     if (rettv_list_alloc(rettv) == FAIL)
 	return;
+
+    if (in_vim9script()
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_lnum_arg(argvars, 1) == FAIL))
+	return;
+
+    buf = term_get_buf(argvars, "term_scrape()");
     if (buf == NULL)
 	return;
     term = buf->b_term;
@@ -6098,9 +6171,7 @@ f_term_sendkeys(typval_T *argvars, typval_T *rettv UNUSED)
     term_T	*term;
 
     if (in_vim9script()
-	    && ((argvars[0].v_type != VAR_STRING
-		    && argvars[0].v_type != VAR_NUMBER
-		    && check_for_string_arg(argvars, 0) == FAIL)
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
 		|| check_for_string_arg(argvars, 1) == FAIL))
 	return;
 
@@ -6140,7 +6211,7 @@ f_term_sendkeys(typval_T *argvars, typval_T *rettv UNUSED)
     void
 f_term_getansicolors(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_getansicolors()");
+    buf_T	*buf;
     term_T	*term;
     VTermState	*state;
     VTermColor  color;
@@ -6151,6 +6222,10 @@ f_term_getansicolors(typval_T *argvars, typval_T *rettv)
     if (rettv_list_alloc(rettv) == FAIL)
 	return;
 
+    if (in_vim9script() && check_for_buffer_arg(argvars, 0) == FAIL)
+	return;
+
+    buf = term_get_buf(argvars, "term_getansicolors()");
     if (buf == NULL)
 	return;
     term = buf->b_term;
@@ -6175,9 +6250,15 @@ f_term_getansicolors(typval_T *argvars, typval_T *rettv)
     void
 f_term_setansicolors(typval_T *argvars, typval_T *rettv UNUSED)
 {
-    buf_T	*buf = term_get_buf(argvars, "term_setansicolors()");
+    buf_T	*buf;
     term_T	*term;
 
+    if (in_vim9script()
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_list_arg(argvars, 1) == FAIL))
+	return;
+
+    buf = term_get_buf(argvars, "term_setansicolors()");
     if (buf == NULL)
 	return;
     term = buf->b_term;
@@ -6206,9 +6287,7 @@ f_term_setapi(typval_T *argvars, typval_T *rettv UNUSED)
     char_u	*api;
 
     if (in_vim9script()
-	    && ((argvars[0].v_type != VAR_STRING
-		    && argvars[0].v_type != VAR_NUMBER
-		    && check_for_string_arg(argvars, 0) == FAIL)
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
 		|| check_for_string_arg(argvars, 1) == FAIL))
 	return;
 
@@ -6236,9 +6315,7 @@ f_term_setrestore(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     char_u	*cmd;
 
     if (in_vim9script()
-	    && ((argvars[0].v_type != VAR_STRING
-		    && argvars[0].v_type != VAR_NUMBER
-		    && check_for_string_arg(argvars, 0) == FAIL)
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
 		|| check_for_string_arg(argvars, 1) == FAIL))
 	return;
 
@@ -6266,9 +6343,7 @@ f_term_setkill(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     char_u	*how;
 
     if (in_vim9script()
-	    && ((argvars[0].v_type != VAR_STRING
-		    && argvars[0].v_type != VAR_NUMBER
-		    && check_for_string_arg(argvars, 0) == FAIL)
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
 		|| check_for_string_arg(argvars, 1) == FAIL))
 	return;
 
@@ -6292,6 +6367,11 @@ f_term_start(typval_T *argvars, typval_T *rettv)
 {
     jobopt_T	opt;
     buf_T	*buf;
+
+    if (in_vim9script()
+	    && (check_for_string_or_list_arg(argvars, 0) == FAIL
+		|| check_for_opt_dict_arg(argvars, 1) == FAIL))
+	return;
 
     init_job_options(&opt);
     if (argvars[1].v_type != VAR_UNKNOWN
@@ -6321,11 +6401,8 @@ f_term_wait(typval_T *argvars, typval_T *rettv UNUSED)
     buf_T	*buf;
 
     if (in_vim9script()
-	    && ((argvars[0].v_type != VAR_STRING
-		    && argvars[0].v_type != VAR_NUMBER
-		    && check_for_string_arg(argvars, 0) == FAIL) ||
-		(argvars[1].v_type != VAR_UNKNOWN
-		 && check_for_number_arg(argvars, 1) == FAIL)))
+	    && (check_for_buffer_arg(argvars, 0) == FAIL
+		|| check_for_opt_number_arg(argvars, 1) == FAIL))
 	return;
 
     buf = term_get_buf(argvars, "term_wait()");
@@ -6820,8 +6897,9 @@ dyn_winpty_init(int verbose)
     if (!hWinPtyDLL)
     {
 	if (verbose)
-	    semsg(_(e_loadlib), *p_winptydll != NUL ? p_winptydll
-						       : (char_u *)WINPTY_DLL);
+	    semsg(_(e_loadlib),
+		    (*p_winptydll != NUL ? p_winptydll : (char_u *)WINPTY_DLL),
+		    GetWin32Error());
 	return FAIL;
     }
     for (i = 0; winpty_entry[i].name != NULL

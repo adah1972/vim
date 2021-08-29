@@ -941,15 +941,11 @@ get_breakindent_win(
     }
     bri = prev_indent + wp->w_briopt_shift;
 
-    // indent minus the length of the showbreak string
-    if (wp->w_briopt_sbr)
-	bri -= vim_strsize(get_showbreak_value(wp));
-
     // Add offset for number column, if 'n' is in 'cpoptions'
     bri += win_col_off2(wp);
 
     // add additional indent for numbered lists
-    if (wp->w_briopt_list > 0)
+    if (wp->w_briopt_list != 0)
     {
 	regmatch_T	    regmatch;
 
@@ -958,10 +954,20 @@ get_breakindent_win(
 	if (regmatch.regprog != NULL)
 	{
 	    if (vim_regexec(&regmatch, line, 0))
-		bri += wp->w_briopt_list;
+	    {
+		if (wp->w_briopt_list > 0)
+		    bri += wp->w_briopt_list;
+		else
+		    bri = (*regmatch.endp - *regmatch.startp);
+	    }
 	    vim_regfree(regmatch.regprog);
 	}
     }
+
+    // indent minus the length of the showbreak string
+    if (wp->w_briopt_sbr)
+	bri -= vim_strsize(get_showbreak_value(wp));
+
 
     // never indent past left window margin
     if (bri < 0)
@@ -1816,6 +1822,13 @@ get_expr_indent(void)
     check_cursor();
     State = save_State;
 
+    // Reset did_throw, unless 'debug' has "throw" and inside a try/catch.
+    if (did_throw && (vim_strchr(p_debug, 't') == NULL || trylevel == 0))
+    {
+	handle_did_throw();
+	did_throw = FALSE;
+    }
+
     // If there is an error, just keep the current indent.
     if (indent < 0)
 	indent = get_indent();
@@ -2092,6 +2105,9 @@ f_indent(typval_T *argvars, typval_T *rettv)
 {
     linenr_T	lnum;
 
+    if (in_vim9script() && check_for_lnum_arg(argvars, 0) == FAIL)
+	return;
+
     lnum = tv_get_lnum(argvars);
     if (lnum >= 1 && lnum <= curbuf->b_ml.ml_line_count)
 	rettv->vval.v_number = get_indent_lnum(lnum);
@@ -2108,6 +2124,9 @@ f_lispindent(typval_T *argvars UNUSED, typval_T *rettv)
 #ifdef FEAT_LISP
     pos_T	pos;
     linenr_T	lnum;
+
+    if (in_vim9script() && check_for_lnum_arg(argvars, 0) == FAIL)
+	return;
 
     pos = curwin->w_cursor;
     lnum = tv_get_lnum(argvars);

@@ -805,7 +805,7 @@ dict2string(typval_T *tv, int copyID, int restore_copyID)
  * Advance over a literal key, including "-".  If the first character is not a
  * literal key character then "key" is returned.
  */
-    char_u *
+    static char_u *
 skip_literal_key(char_u *key)
 {
     char_u *p;
@@ -1073,7 +1073,7 @@ failret:
  * Otherwise duplicate keys are ignored ("action" is "keep").
  */
     void
-dict_extend(dict_T *d1, dict_T *d2, char_u *action)
+dict_extend(dict_T *d1, dict_T *d2, char_u *action, char *func_name)
 {
     dictitem_T	*di1;
     hashitem_T	*hi2;
@@ -1106,8 +1106,8 @@ dict_extend(dict_T *d1, dict_T *d2, char_u *action)
 	    }
 
 	    if (type != NULL
-		     && check_typval_arg_type(type, &HI2DI(hi2)->di_tv, 0)
-								       == FAIL)
+		     && check_typval_arg_type(type, &HI2DI(hi2)->di_tv,
+							 func_name, 0) == FAIL)
 		break;
 
 	    if (di1 == NULL)
@@ -1201,15 +1201,19 @@ dict_list(typval_T *argvars, typval_T *rettv, int what)
     dict_T	*d;
     int		todo;
 
+    if (in_vim9script() && check_for_dict_arg(argvars, 0) == FAIL)
+	return;
+
     if (argvars[0].v_type != VAR_DICT)
     {
 	emsg(_(e_dictreq));
 	return;
     }
-    if ((d = argvars[0].vval.v_dict) == NULL)
-	return;
 
     if (rettv_list_alloc(rettv) == FAIL)
+	return;
+    if ((d = argvars[0].vval.v_dict) == NULL)
+	// empty dict behaves like an empty dict
 	return;
 
     todo = (int)d->dv_hashtab.ht_used;
@@ -1318,6 +1322,11 @@ dict_set_items_ro(dict_T *di)
     void
 f_has_key(typval_T *argvars, typval_T *rettv)
 {
+    if (in_vim9script()
+	    && (check_for_dict_arg(argvars, 0) == FAIL
+		|| check_for_string_or_number_arg(argvars, 1) == FAIL))
+	return;
+
     if (argvars[0].v_type != VAR_DICT)
     {
 	emsg(_(e_dictreq));

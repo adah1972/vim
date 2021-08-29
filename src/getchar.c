@@ -631,7 +631,7 @@ stuffRedoReadbuff(char_u *s)
     add_buff(&readbuf2, s, -1L);
 }
 
-    void
+    static void
 stuffReadbuffLen(char_u *s, long len)
 {
     add_buff(&readbuf1, s, len);
@@ -2024,6 +2024,9 @@ getchar_common(typval_T *argvars, typval_T *rettv)
 {
     varnumber_T		n;
     int			error = FALSE;
+
+    if (in_vim9script() && check_for_opt_bool_arg(argvars, 0) == FAIL)
+	return;
 
 #ifdef MESSAGE_QUEUE
     // vpeekc() used to check for messages, but that caused problems, invoking

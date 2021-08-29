@@ -2006,21 +2006,21 @@ win_update(win_T *wp)
 	    {
 		colnr_T	    fromc, toc;
 #if defined(FEAT_LINEBREAK)
-		int	    save_ve_flags = ve_flags;
+		int	    save_ve_flags = curwin->w_ve_flags;
 
 		if (curwin->w_p_lbr)
-		    ve_flags = VE_ALL;
+		    curwin->w_ve_flags = VE_ALL;
 #endif
 		getvcols(wp, &VIsual, &curwin->w_cursor, &fromc, &toc);
 		++toc;
 #if defined(FEAT_LINEBREAK)
-		ve_flags = save_ve_flags;
+		curwin->w_ve_flags = save_ve_flags;
 #endif
 		// Highlight to the end of the line, unless 'virtualedit' has
 		// "block".
 		if (curwin->w_curswant == MAXCOL)
 		{
-		    if (ve_flags & VE_BLOCK)
+		    if (get_ve_flags() & VE_BLOCK)
 		    {
 			pos_T	    pos;
 			int	    cursor_above =
@@ -2249,9 +2249,11 @@ win_update(win_T *wp)
 	    // up or down to minimize redrawing.
 	    // Don't do this when the change continues until the end.
 	    // Don't scroll when dollar_vcol >= 0, keep the "$".
+	    // Don't scroll when redrawing the top, scrolled already above.
 	    if (lnum == mod_top
 		    && mod_bot != MAXLNUM
-		    && !(dollar_vcol >= 0 && mod_bot == mod_top + 1))
+		    && !(dollar_vcol >= 0 && mod_bot == mod_top + 1)
+		    && row >= top_end)
 	    {
 		int		old_rows = 0;
 		int		new_rows = 0;

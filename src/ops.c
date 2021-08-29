@@ -942,7 +942,8 @@ op_delete(oparg_T *oap)
 	    curwin->w_cursor = curpos;	// restore curwin->w_cursor
 	    (void)do_join(2, FALSE, FALSE, FALSE, FALSE);
 	}
-	auto_format(FALSE, TRUE);
+	if (oap->op_type == OP_DELETE)
+	    auto_format(FALSE, TRUE);
     }
 
     msgmore(curbuf->b_ml.ml_line_count - old_lcount);
@@ -1474,18 +1475,22 @@ op_insert(oparg_T *oap, long count1)
 	// doing block_prep().  When only "block" is used, virtual edit is
 	// already disabled, but still need it when calling
 	// coladvance_force().
+	// coladvance_force() uses get_ve_flags() to get the 'virtualedit'
+	// state for the current window.  To override that state, we need to
+	// set the window-local value of ve_flags rather than the global value.
 	if (curwin->w_cursor.coladd > 0)
 	{
-	    int		old_ve_flags = ve_flags;
+	    int		old_ve_flags = curwin->w_ve_flags;
 
-	    ve_flags = VE_ALL;
 	    if (u_save_cursor() == FAIL)
 		return;
+
+	    curwin->w_ve_flags = VE_ALL;
 	    coladvance_force(oap->op_type == OP_APPEND
 					   ? oap->end_vcol + 1 : getviscol());
 	    if (oap->op_type == OP_APPEND)
 		--curwin->w_cursor.col;
-	    ve_flags = old_ve_flags;
+	    curwin->w_ve_flags = old_ve_flags;
 	}
 	// Get the info about the block before entering the text
 	block_prep(oap, &bd, oap->start.lnum, TRUE);
@@ -1805,6 +1810,7 @@ op_change(oparg_T *oap)
 	    vim_free(ins_text);
 	}
     }
+    auto_format(FALSE, TRUE);
 
     return retval;
 }
@@ -1816,15 +1822,17 @@ op_change(oparg_T *oap)
     void
 adjust_cursor_eol(void)
 {
+    unsigned int cur_ve_flags = get_ve_flags();
+
     if (curwin->w_cursor.col > 0
 	    && gchar_cursor() == NUL
-	    && (ve_flags & VE_ONEMORE) == 0
+	    && (cur_ve_flags & VE_ONEMORE) == 0
 	    && !(restart_edit || (State & INSERT)))
     {
 	// Put the cursor on the last character in the line.
 	dec_cursor();
 
-	if (ve_flags == VE_ALL)
+	if (cur_ve_flags == VE_ALL)
 	{
 	    colnr_T	    scol, ecol;
 

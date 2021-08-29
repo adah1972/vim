@@ -174,6 +174,12 @@ f_reltime(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     if (rettv_list_alloc(rettv) != OK)
 	return;
 
+    if (in_vim9script()
+	    && (check_for_opt_list_arg(argvars, 0) == FAIL
+		|| (argvars[0].v_type != VAR_UNKNOWN
+		    && check_for_opt_list_arg(argvars, 1) == FAIL)))
+	return;
+
     if (argvars[0].v_type == VAR_UNKNOWN)
     {
 	// No arguments: get current time.
@@ -228,6 +234,9 @@ f_reltimefloat(typval_T *argvars UNUSED, typval_T *rettv)
     rettv->v_type = VAR_FLOAT;
     rettv->vval.v_float = 0;
 #  ifdef FEAT_RELTIME
+    if (in_vim9script() && check_for_list_arg(argvars, 0) == FAIL)
+	return;
+
     if (list2proftime(&argvars[0], &tm) == OK)
 	rettv->vval.v_float = profile_float(&tm);
     else if (in_vim9script())
@@ -249,6 +258,9 @@ f_reltimestr(typval_T *argvars UNUSED, typval_T *rettv)
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 # ifdef FEAT_RELTIME
+    if (in_vim9script() && check_for_list_arg(argvars, 0) == FAIL)
+	return;
+
     if (list2proftime(&argvars[0], &tm) == OK)
 	rettv->vval.v_string = vim_strsave((char_u *)profile_msg(&tm));
     else if (in_vim9script())
@@ -270,8 +282,7 @@ f_strftime(typval_T *argvars, typval_T *rettv)
 
     if (in_vim9script()
 	    && (check_for_string_arg(argvars, 0) == FAIL
-		|| (argvars[1].v_type != VAR_UNKNOWN
-		    && check_for_number_arg(argvars, 1) == FAIL)))
+		|| check_for_opt_number_arg(argvars, 1) == FAIL))
 	return;
 
     rettv->v_type = VAR_STRING;
@@ -342,6 +353,11 @@ f_strptime(typval_T *argvars, typval_T *rettv)
     char_u	*str;
     vimconv_T   conv;
     char_u	*enc;
+
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL))
+	return;
 
     CLEAR_FIELD(tmval);
     tmval.tm_isdst = -1;
@@ -504,6 +520,7 @@ check_due_timer(void)
 	    int save_timer_busy = timer_busy;
 	    int save_vgetc_busy = vgetc_busy;
 	    int save_did_emsg = did_emsg;
+	    int prev_uncaught_emsg = uncaught_emsg;
 	    int save_called_emsg = called_emsg;
 	    int save_must_redraw = must_redraw;
 	    int save_trylevel = trylevel;
@@ -520,7 +537,6 @@ check_due_timer(void)
 	    vgetc_busy = 0;
 	    called_emsg = 0;
 	    did_emsg = FALSE;
-	    did_uncaught_emsg = FALSE;
 	    must_redraw = 0;
 	    trylevel = 0;
 	    did_throw = FALSE;
@@ -539,7 +555,7 @@ check_due_timer(void)
 	    did_one = TRUE;
 	    timer_busy = save_timer_busy;
 	    vgetc_busy = save_vgetc_busy;
-	    if (did_uncaught_emsg)
+	    if (uncaught_emsg > prev_uncaught_emsg)
 		++timer->tr_emsg_count;
 	    did_emsg = save_did_emsg;
 	    called_emsg = save_called_emsg;
@@ -755,10 +771,14 @@ f_timer_info(typval_T *argvars, typval_T *rettv)
 
     if (rettv_list_alloc(rettv) != OK)
 	return;
+
+    if (in_vim9script() && check_for_opt_number_arg(argvars, 0) == FAIL)
+	return;
+
     if (argvars[0].v_type != VAR_UNKNOWN)
     {
 	if (argvars[0].v_type != VAR_NUMBER)
-	    emsg(_(e_number_exp));
+	    emsg(_(e_number_expected));
 	else
 	{
 	    timer = find_timer((int)tv_get_number(&argvars[0]));
@@ -777,12 +797,17 @@ f_timer_info(typval_T *argvars, typval_T *rettv)
 f_timer_pause(typval_T *argvars, typval_T *rettv UNUSED)
 {
     timer_T	*timer = NULL;
-    int		paused = (int)tv_get_bool(&argvars[1]);
+
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_bool_arg(argvars, 1) == FAIL))
+	return;
 
     if (argvars[0].v_type != VAR_NUMBER)
-	emsg(_(e_number_exp));
+	emsg(_(e_number_expected));
     else
     {
+	int	paused = (int)tv_get_bool(&argvars[1]);
 	timer = find_timer((int)tv_get_number(&argvars[0]));
 	if (timer != NULL)
 	    timer->tr_paused = paused;
@@ -795,7 +820,7 @@ f_timer_pause(typval_T *argvars, typval_T *rettv UNUSED)
     void
 f_timer_start(typval_T *argvars, typval_T *rettv)
 {
-    long	msec = (long)tv_get_number(&argvars[0]);
+    long	msec;
     timer_T	*timer;
     int		repeat = 0;
     callback_T	callback;
@@ -804,6 +829,13 @@ f_timer_start(typval_T *argvars, typval_T *rettv)
     rettv->vval.v_number = -1;
     if (check_secure())
 	return;
+
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_opt_dict_arg(argvars, 2) == FAIL))
+	return;
+
+    msec = (long)tv_get_number(&argvars[0]);
     if (argvars[2].v_type != VAR_UNKNOWN)
     {
 	if (argvars[2].v_type != VAR_DICT
@@ -838,9 +870,12 @@ f_timer_stop(typval_T *argvars, typval_T *rettv UNUSED)
 {
     timer_T *timer;
 
+    if (in_vim9script() && check_for_number_arg(argvars, 0) == FAIL)
+	return;
+
     if (argvars[0].v_type != VAR_NUMBER)
     {
-	emsg(_(e_number_exp));
+	emsg(_(e_number_expected));
 	return;
     }
     timer = find_timer((int)tv_get_number(&argvars[0]));

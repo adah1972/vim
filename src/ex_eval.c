@@ -255,7 +255,7 @@ cause_errthrow(
 	    if (elem == NULL)
 	    {
 		suppress_errthrow = TRUE;
-		emsg(_(e_outofmem));
+		emsg(_(e_out_of_memory));
 	    }
 	    else
 	    {
@@ -264,7 +264,7 @@ cause_errthrow(
 		{
 		    vim_free(elem);
 		    suppress_errthrow = TRUE;
-		    emsg(_(e_outofmem));
+		    emsg(_(e_out_of_memory));
 		}
 		else
 		{
@@ -592,7 +592,7 @@ throw_exception(void *value, except_type_T type, char_u *cmdname)
 nomem:
     vim_free(excp);
     suppress_errthrow = TRUE;
-    emsg(_(e_outofmem));
+    emsg(_(e_out_of_memory));
 fail:
     current_exception = NULL;
     return FAIL;
@@ -887,6 +887,26 @@ report_discard_pending(int pending, void *value)
     }
 }
 
+    int
+cmd_is_name_only(char_u *arg)
+{
+    char_u  *p = arg;
+    char_u  *alias;
+    int	    name_only = FALSE;
+
+    if (*p == '&')
+    {
+	++p;
+	if (STRNCMP("l:", p, 2) == 0 || STRNCMP("g:", p, 2) == 0)
+	    p += 2;
+    }
+    else if (*p == '@')
+	++p;
+    get_name_len(&p, &alias, FALSE, FALSE);
+    name_only = ends_excmd2(arg, skipwhite(p));
+    vim_free(alias);
+    return name_only;
+}
 
 /*
  * ":eval".
@@ -897,18 +917,10 @@ ex_eval(exarg_T *eap)
     typval_T	tv;
     evalarg_T	evalarg;
     int		name_only = FALSE;
-    char_u	*p;
     long	lnum = SOURCING_LNUM;
 
     if (in_vim9script())
-    {
-	char_u	*alias;
-
-	p = eap->arg;
-	get_name_len(&p, &alias, FALSE, FALSE);
-	name_only = ends_excmd2(eap->arg, skipwhite(p));
-	vim_free(alias);
-    }
+	name_only = cmd_is_name_only(eap->arg);
 
     fill_evalarg_from_eap(&evalarg, eap, eap->skip);
 
@@ -972,9 +984,6 @@ leave_block(cstack_T *cstack)
 		hide_script_var(si, i, func_defined);
 	}
 
-	// TODO: is this needed?
-	cstack->cs_script_var_len[cstack->cs_idx] = si->sn_var_vals.ga_len;
-
 	if (cstack->cs_idx == 0)
 	    si->sn_current_block_id = 0;
 	else
@@ -1029,7 +1038,7 @@ ex_endif(exarg_T *eap)
 {
     cstack_T	*cstack = eap->cstack;
 
-    if (cmdmod_error())
+    if (cmdmod_error(FALSE))
 	return;
     did_endif = TRUE;
     if (cstack->cs_idx < 0
@@ -1178,6 +1187,8 @@ ex_while(exarg_T *eap)
 	    {
 		scriptitem_T	*si = SCRIPT_ITEM(current_sctx.sc_sid);
 		int		i;
+		int		func_defined = cstack->cs_flags[cstack->cs_idx]
+								& CSF_FUNC_DEF;
 
 		// Any variables defined in the previous round are no longer
 		// visible.
@@ -1192,10 +1203,8 @@ ex_while(exarg_T *eap)
 		    if (sv->sv_name != NULL)
 			// Remove a variable declared inside the block, if it
 			// still exists, from sn_vars.
-			hide_script_var(si, i, FALSE);
+			hide_script_var(si, i, func_defined);
 		}
-		cstack->cs_script_var_len[cstack->cs_idx] =
-							si->sn_var_vals.ga_len;
 	    }
 	}
 	cstack->cs_flags[cstack->cs_idx] =
@@ -1222,14 +1231,7 @@ ex_while(exarg_T *eap)
 	    /*
 	     * ":for var in list-expr"
 	     */
-	    CLEAR_FIELD(evalarg);
-	    evalarg.eval_flags = skip ? 0 : EVAL_EVALUATE;
-	    if (getline_equal(eap->getline, eap->cookie, getsourceline))
-	    {
-		evalarg.eval_getline = eap->getline;
-		evalarg.eval_cookie = eap->cookie;
-	    }
-
+	    fill_evalarg_from_eap(&evalarg, eap, skip);
 	    if ((cstack->cs_lflags & CSL_HAD_LOOP) != 0)
 	    {
 		// Jumping here from a ":continue" or ":endfor": use the
@@ -1365,7 +1367,7 @@ ex_endwhile(exarg_T *eap)
     int		csf;
     int		fl;
 
-    if (cmdmod_error())
+    if (cmdmod_error(TRUE))
 	return;
 
     if (eap->cmdidx == CMD_endwhile)
@@ -1469,6 +1471,18 @@ ex_endblock(exarg_T *eap)
 	eap->errmsg = _(e_endblock_without_block);
     else
 	leave_block(cstack);
+}
+
+    int
+inside_block(exarg_T *eap)
+{
+    cstack_T	*cstack = eap->cstack;
+    int		i;
+
+    for (i = 0; i <= cstack->cs_idx; ++i)
+	if (cstack->cs_flags[cstack->cs_idx] & CSF_BLOCK)
+	    return TRUE;
+    return FALSE;
 }
 
 /*
@@ -1591,7 +1605,7 @@ ex_try(exarg_T *eap)
     int		skip;
     cstack_T	*cstack = eap->cstack;
 
-    if (cmdmod_error())
+    if (cmdmod_error(FALSE))
 	return;
 
     if (cstack->cs_idx == CSTACK_LEN - 1)
@@ -1639,7 +1653,7 @@ ex_try(exarg_T *eap)
 
 		elem = ALLOC_ONE(struct eslist_elem);
 		if (elem == NULL)
-		    emsg(_(e_outofmem));
+		    emsg(_(e_out_of_memory));
 		else
 		{
 		    elem->saved_emsg_silent = emsg_silent;
@@ -1672,7 +1686,7 @@ ex_catch(exarg_T *eap)
     cstack_T	*cstack = eap->cstack;
     char_u	*pat;
 
-    if (cmdmod_error())
+    if (cmdmod_error(FALSE))
 	return;
 
     if (cstack->cs_trylevel <= 0 || cstack->cs_idx < 0)
@@ -1837,7 +1851,7 @@ ex_finally(exarg_T *eap)
     int		pending = CSTP_NONE;
     cstack_T	*cstack = eap->cstack;
 
-    if (cmdmod_error())
+    if (cmdmod_error(FALSE))
 	return;
 
     if (cstack->cs_trylevel <= 0 || cstack->cs_idx < 0)
@@ -1969,7 +1983,7 @@ ex_endtry(exarg_T *eap)
     void	*rettv = NULL;
     cstack_T	*cstack = eap->cstack;
 
-    if (cmdmod_error())
+    if (cmdmod_error(FALSE))
 	return;
 
     if (cstack->cs_trylevel <= 0 || cstack->cs_idx < 0)
@@ -2016,7 +2030,8 @@ ex_endtry(exarg_T *eap)
 	{
 	    idx = cstack->cs_idx;
 
-	    if (in_vim9script()
+	    // Check the flags only when not in a skipped block.
+	    if (!skip && in_vim9script()
 		     && (cstack->cs_flags[idx] & (CSF_CATCH|CSF_FINALLY)) == 0)
 	    {
 		// try/endtry without any catch or finally: give an error and

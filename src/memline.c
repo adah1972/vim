@@ -48,11 +48,6 @@
 # include <time.h>
 #endif
 
-// for randombytes_buf
-#ifdef FEAT_SODIUM
-# include <sodium.h>
-#endif
-
 #if defined(SASC) || defined(__amigaos4__)
 # include <proto/dos.h>	    // for Open() and Close()
 #endif
@@ -294,6 +289,7 @@ ml_open(buf_T *buf)
     buf->b_ml.ml_line_lnum = 0;	// no cached line
 #ifdef FEAT_BYTEOFF
     buf->b_ml.ml_chunksize = NULL;
+    buf->b_ml.ml_usedchunks = 0;
 #endif
 
     if (cmdmod.cmod_flags & CMOD_NOSWAPFILE)
@@ -3256,9 +3252,15 @@ ml_append_int(
     }
 
 #ifdef FEAT_BYTEOFF
+# ifdef FEAT_PROP_POPUP
+    if (curbuf->b_has_textprop)
+	// only use the space needed for the text, ignore properties
+	len = (colnr_T)STRLEN(line) + 1;
+# endif
     // The line was inserted below 'lnum'
     ml_updatechunk(buf, lnum + 1, (long)len, ML_CHNK_ADDLINE);
 #endif
+
 #ifdef FEAT_NETBEANS_INTG
     if (netbeans_active())
     {
@@ -3606,7 +3608,7 @@ ml_delete_int(buf_T *buf, linenr_T lnum, int flags)
     int		ret = FAIL;
 #ifdef FEAT_PROP_POPUP
     char_u	*textprop_save = NULL;
-    int		textprop_save_len;
+    int		textprop_save_len = 0;
 #endif
 
     if (lowest_marked && lowest_marked > lnum)
@@ -3757,7 +3759,11 @@ ml_delete_int(buf_T *buf, linenr_T lnum, int flags)
     }
 
 #ifdef FEAT_BYTEOFF
-    ml_updatechunk(buf, lnum, line_size, ML_CHNK_DELLINE);
+    ml_updatechunk(buf, lnum, line_size
+# ifdef FEAT_PROP_POPUP
+					- textprop_save_len
+# endif
+							    , ML_CHNK_DELLINE);
 #endif
     ret = OK;
 
@@ -3982,6 +3988,9 @@ ml_flush_line(buf_T *buf)
 	     */
 	    if ((int)dp->db_free >= extra)
 	    {
+#if defined(FEAT_BYTEOFF) && defined(FEAT_PROP_POPUP)
+		int old_prop_len = 0;
+#endif
 		// if the length changes and there are following lines
 		count = buf->b_ml.ml_locked_high - buf->b_ml.ml_locked_low + 1;
 		if (extra != 0 && idx < count - 1)
@@ -4000,13 +4009,24 @@ ml_flush_line(buf_T *buf)
 		// adjust free space
 		dp->db_free -= extra;
 		dp->db_txt_start -= extra;
+#if defined(FEAT_BYTEOFF) && defined(FEAT_PROP_POPUP)
+		if (buf->b_has_textprop)
+		    old_prop_len = old_len - (int)STRLEN(new_line) - 1;
+#endif
 
 		// copy new line into the data block
 		mch_memmove(old_line - extra, new_line, (size_t)new_len);
 		buf->b_ml.ml_flags |= (ML_LOCKED_DIRTY | ML_LOCKED_POS);
-#ifdef FEAT_BYTEOFF
+#if defined(FEAT_BYTEOFF) && defined(FEAT_PROP_POPUP)
 		// The else case is already covered by the insert and delete
-		ml_updatechunk(buf, lnum, (long)extra, ML_CHNK_UPDLINE);
+		if (buf->b_has_textprop)
+		{
+		    // Do not count the size of any text properties.
+		    extra += old_prop_len;
+		    extra -= new_len - (int)STRLEN(new_line) - 1;
+		}
+		if (extra != 0)
+		    ml_updatechunk(buf, lnum, (long)extra, ML_CHNK_UPDLINE);
 #endif
 	    }
 	    else
@@ -5600,7 +5620,7 @@ ml_updatechunk(
 		else
 #endif
 		{
-		    if (idx == 0)// first line in block, text at the end
+		    if (idx == 0) // first line in block, text at the end
 			text_end = dp->db_txt_end;
 		    else
 			text_end = ((dp->db_index[idx - 1]) & DB_INDEX_MASK);
@@ -5739,7 +5759,7 @@ ml_find_line_or_offset(buf_T *buf, linenr_T lnum, long *offp)
 	return 1;   // Not a "find offset" and offset 0 _must_ be in line 1
     /*
      * Find the last chunk before the one containing our line. Last chunk is
-     * special because it will never qualify
+     * special because it will never qualify.
      */
     curline = 1;
     curix = size = 0;

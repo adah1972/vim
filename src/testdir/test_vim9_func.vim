@@ -160,6 +160,52 @@ def Test_autoload_names()
   delete(dir, 'rf')
 enddef
 
+def Test_autoload_error_in_script()
+  var dir = 'Xdir/autoload'
+  mkdir(dir, 'p')
+
+  var lines =<< trim END
+      func scripterror#function()
+        let g:called_function = 'yes'
+      endfunc
+      let 0 = 1
+  END
+  writefile(lines, dir .. '/scripterror.vim')
+
+  var save_rtp = &rtp
+  exe 'set rtp=' .. getcwd() .. '/Xdir'
+
+  g:called_function = 'no'
+  # The error in the autoload script cannot be checked with assert_fails(), use
+  # CheckDefSuccess() instead of CheckDefFailure()
+  try
+    CheckDefSuccess(['scripterror#function()'])
+  catch
+    assert_match('E121: Undefined variable: 0', v:exception)
+  endtry
+  assert_equal('no', g:called_function)
+
+  lines =<< trim END
+      func scriptcaught#function()
+        let g:called_function = 'yes'
+      endfunc
+      try
+        let 0 = 1
+      catch
+        let g:caught = v:exception
+      endtry
+  END
+  writefile(lines, dir .. '/scriptcaught.vim')
+
+  g:called_function = 'no'
+  CheckDefSuccess(['scriptcaught#function()'])
+  assert_match('E121: Undefined variable: 0', g:caught)
+  assert_equal('yes', g:called_function)
+
+  &rtp = save_rtp
+  delete(dir, 'rf')
+enddef
+
 def CallRecursive(n: number): number
   return CallRecursive(n + 1)
 enddef
@@ -584,6 +630,17 @@ def Test_nested_function()
       assert_equal(2, Test())
   END
   CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      def Outer()
+        def Inner()
+          echo 'hello'
+        enddef burp
+      enddef
+      defcompile
+  END
+  CheckScriptFailure(lines, 'E1173: Text found after enddef: burp', 3)
 enddef
 
 def Test_not_nested_function()
@@ -960,6 +1017,12 @@ def Test_call_lambda_args()
     echo ((a) => a)('aa', 'bb')
   END
   CheckDefAndScriptFailure(lines, 'E118:', 1)
+
+  lines =<< trim END
+    echo 'aa'->((a) => a)('bb')
+  END
+  CheckDefFailure(lines, 'E118: Too many arguments for function: ->((a) => a)(''bb'')', 1)
+  CheckScriptFailure(['vim9script'] + lines, 'E118: Too many arguments for function: <lambda>', 2)
 enddef
 
 def FilterWithCond(x: string, Cond: func(string): bool): bool
@@ -1143,6 +1206,18 @@ def Test_call_def_varargs()
       enddef
   END
   CheckScriptFailure(lines, 'E1160:')
+
+  lines =<< trim END
+      vim9script
+      def DoIt()
+        g:Later('')
+      enddef
+      defcompile
+      def g:Later(...l:  list<number>)
+      enddef
+      DoIt()
+  END
+  CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected number but got string')
 enddef
 
 let s:value = ''
@@ -1409,6 +1484,27 @@ def Test_return_type_wrong()
         'return',
         'enddef',
         'defcompile'], 'E1003:')
+  delfunc! g:Func
+
+  CheckScriptFailure([
+        'def Func():number',
+        'return 123',
+        'enddef',
+        'defcompile'], 'E1069:')
+  delfunc! g:Func
+
+  CheckScriptFailure([
+        'def Func() :number',
+        'return 123',
+        'enddef',
+        'defcompile'], 'E1059:')
+  delfunc! g:Func
+
+  CheckScriptFailure([
+        'def Func() : number',
+        'return 123',
+        'enddef',
+        'defcompile'], 'E1059:')
   delfunc! g:Func
 
   CheckScriptFailure(['def Func(): list', 'return []', 'enddef'], 'E1008:')
@@ -2244,15 +2340,14 @@ def Test_double_nested_lambda()
 enddef
 
 def Test_nested_inline_lambda()
-  # TODO: use the "text" argument
   var lines =<< trim END
       vim9script
       def F(text: string): func(string): func(string): string
         return (arg: string): func(string): string => ((sep: string): string => {
-            return sep .. arg
+            return sep .. arg .. text
           })
       enddef
-      assert_equal('--there', F('unused')('there')('--'))
+      assert_equal('--there++', F('++')('there')('--'))
   END
   CheckScriptSuccess(lines)
 
@@ -2344,6 +2439,51 @@ def Test_list_lambda()
          ->substitute("')", '', '')
          ->substitute('function\zs', ' ', ''))
   assert_match('def <lambda>\d\+(_: any): number\n1  return 0\n   enddef', body)
+enddef
+
+def Test_lambda_block_variable()
+  var lines =<< trim END
+      vim9script
+      var flist: list<func>
+      for i in range(10)
+          var inloop = i
+          flist[i] = () => inloop
+      endfor
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      if true
+        var outloop = 5
+        var flist: list<func>
+        for i in range(10)
+          flist[i] = () => outloop
+        endfor
+      endif
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      if true
+        var outloop = 5
+      endif
+      var flist: list<func>
+      for i in range(10)
+        flist[i] = () => outloop
+      endfor
+  END
+  CheckScriptFailure(lines, 'E1001: Variable not found: outloop', 1)
+
+  lines =<< trim END
+      vim9script
+      for i in range(10)
+        var Ref = () => 0
+      endfor
+      assert_equal(0, ((i) => 0)(0))
+  END
+  CheckScriptSuccess(lines)
 enddef
 
 def Test_legacy_lambda()
@@ -2531,24 +2671,40 @@ def Test_invalid_function_name()
 enddef
 
 def Test_partial_call()
-  var Xsetlist = function('setloclist', [0])
-  Xsetlist([], ' ', {title: 'test'})
-  getloclist(0, {title: 1})->assert_equal({title: 'test'})
+  var lines =<< trim END
+      var Xsetlist: func
+      Xsetlist = function('setloclist', [0])
+      Xsetlist([], ' ', {title: 'test'})
+      getloclist(0, {title: 1})->assert_equal({title: 'test'})
 
-  Xsetlist = function('setloclist', [0, [], ' '])
-  Xsetlist({title: 'test'})
-  getloclist(0, {title: 1})->assert_equal({title: 'test'})
+      Xsetlist = function('setloclist', [0, [], ' '])
+      Xsetlist({title: 'test'})
+      getloclist(0, {title: 1})->assert_equal({title: 'test'})
 
-  Xsetlist = function('setqflist')
-  Xsetlist([], ' ', {title: 'test'})
-  getqflist({title: 1})->assert_equal({title: 'test'})
+      Xsetlist = function('setqflist')
+      Xsetlist([], ' ', {title: 'test'})
+      getqflist({title: 1})->assert_equal({title: 'test'})
 
-  Xsetlist = function('setqflist', [[], ' '])
-  Xsetlist({title: 'test'})
-  getqflist({title: 1})->assert_equal({title: 'test'})
+      Xsetlist = function('setqflist', [[], ' '])
+      Xsetlist({title: 'test'})
+      getqflist({title: 1})->assert_equal({title: 'test'})
 
-  var Len: func: number = function('len', ['word'])
-  assert_equal(4, Len())
+      var Len: func: number = function('len', ['word'])
+      assert_equal(4, Len())
+
+      var RepeatFunc = function('repeat', ['o'])
+      assert_equal('ooooo', RepeatFunc(5))
+  END
+  CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      def Foo(Parser: any)
+      enddef
+      var Expr: func(dict<any>): dict<any>
+      const Call = Foo(Expr)
+  END
+  CheckScriptFailure(lines, 'E1235:')
 enddef
 
 def Test_cmd_modifier()
@@ -2840,6 +2996,27 @@ def Test_check_func_arg_types()
   CheckScriptFailure(lines + ['echo H(G(F2))'], 'E1013:')
 enddef
 
+def Test_list_any_type_checked()
+  var lines =<< trim END
+      vim9script
+      def Foo()
+        --decl--
+        Bar(l)
+      enddef
+      def Bar(ll: list<dict<any>>)
+      enddef
+      Foo()
+  END
+  lines[2] = 'var l: list<any>'
+  CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected list<dict<any>> but got list<any>', 2)
+
+  lines[2] = 'var l: list<any> = []'
+  CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected list<dict<any>> but got list<any>', 2)
+
+  lines[2] = 'var l: list<any> = [11]'
+  CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected list<dict<any>> but got list<number>', 2)
+enddef
+
 def Test_compile_error()
   var lines =<< trim END
     def g:Broken()
@@ -2930,6 +3107,23 @@ def Test_closing_brace_at_start_of_line()
       )
   END
   call CheckDefAndScriptSuccess(lines)
+enddef
+
+func CreateMydict()
+  let g:mydict = {}
+  func g:mydict.afunc()
+    let g:result = self.key
+  endfunc
+endfunc
+
+def Test_numbered_function_reference()
+  CreateMydict()
+  var output = execute('legacy func g:mydict.afunc')
+  var funcName = 'g:' .. substitute(output, '.*function \(\d\+\).*', '\1', '')
+  execute 'function(' .. funcName .. ', [], {key: 42})()'
+  # check that the function still exists
+  assert_equal(output, execute('legacy func g:mydict.afunc'))
+  unlet g:mydict
 enddef
 
 if has('python3')

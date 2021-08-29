@@ -148,9 +148,9 @@ search_regcomp(
 	if (spats[i].pat == NULL)	// pattern was never defined
 	{
 	    if (pat_use == RE_SUBST)
-		emsg(_(e_nopresub));
+		emsg(_(e_no_previous_substitute_regular_expression));
 	    else
-		emsg(_(e_noprevre));
+		emsg(_(e_no_previous_regular_expression));
 	    rc_did_emsg = TRUE;
 	    return FAIL;
 	}
@@ -430,6 +430,10 @@ ignorecase_opt(char_u *pat, int ic_in, int scs)
 pat_has_uppercase(char_u *pat)
 {
     char_u *p = pat;
+    magic_T magic_val = MAGIC_ON;
+
+    // get the magicness of the pattern
+    (void)skip_regexp_ex(pat, NUL, magic_isset(), NULL, NULL, &magic_val);
 
     while (*p != NUL)
     {
@@ -441,7 +445,7 @@ pat_has_uppercase(char_u *pat)
 		return TRUE;
 	    p += l;
 	}
-	else if (*p == '\\')
+	else if (*p == '\\' && magic_val <= MAGIC_ON)
 	{
 	    if (p[1] == '_' && p[2] != NUL)  // skip "\_X"
 		p += 3;
@@ -451,6 +455,13 @@ pat_has_uppercase(char_u *pat)
 		p += 2;
 	    else
 		p += 1;
+	}
+	else if ((*p == '%' || *p == '_') && magic_val == MAGIC_ALL)
+	{
+	    if (p[1] != NUL)  // skip "_X" and %X
+		p += 2;
+	    else
+		p++;
 	}
 	else if (MB_ISUPPER(*p))
 	    return TRUE;
@@ -1217,7 +1228,8 @@ first_submatch(regmmatch_T *rp)
 do_search(
     oparg_T	    *oap,	// can be NULL
     int		    dirc,	// '/' or '?'
-    int		    search_delim, // the delimiter for the search, e.g. '%' in s%regex%replacement%
+    int		    search_delim, // the delimiter for the search, e.g. '%' in
+				  // s%regex%replacement%
     char_u	    *pat,
     long	    count,
     int		    options,
@@ -1322,7 +1334,7 @@ do_search(
 		searchstr = spats[RE_SUBST].pat;
 		if (searchstr == NULL)
 		{
-		    emsg(_(e_noprevre));
+		    emsg(_(e_no_previous_regular_expression));
 		    retval = 0;
 		    goto end_do_search;
 		}
@@ -1476,11 +1488,11 @@ do_search(
 			msgbuf = trunc;
 		    }
 
-    #ifdef FEAT_RIGHTLEFT
-		    // The search pattern could be shown on the right in rightleft
-		    // mode, but the 'ruler' and 'showcmd' area use it too, thus
-		    // it would be blanked out again very soon.  Show it on the
-		    // left, but do reverse the text.
+#ifdef FEAT_RIGHTLEFT
+		    // The search pattern could be shown on the right in
+		    // rightleft mode, but the 'ruler' and 'showcmd' area use
+		    // it too, thus it would be blanked out again very soon.
+		    // Show it on the left, but do reverse the text.
 		    if (curwin->w_p_rl && *curwin->w_p_rlc == 's')
 		    {
 			char_u *r;
@@ -1503,7 +1515,7 @@ do_search(
 				vim_memset(msgbuf + pat_len, ' ', r - msgbuf);
 			}
 		    }
-    #endif
+#endif
 		    msg_outtrans(msgbuf);
 		    msg_clr_eos();
 		    msg_check();
@@ -1548,6 +1560,9 @@ do_search(
 	    }
 	}
 
+	/*
+	 * The actual search.
+	 */
 	c = searchit(curwin, curbuf, &pos, NULL,
 					      dirc == '/' ? FORWARD : BACKWARD,
 		searchstr, count, spats[0].off.end + (options &
@@ -1557,7 +1572,7 @@ do_search(
 		RE_LAST, sia);
 
 	if (dircp != NULL)
-	    *dircp = search_delim;	// restore second '/' or '?' for normal_cmd()
+	    *dircp = search_delim; // restore second '/' or '?' for normal_cmd()
 
 	if (!shortmess(SHM_SEARCH)
 		&& ((dirc == '/' && LT_POS(pos, curwin->w_cursor))
@@ -2141,6 +2156,8 @@ findmatchlimit(
     else if (initc != '#' && initc != NUL)
     {
 	find_mps_values(&initc, &findc, &backwards, TRUE);
+	if (dir)
+	    backwards = (dir == FORWARD) ? FALSE : TRUE;
 	if (findc == NUL)
 	    return NULL;
     }
@@ -4107,6 +4124,9 @@ f_searchcount(typval_T *argvars, typval_T *rettv)
     if (rettv_dict_alloc(rettv) == FAIL)
 	return;
 
+    if (in_vim9script() && check_for_opt_dict_arg(argvars, 0) == FAIL)
+	return;
+
     if (shortmess(SHM_SEARCHCOUNT))	// 'shortmess' contains 'S' flag
 	recompute = TRUE;
 
@@ -4793,6 +4813,12 @@ do_fuzzymatch(typval_T *argvars, typval_T *rettv, int retmatchpos)
     char_u	*key = NULL;
     int		ret;
     int		matchseq = FALSE;
+
+    if (in_vim9script()
+	    && (check_for_list_arg(argvars, 0) == FAIL
+		|| check_for_string_arg(argvars, 1) == FAIL
+		|| check_for_opt_dict_arg(argvars, 2) == FAIL))
+	return;
 
     CLEAR_POINTER(&cb);
 

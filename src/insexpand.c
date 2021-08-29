@@ -2436,6 +2436,11 @@ f_complete(typval_T *argvars, typval_T *rettv UNUSED)
     int	    startcol;
     int	    save_textlock = textlock;
 
+    if (in_vim9script()
+	    && (check_for_number_arg(argvars, 0) == FAIL
+		|| check_for_list_arg(argvars, 1) == FAIL))
+	return;
+
     if ((State & INSERT) == 0)
     {
 	emsg(_("E785: complete() can only be used in Insert mode"));
@@ -2468,6 +2473,9 @@ f_complete(typval_T *argvars, typval_T *rettv UNUSED)
     void
 f_complete_add(typval_T *argvars, typval_T *rettv)
 {
+    if (in_vim9script() && check_for_string_or_dict_arg(argvars, 0) == FAIL)
+	return;
+
     rettv->vval.v_number = ins_compl_add_tv(&argvars[0], 0, FALSE);
 }
 
@@ -2655,6 +2663,9 @@ f_complete_info(typval_T *argvars, typval_T *rettv)
     if (rettv_dict_alloc(rettv) != OK)
 	return;
 
+    if (in_vim9script() && check_for_opt_list_arg(argvars, 0) == FAIL)
+	return;
+
     if (argvars[0].v_type != VAR_UNKNOWN)
     {
 	if (argvars[0].v_type != VAR_LIST)
@@ -2701,6 +2712,8 @@ ins_compl_get_exp(pos_T *ini)
     char_u	*dict = NULL;
     int		dict_f = 0;
     int		set_match_pos;
+    pos_T	prev_pos = {0, 0, 0};
+    int		looped_around = FALSE;
 
     if (!compl_started)
     {
@@ -2953,6 +2966,7 @@ ins_compl_get_exp(pos_T *ini)
 		p_ws = FALSE;
 	    else if (*e_cpt == '.')
 		p_ws = TRUE;
+	    looped_around = FALSE;
 	    for (;;)
 	    {
 		int	cont_s_ipos = FALSE;
@@ -2980,8 +2994,31 @@ ins_compl_get_exp(pos_T *ini)
 		    set_match_pos = FALSE;
 		}
 		else if (first_match_pos.lnum == last_match_pos.lnum
-				 && first_match_pos.col == last_match_pos.col)
+                                && first_match_pos.col == last_match_pos.col)
+		{
 		    found_new_match = FAIL;
+		}
+		else if ((compl_direction == FORWARD)
+			&& (prev_pos.lnum > pos->lnum
+			    || (prev_pos.lnum == pos->lnum
+				&& prev_pos.col >= pos->col)))
+		{
+		    if (looped_around)
+			found_new_match = FAIL;
+		    else
+			looped_around = TRUE;
+		}
+		else if ((compl_direction != FORWARD)
+			&& (prev_pos.lnum < pos->lnum
+			    || (prev_pos.lnum == pos->lnum
+				&& prev_pos.col <= pos->col)))
+		{
+		    if (looped_around)
+			found_new_match = FAIL;
+		    else
+			looped_around = TRUE;
+		}
+		prev_pos = *pos;
 		if (found_new_match == FAIL)
 		{
 		    if (ins_buf == curbuf)
