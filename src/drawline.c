@@ -340,6 +340,8 @@ win_line(
 #endif
     colnr_T	trailcol = MAXCOL;	// start of trailing spaces
     colnr_T	leadcol = 0;		// start of leading spaces
+    int		in_multispace = FALSE;	// in multiple consecutive spaces
+    int		multispace_pos = 0;	// position in lcs-multispace string
 #ifdef FEAT_LINEBREAK
     int		need_showbreak = FALSE; // overlong line, skipping first x
 					// chars
@@ -736,6 +738,7 @@ win_line(
     if (wp->w_p_list)
     {
 	if (wp->w_lcs_chars.space
+		|| wp->w_lcs_chars.multispace != NULL
 		|| wp->w_lcs_chars.trail
 		|| wp->w_lcs_chars.lead
 		|| wp->w_lcs_chars.nbsp)
@@ -1970,17 +1973,22 @@ win_line(
 		if (wp->w_p_lbr && c0 == c
 				  && VIM_ISBREAK(c) && !VIM_ISBREAK((int)*ptr))
 		{
-		    int mb_off = has_mbyte ? (*mb_head_off)(line, ptr - 1) : 0;
-		    char_u *p = ptr - (mb_off + 1);
+		    int	    mb_off = has_mbyte ? (*mb_head_off)(line, ptr - 1)
+									   : 0;
+		    char_u  *p = ptr - (mb_off + 1);
 
 		    // TODO: is passing p for start of the line OK?
 		    n_extra = win_lbr_chartabsize(wp, line, p, (colnr_T)vcol,
 								    NULL) - 1;
 
 		    // We have just drawn the showbreak value, no need to add
-		    // space for it again
+		    // space for it again.
 		    if (vcol == vcol_sbr)
+		    {
 			n_extra -= MB_CHARLEN(get_showbreak_value(wp));
+			if (n_extra < 0)
+			    n_extra = 0;
+		    }
 
 		    if (c == TAB && n_extra + col > wp->w_width)
 # ifdef FEAT_VARTABS
@@ -2006,6 +2014,11 @@ win_line(
 		}
 #endif
 
+		in_multispace = c == ' '
+		    && ((ptr > line + 1 && ptr[-2] == ' ') || *ptr == ' ');
+		if (!in_multispace)
+		    multispace_pos = 0;
+
 		// 'list': Change char 160 to 'nbsp' and space to 'space'
 		// setting in 'listchars'.  But not when the character is
 		// followed by a composing character (use mb_l to check that).
@@ -2017,12 +2030,21 @@ win_line(
 			     && wp->w_lcs_chars.nbsp)
 			    || (c == ' '
 				&& mb_l == 1
-				&& wp->w_lcs_chars.space
+				&& (wp->w_lcs_chars.space
+				    || (in_multispace
+					&& wp->w_lcs_chars.multispace != NULL))
 				&& ptr - line >= leadcol
 				&& ptr - line <= trailcol)))
 		{
-		    c = (c == ' ') ? wp->w_lcs_chars.space :
-							wp->w_lcs_chars.nbsp;
+		    if (in_multispace && wp->w_lcs_chars.multispace != NULL)
+		    {
+			c = wp->w_lcs_chars.multispace[multispace_pos++];
+			if (wp->w_lcs_chars.multispace[multispace_pos] == NUL)
+			    multispace_pos = 0;
+		    }
+		    else
+			c = (c == ' ') ? wp->w_lcs_chars.space
+					: wp->w_lcs_chars.nbsp;
 		    if (area_attr == 0 && search_attr == 0)
 		    {
 			n_attr = 1;
@@ -2104,55 +2126,60 @@ win_line(
 			int	i;
 			int	saved_nextra = n_extra;
 
-#ifdef FEAT_CONCEAL
+# ifdef FEAT_CONCEAL
 			if (vcol_off > 0)
 			    // there are characters to conceal
 			    tab_len += vcol_off;
+
 			// boguscols before FIX_FOR_BOGUSCOLS macro from above
 			if (wp->w_p_list && wp->w_lcs_chars.tab1
 							&& old_boguscols > 0
 							&& n_extra > tab_len)
 			    tab_len += n_extra - tab_len;
-#endif
-
-			// if n_extra > 0, it gives the number of chars, to
+# endif
+			// If n_extra > 0, it gives the number of chars, to
 			// use for a tab, else we need to calculate the width
-			// for a tab
+			// for a tab.
 			len = (tab_len * mb_char2len(wp->w_lcs_chars.tab2));
+			if (wp->w_lcs_chars.tab3)
+			    len += mb_char2len(wp->w_lcs_chars.tab3);
 			if (n_extra > 0)
 			    len += n_extra - tab_len;
 			c = wp->w_lcs_chars.tab1;
 			p = alloc(len + 1);
-			vim_memset(p, ' ', len);
-			p[len] = NUL;
-			vim_free(p_extra_free);
-			p_extra_free = p;
-			for (i = 0; i < tab_len; i++)
+			if (p == NULL)
+			    n_extra = 0;
+			else
 			{
-			    int lcs = wp->w_lcs_chars.tab2;
-
-			    if (*p == NUL)
+			    vim_memset(p, ' ', len);
+			    p[len] = NUL;
+			    vim_free(p_extra_free);
+			    p_extra_free = p;
+			    for (i = 0; i < tab_len; i++)
 			    {
-				tab_len = i;
-				break;
-			    }
+				int lcs = wp->w_lcs_chars.tab2;
 
-			    // if tab3 is given, need to change the char
-			    // for tab
-			    if (wp->w_lcs_chars.tab3 && i == tab_len - 1)
-				lcs = wp->w_lcs_chars.tab3;
-			    mb_char2bytes(lcs, p);
-			    p += mb_char2len(lcs);
-			    n_extra += mb_char2len(lcs)
+				if (*p == NUL)
+				{
+				    tab_len = i;
+				    break;
+				}
+
+				// if tab3 is given, use it for the last char
+				if (wp->w_lcs_chars.tab3 && i == tab_len - 1)
+				    lcs = wp->w_lcs_chars.tab3;
+				p += mb_char2bytes(lcs, p);
+				n_extra += mb_char2len(lcs)
 						  - (saved_nextra > 0 ? 1 : 0);
+			    }
+			    p_extra = p_extra_free;
+# ifdef FEAT_CONCEAL
+			    // n_extra will be increased by FIX_FOX_BOGUSCOLS
+			    // macro below, so need to adjust for that here
+			    if (vcol_off > 0)
+				n_extra -= vcol_off;
+# endif
 			}
-			p_extra = p_extra_free;
-#ifdef FEAT_CONCEAL
-			// n_extra will be increased by FIX_FOX_BOGUSCOLS
-			// macro below, so need to adjust for that here
-			if (vcol_off > 0)
-			    n_extra -= vcol_off;
-#endif
 		    }
 #endif
 #ifdef FEAT_CONCEAL

@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2021 Jul 03
+" Last Change:	2021 Sep 21
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -488,7 +488,7 @@ au BufNewFile,BufRead *.desktop,*.directory	setf desktop
 au BufNewFile,BufRead dict.conf,.dictrc		setf dictconf
 
 " Dictd config
-au BufNewFile,BufRead dictd.conf		setf dictdconf
+au BufNewFile,BufRead dictd*.conf		setf dictdconf
 
 " Diff files
 au BufNewFile,BufRead *.diff,*.rej		setf diff
@@ -1029,7 +1029,7 @@ au BufNewFile,BufRead *.markdown,*.mdown,*.mkd,*.mkdn,*.mdwn,*.md  setf markdown
 " Mason
 au BufNewFile,BufRead *.mason,*.mhtml,*.comp	setf mason
 
-" Mathematica, Matlab, Murphi or Objective C
+" Mathematica, Matlab, Murphi, Objective C or Octave
 au BufNewFile,BufRead *.m			call dist#ft#FTm()
 
 " Mathematica notebook
@@ -1091,6 +1091,9 @@ au BufNewFile,BufRead *.moo			setf moo
 
 " Modconf
 au BufNewFile,BufRead */etc/modules.conf,*/etc/modules,*/etc/conf.modules setf modconf
+
+" MPD is based on XML
+au BufNewFile,BufRead *.mpd			setf xml
 
 " Mplayer config
 au BufNewFile,BufRead mplayer.conf,*/.mplayer/config	setf mplayerconf
@@ -1174,6 +1177,9 @@ au BufNewFile,BufRead *.ml,*.mli,*.mll,*.mly,.ocamlinit,*.mlt,*.mlp,*.mlip,*.mli
 
 " Occam
 au BufNewFile,BufRead *.occ			setf occam
+
+" Octave
+au BufNewFile,BufRead octave.conf,.octaverc,octaverc	setf octave
 
 " Omnimark
 au BufNewFile,BufRead *.xom,*.xin		setf omnimark
@@ -1397,7 +1403,7 @@ au BufNewFile,BufRead *.ptl,*.pyi,SConstruct		   setf python
 " Radiance
 au BufNewFile,BufRead *.rad,*.mat		setf radiance
 
-" Raku (formelly Perl6)
+" Raku (formerly Perl6)
 au BufNewFile,BufRead *.pm6,*.p6,*.t6,*.pod6,*.raku,*.rakumod,*.rakudoc,*.rakutest  setf raku
 
 " Ratpoison config/command files
@@ -2135,7 +2141,7 @@ au BufNewFile,BufRead proftpd.conf*					call s:StarSetf('apachestyle')
 
 " More Apache config files
 au BufNewFile,BufRead access.conf*,apache.conf*,apache2.conf*,httpd.conf*,srm.conf*	call s:StarSetf('apache')
-au BufNewFile,BufRead */etc/apache2/*.conf*,*/etc/apache2/conf.*/*,*/etc/apache2/mods-*/*,*/etc/apache2/sites-*/*,*/etc/httpd/conf.d/*.conf*		call s:StarSetf('apache')
+au BufNewFile,BufRead */etc/apache2/*.conf*,*/etc/apache2/conf.*/*,*/etc/apache2/mods-*/*,*/etc/apache2/sites-*/*,*/etc/httpd/conf.*/*,*/etc/httpd/mods-*/*,*/etc/httpd/sites-*/*,*/etc/httpd/conf.d/*.conf*		call s:StarSetf('apache')
 
 " Asterisk config file
 au BufNewFile,BufRead *asterisk/*.conf*		call s:StarSetf('asterisk')

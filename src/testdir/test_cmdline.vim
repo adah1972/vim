@@ -482,6 +482,13 @@ func Test_fullcommand()
   call assert_equal('', fullcommand(test_null_string()))
 
   call assert_equal('syntax', 'syn'->fullcommand())
+
+  command -buffer BufferLocalCommand :
+  command GlobalCommand :
+  call assert_equal('GlobalCommand', fullcommand('GlobalCom'))
+  call assert_equal('BufferLocalCommand', fullcommand('BufferL'))
+  delcommand BufferLocalCommand
+  delcommand GlobalCommand
 endfunc
 
 func Test_shellcmd_completion()
@@ -847,6 +854,11 @@ func Test_cmdline_complete_various()
   call feedkeys(":disas s:WeirdF\<C-A>\<C-B>\"\<CR>", 'xt')
   call assert_match('"disas <SNR>\d\+_WeirdFunc', @:)
 
+  call feedkeys(":disas \<S-Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_match('"disas <SNR>\d\+_', @:)
+  call feedkeys(":disas debug \<S-Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_match('"disas debug <SNR>\d\+_', @:)
+
   " completion for the :match command
   call feedkeys(":match Search /pat/\<C-A>\<C-B>\"\<CR>", 'xt')
   call assert_equal("\"match Search /pat/\<C-A>", @:)
@@ -876,11 +888,13 @@ func Test_cmdline_complete_various()
   call delete('Xfile2')
 
   " completion for the :augroup command
-  augroup XTest
+  augroup XTest.test
   augroup END
   call feedkeys(":augroup X\<C-A>\<C-B>\"\<CR>", 'xt')
-  call assert_equal("\"augroup XTest", @:)
-  augroup! XTest
+  call assert_equal("\"augroup XTest.test", @:)
+  call feedkeys(":au X\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal("\"au XTest.test", @:)
+  augroup! XTest.test
 
   " completion for the :unlet command
   call feedkeys(":unlet one two\<C-A>\<C-B>\"\<CR>", 'xt')

@@ -690,12 +690,16 @@ check_number_or_float(vartype_T type1, vartype_T type2, char_u *op)
     return OK;
 }
 
+/*
+ * Generate instruction for "+".  For a list this creates a new list.
+ */
     static int
 generate_add_instr(
 	cctx_T *cctx,
 	vartype_T vartype,
 	type_T *type1,
-	type_T *type2)
+	type_T *type2,
+	exprtype_T expr_type)
 {
     garray_T	*stack = &cctx->ctx_type_stack;
     isn_T	*isn = generate_instr_drop(cctx,
@@ -715,7 +719,12 @@ generate_add_instr(
 	return FAIL;
 
     if (isn != NULL)
-	isn->isn_arg.op.op_type = EXPR_ADD;
+    {
+	if (isn->isn_type == ISN_ADDLIST)
+	    isn->isn_arg.op.op_type = expr_type;
+	else
+	    isn->isn_arg.op.op_type = EXPR_ADD;
+    }
 
     // When concatenating two lists with different member types the member type
     // becomes "any".
@@ -769,7 +778,8 @@ generate_two_op(cctx_T *cctx, char_u *op)
     switch (*op)
     {
 	case '+':
-		  if (generate_add_instr(cctx, vartype, type1, type2) == FAIL)
+		  if (generate_add_instr(cctx, vartype, type1, type2,
+							    EXPR_COPY) == FAIL)
 		      return FAIL;
 		  break;
 
@@ -2837,7 +2847,7 @@ generate_ppconst(cctx_T *cctx, ppconst_T *ppconst)
 }
 
 /*
- * Check that the last item of "ppconst" is a bool.
+ * Check that the last item of "ppconst" is a bool, if there is an item.
  */
     static int
 check_ppconst_bool(ppconst_T *ppconst)
@@ -2868,9 +2878,10 @@ clear_ppconst(ppconst_T *ppconst)
 /*
  * Compile getting a member from a list/dict/string/blob.  Stack has the
  * indexable value and the index or the two indexes of a slice.
+ * "keeping_dict" is used for dict[func](arg) to pass dict to func.
  */
     static int
-compile_member(int is_slice, cctx_T *cctx)
+compile_member(int is_slice, int *keeping_dict, cctx_T *cctx)
 {
     type_T	**typep;
     garray_T	*stack = &cctx->ctx_type_stack;
@@ -2925,6 +2936,8 @@ compile_member(int is_slice, cctx_T *cctx)
 	    return FAIL;
 	if (generate_instr_drop(cctx, ISN_MEMBER, 1) == FAIL)
 	    return FAIL;
+	if (keeping_dict != NULL)
+	    *keeping_dict = TRUE;
     }
     else if (vartype == VAR_STRING)
     {
@@ -4304,6 +4317,7 @@ compile_subscript(
 	ppconst_T *ppconst)
 {
     char_u	*name_start = *end_leader;
+    int		keeping_dict = FALSE;
 
     for (;;)
     {
@@ -4350,6 +4364,12 @@ compile_subscript(
 		return FAIL;
 	    if (generate_PCALL(cctx, argcount, name_start, type, TRUE) == FAIL)
 		return FAIL;
+	    if (keeping_dict)
+	    {
+		keeping_dict = FALSE;
+		if (generate_instr(cctx, ISN_CLEARDICT) == NULL)
+		    return FAIL;
+	    }
 	}
 	else if (*p == '-' && p[1] == '>')
 	{
@@ -4460,6 +4480,12 @@ compile_subscript(
 		if (compile_call(arg, p - *arg, cctx, ppconst, 1) == FAIL)
 		    return FAIL;
 	    }
+	    if (keeping_dict)
+	    {
+		keeping_dict = FALSE;
+		if (generate_instr(cctx, ISN_CLEARDICT) == NULL)
+		    return FAIL;
+	    }
 	}
 	else if (**arg == '[')
 	{
@@ -4527,7 +4553,13 @@ compile_subscript(
 	    }
 	    *arg = *arg + 1;
 
-	    if (compile_member(is_slice, cctx) == FAIL)
+	    if (keeping_dict)
+	    {
+		keeping_dict = FALSE;
+		if (generate_instr(cctx, ISN_CLEARDICT) == NULL)
+		    return FAIL;
+	    }
+	    if (compile_member(is_slice, &keeping_dict, cctx) == FAIL)
 		return FAIL;
 	}
 	else if (*p == '.' && p[1] != '.')
@@ -4552,18 +4584,21 @@ compile_subscript(
 		semsg(_(e_syntax_error_at_str), *arg);
 		return FAIL;
 	    }
+	    if (keeping_dict && generate_instr(cctx, ISN_CLEARDICT) == NULL)
+		return FAIL;
 	    if (generate_STRINGMEMBER(cctx, *arg, p - *arg) == FAIL)
 		return FAIL;
+	    keeping_dict = TRUE;
 	    *arg = p;
 	}
 	else
 	    break;
     }
 
-    // TODO - see handle_subscript():
     // Turn "dict.Func" into a partial for "Func" bound to "dict".
-    // Don't do this when "Func" is already a partial that was bound
-    // explicitly (pt_auto is FALSE).
+    // This needs to be done at runtime to be able to check the type.
+    if (keeping_dict && generate_instr(cctx, ISN_USEDICT) == NULL)
+	return FAIL;
 
     return OK;
 }
@@ -4810,7 +4845,8 @@ compile_expr7(
 	}
 	else
 	{
-	    if (generate_ppconst(cctx, ppconst) == FAIL)
+	    if (cctx->ctx_skip != SKIP_YES
+				    && generate_ppconst(cctx, ppconst) == FAIL)
 		return FAIL;
 	    r = compile_load(arg, p, cctx, TRUE, TRUE);
 	}
@@ -5205,6 +5241,7 @@ compile_and_or(
     {
 	garray_T	*instr = &cctx->ctx_instr;
 	garray_T	end_ga;
+	int		save_skip = cctx->ctx_skip;
 
 	/*
 	 * Repeat until there is no following "||" or "&&"
@@ -5216,7 +5253,10 @@ compile_and_or(
 	    long	save_sourcing_lnum;
 	    int		start_ctx_lnum = cctx->ctx_lnum;
 	    int		save_lnum;
+	    int		const_used;
 	    int		status;
+	    jumpwhen_T	jump_when = opchar == '|'
+				      ? JUMP_IF_COND_TRUE : JUMP_IF_COND_FALSE;
 
 	    if (next != NULL)
 	    {
@@ -5228,6 +5268,7 @@ compile_and_or(
 	    {
 		semsg(_(e_white_space_required_before_and_after_str_at_str),
 									op, p);
+		ga_clear(&end_ga);
 		return FAIL;
 	    }
 
@@ -5239,14 +5280,38 @@ compile_and_or(
 	    status = check_ppconst_bool(ppconst);
 	    if (status != FAIL)
 	    {
-		// TODO: use ppconst if the value is a constant
-		generate_ppconst(cctx, ppconst);
+		// Use the last ppconst if possible.
+		if (ppconst->pp_used > 0)
+		{
+		    typval_T	*tv = &ppconst->pp_tv[ppconst->pp_used - 1];
+		    int		is_true = tv2bool(tv);
 
-		// Every part must evaluate to a bool.
-		status = bool_on_stack(cctx);
-		if (status != FAIL)
-		    status = ga_grow(&end_ga, 1);
+		    if ((is_true && opchar == '|')
+						|| (!is_true && opchar == '&'))
+		    {
+			// For "false && expr" and "true || expr" the "expr"
+			// does not need to be evaluated.
+			cctx->ctx_skip = SKIP_YES;
+			clear_tv(tv);
+			tv->v_type = VAR_BOOL;
+			tv->vval.v_number = is_true ? VVAL_TRUE : VVAL_FALSE;
+		    }
+		    else
+		    {
+			// For "true && expr" and "false || expr" only "expr"
+			// needs to be evaluated.
+			--ppconst->pp_used;
+			jump_when = JUMP_NEVER;
+		    }
+		}
+		else
+		{
+		    // Every part must evaluate to a bool.
+		    status = bool_on_stack(cctx);
+		}
 	    }
+	    if (status != FAIL)
+		status = ga_grow(&end_ga, 1);
 	    cctx->ctx_lnum = save_lnum;
 	    if (status == FAIL)
 	    {
@@ -5254,10 +5319,15 @@ compile_and_or(
 		return FAIL;
 	    }
 
-	    *(((int *)end_ga.ga_data) + end_ga.ga_len) = instr->ga_len;
-	    ++end_ga.ga_len;
-	    generate_JUMP(cctx, opchar == '|'
-				 ?  JUMP_IF_COND_TRUE : JUMP_IF_COND_FALSE, 0);
+	    if (jump_when != JUMP_NEVER)
+	    {
+		if (cctx->ctx_skip != SKIP_YES)
+		{
+		    *(((int *)end_ga.ga_data) + end_ga.ga_len) = instr->ga_len;
+		    ++end_ga.ga_len;
+		}
+		generate_JUMP(cctx, jump_when, 0);
+	    }
 
 	    // eval the next expression
 	    SOURCING_LNUM = save_sourcing_lnum;
@@ -5267,11 +5337,26 @@ compile_and_or(
 		return FAIL;
 	    }
 
+	    const_used = ppconst->pp_used;
 	    if ((opchar == '|' ? compile_expr3(arg, cctx, ppconst)
 				  : compile_expr4(arg, cctx, ppconst)) == FAIL)
 	    {
 		ga_clear(&end_ga);
 		return FAIL;
+	    }
+
+	    // "0 || 1" results in true, "1 && 0" results in false.
+	    if (ppconst->pp_used == const_used + 1)
+	    {
+		typval_T	*tv = &ppconst->pp_tv[ppconst->pp_used - 1];
+
+		if (tv->v_type == VAR_NUMBER
+			 && (tv->vval.v_number == 1 || tv->vval.v_number == 0))
+		{
+		    tv->vval.v_number = tv->vval.v_number == 1
+						      ? VVAL_TRUE : VVAL_FALSE;
+		    tv->v_type = VAR_BOOL;
+		}
 	    }
 
 	    p = may_peek_next_line(cctx, *arg, &next);
@@ -5282,26 +5367,32 @@ compile_and_or(
 	    ga_clear(&end_ga);
 	    return FAIL;
 	}
-	generate_ppconst(cctx, ppconst);
 
-	// Every part must evaluate to a bool.
-	if (bool_on_stack(cctx) == FAIL)
+	if (cctx->ctx_skip != SKIP_YES && ppconst->pp_used == 0)
+	    // Every part must evaluate to a bool.
+	    if (bool_on_stack(cctx) == FAIL)
+	    {
+		ga_clear(&end_ga);
+		return FAIL;
+	    }
+
+	if (end_ga.ga_len > 0)
 	{
-	    ga_clear(&end_ga);
-	    return FAIL;
-	}
+	    // Fill in the end label in all jumps.
+	    generate_ppconst(cctx, ppconst);
+	    while (end_ga.ga_len > 0)
+	    {
+		isn_T	*isn;
 
-	// Fill in the end label in all jumps.
-	while (end_ga.ga_len > 0)
-	{
-	    isn_T	*isn;
-
-	    --end_ga.ga_len;
-	    isn = ((isn_T *)instr->ga_data)
+		--end_ga.ga_len;
+		isn = ((isn_T *)instr->ga_data)
 				  + *(((int *)end_ga.ga_data) + end_ga.ga_len);
-	    isn->isn_arg.jump.jump_where = instr->ga_len;
+		isn->isn_arg.jump.jump_where = instr->ga_len;
+	    }
 	}
 	ga_clear(&end_ga);
+
+	cctx->ctx_skip = save_skip;
     }
 
     return OK;
@@ -6651,7 +6742,7 @@ compile_load_lhs_with_index(lhs_T *lhs, char_u *var_start, cctx_T *cctx)
 	}
 
 	// Get the member.
-	if (compile_member(FALSE, cctx) == FAIL)
+	if (compile_member(FALSE, NULL, cctx) == FAIL)
 	    return FAIL;
     }
     return OK;
@@ -7186,7 +7277,8 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
 	    {
 		if (generate_add_instr(cctx,
 			    operator_type(lhs.lhs_member_type, stacktype),
-				       lhs.lhs_member_type, stacktype) == FAIL)
+				       lhs.lhs_member_type, stacktype,
+							  EXPR_APPEND) == FAIL)
 		    goto theend;
 	    }
 	    else if (generate_two_op(cctx, op) == FAIL)
@@ -10395,6 +10487,7 @@ delete_instr(isn_T *isn)
 	case ISN_CEXPR_AUCMD:
 	case ISN_CHECKLEN:
 	case ISN_CHECKNR:
+	case ISN_CLEARDICT:
 	case ISN_CMDMOD_REV:
 	case ISN_COMPAREANY:
 	case ISN_COMPAREBLOB:
@@ -10471,6 +10564,7 @@ delete_instr(isn_T *isn)
 	case ISN_UNLETINDEX:
 	case ISN_UNLETRANGE:
 	case ISN_UNPACK:
+	case ISN_USEDICT:
 	    // nothing allocated
 	    break;
     }

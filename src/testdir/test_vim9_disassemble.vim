@@ -412,7 +412,8 @@ def Test_disassemble_store_index()
         '\d PUSHNR 0\_s*' ..
         '\d LOAD $0\_s*' ..
         '\d MEMBER dd\_s*' ..
-        '\d STOREINDEX any\_s*' ..
+        '\d\+ USEDICT\_s*' ..
+        '\d\+ STOREINDEX any\_s*' ..
         '\d\+ RETURN void',
         res)
 enddef
@@ -1217,6 +1218,38 @@ def Test_disassemble_and_or()
         instr)
 enddef
 
+def AndConstant(arg: any): string
+  if true && arg
+    return "yes"
+  endif
+  if false && arg
+    return "never"
+  endif
+  return "no"
+enddef
+
+def Test_disassemble_and_constant()
+  assert_equal("yes", AndConstant(1))
+  assert_equal("no", AndConstant(false))
+  var instr = execute('disassemble AndConstant')
+  assert_match('AndConstant\_s*' ..
+      'if true && arg\_s*' ..
+      '0 LOAD arg\[-1\]\_s*' ..
+      '1 COND2BOOL\_s*' ..
+      '2 JUMP_IF_FALSE -> 5\_s*' ..
+      'return "yes"\_s*' ..
+      '3 PUSHS "yes"\_s*' ..
+      '4 RETURN\_s*' ..
+      'endif\_s*' ..
+      'if false && arg\_s*' ..
+      'return "never"\_s*' ..
+      'endif\_s*' ..
+      'return "no"\_s*' ..
+      '5 PUSHS "no"\_s*' ..
+      '6 RETURN',
+      instr)
+enddef
+
 def ForLoop(): list<number>
   var res: list<number>
   for i in range(3)
@@ -1625,11 +1658,13 @@ def Test_disassemble_dict_member()
         'var res = d.item\_s*' ..
         '\d\+ LOAD $0\_s*' ..
         '\d\+ MEMBER item\_s*' ..
+        '\d\+ USEDICT\_s*' ..
         '\d\+ STORE $1\_s*' ..
         'res = d\["item"\]\_s*' ..
         '\d\+ LOAD $0\_s*' ..
         '\d\+ PUSHS "item"\_s*' ..
         '\d\+ MEMBER\_s*' ..
+        '\d\+ USEDICT\_s*' ..
         '\d\+ STORE $1\_s*',
         instr)
   assert_equal(1, DictMember())
@@ -1731,25 +1766,31 @@ def Test_disassemble_invert_bool()
 enddef
 
 def ReturnBool(): bool
-  var name: bool = 1 && 0 || 1
+  var one = 1
+  var zero = 0
+  var name: bool = one && zero || one
   return name
 enddef
 
 def Test_disassemble_return_bool()
   var instr = execute('disassemble ReturnBool')
   assert_match('ReturnBool\_s*' ..
-        'var name: bool = 1 && 0 || 1\_s*' ..
-        '0 PUSHNR 1\_s*' ..
-        '1 COND2BOOL\_s*' ..
-        '2 JUMP_IF_COND_FALSE -> 5\_s*' ..
-        '3 PUSHNR 0\_s*' ..
-        '4 COND2BOOL\_s*' ..
-        '5 JUMP_IF_COND_TRUE -> 8\_s*' ..
-        '6 PUSHNR 1\_s*' ..
-        '7 COND2BOOL\_s*' ..
-        '\d STORE $0\_s*' ..
+        'var one = 1\_s*' ..
+        '0 STORE 1 in $0\_s*' ..
+        'var zero = 0\_s*' ..
+        '1 STORE 0 in $1\_s*' ..
+        'var name: bool = one && zero || one\_s*' ..
+        '2 LOAD $0\_s*' ..
+        '3 COND2BOOL\_s*' ..
+        '4 JUMP_IF_COND_FALSE -> 7\_s*' ..
+        '5 LOAD $1\_s*' ..
+        '6 COND2BOOL\_s*' ..
+        '7 JUMP_IF_COND_TRUE -> 10\_s*' ..
+        '8 LOAD $0\_s*' ..
+        '9 COND2BOOL\_s*' ..
+        '10 STORE $2\_s*' ..
         'return name\_s*' ..
-        '\d\+ LOAD $0\_s*' ..   
+        '\d\+ LOAD $2\_s*' ..   
         '\d\+ RETURN',
         instr)
   assert_equal(true, InvertBool())
@@ -2302,6 +2343,35 @@ def Test_debug_elseif()
         res)
 enddef
 
+func Legacy() dict
+  echo 'legacy'
+endfunc
+
+def s:UseMember()
+  var d = {func: Legacy}
+  var v = d.func()
+enddef
+
+def Test_disassemble_dict_stack()
+  var res = execute('disass s:UseMember')
+  assert_match('<SNR>\d*_UseMember\_s*' ..
+          'var d = {func: Legacy}\_s*' ..
+          '\d PUSHS "func"\_s*' ..
+          '\d PUSHFUNC "Legacy"\_s*' ..
+          '\d NEWDICT size 1\_s*' ..
+          '\d STORE $0\_s*' ..
+
+          'var v = d.func()\_s*' ..
+          '\d LOAD $0\_s*' ..
+          '\d MEMBER func\_s*' ..
+          '\d PCALL top (argc 0)\_s*' ..
+          '\d PCALL end\_s*' ..
+          '\d CLEARDICT\_s*' ..
+          '\d\+ STORE $1\_s*' ..
+          '\d\+ RETURN void*',
+        res)
+enddef
+
 def s:EchoMessages()
   echohl ErrorMsg | echom v:exception | echohl NONE
 enddef
@@ -2361,6 +2431,7 @@ def Test_disassemble_after_reload()
     delfunc g:ThisFunc
     delfunc g:ThatFunc
 enddef
+
 
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

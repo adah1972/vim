@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.2.  Last change: 2021 Jul 22
+*options.txt*	For Vim version 8.2.  Last change: 2021 Sep 21
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -195,10 +195,17 @@ include the "|" in the option value, use "\|" instead.  This example sets the
 This sets the 'titlestring' option to "hi" and 'iconstring' to "there": >
    :set titlestring=hi|set iconstring=there
 
-Similarly, the double quote character starts a comment.  To include the '"' in
-the option value, use '\"' instead.  This example sets the 'titlestring'
-option to 'hi "there"': >
+Similarly, in legacy script the double quote character starts a comment.  To
+include the '"' in the option value, use '\"' instead.  This example sets the
+'titlestring' option to 'hi "there"': >
    :set titlestring=hi\ \"there\"
+
+In |Vim9| script it's simpler, comments start with a '#' character, and only
+when preceded by white space.  A backslash is needed less often: >
+   vim9script
+   set titlestring=hi\ "there"
+   set titlestring=hi#there#
+   set titlestring=hi\ \#there#
 
 For Win32 backslashes in file names are mostly not removed.  More precise: For
 options that expect a file name (those where environment variables are
@@ -4932,16 +4939,25 @@ A jump table for the options with a short description can be found at |Q_op|.
 							*lcs-space*
 	  space:c	Character to show for a space.  When omitted, spaces
 			are left blank.
+							*lcs-multispace*
+	  multispace:c...
+	 		One or more characters to use cyclically to show for
+	 		multiple consecutive spaces.  Overrides the "space"
+			setting, except for single spaces.  When omitted, the
+			"space" setting is used.  For example,
+			`:set listchars=multispace:---+` shows ten consecutive
+			spaces as:
+				---+---+--
 							*lcs-lead*
 	  lead:c	Character to show for leading spaces.  When omitted,
-			leading spaces are blank.  Overrides the "space"
-			setting for leading spaces.  You can combine it with
-			"tab:", for example: >
+			leading spaces are blank.  Overrides the "space" and
+			"multispace" settings for leading spaces.  You can
+			combine it with "tab:", for example: >
 				:set listchars+=tab:>-,lead:.
 <							*lcs-trail*
 	  trail:c	Character to show for trailing spaces.  When omitted,
-			trailing spaces are blank.  Overrides the "space"
-			setting for trailing spaces.
+			trailing spaces are blank.  Overrides the "space" and
+			"multispace" settings for trailing spaces.
 							*lcs-extends*
 	  extends:c	Character to show in the last column, when 'wrap' is
 			off and the line continues beyond the right of the
@@ -4967,7 +4983,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	    :set lcs=tab:>-,eol:<,nbsp:%
 	    :set lcs=extends:>,precedes:<
 <	The "NonText" highlighting will be used for "eol", "extends" and
-	"precedes".  "SpecialKey" for "nbsp", "space", "tab" and "trail".
+	"precedes".  "SpecialKey" will be used for "tab", "nbsp", "space",
+	"multispace", "lead" and "trail".
 	|hl-NonText| |hl-SpecialKey|
 
 			*'lpl'* *'nolpl'* *'loadplugins'* *'noloadplugins'*
@@ -7169,6 +7186,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	If the name "cjk" is included East Asian characters are excluded from
 	spell checking.  This is useful when editing text that also has Asian
 	words.
+	Note that the "medical" dictionary does not exist, it is just an
+	example of a longer name.
 							*E757*
 	As a special case the name of a .spl file can be given as-is.  The
 	first "_xx" in the name is removed and used as the region name
@@ -8762,8 +8781,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	More info here: |cmdline-completion|.
 	The character is not recognized when used inside a macro.  See
 	'wildcharm' for that.
+	Some keys will not work, such as CTRL-C, <CR> and Enter.
 	Although 'wc' is a number option, you can set it to a special key: >
-		:set wc=<Esc>
+		:set wc=<Tab>
 <	NOTE: This option is set to the Vi default value when 'compatible' is
 	set and to the Vim default value when 'compatible' is reset.
 

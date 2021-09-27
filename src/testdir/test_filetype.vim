@@ -59,7 +59,7 @@ let s:filename_checks = {
     \ 'aml': ['file.aml'],
     \ 'ampl': ['file.run'],
     \ 'ant': ['build.xml'],
-    \ 'apache': ['.htaccess', '/etc/httpd/file.conf', '/etc/apache2/sites-2/file.com', '/etc/apache2/some.config', '/etc/apache2/conf.file/conf', '/etc/apache2/mods-some/file', '/etc/apache2/sites-some/file', '/etc/httpd/conf.d/file.config', '/etc/apache2/conf.file/file', '/etc/apache2/file.conf', '/etc/apache2/file.conf-file', '/etc/apache2/mods-file/file', '/etc/apache2/sites-file/file', '/etc/apache2/sites-file/file.com', '/etc/httpd/conf.d/file.conf', '/etc/httpd/conf.d/file.conf-file', 'access.conf', 'access.conf-file', 'any/etc/apache2/conf.file/file', 'any/etc/apache2/file.conf', 'any/etc/apache2/file.conf-file', 'any/etc/apache2/mods-file/file', 'any/etc/apache2/sites-file/file', 'any/etc/apache2/sites-file/file.com', 'any/etc/httpd/conf.d/file.conf', 'any/etc/httpd/conf.d/file.conf-file', 'any/etc/httpd/file.conf', 'apache.conf', 'apache.conf-file', 'apache2.conf', 'apache2.conf-file', 'httpd.conf', 'httpd.conf-file', 'srm.conf', 'srm.conf-file'],
+    \ 'apache': ['.htaccess', '/etc/httpd/file.conf', '/etc/apache2/sites-2/file.com', '/etc/apache2/some.config', '/etc/apache2/conf.file/conf', '/etc/apache2/mods-some/file', '/etc/apache2/sites-some/file', '/etc/httpd/conf.d/file.config', '/etc/apache2/conf.file/file', '/etc/apache2/file.conf', '/etc/apache2/file.conf-file', '/etc/apache2/mods-file/file', '/etc/apache2/sites-file/file', '/etc/apache2/sites-file/file.com', '/etc/httpd/conf.d/file.conf', '/etc/httpd/conf.d/file.conf-file', 'access.conf', 'access.conf-file', 'any/etc/apache2/conf.file/file', 'any/etc/apache2/file.conf', 'any/etc/apache2/file.conf-file', 'any/etc/apache2/mods-file/file', 'any/etc/apache2/sites-file/file', 'any/etc/apache2/sites-file/file.com', 'any/etc/httpd/conf.d/file.conf', 'any/etc/httpd/conf.d/file.conf-file', 'any/etc/httpd/file.conf', 'apache.conf', 'apache.conf-file', 'apache2.conf', 'apache2.conf-file', 'httpd.conf', 'httpd.conf-file', 'srm.conf', 'srm.conf-file', '/etc/httpd/mods-some/file', '/etc/httpd/sites-some/file', '/etc/httpd/conf.file/conf'],
     \ 'apachestyle': ['/etc/proftpd/file.config,/etc/proftpd/conf.file/file', '/etc/proftpd/conf.file/file', '/etc/proftpd/file.conf', '/etc/proftpd/file.conf-file', 'any/etc/proftpd/conf.file/file', 'any/etc/proftpd/file.conf', 'any/etc/proftpd/file.conf-file', 'proftpd.conf', 'proftpd.conf-file'],
     \ 'applescript': ['file.scpt'],
     \ 'aptconf': ['apt.conf', '/.aptitude/config', 'any/.aptitude/config'],
@@ -142,7 +142,7 @@ let s:filename_checks = {
     \ 'desc': ['file.desc'],
     \ 'desktop': ['file.desktop', '.directory', 'file.directory'],
     \ 'dictconf': ['dict.conf', '.dictrc'],
-    \ 'dictdconf': ['dictd.conf'],
+    \ 'dictdconf': ['dictd.conf', 'dictdfile.conf', 'dictd-file.conf'],
     \ 'diff': ['file.diff', 'file.rej'],
     \ 'dircolors': ['.dir_colors', '.dircolors', '/etc/DIR_COLORS', 'any/etc/DIR_COLORS'],
     \ 'dnsmasq': ['/etc/dnsmasq.conf', '/etc/dnsmasq.d/file', 'any/etc/dnsmasq.conf', 'any/etc/dnsmasq.d/file'],
@@ -295,6 +295,7 @@ let s:filename_checks = {
     \ 'lss': ['file.lss'],
     \ 'lua': ['file.lua', 'file.rockspec', 'file.nse'],
     \ 'lynx': ['lynx.cfg'],
+    \ 'matlab': ['file.m'],
     \ 'm3build': ['m3makefile', 'm3overrides'],
     \ 'm3quake': ['file.quake', 'cm3.cfg'],
     \ 'm4': ['file.at'],
@@ -351,6 +352,7 @@ let s:filename_checks = {
     \ 'obj': ['file.obj'],
     \ 'ocaml': ['file.ml', 'file.mli', 'file.mll', 'file.mly', '.ocamlinit', 'file.mlt', 'file.mlp', 'file.mlip', 'file.mli.cppo', 'file.ml.cppo'],
     \ 'occam': ['file.occ'],
+    \ 'octave': ['octaverc', '.octaverc', 'octave.conf'],
     \ 'omnimark': ['file.xom', 'file.xin'],
     \ 'opam': ['opam', 'file.opam', 'file.opam.template'],
     \ 'openroad': ['file.or'],
@@ -549,7 +551,7 @@ let s:filename_checks = {
     \ 'xhtml': ['file.xhtml', 'file.xht'],
     \ 'xinetd': ['/etc/xinetd.conf', '/etc/xinetd.d/file', 'any/etc/xinetd.conf', 'any/etc/xinetd.d/file'],
     \ 'xmath': ['file.msc', 'file.msf'],
-    \ 'xml': ['/etc/blkid.tab', '/etc/blkid.tab.old', 'file.xmi', 'file.csproj', 'file.csproj.user', 'file.ui', 'file.tpm', '/etc/xdg/menus/file.menu', 'fglrxrc', 'file.xlf', 'file.xliff', 'file.xul', 'file.wsdl', 'file.wpl', 'any/etc/blkid.tab', 'any/etc/blkid.tab.old', 'any/etc/xdg/menus/file.menu', 'file.atom', 'file.rss', 'file.cdxml', 'file.psc1'],
+    \ 'xml': ['/etc/blkid.tab', '/etc/blkid.tab.old', 'file.xmi', 'file.csproj', 'file.csproj.user', 'file.ui', 'file.tpm', '/etc/xdg/menus/file.menu', 'fglrxrc', 'file.xlf', 'file.xliff', 'file.xul', 'file.wsdl', 'file.wpl', 'any/etc/blkid.tab', 'any/etc/blkid.tab.old', 'any/etc/xdg/menus/file.menu', 'file.atom', 'file.rss', 'file.cdxml', 'file.psc1', 'file.mpd'],
     \ 'xmodmap': ['anyXmodmap', 'Xmodmap', 'some-Xmodmap', 'some-xmodmap', 'some-xmodmap-file', 'xmodmap', 'xmodmap-file'],
     \ 'xf86conf': ['xorg.conf', 'xorg.conf-4'],
     \ 'xpm2': ['file.xpm2'],
@@ -851,4 +853,93 @@ func Test_dsl_file()
   filetype off
 endfunc
 
+func Test_m_file()
+  filetype on
+
+  call writefile(['looks like Matlab'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('matlab', &filetype)
+  bwipe!
+
+  let g:filetype_m = 'octave'
+  split Xfile.m
+  call assert_equal('octave', &filetype)
+  bwipe!
+  unlet g:filetype_m
+
+  " Test dist#ft#FTm()
+
+  " Objective-C
+
+  call writefile(['// Objective-C line comment'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('objc', &filetype)
+  bwipe!
+
+  call writefile(['/* Objective-C block comment */'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('objc', &filetype)
+  bwipe!
+
+  call writefile(['#import "test.m"'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('objc', &filetype)
+  bwipe!
+
+  " Octave
+
+  call writefile(['# Octave line comment'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('octave', &filetype)
+  bwipe!
+
+  call writefile(['%!test "Octave test"'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('octave', &filetype)
+  bwipe!
+
+  call writefile(['unwind_protect'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('octave', &filetype)
+  bwipe!
+
+  call writefile(['try; 42; end_try_catch'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('octave', &filetype)
+  bwipe!
+
+  " Mathematica
+
+  call writefile(['(* Mathematica comment'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('mma', &filetype)
+  bwipe!
+
+  " MATLAB
+
+  call writefile(['% MATLAB line comment'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('matlab', &filetype)
+  bwipe!
+
+  " Murphi
+
+  call writefile(['-- Murphi comment'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('murphi', &filetype)
+  bwipe!
+
+  call writefile(['/* Murphi block comment */', 'Type'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('murphi', &filetype)
+  bwipe!
+
+  call writefile(['Type'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('murphi', &filetype)
+  bwipe!
+
+  call delete('Xfile.m')
+  filetype off
+endfunc
 " vim: shiftwidth=2 sts=2 expandtab

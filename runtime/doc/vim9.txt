@@ -1,4 +1,4 @@
-*vim9.txt*	For Vim version 8.2.  Last change: 2021 Aug 11
+*vim9.txt*	For Vim version 8.2.  Last change: 2021 Sep 13
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -106,6 +106,9 @@ script and `:def` functions; details are below:
   or curly-braces names.
 - A range before a command must be prefixed with a colon: >
 	:%s/this/that
+- Executing a register with "@r" does not work, you can prepend a colon or use
+  `:exe`: >
+  	:exe @a
 - Unless mentioned specifically, the highest |scriptversion| is used.
 
 
@@ -154,7 +157,7 @@ Compilation is done when any of these is encountered:
   function was defined
 - `:disassemble` is used for the function.
 - a function that is compiled calls the function or uses it as a function
-  reference
+  reference (so that the argument and return types can be checked)
 							*E1091*
 If compilation fails it is not tried again on the next call, instead this
 error is given: "E1091: Function is not compiled: {name}".
@@ -168,7 +171,7 @@ created yet.  In this case you can call `execute()` to invoke it at runtime. >
 "closure".  A `:def` function always aborts on an error (unless `:silent!` was
 used for the command or inside a `:try` block), does not get a range passed
 cannot be a "dict" function, and can always be a closure.
-
+						*vim9-no-dict-function*
 Later classes will be added, which replaces the "dict function" mechanism.
 For now you will need to pass the dictionary explicitly: >
 	def DictFunc(d: dict<any>, arg: string)
@@ -176,6 +179,15 @@ For now you will need to pass the dictionary explicitly: >
 	enddef
 	var d = {item: 'value', func: DictFunc}
 	d.func(d, 'item')
+
+You can call a legacy dict function though: >
+	func Legacy() dict
+	  echo self.value
+	endfunc
+	def CallLegacy()
+	  var d = {func: Legacy, value: 'text'}
+	  d.func()
+	enddef
 
 The argument types and return type need to be specified.  The "any" type can
 be used, type checking will then be done at runtime, like with legacy
@@ -477,7 +489,7 @@ use the command instead: >
 If the expression starts with "!" this is interpreted as a shell command, not
 negation of a condition.  Thus this is a shell command: >
 	!shellCommand->something
-Put the expression in parenthesis to use the "!" for negation: >
+Put the expression in parentheses to use the "!" for negation: >
 	(!expression)->Method()
 
 Note that while variables need to be defined before they can be used,
@@ -741,8 +753,8 @@ White space is not allowed:
 	      arg	   # OK
 	      )
 
-White space space is not allowed in a `:set` command between the option name
-and a following "&", "!", "<", "=", "+=", "-=" or "^=".
+White space is not allowed in a `:set` command between the option name and a
+following "&", "!", "<", "=", "+=", "-=" or "^=".
 
 
 No curly braces expansion ~
@@ -1413,11 +1425,10 @@ In case the name is ambiguous, another name can be specified: >
 To import all exported items under a specific identifier: >
 	import * as That from 'thatscript.vim'
 
-{not implemented yet: using "This as That"}
-
 Then you can use "That.EXPORTED_CONST", "That.someValue", etc.  You are free
 to choose the name "That", but it is highly recommended to use the name of the
-script file to avoid confusion.
+script file to avoid confusion.  Also avoid command names, because the name
+will shadow them.
 
 `:import` can also be used in legacy Vim script.  The imported items still
 become script-local, even when the "s:" prefix is not given.

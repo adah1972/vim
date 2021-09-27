@@ -284,6 +284,7 @@ edit(
     else
 	State = INSERT;
 
+    trigger_modechanged();
     stop_insert_mode = FALSE;
 
 #ifdef FEAT_CONCEAL
@@ -3581,6 +3582,11 @@ ins_esc(
 {
     int		temp;
     static int	disabled_redraw = FALSE;
+#ifdef FEAT_CONCEAL
+    // Remember if the cursor line was concealed before changing State.
+    int		cursor_line_was_concealed = curwin->w_p_cole > 0
+						&& conceal_cursor_line(curwin);
+#endif
 
 #ifdef FEAT_SPELL
     check_spell_redraw();
@@ -3681,6 +3687,7 @@ ins_esc(
 #endif
 
     State = NORMAL;
+    trigger_modechanged();
     // need to position cursor again (e.g. when on a TAB )
     changed_cline_bef_curs();
 
@@ -3699,6 +3706,11 @@ ins_esc(
 	// Re-enable modifyOtherKeys.
 	out_str(T_CTI);
     }
+#ifdef FEAT_CONCEAL
+    // Check if the cursor line needs redrawing after changing State.  If
+    // 'concealcursor' is "i" it needs to be redrawn without concealing.
+    conceal_check_cursor_line(cursor_line_was_concealed);
+#endif
 
     // When recording or for CTRL-O, need to display the new mode.
     // Otherwise remove the mode message.
@@ -3811,6 +3823,7 @@ ins_insert(int replaceState)
 	State = INSERT | (State & LANGMAP);
     else
 	State = replaceState | (State & LANGMAP);
+    trigger_modechanged();
     AppendCharToRedobuff(K_INS);
     showmode();
 #ifdef CURSOR_SHAPE

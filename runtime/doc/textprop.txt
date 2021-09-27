@@ -1,4 +1,4 @@
-*textprop.txt*  For Vim version 8.2.  Last change: 2021 May 26
+*textprop.txt*  For Vim version 8.2.  Last change: 2021 Aug 16
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -160,7 +160,7 @@ prop_add({lnum}, {col}, {props})
 
 		Can also be used as a |method|: >
 			GetLnum()->prop_add(col, props)
-
+<
 						*prop_add_list()*
 prop_add_list({props}, [[{lnum}, {col}, {end-lnum}, {end-col}], ...])
 		Similar to prop_add(), but attaches a text property at

@@ -289,7 +289,7 @@ set_context_in_user_cmd(expand_T *xp, char_u *arg_in)
 }
 
     char_u *
-get_user_command_name(int idx)
+expand_user_command_name(int idx)
 {
     return get_user_commands(NULL, idx - (int)CMD_SIZE);
 }
@@ -312,6 +312,32 @@ get_user_commands(expand_T *xp UNUSED, int idx)
     idx -= buf->b_ucmds.ga_len;
     if (idx < ucmds.ga_len)
 	return USER_CMD(idx)->uc_name;
+    return NULL;
+}
+
+/*
+ * Get the name of user command "idx".  "cmdidx" can be CMD_USER or
+ * CMD_USER_BUF.
+ * Returns NULL if the command is not found.
+ */
+    char_u *
+get_user_command_name(int idx, int cmdidx)
+{
+    if (cmdidx == CMD_USER && idx < ucmds.ga_len)
+	return USER_CMD(idx)->uc_name;
+    if (cmdidx == CMD_USER_BUF)
+    {
+	// In cmdwin, the alternative buffer should be used.
+	buf_T *buf =
+#ifdef FEAT_CMDWIN
+		    (cmdwin_type != 0 && get_cmdline_type() == NUL)
+							  ? prevwin->w_buffer :
+#endif
+	    curbuf;
+
+	if (idx < buf->b_ucmds.ga_len)
+	    return USER_CMD_GA(&buf->b_ucmds, idx)->uc_name;
+    }
     return NULL;
 }
 
@@ -1136,8 +1162,16 @@ ex_delcommand(exarg_T *eap)
 {
     int		i = 0;
     ucmd_T	*cmd = NULL;
-    int		cmp = -1;
+    int		res = -1;
     garray_T	*gap;
+    char_u	*arg = eap->arg;
+    int		buffer_only = FALSE;
+
+    if (STRNCMP(arg, "-buffer", 7) == 0 && VIM_ISWHITE(arg[7]))
+    {
+	buffer_only = TRUE;
+	arg = skipwhite(arg + 7);
+    }
 
     gap = &curbuf->b_ucmds;
     for (;;)
@@ -1145,18 +1179,20 @@ ex_delcommand(exarg_T *eap)
 	for (i = 0; i < gap->ga_len; ++i)
 	{
 	    cmd = USER_CMD_GA(gap, i);
-	    cmp = STRCMP(eap->arg, cmd->uc_name);
-	    if (cmp <= 0)
+	    res = STRCMP(arg, cmd->uc_name);
+	    if (res <= 0)
 		break;
 	}
-	if (gap == &ucmds || cmp == 0)
+	if (gap == &ucmds || res == 0 || buffer_only)
 	    break;
 	gap = &ucmds;
     }
 
-    if (cmp != 0)
+    if (res != 0)
     {
-	semsg(_("E184: No such user-defined command: %s"), eap->arg);
+	semsg(_(buffer_only
+		    ? e_no_such_user_defined_command_in_current_buffer_str
+		    : e_no_such_user_defined_command_str), arg);
 	return;
     }
 

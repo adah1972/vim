@@ -485,6 +485,7 @@ do_exmode(
     else
 	exmode_active = EXMODE_NORMAL;
     State = NORMAL;
+    trigger_modechanged();
 
     // When using ":global /pat/ visual" and then "Q" we return to continue
     // the :global command.
@@ -2807,7 +2808,16 @@ parse_command_modifiers(
 
 	// ignore comment and empty lines
 	if (comment_start(eap->cmd, starts_with_colon))
+	{
+	    // a comment ends at a NL
+	    if (eap->nextcmd == NULL)
+	    {
+		eap->nextcmd = vim_strchr(eap->cmd, '\n');
+		if (eap->nextcmd != NULL)
+		    ++eap->nextcmd;
+	    }
 	    return FAIL;
+	}
 	if (*eap->cmd == NUL)
 	{
 	    if (!skip_only)
@@ -3886,8 +3896,8 @@ f_fullcommand(typval_T *argvars, typval_T *rettv)
     }
 
     rettv->vval.v_string = vim_strsave(IS_USER_CMDIDX(ea.cmdidx)
-				    ? get_user_commands(NULL, ea.useridx)
-				    : cmdnames[ea.cmdidx].cmd_name);
+				 ? get_user_command_name(ea.useridx, ea.cmdidx)
+				 : cmdnames[ea.cmdidx].cmd_name);
 }
 #endif
 
@@ -5510,7 +5520,7 @@ check_more(
 get_command_name(expand_T *xp UNUSED, int idx)
 {
     if (idx >= (int)CMD_SIZE)
-	return get_user_command_name(idx);
+	return expand_user_command_name(idx);
     return cmdnames[idx].cmd_name;
 }
 

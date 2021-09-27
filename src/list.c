@@ -952,7 +952,10 @@ list_flatten(list_T *list, long maxdepth)
 
 	    vimlist_remove(list, item, item);
 	    if (list_extend(list, item->li_tv.vval.v_list, next) == FAIL)
+	    {
+		list_free_item(list, item);
 		return;
+	    }
 	    clear_tv(&item->li_tv);
 	    tofree = item;
 
@@ -1023,6 +1026,9 @@ flatten_common(typval_T *argvars, typval_T *rettv, int make_copy)
 	rettv->vval.v_list = l;
 	if (l == NULL)
 	    return;
+	// The type will change.
+	free_type(l->lv_type);
+	l->lv_type = NULL;
     }
     else
     {
@@ -1217,6 +1223,7 @@ list_copy(list_T *orig, int deep, int copyID)
     copy = list_alloc();
     if (copy != NULL)
     {
+	copy->lv_type = alloc_type(orig->lv_type);
 	if (copyID != 0)
 	{
 	    // Do this before adding the items, because one of the items may
@@ -1938,7 +1945,13 @@ item_compare2(const void *s1, const void *s2)
     if (res == FAIL)
 	res = ITEM_COMPARE_FAIL;
     else
+    {
 	res = (int)tv_get_number_chk(&rettv, &sortinfo->item_compare_func_err);
+	if (res > 0)
+	    res = 1;
+	else if (res < 0)
+	    res = -1;
+    }
     if (sortinfo->item_compare_func_err)
 	res = ITEM_COMPARE_FAIL;  // return value has wrong type
     clear_tv(&rettv);

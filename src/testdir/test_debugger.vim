@@ -271,9 +271,7 @@ func Test_Debugger()
   call RunDbgCmd(buf, 'breakd func a()', ['E475: Invalid argument: func a()'])
   call RunDbgCmd(buf, 'breakd func a', ['E161: Breakpoint not found: func a'])
   call RunDbgCmd(buf, 'breakd expr', ['E475: Invalid argument: expr'])
-  call RunDbgCmd(buf, 'breakd expr x', [
-	      \ 'E121: Undefined variable: x',
-	      \ 'E161: Breakpoint not found: expr x'])
+  call RunDbgCmd(buf, 'breakd expr x', ['E161: Breakpoint not found: expr x'])
 
   " finish the current function
   call RunDbgCmd(buf, 'finish', [
@@ -318,7 +316,9 @@ func Test_Debugger()
   call RunDbgCmd(buf, 'enew! | only!')
 
   call StopVimInTerminal(buf)
+endfunc
 
+func Test_Debugger_breakadd()
   " Tests for :breakadd file and :breakadd here
   " Breakpoints should be set before sourcing the file
 
@@ -342,9 +342,36 @@ func Test_Debugger()
 
   call delete('Xtest.vim')
   %bw!
+
   call assert_fails('breakadd here', 'E32:')
   call assert_fails('breakadd file Xtest.vim /\)/', 'E55:')
 endfunc
+
+def Test_Debugger_breakadd_expr()
+  var lines =<< trim END
+      vim9script
+      func g:EarlyFunc()
+      endfunc
+      breakadd expr DoesNotExist()
+      func g:LaterFunc()
+      endfunc
+      breakdel *
+  END
+  writefile(lines, 'Xtest.vim')
+
+  # Start Vim in a terminal
+  var buf = RunVimInTerminal('-S Xtest.vim', {wait_for_ruler: 0})
+  call TermWait(buf)
+
+  # Despite the failure the functions are defined
+  RunDbgCmd(buf, ':function g:EarlyFunc',
+     ['function EarlyFunc()', 'endfunction'], {match: 'pattern'})
+  RunDbgCmd(buf, ':function g:LaterFunc',
+     ['function LaterFunc()', 'endfunction'], {match: 'pattern'})
+
+  call StopVimInTerminal(buf)
+  call delete('Xtest.vim')
+enddef
 
 func Test_Backtrace_Through_Source()
   CheckCWD
@@ -930,6 +957,27 @@ func Test_Backtrace_DefFunction()
   call StopVimInTerminal(buf)
   call delete('Xtest1.vim')
   call delete('Xtest2.vim')
+endfunc
+
+func Test_DefFunction_expr()
+  CheckCWD
+  let file3 =<< trim END
+      vim9script
+      g:someVar = "foo"
+      def g:ChangeVar()
+        g:someVar = "bar"
+        echo "changed"
+      enddef
+      defcompile
+  END
+  call writefile(file3, 'Xtest3.vim')
+  let buf = RunVimInTerminal('-S Xtest3.vim', {})
+
+  call RunDbgCmd(buf, ':breakadd expr g:someVar')
+  call RunDbgCmd(buf, ':call g:ChangeVar()', ['Oldval = "''foo''"', 'Newval = "''bar''"', 'function ChangeVar', 'line 2: echo "changed"'])
+
+  call StopVimInTerminal(buf)
+  call delete('Xtest3.vim')
 endfunc
 
 func Test_debug_def_and_legacy_function()

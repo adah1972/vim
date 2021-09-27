@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 8.2.  Last change: 2021 Aug 14
+*todo.txt*      For Vim version 8.2.  Last change: 2021 Sep 20
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -38,9 +38,14 @@ browser use: https://github.com/vim/vim/issues/1234
 							*known-bugs*
 -------------------- Known bugs and current work -----------------------
 
+Flaky test op Windows:
+From test_vim9_script.vim:
+    Found errors in Test_no_unknown_error_after_error():
+    command line..script D:/a/vim/vim/src2/testdir/runtest.vim[486]..function RunTheTest[44]..Test_no_unknown_error_after_error line 22: Expected 'E1012:' but got 'E684: list index out of range: 0': so Xdef
+
 Vim9 - Make everything work:
-- use CheckLegacyAndVim9Success(lines) in many more places
 - Check TODO items in vim9compile.c and vim9execute.c
+- use CheckLegacyAndVim9Success(lines) in many more places
 - For builtin functions using tv_get_string*() use check_for_string() to be
   more strict about the argument type (not a bool).
     done: balloon_()
@@ -75,6 +80,7 @@ Further Vim9 improvements, possibly after launch:
   evaluation.
   Use the location where the option was set for deciding whether it's to be
   evaluated in Vim9 script context.
+- Handle command that is only a range more efficient than calling ISN_EXEC
 - implement :type, "import type"
 - implement enum,  "import enum".
 - implement class and interface: See |vim9-classes|
@@ -221,6 +227,9 @@ Need to handle extra bytes.
 Test_communicate_ipv6(): is flaky on many systems
 Fails in line 64 of Ch_communicate, no exception is thrown.
 
+Patch for Template string: #4634
+Have another look at the implementation.
+
 Rename getdigraphlist -> digraph_getlist() etc.
 
 Valgrind reports memory leaks in test_options.
@@ -241,6 +250,8 @@ Memory leak in test_alot with pyeval() (allocating partial)
 Memory leak in test_alot with expand()
 Memory leaks in test_channel? (or is it because of fork())
 
+Idea: when typing ":e /some/dir/" and "dir" does not exist, highlight in red.
+
 ":set &shellpipe" and ":set &shellredir" should use the logic from
 initialization to figure out the default value from 'shell'.  Add a test for
 this.
@@ -254,9 +265,6 @@ Mapping with partial match not executed properly in GTK. (Ingo Karkat, #7082)
 Problem that a previous silent ":throw" causes a following try/catch not to
 work. (ZyX, 2013 Sep 28) With examples: (Malcolm Rowe, 2015 Dec 24)
 Also see #8487 for an example.
-
-Patch for Template string: #4634
-Have another look at the implementation.
 
 Patch to implement the vimtutor with a plugin: #6414
 Was originally written by Felipe Morales.
@@ -359,10 +367,6 @@ autocommands for the buffer lifecycle:
     BufIsWiped    (after buffer ID was wiped)
     BufIsRenamed  (after buffer ID gets another name)
 The buffer list and windows are locked, no changes possible
-
-Add a ModeChanged autocommand that has an argument indicating the old and new
-mode, as what's returned from mode().  Also used for switching Terminal mode.
-#8360, #7863, #7363
 
 Matchparen doesn't remove highlight after undo. (#7054)
 Is OK when syntax HL is active.
@@ -1034,6 +1038,9 @@ always nested.
 matchit hasn't been maintained for a long time.  #955.
 
 Problem with 'delcombine'. (agguser, 2017 Nov 10, #2313)
+
+'delcombine' does not work for the command line. (Tony Mechelynck, 2009 Jul
+20)
 
 MS-Windows: buffer completion doesn't work when using backslash (or slash)
 for a path separator. (xtal8, #2201)
@@ -2295,9 +2302,6 @@ string_convert() should be able to convert between utf-8 and utf-16le.  Used
 for GTK clipboard.  Avoid requirement for iconv.
 
 Now that colnr_T is int instead of unsigned, more type casts can be removed.
-
-'delcombine' does not work for the command line. (Tony Mechelynck, 2009 Jul
-20)
 
 Don't load macmap.vim on startup, turn it into a plugin. (Ron Aaron,
 2009 Apr 7)  Reminder Apr 14.
@@ -4839,7 +4843,6 @@ Autocommands:
     command used dos fileformat.  Same for 'fileencoding'.
 -   Add events to autocommands:
     Error	    - When an error happens
-    ModeChange	    - after changing mode (before waiting for a char)
     VimLeaveCheck    - Before Vim decides to exit, so that it can be cancelled
 		      when exiting isn't a good idea.
     CursorHoldC     - CursorHold while command-line editing

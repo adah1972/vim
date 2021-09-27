@@ -2321,6 +2321,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 :cope	quickfix.txt	/*:cope*
 :copen	quickfix.txt	/*:copen*
 :copy	change.txt	/*:copy*
+:count_quit	windows.txt	/*:count_quit*
 :cp	quickfix.txt	/*:cp*
 :cpf	quickfix.txt	/*:cpf*
 :cpfile	quickfix.txt	/*:cpfile*
@@ -3502,6 +3503,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 :y	change.txt	/*:y*
 :yank	change.txt	/*:yank*
 :z	various.txt	/*:z*
+:z!	various.txt	/*:z!*
 :z#	various.txt	/*:z#*
 :~	change.txt	/*:~*
 ;	motion.txt	/*;*
@@ -3987,6 +3989,8 @@ E123	eval.txt	/*E123*
 E1231	map.txt	/*E1231*
 E1232	eval.txt	/*E1232*
 E1233	eval.txt	/*E1233*
+E1237	map.txt	/*E1237*
+E1239	eval.txt	/*E1239*
 E124	eval.txt	/*E124*
 E125	eval.txt	/*E125*
 E126	eval.txt	/*E126*
@@ -5013,6 +5017,7 @@ Macintosh	os_mac.txt	/*Macintosh*
 Mark	motion.txt	/*Mark*
 MenuPopup	autocmd.txt	/*MenuPopup*
 MiNT	os_mint.txt	/*MiNT*
+ModeChanged	autocmd.txt	/*ModeChanged*
 Moolenaar	intro.txt	/*Moolenaar*
 MorphOS	os_amiga.txt	/*MorphOS*
 Motif	gui_x11.txt	/*Motif*
@@ -5551,10 +5556,12 @@ beval_winnr-variable	eval.txt	/*beval_winnr-variable*
 binary-number	eval.txt	/*binary-number*
 bitwise-function	usr_41.txt	/*bitwise-function*
 blob	eval.txt	/*blob*
+blob-functions	usr_41.txt	/*blob-functions*
 blob-identity	eval.txt	/*blob-identity*
 blob-index	eval.txt	/*blob-index*
 blob-literal	eval.txt	/*blob-literal*
 blob-modification	eval.txt	/*blob-modification*
+blob2list()	eval.txt	/*blob2list()*
 blockwise-examples	visual.txt	/*blockwise-examples*
 blockwise-operators	visual.txt	/*blockwise-operators*
 blockwise-register	change.txt	/*blockwise-register*
@@ -5920,6 +5927,7 @@ compl-keyword	insert.txt	/*compl-keyword*
 compl-omni	insert.txt	/*compl-omni*
 compl-omni-filetypes	insert.txt	/*compl-omni-filetypes*
 compl-spelling	insert.txt	/*compl-spelling*
+compl-stop	insert.txt	/*compl-stop*
 compl-tag	insert.txt	/*compl-tag*
 compl-vim	insert.txt	/*compl-vim*
 compl-whole-line	insert.txt	/*compl-whole-line*
@@ -6834,10 +6842,12 @@ g:netrw_altv	pi_netrw.txt	/*g:netrw_altv*
 g:netrw_banner	pi_netrw.txt	/*g:netrw_banner*
 g:netrw_bannerbackslash	pi_netrw.txt	/*g:netrw_bannerbackslash*
 g:netrw_browse_split	pi_netrw.txt	/*g:netrw_browse_split*
+g:netrw_browsex_support_remote	pi_netrw.txt	/*g:netrw_browsex_support_remote*
 g:netrw_browsex_viewer	pi_netrw.txt	/*g:netrw_browsex_viewer*
 g:netrw_bufsettings	pi_netrw.txt	/*g:netrw_bufsettings*
 g:netrw_chgperm	pi_netrw.txt	/*g:netrw_chgperm*
 g:netrw_chgwin	pi_netrw.txt	/*g:netrw_chgwin*
+g:netrw_clipboard	pi_netrw.txt	/*g:netrw_clipboard*
 g:netrw_compress	pi_netrw.txt	/*g:netrw_compress*
 g:netrw_ctags	pi_netrw.txt	/*g:netrw_ctags*
 g:netrw_cursor	pi_netrw.txt	/*g:netrw_cursor*
@@ -7195,6 +7205,7 @@ gui-x11-printing	gui_x11.txt	/*gui-x11-printing*
 gui-x11-start	gui_x11.txt	/*gui-x11-start*
 gui-x11-various	gui_x11.txt	/*gui-x11-various*
 gui.txt	gui.txt	/*gui.txt*
+gui_running	eval.txt	/*gui_running*
 gui_w32.txt	gui_w32.txt	/*gui_w32.txt*
 gui_x11.txt	gui_x11.txt	/*gui_x11.txt*
 guifontwide_gtk	gui.txt	/*guifontwide_gtk*
@@ -7477,6 +7488,7 @@ i_CTRL-X_CTRL-T	insert.txt	/*i_CTRL-X_CTRL-T*
 i_CTRL-X_CTRL-U	insert.txt	/*i_CTRL-X_CTRL-U*
 i_CTRL-X_CTRL-V	insert.txt	/*i_CTRL-X_CTRL-V*
 i_CTRL-X_CTRL-Y	insert.txt	/*i_CTRL-X_CTRL-Y*
+i_CTRL-X_CTRL-Z	insert.txt	/*i_CTRL-X_CTRL-Z*
 i_CTRL-X_CTRL-]	insert.txt	/*i_CTRL-X_CTRL-]*
 i_CTRL-X_index	index.txt	/*i_CTRL-X_index*
 i_CTRL-X_s	insert.txt	/*i_CTRL-X_s*
@@ -7695,6 +7707,7 @@ lcs-conceal	options.txt	/*lcs-conceal*
 lcs-eol	options.txt	/*lcs-eol*
 lcs-extends	options.txt	/*lcs-extends*
 lcs-lead	options.txt	/*lcs-lead*
+lcs-multispace	options.txt	/*lcs-multispace*
 lcs-nbsp	options.txt	/*lcs-nbsp*
 lcs-precedes	options.txt	/*lcs-precedes*
 lcs-space	options.txt	/*lcs-space*
@@ -7729,6 +7742,7 @@ list-identity	eval.txt	/*list-identity*
 list-index	eval.txt	/*list-index*
 list-modification	eval.txt	/*list-modification*
 list-repeat	windows.txt	/*list-repeat*
+list2blob()	eval.txt	/*list2blob()*
 list2str()	eval.txt	/*list2str()*
 listener_add()	eval.txt	/*listener_add()*
 listener_flush()	eval.txt	/*listener_flush()*
@@ -8625,6 +8639,7 @@ prompt_setprompt()	eval.txt	/*prompt_setprompt()*
 promptbuffer-functions	usr_41.txt	/*promptbuffer-functions*
 pronounce	intro.txt	/*pronounce*
 prop_add()	textprop.txt	/*prop_add()*
+prop_add_list()	textprop.txt	/*prop_add_list()*
 prop_clear()	textprop.txt	/*prop_clear()*
 prop_find()	textprop.txt	/*prop_find()*
 prop_list()	textprop.txt	/*prop_list()*
@@ -9788,6 +9803,7 @@ timestamps	editing.txt	/*timestamps*
 tips	tips.txt	/*tips*
 tips.txt	tips.txt	/*tips.txt*
 tmux	syntax.txt	/*tmux*
+tmux-integration	term.txt	/*tmux-integration*
 todo	todo.txt	/*todo*
 todo.txt	todo.txt	/*todo.txt*
 toggle	options.txt	/*toggle*
@@ -10215,6 +10231,7 @@ vim9-lambda	vim9.txt	/*vim9-lambda*
 vim9-lambda-arguments	vim9.txt	/*vim9-lambda-arguments*
 vim9-mix	vim9.txt	/*vim9-mix*
 vim9-namespace	vim9.txt	/*vim9-namespace*
+vim9-no-dict-function	vim9.txt	/*vim9-no-dict-function*
 vim9-rationale	vim9.txt	/*vim9-rationale*
 vim9-reload	vim9.txt	/*vim9-reload*
 vim9-scopes	vim9.txt	/*vim9-scopes*

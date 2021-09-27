@@ -3260,6 +3260,12 @@ set_var_const(
 		semsg(_(e_redefining_imported_item_str), name);
 		goto failed;
 	    }
+	    if (import->imp_flags & IMP_FLAGS_STAR)
+	    {
+		semsg(_(e_cannot_use_str_itself_it_is_imported_with_star),
+									 name);
+		goto failed;
+	    }
 	    sv = ((svar_T *)si->sn_var_vals.ga_data) + import->imp_var_vals_idx;
 
 	    where.wt_variable = TRUE;
@@ -3456,9 +3462,21 @@ set_var_const(
     if (vim9script && type != NULL)
     {
 	if (type->tt_type == VAR_DICT && dest_tv->vval.v_dict != NULL)
-	    dest_tv->vval.v_dict->dv_type = alloc_type(type);
+	{
+	    if (dest_tv->vval.v_dict->dv_type != type)
+	    {
+		free_type(dest_tv->vval.v_dict->dv_type);
+		dest_tv->vval.v_dict->dv_type = alloc_type(type);
+	    }
+	}
 	else if (type->tt_type == VAR_LIST && dest_tv->vval.v_list != NULL)
-	    dest_tv->vval.v_list->lv_type = alloc_type(type);
+	{
+	    if (dest_tv->vval.v_list->lv_type != type)
+	    {
+		free_type(dest_tv->vval.v_list->lv_type);
+		dest_tv->vval.v_list->lv_type = alloc_type(type);
+	    }
+	}
     }
 
     // ":const var = value" locks the value
