@@ -890,6 +890,48 @@ func Test_edit_CTRL_T()
   bw!
 endfunc
 
+" Test 'thesaurusfunc'
+func MyThesaurus(findstart, base)
+  let mythesaurus = [
+        \ #{word: "happy",
+        \   synonyms: "cheerful,blissful,flying high,looking good,peppy"},
+        \ #{word: "kind",
+        \   synonyms: "amiable,bleeding-heart,heart in right place"}]
+  if a:findstart
+    " locate the start of the word
+    let line = getline('.')
+    let start = col('.') - 1
+    while start > 0 && line[start - 1] =~ '\a'
+      let start -= 1
+    endwhile
+    return start
+  else
+    " find strings matching with "a:base"
+    let res = []
+    for w in mythesaurus
+      if w.word =~ '^' . a:base
+        call add(res, w.word)
+        call extend(res, split(w.synonyms, ","))
+      endif
+    endfor
+    return res
+  endif
+endfunc
+
+func Test_thesaurus_func()
+  new
+  set thesaurus=
+  set thesaurusfunc=MyThesaurus
+  call setline(1, "an ki")
+  call cursor(1, 1)
+  call feedkeys("A\<c-x>\<c-t>\<c-n>\<cr>\<esc>", 'tnix')
+  call assert_equal(['an amiable', ''], getline(1, '$'))
+  set thesaurusfunc=NonExistingFunc
+  call assert_fails("normal $a\<C-X>\<C-T>", 'E117:')
+  set thesaurusfunc&
+  %bw!
+endfunc
+
 func Test_edit_CTRL_U()
   " Test 'completefunc'
   new
@@ -1918,7 +1960,7 @@ func Test_mode_changes()
   func! TestMode()
     call assert_equal(g:mode_seq[g:index], get(v:event, "old_mode"))
     call assert_equal(g:mode_seq[g:index + 1], get(v:event, "new_mode"))
-    call assert_equal(mode(), get(v:event, "new_mode"))
+    call assert_equal(mode(1), get(v:event, "new_mode"))
     let g:index += 1
   endfunc
 
@@ -1930,8 +1972,33 @@ func Test_mode_changes()
   au ModeChanged V:v :call DoIt()
   call feedkeys("Vv\<esc>", 'tnix')
   call assert_equal(4, g:count)
-
   call assert_equal(len(g:mode_seq) - 1, g:index)
+
+  let g:n_to_i = 0
+  au ModeChanged n:i let g:n_to_i += 1
+  let g:n_to_niI = 0
+  au ModeChanged i:niI let g:n_to_niI += 1
+  let g:niI_to_i = 0
+  au ModeChanged niI:i let g:niI_to_i += 1
+  let g:nany_to_i = 0
+  au ModeChanged n*:i let g:nany_to_i += 1
+  let g:i_to_n = 0
+  au ModeChanged i:n let g:i_to_n += 1
+  let g:nori_to_any = 0
+  au ModeChanged [ni]:* let g:nori_to_any += 1
+  let g:i_to_any = 0
+  au ModeChanged i:* let g:i_to_any += 1
+  let g:index = 0
+  let g:mode_seq = ['n', 'i', 'niI', 'i', 'n']
+  call feedkeys("a\<C-O>l\<esc>", 'tnix')
+  call assert_equal(len(g:mode_seq) - 1, g:index)
+  call assert_equal(1, g:n_to_i)
+  call assert_equal(1, g:n_to_niI)
+  call assert_equal(1, g:niI_to_i)
+  call assert_equal(2, g:nany_to_i)
+  call assert_equal(1, g:i_to_n)
+  call assert_equal(2, g:i_to_any)
+  call assert_equal(3, g:nori_to_any)
 
   au! ModeChanged
   delfunc TestMode

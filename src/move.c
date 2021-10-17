@@ -1028,7 +1028,7 @@ curs_columns(
 	    // column
 	    sbr = get_showbreak_value(curwin);
 	    if (*sbr && *ml_get_cursor() == NUL
-				    && curwin->w_wcol == (int)vim_strsize(sbr))
+				    && curwin->w_wcol == vim_strsize(sbr))
 		curwin->w_wcol = 0;
 #endif
 	}
@@ -2682,7 +2682,6 @@ get_scroll_overlap(lineoff_T *lp, int dir)
 	*lp = loff1;	// 1 line overlap
     else
 	*lp = loff2;	// 2 lines overlap
-    return;
 }
 
 /*

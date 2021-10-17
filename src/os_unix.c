@@ -2647,7 +2647,15 @@ mch_FullName(
 		{
 		    vim_strncpy(buf, fname, p - fname);
 		    if (mch_chdir((char *)buf))
-			retval = FAIL;
+		    {
+			// Path does not exist (yet).  For a full path fail,
+			// will use the path as-is.  For a relative path use
+			// the current directory and append the file name.
+			if (mch_isFullName(fname))
+			    retval = FAIL;
+			else
+			    p = NULL;
+		    }
 		    else if (*p == '/')
 			fname = p + 1;
 		    else
@@ -4798,6 +4806,11 @@ mch_call_shell_fork(
 		    // push stream discipline modules
 		    if (options & SHELL_COOKED)
 			setup_slavepty(pty_slave_fd);
+#  ifdef TIOCSCTTY
+		    // Try to become controlling tty (probably doesn't work,
+		    // unless run by root)
+		    ioctl(pty_slave_fd, TIOCSCTTY, (char *)NULL);
+#  endif
 		}
 # endif
 		set_default_child_environment(FALSE);

@@ -533,7 +533,14 @@ func Test_geometry()
     [CODE]
     if RunVim([], after, '-f -g -geometry 31x13+41+43')
       let lines = readfile('Xtest_geometry')
-      call assert_equal(['31', '13', '41', '43', '[41, 43]'], lines)
+      " Depending on the GUI library and the windowing system the final size
+      " might be a bit different, allow for some tolerance.  Tuned based on
+      " actual failures.
+      call assert_inrange(31, 35, str2nr(lines[0]))
+      call assert_equal('13', lines[1])
+      call assert_equal('41', lines[2])
+      call assert_equal('43', lines[3])
+      call assert_equal('[41, 43]', lines[4])
     endif
   endif
 
@@ -1295,5 +1302,21 @@ func Test_echo_true_in_cmd()
   call delete('Xscript')
   call delete('Xresult')
 endfunc
+
+func Test_rename_buffer_on_startup()
+  CheckUnix
+
+  let lines =<< trim END
+      call writefile(['done'], 'Xresult')
+      qa!
+  END
+  call writefile(lines, 'Xscript')
+  if RunVim([], [], "--clean -e -s --cmd 'file x|new|file x' --cmd 'so Xscript'")
+    call assert_equal(['done'], readfile('Xresult'))
+  endif
+  call delete('Xscript')
+  call delete('Xresult')
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

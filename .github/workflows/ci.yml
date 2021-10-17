@@ -40,6 +40,7 @@ jobs:
             compiler: gcc
             coverage: true
             extra: testgui
+            uchar: true
           - features: huge
             compiler: clang
             extra: asan
@@ -80,7 +81,7 @@ jobs:
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
           . /etc/lsb-release
           sudo add-apt-repository -y "deb http://apt.llvm.org/${DISTRIB_CODENAME}/ llvm-toolchain-${DISTRIB_CODENAME}-11 main"
-          sudo apt-get install -y clang-11
+          sudo apt-get install -y clang-11 llvm-11
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-11 100
           sudo update-alternatives --set clang /usr/bin/clang-11
           sudo update-alternatives --install /usr/bin/llvm-cov llvm-cov /usr/bin/llvm-cov-11 100
@@ -111,9 +112,13 @@ jobs:
             ;;
           esac
 
+          CFLAGS=""
           if ${{ matrix.coverage == true }}; then
-            echo "CFLAGS=--coverage -DUSE_GCOV_FLUSH"
+            CFLAGS="$CFLAGS --coverage -DUSE_GCOV_FLUSH"
             echo "LDFLAGS=--coverage"
+          fi
+          if ${{ matrix.uchar == true }}; then
+            CFLAGS="$CFLAGS -funsigned-char"
           fi
           if ${{ contains(matrix.extra, 'testgui') }}; then
             echo "TEST=-C src testgui"
@@ -130,6 +135,7 @@ jobs:
           if ${{ contains(matrix.extra, 'vimtags') }}; then
             echo "TEST=-C runtime/doc vimtags VIMEXE=../../${SRCDIR}/vim"
           fi
+          echo "CFLAGS=$CFLAGS"
           ) >> $GITHUB_ENV
 
       - name: Set up system

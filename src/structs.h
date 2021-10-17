@@ -943,11 +943,12 @@ typedef struct {
 # define CSF_CATCH	0x0400	// ":catch" has been seen
 # define CSF_THROWN	0x0800	// exception thrown to this try conditional
 # define CSF_CAUGHT	0x1000  // exception caught by this try conditional
-# define CSF_SILENT	0x2000	// "emsg_silent" reset by ":try"
+# define CSF_FINISHED	0x2000  // CSF_CAUGHT was handled by finish_exception()
+# define CSF_SILENT	0x4000	// "emsg_silent" reset by ":try"
 // Note that CSF_ELSE is only used when CSF_TRY and CSF_WHILE are unset
 // (an ":if"), and CSF_SILENT is only used when CSF_TRY is set.
-//
-#define CSF_FUNC_DEF	0x4000	// a function was defined in this block
+
+# define CSF_FUNC_DEF	0x8000	// a function was defined in this block
 
 /*
  * What's pending for being reactivated at the ":endtry" of this try
@@ -1405,8 +1406,8 @@ typedef struct type_S type_T;
 struct type_S {
     vartype_T	    tt_type;
     int8_T	    tt_argcount;    // for func, incl. vararg, -1 for unknown
-    char	    tt_min_argcount; // number of non-optional arguments
-    char	    tt_flags;	    // TTFLAG_ values
+    int8_T	    tt_min_argcount; // number of non-optional arguments
+    char_u	    tt_flags;	    // TTFLAG_ values
     type_T	    *tt_member;	    // for list, dict, func return type
     type_T	    **tt_args;	    // func argument types, allocated
 };
@@ -2700,10 +2701,10 @@ struct file_buffer
 				// incremented for each change, also for undo
 #define CHANGEDTICK(buf) ((buf)->b_ct_di.di_tv.vval.v_number)
 
-    varnumber_T	b_last_changedtick; // b:changedtick when TextChanged or
-				    // TextChangedI was last triggered.
-    varnumber_T	b_last_changedtick_pum; // b:changedtick when TextChangedP was
+    varnumber_T	b_last_changedtick;	// b:changedtick when TextChanged was
 					// last triggered.
+    varnumber_T	b_last_changedtick_pum; // b:changedtick for TextChangedP
+    varnumber_T	b_last_changedtick_i;   // b:changedtick for TextChangedI
 
     int		b_saving;	// Set to TRUE if we are in the middle of
 				// saving the buffer.
@@ -2723,7 +2724,9 @@ struct file_buffer
     wininfo_T	*b_wininfo;	// list of last used info for each window
 
     long	b_mtime;	// last change time of original file
+    long	b_mtime_ns;	// nanoseconds of last change time
     long	b_mtime_read;	// last change time when reading
+    long	b_mtime_read_ns;  // nanoseconds of last read time
     off_T	b_orig_size;	// size of original file in bytes
     int		b_orig_mode;	// mode of original file
 #ifdef FEAT_VIMINFO
@@ -2861,6 +2864,7 @@ struct file_buffer
 #ifdef FEAT_COMPL_FUNC
     char_u	*b_p_cfu;	// 'completefunc'
     char_u	*b_p_ofu;	// 'omnifunc'
+    char_u	*b_p_tsrfu;	// 'thesaurusfunc'
 #endif
 #ifdef FEAT_EVAL
     char_u	*b_p_tfu;	// 'tagfunc'

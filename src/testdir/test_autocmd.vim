@@ -100,6 +100,22 @@ if has('timers')
     set updatetime&
   endfunc
 
+  func Test_cursorhold_insert_ctrl_g_U()
+    au CursorHoldI * :
+    set updatetime=20
+    new
+    call timer_start(100, { -> feedkeys("\<Left>foo\<Esc>", 't') })
+    call feedkeys("i()\<C-g>U", 'tx!')
+    sleep 200m
+    call assert_equal('(foo)', getline(1))
+    undo
+    call assert_equal('', getline(1))
+
+    bwipe!
+    au! CursorHoldI
+    set updatetime&
+  endfunc
+
   func Test_OptionSet_modeline()
     call test_override('starting', 1)
     au! OptionSet
@@ -1474,6 +1490,7 @@ endfunc
 
 " Test for BufUnload autocommand that unloads all the other buffers
 func Test_bufunload_all()
+  let g:test_is_flaky = 1
   call writefile(['Test file Xxx1'], 'Xxx1')"
   call writefile(['Test file Xxx2'], 'Xxx2')"
 
@@ -1913,6 +1930,7 @@ func Test_ChangedP()
     let g:autocmd .= a:char
   endfunc
 
+  " TextChanged will not be triggered, only check that it isn't.
   au! TextChanged <buffer> :call TextChangedAutocmd('N')
   au! TextChangedI <buffer> :call TextChangedAutocmd('I')
   au! TextChangedP <buffer> :call TextChangedAutocmd('P')
@@ -2361,6 +2379,7 @@ endfunc
 
 func Test_autocmd_SafeState()
   CheckRunVimInTerminal
+  let g:test_is_flaky = 1
 
   let lines =<< trim END
 	let g:safe = 0
@@ -2441,6 +2460,7 @@ func Test_autocmd_was_using_freed_memory()
 endfunc
 
 func Test_BufWrite_lockmarks()
+  let g:test_is_flaky = 1
   edit! Xtest
   call setline(1, ['a', 'b', 'c', 'd'])
 
@@ -2847,5 +2867,42 @@ func Test_autocmd_with_block()
   augroup END
 endfunc
 
+" Test TextChangedI and TextChanged
+func Test_Changed_ChangedI()
+  new
+  call test_override("char_avail", 1)
+  let [g:autocmd_i, g:autocmd_n] = ['','']
+
+  func! TextChangedAutocmdI(char)
+    let g:autocmd_{tolower(a:char)} = a:char .. b:changedtick
+  endfunc
+
+  augroup Test_TextChanged
+    au!
+    au TextChanged  <buffer> :call TextChangedAutocmdI('N')
+    au TextChangedI <buffer> :call TextChangedAutocmdI('I')
+  augroup END
+
+  call feedkeys("ifoo\<esc>", 'tnix')
+  " TODO: Test test does not seem to trigger TextChanged autocommand, this
+  " requires running Vim in a terminal window.
+  " call assert_equal('N3', g:autocmd_n)
+  call assert_equal('I3', g:autocmd_i)
+
+  call feedkeys("yyp", 'tnix')
+  " TODO: Test test does not seem to trigger TextChanged autocommand.
+  " call assert_equal('N4', g:autocmd_n)
+  call assert_equal('I3', g:autocmd_i)
+
+  " CleanUp
+  call test_override("char_avail", 0)
+  au! TextChanged  <buffer>
+  au! TextChangedI <buffer>
+  augroup! Test_TextChanged
+  delfu TextChangedAutocmdI
+  unlet! g:autocmd_i g:autocmd_n
+
+  bw!
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

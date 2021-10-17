@@ -271,6 +271,7 @@ check_buf_options(buf_T *buf)
 #ifdef FEAT_COMPL_FUNC
     check_string_option(&buf->b_p_cfu);
     check_string_option(&buf->b_p_ofu);
+    check_string_option(&buf->b_p_tsrfu);
 #endif
 #ifdef FEAT_EVAL
     check_string_option(&buf->b_p_tfu);
@@ -1559,6 +1560,13 @@ ambw_end:
 	redraw_gui_only = TRUE;
     }
 #endif
+# if defined(FEAT_GUI_GTK)
+    else if (varp == &p_guiligatures)
+    {
+	gui_set_ligatures();
+	redraw_gui_only = TRUE;
+    }
+# endif
 
 #ifdef CURSOR_SHAPE
     // 'guicursor'
