@@ -136,13 +136,35 @@ func Test_gp_with_count_leaves_cursor_at_end()
   bwipe!
 endfunc
 
+func Test_p_with_count_leaves_mark_at_end()
+  new
+  call setline(1, '<---->')
+  call setreg('@', "start\nend", 'c')
+  normal 1G3|3p
+  call assert_equal([0, 1, 4, 0], getpos("."))
+  call assert_equal(['<--start', 'endstart', 'endstart', 'end-->'], getline(1, '$'))
+  call assert_equal([0, 4, 3, 0], getpos("']"))
+
+  bwipe!
+endfunc
+
 func Test_very_large_count()
-  " FIXME: should actually check if sizeof(int) == sizeof(long)
-  CheckNotMSWindows
+  if v:sizeofint != 8
+    throw 'Skipped: only works with 64 bit ints'
+  endif
 
   new
   let @" = 'x'
   call assert_fails('norm 44444444444444p', 'E1240:')
+  bwipe!
+endfunc
+
+func Test_put_above_first_line()
+  new
+  let @" = 'text'
+  silent! normal 0o00
+  0put
+  call assert_equal('text', getline(1))
   bwipe!
 endfunc
 

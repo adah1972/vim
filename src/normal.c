@@ -527,6 +527,7 @@ normal_cmd(
 # endif
     }
 #endif
+    trigger_modechanged();
 
     // When not finishing an operator and no register name typed, reset the
     // count.
@@ -1221,6 +1222,7 @@ normal_end:
     c = finish_op;
 #endif
     finish_op = FALSE;
+    trigger_modechanged();
 #ifdef CURSOR_SHAPE
     // Redraw the cursor with another shape, if we were in Operator-pending
     // mode or did a replace command.
@@ -1278,6 +1280,7 @@ normal_end:
 	if (restart_VIsual_select == 1)
 	{
 	    VIsual_select = TRUE;
+	    trigger_modechanged();
 	    showmode();
 	    restart_VIsual_select = 0;
 	}
@@ -1386,7 +1389,6 @@ end_visual_mode_keep_button()
 #endif
 
     VIsual_active = FALSE;
-    trigger_modechanged();
     setmouse();
     mouse_dragging = 0;
 
@@ -1403,6 +1405,7 @@ end_visual_mode_keep_button()
     may_clear_cmdline();
 
     adjust_cursor_eol();
+    trigger_modechanged();
 }
 
 /*
@@ -2302,12 +2305,20 @@ nv_gd(
 
     if ((len = find_ident_under_cursor(&ptr, FIND_IDENT)) == 0
 	    || find_decl(ptr, len, nchar == 'd', thisblock, SEARCH_START)
-								      == FAIL)
+								       == FAIL)
+    {
 	clearopbeep(oap);
+    }
+    else
+    {
 #ifdef FEAT_FOLDING
-    else if ((fdo_flags & FDO_SEARCH) && KeyTyped && oap->op_type == OP_NOP)
-	foldOpenCursor();
+	if ((fdo_flags & FDO_SEARCH) && KeyTyped && oap->op_type == OP_NOP)
+	    foldOpenCursor();
 #endif
+	// clear any search statistics
+	if (messaging() && !msg_silent && !shortmess(SHM_SEARCHCOUNT))
+	    clear_cmdline = TRUE;
+    }
 }
 
 /*
@@ -2527,7 +2538,7 @@ nv_screengo(oparg_T *oap, int dir, long dist)
     int		col_off1;	// margin offset for first screen line
     int		col_off2;	// margin offset for wrapped screen line
     int		width1;		// text width for first screen line
-    int		width2;		// test width for wrapped screen line
+    int		width2;		// text width for wrapped screen line
 
     oap->motion_type = MCHAR;
     oap->inclusive = (curwin->w_curswant == MAXCOL);
@@ -2653,6 +2664,7 @@ nv_screengo(oparg_T *oap, int dir, long dist)
     if (curwin->w_cursor.col > 0 && curwin->w_p_wrap)
     {
 	colnr_T virtcol;
+	int	c;
 
 	/*
 	 * Check for landing on a character that got split at the end of the
@@ -2665,6 +2677,12 @@ nv_screengo(oparg_T *oap, int dir, long dist)
 	if (virtcol > (colnr_T)width1 && *get_showbreak_value(curwin) != NUL)
 	    virtcol -= vim_strsize(get_showbreak_value(curwin));
 #endif
+
+	c = (*mb_ptr2char)(ml_get_cursor());
+	if (dir == FORWARD && virtcol < curwin->w_curswant
+		&& (curwin->w_curswant <= (colnr_T)width1)
+		&& !vim_isprintc(c) && c > 255)
+	    oneright();
 
 	if (virtcol > curwin->w_curswant
 		&& (curwin->w_curswant < (colnr_T)width1
@@ -3439,6 +3457,7 @@ nv_ctrlg(cmdarg_T *cap)
     if (VIsual_active)	// toggle Selection/Visual mode
     {
 	VIsual_select = !VIsual_select;
+	trigger_modechanged();
 	showmode();
     }
     else if (!checkclearop(cap->oap))
@@ -3501,6 +3520,7 @@ nv_ctrlo(cmdarg_T *cap)
     if (VIsual_active && VIsual_select)
     {
 	VIsual_select = FALSE;
+	trigger_modechanged();
 	showmode();
 	restart_VIsual_select = 2;	// restart Select mode later
     }
@@ -3741,7 +3761,7 @@ nv_ident(cmdarg_T *cap)
 	ptr = vim_strnsave(ptr, n);
 	if (kp_ex)
 	    // Escape the argument properly for an Ex command
-	    p = vim_strsave_fnameescape(ptr, FALSE);
+	    p = vim_strsave_fnameescape(ptr, VSE_NONE);
 	else
 	    // Escape the argument properly for a shell command
 	    p = vim_strsave_shellescape(ptr, TRUE, TRUE);

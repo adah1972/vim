@@ -48,6 +48,8 @@ ExpandEscape(
 {
     int		i;
     char_u	*p;
+    int		vse_what = xp->xp_context == EXPAND_BUFFERS
+						       ? VSE_BUFFER : VSE_NONE;
 
     // May change home directory back to "~"
     if (options & WILD_HOME_REPLACE)
@@ -84,9 +86,10 @@ ExpandEscape(
 		    }
 		}
 #ifdef BACKSLASH_IN_FILENAME
-		p = vim_strsave_fnameescape(files[i], FALSE);
+		p = vim_strsave_fnameescape(files[i], vse_what);
 #else
-		p = vim_strsave_fnameescape(files[i], xp->xp_shell);
+		p = vim_strsave_fnameescape(files[i],
+					  xp->xp_shell ? VSE_SHELL : vse_what);
 #endif
 		if (p != NULL)
 		{
@@ -975,6 +978,7 @@ set_one_cmd_context(
 
     ExpandInit(xp);
     xp->xp_pattern = buff;
+    xp->xp_line = buff;
     xp->xp_context = EXPAND_COMMANDS;	// Default until we get past command
     ea.argt = 0;
 
@@ -2888,7 +2892,7 @@ f_getcompletion(typval_T *argvars, typval_T *rettv)
     expand_T	xpc;
     int		filtered = FALSE;
     int		options = WILD_SILENT | WILD_USE_NL | WILD_ADD_SLASH
-								| WILD_NO_BEEP;
+					| WILD_NO_BEEP | WILD_HOME_REPLACE;
 
     if (in_vim9script()
 	    && (check_for_string_arg(argvars, 0) == FAIL

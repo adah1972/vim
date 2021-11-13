@@ -243,6 +243,8 @@ ins_ctrl_x(void)
 	// CTRL-X in CTRL-X CTRL-V mode behaves differently to make CTRL-X
 	// CTRL-V look like CTRL-N
 	ctrl_x_mode = CTRL_X_CMDLINE_CTRL_X;
+
+    trigger_modechanged();
 }
 
 /*
@@ -301,7 +303,7 @@ has_compl_option(int dict_opt)
 							)
 		 : (*curbuf->b_p_tsr == NUL && *p_tsr == NUL
 #ifdef FEAT_COMPL_FUNC
-		     && *curbuf->b_p_tsrfu == NUL
+		     && *curbuf->b_p_tsrfu == NUL && *p_tsrfu == NUL
 #endif
 		   ))
     {
@@ -2150,6 +2152,8 @@ ins_compl_prep(int c)
 	// upon the (possibly failed) completion.
 	ins_apply_autocmds(EVENT_COMPLETEDONE);
 
+    trigger_modechanged();
+
     // reset continue_* if we left expansion-mode, if we stay they'll be
     // (re)set properly in ins_complete()
     if (!vim_is_ctrl_x_key(c))
@@ -2246,7 +2250,7 @@ get_complete_funcname(int type)
 	case CTRL_X_OMNI:
 	    return curbuf->b_p_ofu;
 	case CTRL_X_THESAURUS:
-	    return curbuf->b_p_tsrfu;
+	    return *curbuf->b_p_tsrfu == NUL ? p_tsrfu : curbuf->b_p_tsrfu;
 	default:
 	    return (char_u *)"";
     }
@@ -2487,6 +2491,7 @@ set_completion(colnr_T startcol, list_T *list)
     // Lazily show the popup menu, unless we got interrupted.
     if (!compl_interrupted)
 	show_pum(save_w_wrow, save_w_leftcol);
+    trigger_modechanged();
     out_flush();
 }
 
@@ -2750,9 +2755,8 @@ f_complete_info(typval_T *argvars, typval_T *rettv)
 thesaurus_func_complete(int type UNUSED)
 {
 #ifdef FEAT_COMPL_FUNC
-    return (type == CTRL_X_THESAURUS
-		&& curbuf->b_p_tsrfu != NULL
-		&& *curbuf->b_p_tsrfu != NUL);
+    return type == CTRL_X_THESAURUS
+		&& (*curbuf->b_p_tsrfu != NUL || *p_tsrfu != NUL);
 #else
     return FALSE;
 #endif
@@ -3256,6 +3260,8 @@ ins_compl_get_exp(pos_T *ini)
 	if (compl_curr_match == NULL)
 	    compl_curr_match = compl_old_match;
     }
+    trigger_modechanged();
+
     return i;
 }
 

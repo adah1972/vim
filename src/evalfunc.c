@@ -1527,6 +1527,10 @@ static funcentry_T global_functions[] =
 			ret_number,	    f_hlID},
     {"hlexists",	1, 1, FEARG_1,	    arg1_string,
 			ret_number_bool,    f_hlexists},
+    {"hlget",		0, 2, FEARG_1,	    arg2_string_bool,
+			ret_list_dict_any,  f_hlget},
+    {"hlset",		1, 1, FEARG_1,	    arg1_list_any,
+			ret_number_bool,    f_hlset},
     {"hostname",	0, 0, 0,	    NULL,
 			ret_string,	    f_hostname},
     {"iconv",		3, 3, FEARG_1,	    arg3_string,
@@ -1955,7 +1959,7 @@ static funcentry_T global_functions[] =
 			ret_number_bool,    SIGN_FUNC(f_sign_undefine)},
     {"sign_unplace",	1, 2, FEARG_1,	    arg2_string_dict,
 			ret_number_bool,    SIGN_FUNC(f_sign_unplace)},
-    {"sign_unplacelist", 1, 2, FEARG_1,	    arg1_list_any,
+    {"sign_unplacelist", 1, 1, FEARG_1,	    arg1_list_any,
 			ret_list_number,    SIGN_FUNC(f_sign_unplacelist)},
     {"simplify",	1, 1, FEARG_1,	    arg1_string,
 			ret_string,	    f_simplify},
@@ -3886,7 +3890,7 @@ f_fnameescape(typval_T *argvars, typval_T *rettv)
 	return;
 
     rettv->vval.v_string = vim_strsave_fnameescape(
-					   tv_get_string(&argvars[0]), FALSE);
+					 tv_get_string(&argvars[0]), VSE_NONE);
     rettv->v_type = VAR_STRING;
 }
 

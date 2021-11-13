@@ -43,6 +43,21 @@
 // 700 is needed for mkdtemp().
 #  ifndef _XOPEN_SOURCE
 #   define _XOPEN_SOURCE    700
+
+// On old systems, defining _XOPEN_SOURCE causes _BSD_SOURCE, _SVID_SOURCE
+// and/or // _DEFAULT_SOURCE not to be defined, so do that here.  Those are
+// needed to include nanosecond-resolution timestamps in struct stat.  On new
+// systems, _DEFAULT_SOURCE is needed to avoid warning messages about using
+// deprecated _BSD_SOURCE or _SVID_SOURCE.
+#   ifndef _BSD_SOURCE
+#    define _BSD_SOURCE 1
+#   endif
+#   ifndef _SVID_SOURCE
+#    define _SVID_SOURCE 1
+#   endif
+#   ifndef _DEFAULT_SOURCE
+#    define _DEFAULT_SOURCE 1
+#   endif
 #  endif
 # endif
 
@@ -291,6 +306,7 @@
 #endif
 #ifdef BACKSLASH_IN_FILENAME
 # define PATH_ESC_CHARS ((char_u *)" \t\n*?[{`%#'\"|!<")
+# define BUFFER_ESC_CHARS ((char_u *)" \t\n*?[`%#'\"|!<")
 #else
 # ifdef VMS
     // VMS allows a lot of characters in the file name
@@ -300,6 +316,7 @@
 #  define PATH_ESC_CHARS ((char_u *)" \t\n*?[{`$\\%#'\"|!<")
 #  define SHELL_ESC_CHARS ((char_u *)" \t\n*?[{`$\\%#'\"|!<>();&")
 # endif
+#  define BUFFER_ESC_CHARS ((char_u *)" \t\n*?[`$\\%#'\"|!<")
 #endif
 
 // length of a buffer to store a number in ASCII (64 bits binary + NUL)
@@ -975,6 +992,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define READ_DUMMY	0x10	// reading into a dummy buffer
 #define READ_KEEP_UNDO	0x20	// keep undo info
 #define READ_FIFO	0x40	// read from fifo or socket
+#define READ_NOWINENTER 0x80	// do not trigger BufWinEnter
 
 // Values for change_indent()
 #define INDENT_SET	1	// set indent
@@ -1041,6 +1059,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define ECMD_FORCEIT	0x08	// ! used in Ex command
 #define ECMD_ADDBUF	0x10	// don't edit, just add to buffer list
 #define ECMD_ALTBUF	0x20	// like ECMD_ADDBUF and set the alternate file
+#define ECMD_NOWINENTER	0x40	// do not trigger BufWinEnter
 
 // for lnum argument in do_ecmd()
 #define ECMD_LASTL	(linenr_T)0	// use last position in loaded file
@@ -1360,6 +1379,7 @@ enum auto_event
     EVENT_WINENTER,		// after entering a window
     EVENT_WINLEAVE,		// before leaving a window
     EVENT_WINNEW,		// when entering a new window
+    EVENT_WINCLOSED,		// after closing a window
     EVENT_VIMSUSPEND,		// before Vim is suspended
     EVENT_VIMRESUME,		// after Vim is resumed
 
@@ -2040,7 +2060,11 @@ typedef int sock_T;
 #define VV_ARGV		96
 #define VV_COLLATE      97
 #define VV_EXITING	98
-#define VV_LEN		99	// number of v: vars
+#define VV_COLORNAMES   99
+#define VV_SIZEOFINT	100
+#define VV_SIZEOFLONG	101
+#define VV_SIZEOFPOINTER 102
+#define VV_LEN		103	// number of v: vars
 
 // used for v_number in VAR_BOOL and VAR_SPECIAL
 #define VVAL_FALSE	0L	// VAR_BOOL
@@ -2766,5 +2790,9 @@ long elapsed(DWORD start_tick);
 #define UC_BUFFER	1	// -buffer: local to current buffer
 #define UC_VIM9		2	// {} argument: Vim9 syntax.
 
+// flags used by vim_strsave_escaped()
+#define VSE_NONE	0
+#define VSE_SHELL	1	// escape for a shell command
+#define VSE_BUFFER	2	// escape for a ":buffer" command
 
 #endif // VIM__H

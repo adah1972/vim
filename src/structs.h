@@ -1906,8 +1906,11 @@ typedef struct {
     // pointer to the last line obtained with getsourceline()
     char_u	*eval_tofree;
 
-    // pointer to the last line of an inline function
-    char_u	*eval_tofree_cmdline;
+    // array with lines of an inline function
+    garray_T	eval_tofree_ga;
+
+    // set when "arg" points into the last entry of "eval_tofree_ga"
+    int		eval_using_cmdline;
 
     // pointer to the lines concatenated for a lambda.
     char_u	*eval_tofree_lambda;
@@ -2864,7 +2867,6 @@ struct file_buffer
 #ifdef FEAT_COMPL_FUNC
     char_u	*b_p_cfu;	// 'completefunc'
     char_u	*b_p_ofu;	// 'omnifunc'
-    char_u	*b_p_tsrfu;	// 'thesaurusfunc'
 #endif
 #ifdef FEAT_EVAL
     char_u	*b_p_tfu;	// 'tagfunc'
@@ -2967,6 +2969,9 @@ struct file_buffer
     unsigned	b_tc_flags;     // flags for 'tagcase'
     char_u	*b_p_dict;	// 'dictionary' local value
     char_u	*b_p_tsr;	// 'thesaurus' local value
+#ifdef FEAT_COMPL_FUNC
+    char_u	*b_p_tsrfu;	// 'thesaurusfunc' local value
+#endif
     long	b_p_ul;		// 'undolevels' local value
 #ifdef FEAT_PERSISTENT_UNDO
     int		b_p_udf;	// 'undofile'

@@ -2011,10 +2011,18 @@ do_put(
 	    }
 
 	    do {
+#ifdef FEAT_FLOAT
+		double multlen = (double)count * (double)yanklen;
+
+		totlen = count * yanklen;
+		if ((double)totlen != multlen)
+#else
 		long multlen = count * yanklen;
 
+		// this only works when sizeof(int) != sizeof(long)
 		totlen = multlen;
 		if (totlen != multlen)
+#endif
 		{
 		    emsg(_(e_resulting_text_too_long));
 		    break;
@@ -2183,7 +2191,7 @@ error:
 					   curbuf->b_op_start.lnum, nr_lines);
 
 	    // put '] mark at last inserted character
-	    curbuf->b_op_end.lnum = lnum;
+	    curbuf->b_op_end.lnum = new_lnum;
 	    // correct length for change in indent
 	    col = (colnr_T)STRLEN(y_array[y_size - 1]) - lendiff;
 	    if (col > 1)

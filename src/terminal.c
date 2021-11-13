@@ -667,7 +667,7 @@ term_start(
 
 	    if (s == NULL)
 		break;
-	    p = vim_strsave_fnameescape(s, FALSE);
+	    p = vim_strsave_fnameescape(s, VSE_NONE);
 	    if (p == NULL)
 		break;
 	    ga_concat(&ga, p);
@@ -1995,6 +1995,7 @@ term_check_timers(int next_due_arg, proftime_T *now)
 set_terminal_mode(term_T *term, int normal_mode)
 {
     term->tl_normal_mode = normal_mode;
+    trigger_modechanged();
     if (!normal_mode)
 	handle_postponed_scrollback(term);
     VIM_CLEAR(term->tl_status_text);
@@ -4472,7 +4473,8 @@ static VTermStateFallbacks state_fallbacks = {
     static void *
 vterm_malloc(size_t size, void *data UNUSED)
 {
-    return alloc_clear(size);
+    // make sure that the length is not zero
+    return alloc_clear(size == 0 ? 1L : size);
 }
 
     static void

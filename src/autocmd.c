@@ -186,6 +186,7 @@ static struct event_name
     {"VimLeave",	EVENT_VIMLEAVE},
     {"VimLeavePre",	EVENT_VIMLEAVEPRE},
     {"WinNew",		EVENT_WINNEW},
+    {"WinClosed",	EVENT_WINCLOSED},
     {"WinEnter",	EVENT_WINENTER},
     {"WinLeave",	EVENT_WINLEAVE},
     {"VimResized",	EVENT_VIMRESIZED},
@@ -1218,6 +1219,23 @@ do_autocmd_event(
 		    return FAIL;
 		}
 
+#ifdef FEAT_EVAL
+		// need to initialize last_mode for the first ModeChanged
+		// autocmd
+		if (event == EVENT_MODECHANGED && !has_modechanged())
+		{
+		    typval_T rettv;
+		    typval_T tv[2];
+
+		    tv[0].v_type = VAR_NUMBER;
+		    tv[0].vval.v_number = 1;
+		    tv[1].v_type = VAR_UNKNOWN;
+		    f_mode(tv, &rettv);
+		    STRCPY(last_mode, rettv.vval.v_string);
+		    vim_free(rettv.vval.v_string);
+		}
+#endif
+
 		if (is_buflocal)
 		{
 		    ap->buflocal_nr = buflocal_nr;
@@ -2025,7 +2043,8 @@ apply_autocmds_group(
 		|| event == EVENT_OPTIONSET
 		|| event == EVENT_QUICKFIXCMDPOST
 		|| event == EVENT_DIRCHANGED
-		|| event == EVENT_MODECHANGED)
+		|| event == EVENT_MODECHANGED
+		|| event == EVENT_WINCLOSED)
 	{
 	    fname = vim_strsave(fname);
 	    autocmd_fname_full = TRUE; // don't expand it later
