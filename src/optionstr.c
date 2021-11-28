@@ -2205,10 +2205,7 @@ ambw_end:
     }
     // 'wincolor'
     else if (varp == &curwin->w_p_wcr)
-    {
-	if (curwin->w_buffer->b_term != NULL)
-	    term_update_colors(curwin->w_buffer->b_term);
-    }
+	term_update_wincolor(curwin);
 # if defined(MSWIN)
     // 'termwintype'
     else if (varp == &p_twt)
@@ -2320,10 +2317,27 @@ ambw_end:
 # endif
 #endif
 
+    // 'operatorfunc'
+    else if (varp == &p_opfunc)
+    {
+	if (set_operatorfunc_option() == FAIL)
+	    errmsg = e_invarg;
+    }
+
 #ifdef FEAT_QUICKFIX
+    // 'quickfixtextfunc'
     else if (varp == &p_qftf)
     {
-	if (qf_process_qftf_option() == FALSE)
+	if (qf_process_qftf_option() == FAIL)
+	    errmsg = e_invarg;
+    }
+#endif
+
+#ifdef FEAT_EVAL
+    // 'tagfunc'
+    else if (gvarp == &p_tfu)
+    {
+	if (set_tagfunc_option() == FAIL)
 	    errmsg = e_invarg;
     }
 #endif

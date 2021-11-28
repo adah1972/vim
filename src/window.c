@@ -1422,6 +1422,9 @@ win_init(win_T *newp, win_T *oldp, int flags UNUSED)
 #ifdef FEAT_SYN_HL
     check_colorcolumn(newp);
 #endif
+#ifdef FEAT_TERMINAL
+    term_update_wincolor(newp);
+#endif
 }
 
 /*
@@ -2265,8 +2268,9 @@ entering_window(win_T *win)
 	stop_insert_mode = FALSE;
 
     // When entering the prompt window restart Insert mode if we were in Insert
-    // mode when we left it.
-    restart_edit = win->w_buffer->b_prompt_insert;
+    // mode when we left it and not already in Insert mode.
+    if ((State & INSERT) == 0)
+	restart_edit = win->w_buffer->b_prompt_insert;
 }
 #endif
 
@@ -3684,6 +3688,9 @@ win_init_empty(win_T *wp)
 #if defined(FEAT_SYN_HL) || defined(FEAT_SPELL)
     wp->w_s = &wp->w_buffer->b_s;
 #endif
+#ifdef FEAT_TERMINAL
+    term_reset_wincolor(wp);
+#endif
 }
 
 /*
@@ -4796,36 +4803,7 @@ win_enter_ext(win_T *wp, int flags)
     }
 #endif
 
-    if (curwin->w_localdir != NULL || curtab->tp_localdir != NULL)
-    {
-	char_u	*dirname;
-
-	// Window or tab has a local directory: Save current directory as
-	// global directory (unless that was done already) and change to the
-	// local directory.
-	if (globaldir == NULL)
-	{
-	    char_u	cwd[MAXPATHL];
-
-	    if (mch_dirname(cwd, MAXPATHL) == OK)
-		globaldir = vim_strsave(cwd);
-	}
-	if (curwin->w_localdir != NULL)
-	    dirname = curwin->w_localdir;
-	else
-	    dirname = curtab->tp_localdir;
-
-	if (mch_chdir((char *)dirname) == 0)
-	    shorten_fnames(TRUE);
-    }
-    else if (globaldir != NULL)
-    {
-	// Window doesn't have a local directory and we are not in the global
-	// directory: Change to the global directory.
-	vim_ignored = mch_chdir((char *)globaldir);
-	VIM_CLEAR(globaldir);
-	shorten_fnames(TRUE);
-    }
+    fix_current_dir();
 
 #ifdef FEAT_JOB_CHANNEL
     entering_window(curwin);
@@ -4875,6 +4853,48 @@ win_enter_ext(win_T *wp, int flags)
     return did_decrement;
 }
 
+/*
+ * Used after making another window the current one: change directory if
+ * needed.
+ */
+    void
+fix_current_dir(void)
+{
+    if (curwin->w_localdir != NULL || curtab->tp_localdir != NULL)
+    {
+	char_u	*dirname;
+
+	// Window or tab has a local directory: Save current directory as
+	// global directory (unless that was done already) and change to the
+	// local directory.
+	if (globaldir == NULL)
+	{
+	    char_u	cwd[MAXPATHL];
+
+	    if (mch_dirname(cwd, MAXPATHL) == OK)
+		globaldir = vim_strsave(cwd);
+	}
+	if (curwin->w_localdir != NULL)
+	    dirname = curwin->w_localdir;
+	else
+	    dirname = curtab->tp_localdir;
+
+	if (mch_chdir((char *)dirname) == 0)
+	{
+	    last_chdir_reason = NULL;
+	    shorten_fnames(TRUE);
+	}
+    }
+    else if (globaldir != NULL)
+    {
+	// Window doesn't have a local directory and we are not in the global
+	// directory: Change to the global directory.
+	vim_ignored = mch_chdir((char *)globaldir);
+	VIM_CLEAR(globaldir);
+	last_chdir_reason = NULL;
+	shorten_fnames(TRUE);
+    }
+}
 
 /*
  * Jump to the first open window that contains buffer "buf", if one exists.

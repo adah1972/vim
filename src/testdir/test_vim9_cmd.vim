@@ -105,6 +105,23 @@ def Test_edit_wildcards()
   var files = ['file 1', 'file%2', 'file# 3']
   args `=files`
   assert_equal(files, argv())
+
+  filename = 'Xwindo'
+  windo edit `=filename`
+  assert_equal('Xwindo', bufname())
+
+  filename = 'Xtabdo'
+  tabdo edit `=filename`
+  assert_equal('Xtabdo', bufname())
+
+  filename = 'Xargdo'
+  argdo edit `=filename`
+  assert_equal('Xargdo', bufname())
+
+  :%bwipe!
+  filename = 'Xbufdo'
+  bufdo file `=filename`
+  assert_equal('Xbufdo', bufname())
 enddef
 
 def Test_expand_alternate_file()
@@ -556,7 +573,41 @@ def Test_use_register()
       @a = 'echo "text"'
       @a
   END
-  CheckDefAndScriptFailure(lines, 'E1207:')
+  CheckDefAndScriptFailure(lines, 'E1207:', 2)
+
+  lines =<< trim END
+      @/ = 'pattern'
+      @/
+  END
+  CheckDefAndScriptFailure(lines, 'E1207:', 2)
+
+  lines =<< trim END
+      &opfunc = 'nothing'
+      &opfunc
+  END
+  CheckDefAndScriptFailure(lines, 'E1207:', 2)
+  &opfunc = ''
+
+  lines =<< trim END
+      &l:showbreak = 'nothing'
+      &l:showbreak
+  END
+  CheckDefAndScriptFailure(lines, 'E1207:', 2)
+  &l:showbreak = ''
+
+  lines =<< trim END
+      &g:showbreak = 'nothing'
+      &g:showbreak
+  END
+  CheckDefAndScriptFailure(lines, 'E1207:', 2)
+  &g:showbreak = ''
+
+  lines =<< trim END
+      $SomeEnv = 'value'
+      $SomeEnv
+  END
+  CheckDefAndScriptFailure(lines, 'E1207:', 2)
+  $SomeEnv = ''
 enddef
 
 def Test_environment_use_linebreak()
@@ -1343,6 +1394,23 @@ def Test_lockvar()
       unlockvar theList
   END
   CheckDefFailure(lines, 'E1178', 2)
+
+  lines =<< trim END
+      vim9script
+      var name = 'john'
+      lockvar nameX
+  END
+  CheckScriptFailure(lines, 'E1246', 3)
+
+  lines =<< trim END
+      vim9script
+      var name = 'john'
+      def LockIt()
+        lockvar nameX
+      enddef
+      LockIt()
+  END
+  CheckScriptFailure(lines, 'E1246', 1)
 enddef
 
 def Test_substitute_expr()
@@ -1568,6 +1636,25 @@ def Test_no_space_after_command()
       s# pat#repl
   END
   CheckDefExecAndScriptFailure(lines, 'E486:', 1)
+enddef
+
+" Test for the 'previewpopup' option
+def Test_previewpopup()
+  set previewpopup=height:10,width:60
+  pedit Xfile
+  var id = popup_findpreview()
+  assert_notequal(id, 0)
+  assert_match('Xfile', popup_getoptions(id).title)
+  popup_clear()
+  set previewpopup&
+enddef
+
+def Test_syntax_enable_clear()
+  syntax clear
+  syntax enable
+  highlight clear String
+  assert_equal(true, hlget('String')->get(0, {})->get('default', false))
+  syntax clear
 enddef
 
 

@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2021 Oct 03
+" Last Change:	2021 Nov 16
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -617,6 +617,9 @@ autocmd BufRead,BufNewFile *.fnl		setf fennel
 " Fetchmail RC file
 au BufNewFile,BufRead .fetchmailrc		setf fetchmail
 
+" Fish shell
+au BufNewFile,BufRead *.fish			setf fish
+
 " FlexWiki - disabled, because it has side effects when a .wiki file
 " is not actually FlexWiki
 "au BufNewFile,BufRead *.wiki			setf flexwiki
@@ -629,7 +632,10 @@ au BufNewFile,BufRead auto.master		setf conf
 au BufNewFile,BufRead *.mas,*.master		setf master
 
 " Forth
-au BufNewFile,BufRead *.fs,*.ft,*.fth		setf forth
+au BufNewFile,BufRead *.ft,*.fth		setf forth
+
+" F# or Forth
+au BufNewFile,BufRead *.fs			call dist#ft#FTfs()
 
 " Reva Forth
 au BufNewFile,BufRead *.frt			setf reva
@@ -647,7 +653,7 @@ au BufNewFile,BufRead *.fsl			setf framescript
 au BufNewFile,BufRead fstab,mtab		setf fstab
 
 " GDB command files
-au BufNewFile,BufRead .gdbinit			setf gdb
+au BufNewFile,BufRead .gdbinit,gdbinit		setf gdb
 
 " GDMO
 au BufNewFile,BufRead *.mo,*.gdmo		setf gdmo
@@ -1493,6 +1499,9 @@ au BufNewFile,BufRead robots.txt		setf robots
 " Rpcgen
 au BufNewFile,BufRead *.x			setf rpcgen
 
+" MikroTik RouterOS script
+au BufRead,BufNewFile *.rsc			setf routeros
+
 " reStructuredText Documentation Format
 au BufNewFile,BufRead *.rst			setf rst
 
@@ -2053,8 +2062,14 @@ au BufNewFile,BufRead *.xml			call dist#ft#FTxml()
 " XMI (holding UML models) is also XML
 au BufNewFile,BufRead *.xmi			setf xml
 
-" CSPROJ files are Visual Studio.NET's XML-based project config files
+" CSPROJ files are Visual Studio.NET's XML-based C# project config files
 au BufNewFile,BufRead *.csproj,*.csproj.user	setf xml
+
+" FSPROJ files are Visual Studio.NET's XML-based F# project config files
+au BufNewFile,BufRead *.fsproj,*.fsproj.user	setf xml
+
+" VBPROJ files are Visual Studio.NET's XML-based Visual Basic project config files
+au BufNewFile,BufRead *.vbproj,*.vbproj.user	setf xml
 
 " Qt Linguist translation source and Qt User Interface Files are XML
 " However, for .ts Typescript is more common.
@@ -2300,6 +2315,9 @@ au BufNewFile,BufRead */doc/{,.}bash[_-]completion{,.d,.sh}{,/*} setf text
 au BufNewFile,BufRead .bashrc*,.bash[_-]profile*,.bash[_-]logout*,.bash[_-]aliases*,bash-fc[-.]*,PKGBUILD*,APKBUILD*,*/{,.}bash[_-]completion{,.d,.sh}{,/*} call dist#ft#SetFileTypeSH("bash")
 au BufNewFile,BufRead .kshrc* call dist#ft#SetFileTypeSH("ksh")
 au BufNewFile,BufRead .profile* call dist#ft#SetFileTypeSH(getline(1))
+
+" Sudoers
+au BufNewFile,BufRead */etc/sudoers.d/*		call s:StarSetf('sudoers')
 
 " tcsh scripts ending in a star
 au BufNewFile,BufRead .tcshrc*	call dist#ft#SetFileTypeShell("tcsh")

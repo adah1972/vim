@@ -2307,6 +2307,7 @@ $VIM_POSIX	vi_diff.txt	/*$VIM_POSIX*
 :command-completion-custom	map.txt	/*:command-completion-custom*
 :command-completion-customlist	map.txt	/*:command-completion-customlist*
 :command-count	map.txt	/*:command-count*
+:command-keepscript	map.txt	/*:command-keepscript*
 :command-modifiers	map.txt	/*:command-modifiers*
 :command-nargs	map.txt	/*:command-nargs*
 :command-range	map.txt	/*:command-range*
@@ -3998,6 +3999,7 @@ E1239	eval.txt	/*E1239*
 E124	eval.txt	/*E124*
 E1243	options.txt	/*E1243*
 E1244	message.txt	/*E1244*
+E1245	cmdline.txt	/*E1245*
 E125	eval.txt	/*E125*
 E126	eval.txt	/*E126*
 E127	eval.txt	/*E127*
@@ -5036,7 +5038,6 @@ N:	cmdline.txt	/*N:*
 N<Del>	various.txt	/*N<Del>*
 NFA	pattern.txt	/*NFA*
 NL-used-for-Nul	pattern.txt	/*NL-used-for-Nul*
-NOT	eval.txt	/*NOT*
 Neovim	intro.txt	/*Neovim*
 NetBSD-backspace	options.txt	/*NetBSD-backspace*
 NetBeans	netbeans.txt	/*NetBeans*
@@ -5243,6 +5244,7 @@ WORD	motion.txt	/*WORD*
 WWW	intro.txt	/*WWW*
 Win32	os_win32.txt	/*Win32*
 WinBar	gui.txt	/*WinBar*
+WinClosed	autocmd.txt	/*WinClosed*
 WinEnter	autocmd.txt	/*WinEnter*
 WinLeave	autocmd.txt	/*WinLeave*
 WinNew	autocmd.txt	/*WinNew*
@@ -7273,7 +7275,6 @@ help-translated	helphelp.txt	/*help-translated*
 help-writing	helphelp.txt	/*help-writing*
 help-xterm-window	helphelp.txt	/*help-xterm-window*
 help.txt	help.txt	/*help.txt*
-helpfile_name.txt	helphelp.txt	/*helpfile_name.txt*
 helphelp	helphelp.txt	/*helphelp*
 helphelp.txt	helphelp.txt	/*helphelp.txt*
 hex-editing	tips.txt	/*hex-editing*
@@ -7321,7 +7322,9 @@ hl-Cursor	syntax.txt	/*hl-Cursor*
 hl-CursorColumn	syntax.txt	/*hl-CursorColumn*
 hl-CursorIM	syntax.txt	/*hl-CursorIM*
 hl-CursorLine	syntax.txt	/*hl-CursorLine*
+hl-CursorLineFold	syntax.txt	/*hl-CursorLineFold*
 hl-CursorLineNr	syntax.txt	/*hl-CursorLineNr*
+hl-CursorLineSign	syntax.txt	/*hl-CursorLineSign*
 hl-DiffAdd	syntax.txt	/*hl-DiffAdd*
 hl-DiffChange	syntax.txt	/*hl-DiffChange*
 hl-DiffDelete	syntax.txt	/*hl-DiffDelete*
@@ -8421,6 +8424,7 @@ operator-variable	eval.txt	/*operator-variable*
 option-backslash	options.txt	/*option-backslash*
 option-list	quickref.txt	/*option-list*
 option-summary	options.txt	/*option-summary*
+option-value-function	options.txt	/*option-value-function*
 option-window	options.txt	/*option-window*
 option_restore()	todo.txt	/*option_restore()*
 option_save()	todo.txt	/*option_save()*
@@ -8543,6 +8547,7 @@ plugin	usr_05.txt	/*plugin*
 plugin-details	filetype.txt	/*plugin-details*
 plugin-filetype	usr_41.txt	/*plugin-filetype*
 plugin-special	usr_41.txt	/*plugin-special*
+plugin_name.txt	helphelp.txt	/*plugin_name.txt*
 pmbcs-option	print.txt	/*pmbcs-option*
 pmbfn-option	print.txt	/*pmbfn-option*
 popt-option	print.txt	/*popt-option*
@@ -8695,6 +8700,7 @@ python-command	if_pyth.txt	/*python-command*
 python-commands	if_pyth.txt	/*python-commands*
 python-current	if_pyth.txt	/*python-current*
 python-dynamic	if_pyth.txt	/*python-dynamic*
+python-environment	if_pyth.txt	/*python-environment*
 python-error	if_pyth.txt	/*python-error*
 python-eval	if_pyth.txt	/*python-eval*
 python-examples	if_pyth.txt	/*python-examples*

@@ -1,4 +1,4 @@
-*syntax.txt*	For Vim version 8.2.  Last change: 2021 Nov 07
+*syntax.txt*	For Vim version 8.2.  Last change: 2021 Nov 20
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1531,6 +1531,14 @@ this mode define the following variable in your vimrc file >
 The enhanced mode also takes advantage of additional color features for a dark
 gvim display.  Here, statements are colored LightYellow instead of Yellow, and
 conditionals are LightBlue for better distinction.
+
+
+FORTH						*forth.vim* *ft-forth-syntax*
+
+Files matching "*.fs" could be F# or Forth.  If the automatic detection
+doesn't work for you, or you don't edit F# at all, use this in your
+startup vimrc: >
+   :let filetype_fs = "forth"
 
 
 FORTRAN					*fortran.vim* *ft-fortran-syntax*
@@ -4880,7 +4888,7 @@ in their own color.
 :hi[ghlight] [default] {group-name} {key}={arg} ..
 			Add a highlight group, or change the highlighting for
 			an existing group. If a given color name is not
-			receognized, each `colors/lists/default.vim` found on
+			recognized, each `colors/lists/default.vim` found on
 			|'runtimepath'| will be loaded.
 			See |highlight-args| for the {key}={arg} arguments.
 			See |:highlight-default| for the optional [default]
@@ -5251,6 +5259,10 @@ LineNrBelow	Line number for when the 'relativenumber'
 							*hl-CursorLineNr*
 CursorLineNr	Like LineNr when 'cursorline' is set and 'cursorlineopt'
 		contains "number" or is "both", for the cursor line.
+							*hl-CursorLineSign*
+CursorLineSign	Like SignColumn when 'cursorline' is set for the cursor line.
+							*hl-CursorLineFold*
+CursorLineFold	Like FoldColumn when 'cursorline' is set for the cursor line.
 							*hl-MatchParen*
 MatchParen	The character under the cursor or just before it, if it
 		is a paired bracket, and its match. |pi_paren.txt|
@@ -5477,7 +5489,7 @@ For Unix you can use the file ~/.vim/after/syntax/syncolor.vim.  Example: >
 	else
 	  highlight comment ctermfg=green guifg=green
 	endif
-
+<
 								*E679*
 Do make sure this syncolor.vim script does not use a "syntax on", set the
 'background' option or uses a "colorscheme" command, because it results in an
@@ -5490,11 +5502,11 @@ depends on the color scheme file.  See |:colorscheme|.
 							*syntax_cmd*
 The "syntax_cmd" variable is set to one of these values when the
 syntax/syncolor.vim files are loaded:
-   "on"		":syntax on" command.  Highlight colors are overruled but
+   "on"		`:syntax on` command.  Highlight colors are overruled but
 		links are kept
-   "enable"	":syntax enable" command.  Only define colors for groups that
-		don't have highlighting yet.  Use ":syntax default".
-   "reset"	":syntax reset" command or loading a color scheme.  Define all
+   "enable"	`:syntax enable` command.  Only define colors for groups that
+		don't have highlighting yet.  Use `:highlight default` .
+   "reset"	`:syntax reset` command or loading a color scheme.  Define all
 		the colors.
    "skip"	Don't define colors.  Used to skip the default settings when a
 		syncolor.vim file earlier in 'runtimepath' has already set

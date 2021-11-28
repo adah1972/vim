@@ -1827,7 +1827,12 @@ do_lock_var(
 	    // Normal name or expanded name.
 	    di = find_var(lp->ll_name, NULL, TRUE);
 	    if (di == NULL)
+	    {
+		if (in_vim9script())
+		    semsg(_(e_cannot_find_variable_to_unlock_str),
+								  lp->ll_name);
 		ret = FAIL;
+	    }
 	    else if ((di->di_flags & DI_FLAGS_FIX)
 			    && di->di_tv.v_type != VAR_DICT
 			    && di->di_tv.v_type != VAR_LIST)
@@ -2074,8 +2079,7 @@ get_user_var_name(expand_T *xp, int idx)
     ht =
 #ifdef FEAT_CMDWIN
 	// In cmdwin, the alternative buffer should be used.
-	(cmdwin_type != 0 && get_cmdline_type() == NUL) ?
-	&prevwin->w_buffer->b_vars->dv_hashtab :
+	is_in_cmdwin() ? &prevwin->w_buffer->b_vars->dv_hashtab :
 #endif
 	&curbuf->b_vars->dv_hashtab;
     if (bdone < ht->ht_used)
@@ -2093,8 +2097,7 @@ get_user_var_name(expand_T *xp, int idx)
     ht =
 #ifdef FEAT_CMDWIN
 	// In cmdwin, the alternative window should be used.
-	(cmdwin_type != 0 && get_cmdline_type() == NUL) ?
-	&prevwin->w_vars->dv_hashtab :
+	is_in_cmdwin() ? &prevwin->w_vars->dv_hashtab :
 #endif
 	&curwin->w_vars->dv_hashtab;
     if (wdone < ht->ht_used)
@@ -3203,13 +3206,14 @@ set_var(
     void
 set_var_const(
     char_u	*name,
-    type_T	*type,
+    type_T	*type_arg,
     typval_T	*tv_arg,
     int		copy,	    // make copy of value in "tv"
     int		flags_arg,  // ASSIGN_CONST, ASSIGN_FINAL, etc.
     int		var_idx)    // index for ":let [a, b] = list"
 {
     typval_T	*tv = tv_arg;
+    type_T	*type = type_arg;
     typval_T	bool_tv;
     dictitem_T	*di;
     typval_T	*dest_tv = NULL;
@@ -3331,13 +3335,18 @@ set_var_const(
 		if (var_in_vim9script && (flags & ASSIGN_FOR_LOOP) == 0)
 		{
 		    where_T where = WHERE_INIT;
+		    svar_T  *sv = find_typval_in_script(&di->di_tv);
 
-		    // check the type and adjust to bool if needed
-		    where.wt_index = var_idx;
-		    where.wt_variable = TRUE;
-		    if (check_script_var_type(&di->di_tv, tv, name, where)
-								       == FAIL)
-			goto failed;
+		    if (sv != NULL)
+		    {
+			// check the type and adjust to bool if needed
+			where.wt_index = var_idx;
+			where.wt_variable = TRUE;
+			if (check_script_var_type(sv, tv, name, where) == FAIL)
+			    goto failed;
+			if (type == NULL)
+			    type = sv->sv_type;
+		    }
 		}
 
 		if ((flags & ASSIGN_FOR_LOOP) == 0
@@ -3433,7 +3442,7 @@ set_var_const(
 
 	    // Make sure the variable name is valid.  In Vim9 script an autoload
 	    // variable must be prefixed with "g:".
-	    if (!valid_varname(varname, !vim9script
+	    if (!valid_varname(varname, -1, !vim9script
 					       || STRNCMP(name, "g:", 2) == 0))
 		goto failed;
 
@@ -3633,14 +3642,15 @@ value_check_lock(int lock, char_u *name, int use_gettext)
 
 /*
  * Check if a variable name is valid.  When "autoload" is true "#" is allowed.
+ * If "len" is -1 use all of "varname", otherwise up to "varname[len]".
  * Return FALSE and give an error if not.
  */
     int
-valid_varname(char_u *varname, int autoload)
+valid_varname(char_u *varname, int len, int autoload)
 {
     char_u *p;
 
-    for (p = varname; *p != NUL; ++p)
+    for (p = varname; len < 0 ? *p != NUL : p < varname + len; ++p)
 	if (!eval_isnamec1(*p) && (p == varname || !VIM_ISDIGIT(*p))
 					 && !(autoload && *p == AUTOLOAD_CHAR))
 	{

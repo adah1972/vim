@@ -1456,7 +1456,8 @@ op_insert(oparg_T *oap, long count1)
 {
     long		ins_len, pre_textlen = 0;
     char_u		*firstline, *ins_text;
-    colnr_T		ind_pre = 0, ind_post;
+    colnr_T		ind_pre_col = 0, ind_post_col;
+    int			ind_pre_vcol = 0, ind_post_vcol = 0;
     struct block_def	bd;
     int			i;
     pos_T		t1;
@@ -1497,7 +1498,8 @@ op_insert(oparg_T *oap, long count1)
 	// Get the info about the block before entering the text
 	block_prep(oap, &bd, oap->start.lnum, TRUE);
 	// Get indent information
-	ind_pre = (colnr_T)getwhitecols_curline();
+	ind_pre_col = (colnr_T)getwhitecols_curline();
+	ind_pre_vcol = get_indent();
 	firstline = ml_get(oap->start.lnum) + bd.textcol;
 
 	if (oap->op_type == OP_APPEND)
@@ -1563,11 +1565,12 @@ op_insert(oparg_T *oap, long count1)
 
 	// If indent kicked in, the firstline might have changed
 	// but only do that, if the indent actually increased.
-	ind_post = (colnr_T)getwhitecols_curline();
-	if (curbuf->b_op_start.col > ind_pre && ind_post > ind_pre)
+	ind_post_col = (colnr_T)getwhitecols_curline();
+	if (curbuf->b_op_start.col > ind_pre_col && ind_post_col > ind_pre_col)
 	{
-	    bd.textcol += ind_post - ind_pre;
-	    bd.start_vcol += ind_post - ind_pre;
+	    bd.textcol += ind_post_col - ind_pre_col;
+	    ind_post_vcol = get_indent();
+	    bd.start_vcol += ind_post_vcol - ind_pre_vcol;
 	    did_indent = TRUE;
 	}
 
@@ -1612,12 +1615,28 @@ op_insert(oparg_T *oap, long count1)
 	    }
 	}
 
-	/*
-	 * Spaces and tabs in the indent may have changed to other spaces and
-	 * tabs.  Get the starting column again and correct the length.
-	 * Don't do this when "$" used, end-of-line will have changed.
-	 */
+	// Spaces and tabs in the indent may have changed to other spaces and
+	// tabs.  Get the starting column again and correct the length.
+	// Don't do this when "$" used, end-of-line will have changed.
+	//
+	// if indent was added and the inserted text was after the indent,
+	// correct the selection for the new indent.
+	if (did_indent && bd.textcol - ind_post_col > 0)
+	{
+	    oap->start.col += ind_post_col - ind_pre_col;
+	    oap->start_vcol += ind_post_vcol - ind_pre_vcol;
+	    oap->end.col += ind_post_col - ind_pre_col;
+	    oap->end_vcol += ind_post_vcol - ind_pre_vcol;
+	}
 	block_prep(oap, &bd2, oap->start.lnum, TRUE);
+	if (did_indent && bd.textcol - ind_post_col > 0)
+	{
+	    // undo for where "oap" is used below
+	    oap->start.col -= ind_post_col - ind_pre_col;
+	    oap->start_vcol -= ind_post_vcol - ind_pre_vcol;
+	    oap->end.col -= ind_post_col - ind_pre_col;
+	    oap->end_vcol -= ind_post_vcol - ind_pre_vcol;
+	}
 	if (!bd.is_MAX || bd2.textlen < bd.textlen)
 	{
 	    if (oap->op_type == OP_APPEND)
@@ -3305,6 +3324,29 @@ op_colon(oparg_T *oap)
     // do_cmdline() does the rest
 }
 
+// callback function for 'operatorfunc'
+static callback_T opfunc_cb;
+
+/*
+ * Process the 'operatorfunc' option value.
+ * Returns OK or FAIL.
+ */
+    int
+set_operatorfunc_option(void)
+{
+    return option_set_callback_func(p_opfunc, &opfunc_cb);
+}
+
+#if defined(EXITFREE) || defined(PROTO)
+    void
+free_operatorfunc_option(void)
+{
+#  ifdef FEAT_EVAL
+    free_callback(&opfunc_cb);
+#  endif
+}
+#endif
+
 /*
  * Handle the "g@" operator: call 'operatorfunc'.
  */
@@ -3317,6 +3359,7 @@ op_function(oparg_T *oap UNUSED)
     int		save_finish_op = finish_op;
     pos_T	orig_start = curbuf->b_op_start;
     pos_T	orig_end = curbuf->b_op_end;
+    typval_T	rettv;
 
     if (*p_opfunc == NUL)
 	emsg(_("E774: 'operatorfunc' is empty"));
@@ -3345,7 +3388,8 @@ op_function(oparg_T *oap UNUSED)
 	// Reset finish_op so that mode() returns the right value.
 	finish_op = FALSE;
 
-	(void)call_func_noret(p_opfunc, 1, argv);
+	if (call_callback(&opfunc_cb, 0, &rettv, 1, argv) != FAIL)
+	    clear_tv(&rettv);
 
 	virtual_op = save_virtual_op;
 	finish_op = save_finish_op;
@@ -3739,6 +3783,8 @@ do_pending_operator(cmdarg_T *cap, int old_col, int gui_yank)
 			    oap->motion_force, cap->cmdchar, cap->nchar);
 		else if (cap->cmdchar != ':' && cap->cmdchar != K_COMMAND)
 		{
+		    int opchar = get_op_char(oap->op_type);
+		    int extra_opchar = get_extra_op_char(oap->op_type);
 		    int nchar = oap->op_type == OP_REPLACE ? cap->nchar : NUL;
 
 		    // reverse what nv_replace() did
@@ -3746,10 +3792,14 @@ do_pending_operator(cmdarg_T *cap, int old_col, int gui_yank)
 			nchar = CAR;
 		    else if (nchar == REPLACE_NL_NCHAR)
 			nchar = NL;
-		    prep_redo(oap->regname, 0L, NUL, 'v',
-					get_op_char(oap->op_type),
-					get_extra_op_char(oap->op_type),
-					nchar);
+
+		    if (opchar == 'g' && extra_opchar == '@')
+			// also repeat the count for 'operatorfunc'
+			prep_redo_num2(oap->regname, 0L, NUL, 'v',
+				     cap->count0, opchar, extra_opchar, nchar);
+		    else
+			prep_redo(oap->regname, 0L, NUL, 'v',
+						  opchar, extra_opchar, nchar);
 		}
 		if (!redo_VIsual_busy)
 		{
