@@ -222,11 +222,12 @@ dict_free_items(int copyID)
 dictitem_alloc(char_u *key)
 {
     dictitem_T *di;
+    size_t len = STRLEN(key);
 
-    di = alloc(offsetof(dictitem_T, di_key) + STRLEN(key) + 1);
+    di = alloc(offsetof(dictitem_T, di_key) + len + 1);
     if (di != NULL)
     {
-	STRCPY(di->di_key, key);
+	mch_memmove(di->di_key, key, len + 1);
 	di->di_flags = DI_FLAGS_ALLOC;
 	di->di_tv.v_lock = 0;
 	di->di_tv.v_type = VAR_UNKNOWN;
@@ -719,7 +720,7 @@ dict_get_number_check(dict_T *d, char_u *key)
 	return 0;
     if (di->di_tv.v_type != VAR_NUMBER)
     {
-	semsg(_(e_invarg2), tv_get_string(&di->di_tv));
+	semsg(_(e_invalid_argument_str), tv_get_string(&di->di_tv));
 	return 0;
     }
     return tv_get_number(&di->di_tv);
@@ -758,7 +759,7 @@ dict2string(typval_T *tv, int copyID, int restore_copyID)
 
     if ((d = tv->vval.v_dict) == NULL)
 	return NULL;
-    ga_init2(&ga, (int)sizeof(char), 80);
+    ga_init2(&ga, sizeof(char), 80);
     ga_append(&ga, '{');
 
     todo = (int)d->dv_hashtab.ht_used;
@@ -891,25 +892,21 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
     typval_T	tv;
     char_u	*key = NULL;
     dictitem_T	*item;
-    char_u	*start = skipwhite(*arg + 1);
+    char_u	*curly_expr = skipwhite(*arg + 1);
     char_u	buf[NUMBUFLEN];
     int		vim9script = in_vim9script();
     int		had_comma;
 
-    /*
-     * First check if it's not a curly-braces thing: {expr}.
-     * Must do this without evaluating, otherwise a function may be called
-     * twice.  Unfortunately this means we need to call eval1() twice for the
-     * first item.
-     * But {} is an empty Dictionary.
-     */
-    if (!vim9script && *start != '}')
-    {
-	if (eval1(&start, &tv, NULL) == FAIL)	// recursive!
-	    return FAIL;
-	if (*skipwhite(start) == '}')
-	    return NOTDONE;
-    }
+    // First check if it's not a curly-braces thing: {expr}.
+    // Must do this without evaluating, otherwise a function may be called
+    // twice.  Unfortunately this means we need to call eval1() twice for the
+    // first item.
+    // But {} is an empty Dictionary.
+    if (!vim9script
+	    && *curly_expr != '}'
+	    && eval1(&curly_expr, &tv, NULL) == OK
+	    && *skipwhite(curly_expr) == '}')
+	return NOTDONE;
 
     if (evaluate)
     {
@@ -965,7 +962,7 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
 	    if (*skipwhite(*arg) == ':')
 		semsg(_(e_no_white_space_allowed_before_str_str), ":", *arg);
 	    else
-		semsg(_(e_missing_dict_colon), *arg);
+		semsg(_(e_missing_colon_in_dictionary), *arg);
 	    clear_tv(&tvkey);
 	    goto failret;
 	}
@@ -1005,7 +1002,7 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
 	    item = dict_find(d, key, -1);
 	    if (item != NULL)
 	    {
-		semsg(_(e_duplicate_key), key);
+		semsg(_(e_duplicate_key_in_dicitonary), key);
 		clear_tv(&tvkey);
 		clear_tv(&tv);
 		goto failret;
@@ -1045,7 +1042,7 @@ eval_dict(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int literal)
 	    if (**arg == ',')
 		semsg(_(e_no_white_space_allowed_before_str_str), ",", *arg);
 	    else
-		semsg(_(e_missing_dict_comma), *arg);
+		semsg(_(e_missing_comma_in_dictionary), *arg);
 	    goto failret;
 	}
     }
@@ -1119,7 +1116,7 @@ dict_extend(dict_T *d1, dict_T *d2, char_u *action, char *func_name)
 	    }
 	    else if (*action == 'e')
 	    {
-		semsg(_("E737: Key already exists: %s"), hi2->hi_key);
+		semsg(_(e_key_already_exists_str), hi2->hi_key);
 		break;
 	    }
 	    else if (*action == 'f' && HI2DI(hi2) != di1)
@@ -1186,6 +1183,250 @@ dict_equal(
 }
 
 /*
+ * Count the number of times item "needle" occurs in Dict "d". Case is ignored
+ * if "ic" is TRUE.
+ */
+    long
+dict_count(dict_T *d, typval_T *needle, int ic)
+{
+    int		todo;
+    hashitem_T	*hi;
+    long	n = 0;
+
+    if (d == NULL)
+	return 0;
+
+    todo = (int)d->dv_hashtab.ht_used;
+    for (hi = d->dv_hashtab.ht_array; todo > 0; ++hi)
+    {
+	if (!HASHITEM_EMPTY(hi))
+	{
+	    --todo;
+	    if (tv_equal(&HI2DI(hi)->di_tv, needle, ic, FALSE))
+		++n;
+	}
+    }
+
+    return n;
+}
+
+/*
+ * extend() a Dict. Append Dict argvars[1] to Dict argvars[0] and return the
+ * resulting Dict in "rettv".  "is_new" is TRUE for extendnew().
+ */
+    void
+dict_extend_func(
+	typval_T	*argvars,
+	type_T		*type,
+	char		*func_name,
+	char_u		*arg_errmsg,
+	int		is_new,
+	typval_T	*rettv)
+{
+    dict_T	*d1, *d2;
+    char_u	*action;
+    int	i;
+
+    d1 = argvars[0].vval.v_dict;
+    if (d1 == NULL)
+    {
+	emsg(_(e_cannot_extend_null_dict));
+	return;
+    }
+    d2 = argvars[1].vval.v_dict;
+    if ((is_new || !value_check_lock(d1->dv_lock, arg_errmsg, TRUE))
+	    && d2 != NULL)
+    {
+	if (is_new)
+	{
+	    d1 = dict_copy(d1, FALSE, get_copyID());
+	    if (d1 == NULL)
+		return;
+	}
+
+	// Check the third argument.
+	if (argvars[2].v_type != VAR_UNKNOWN)
+	{
+	    static char *(av[]) = {"keep", "force", "error"};
+
+	    action = tv_get_string_chk(&argvars[2]);
+	    if (action == NULL)
+		return;
+	    for (i = 0; i < 3; ++i)
+		if (STRCMP(action, av[i]) == 0)
+		    break;
+	    if (i == 3)
+	    {
+		semsg(_(e_invalid_argument_str), action);
+		return;
+	    }
+	}
+	else
+	    action = (char_u *)"force";
+
+	if (type != NULL && check_typval_arg_type(type, &argvars[1],
+		    func_name, 2) == FAIL)
+	    return;
+	dict_extend(d1, d2, action, func_name);
+
+	if (is_new)
+	{
+	    rettv->v_type = VAR_DICT;
+	    rettv->vval.v_dict = d1;
+	    rettv->v_lock = FALSE;
+	}
+	else
+	    copy_tv(&argvars[0], rettv);
+    }
+}
+
+/*
+ * Implementation of map() and filter() for a Dict.  Apply "expr" to every
+ * item in Dict "d" and return the result in "rettv".
+ */
+    void
+dict_filter_map(
+	dict_T		*d,
+	filtermap_T	filtermap,
+	type_T		*argtype,
+	char		*func_name,
+	char_u		*arg_errmsg,
+	typval_T	*expr,
+	typval_T	*rettv)
+{
+    int		prev_lock;
+    dict_T	*d_ret = NULL;
+    hashtab_T	*ht;
+    hashitem_T	*hi;
+    dictitem_T	*di;
+    int		todo;
+    int		rem;
+
+    if (filtermap == FILTERMAP_MAPNEW)
+    {
+	rettv->v_type = VAR_DICT;
+	rettv->vval.v_dict = NULL;
+    }
+    if (d == NULL
+	  || (filtermap == FILTERMAP_FILTER
+			&& value_check_lock(d->dv_lock, arg_errmsg, TRUE)))
+	return;
+
+    prev_lock = d->dv_lock;
+
+    if (filtermap == FILTERMAP_MAPNEW)
+    {
+	if (rettv_dict_alloc(rettv) == FAIL)
+	    return;
+	d_ret = rettv->vval.v_dict;
+    }
+
+    if (filtermap != FILTERMAP_FILTER && d->dv_lock == 0)
+	d->dv_lock = VAR_LOCKED;
+    ht = &d->dv_hashtab;
+    hash_lock(ht);
+    todo = (int)ht->ht_used;
+    for (hi = ht->ht_array; todo > 0; ++hi)
+    {
+	if (!HASHITEM_EMPTY(hi))
+	{
+	    int		r;
+	    typval_T	newtv;
+
+	    --todo;
+	    di = HI2DI(hi);
+	    if (filtermap == FILTERMAP_MAP
+		    && (value_check_lock(di->di_tv.v_lock,
+			    arg_errmsg, TRUE)
+			|| var_check_ro(di->di_flags,
+			    arg_errmsg, TRUE)))
+		break;
+	    set_vim_var_string(VV_KEY, di->di_key, -1);
+	    newtv.v_type = VAR_UNKNOWN;
+	    r = filter_map_one(&di->di_tv, expr, filtermap,
+		    &newtv, &rem);
+	    clear_tv(get_vim_var_tv(VV_KEY));
+	    if (r == FAIL || did_emsg)
+	    {
+		clear_tv(&newtv);
+		break;
+	    }
+	    if (filtermap == FILTERMAP_MAP)
+	    {
+		if (argtype != NULL && check_typval_arg_type(
+			     argtype->tt_member, &newtv, func_name, 0) == FAIL)
+		{
+		    clear_tv(&newtv);
+		    break;
+		}
+		// map(): replace the dict item value
+		clear_tv(&di->di_tv);
+		newtv.v_lock = 0;
+		di->di_tv = newtv;
+	    }
+	    else if (filtermap == FILTERMAP_MAPNEW)
+	    {
+		// mapnew(): add the item value to the new dict
+		r = dict_add_tv(d_ret, (char *)di->di_key, &newtv);
+		clear_tv(&newtv);
+		if (r == FAIL)
+		    break;
+	    }
+	    else if (filtermap == FILTERMAP_FILTER && rem)
+	    {
+		// filter(false): remove the item from the dict
+		if (var_check_fixed(di->di_flags, arg_errmsg, TRUE)
+			|| var_check_ro(di->di_flags, arg_errmsg, TRUE))
+		    break;
+		dictitem_remove(d, di);
+	    }
+	}
+    }
+    hash_unlock(ht);
+    d->dv_lock = prev_lock;
+}
+
+/*
+ * "remove({dict})" function
+ */
+    void
+dict_remove(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg)
+{
+    dict_T	*d;
+    char_u	*key;
+    dictitem_T	*di;
+
+    if (argvars[2].v_type != VAR_UNKNOWN)
+    {
+	semsg(_(e_too_many_arguments_for_function_str), "remove()");
+	return;
+    }
+
+    d = argvars[0].vval.v_dict;
+    if (d == NULL || value_check_lock(d->dv_lock, arg_errmsg, TRUE))
+	return;
+
+    key = tv_get_string_chk(&argvars[1]);
+    if (key == NULL)
+	return;
+
+    di = dict_find(d, key, -1);
+    if (di == NULL)
+    {
+	semsg(_(e_key_not_present_in_dictionary), key);
+	return;
+    }
+
+    if (var_check_fixed(di->di_flags, arg_errmsg, TRUE)
+	    || var_check_ro(di->di_flags, arg_errmsg, TRUE))
+	return;
+
+    *rettv = di->di_tv;
+    init_tv(&di->di_tv);
+    dictitem_remove(d, di);
+}
+
+/*
  * Turn a dict into a list:
  * "what" == 0: list of keys
  * "what" == 1: list of values
@@ -1207,7 +1448,7 @@ dict_list(typval_T *argvars, typval_T *rettv, int what)
 
     if (argvars[0].v_type != VAR_DICT)
     {
-	emsg(_(e_dictreq));
+	emsg(_(e_dictionary_required));
 	return;
     }
 
@@ -1330,7 +1571,7 @@ f_has_key(typval_T *argvars, typval_T *rettv)
 
     if (argvars[0].v_type != VAR_DICT)
     {
-	emsg(_(e_dictreq));
+	emsg(_(e_dictionary_required));
 	return;
     }
     if (argvars[0].vval.v_dict == NULL)
@@ -1338,38 +1579,6 @@ f_has_key(typval_T *argvars, typval_T *rettv)
 
     rettv->vval.v_number = dict_find(argvars[0].vval.v_dict,
 				      tv_get_string(&argvars[1]), -1) != NULL;
-}
-
-/*
- * "remove({dict})" function
- */
-    void
-dict_remove(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg)
-{
-    dict_T	*d;
-    char_u	*key;
-    dictitem_T	*di;
-
-    if (argvars[2].v_type != VAR_UNKNOWN)
-	semsg(_(e_toomanyarg), "remove()");
-    else if ((d = argvars[0].vval.v_dict) != NULL
-	    && !value_check_lock(d->dv_lock, arg_errmsg, TRUE))
-    {
-	key = tv_get_string_chk(&argvars[1]);
-	if (key != NULL)
-	{
-	    di = dict_find(d, key, -1);
-	    if (di == NULL)
-		semsg(_(e_dictkey), key);
-	    else if (!var_check_fixed(di->di_flags, arg_errmsg, TRUE)
-			&& !var_check_ro(di->di_flags, arg_errmsg, TRUE))
-	    {
-		*rettv = di->di_tv;
-		init_tv(&di->di_tv);
-		dictitem_remove(d, di);
-	    }
-	}
-    }
 }
 
 #endif // defined(FEAT_EVAL)

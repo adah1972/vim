@@ -198,7 +198,7 @@ do_window(
 		    if (Prenum == 0)
 			emsg(_(e_no_alternate_file));
 		    else
-			semsg(_("E92: Buffer %ld not found"), Prenum);
+			semsg(_(e_buffer_nr_not_found), Prenum);
 		    break;
 		}
 
@@ -260,7 +260,7 @@ newwindow:
 		    if (wp->w_p_pvw)
 			break;
 		if (wp == NULL)
-		    emsg(_("E441: There is no preview window"));
+		    emsg(_(e_there_is_no_preview_window));
 		else
 		    win_goto(wp);
 		break;
@@ -774,7 +774,7 @@ check_split_disallowed()
 {
     if (split_disallowed > 0)
     {
-	emsg(_("E242: Can't split a window while closing another"));
+	emsg(_(e_cant_split_window_while_closing_another));
 	return FAIL;
     }
     if (curwin->w_buffer->b_locked_split)
@@ -817,7 +817,7 @@ win_split(int size, int flags)
     flags |= cmdmod.cmod_split;
     if ((flags & WSP_TOP) && (flags & WSP_BOT))
     {
-	emsg(_("E442: Can't split topleft and botright at the same time"));
+	emsg(_(e_cant_split_topleft_and_botright_at_the_same_time));
 	return FAIL;
     }
 
@@ -1332,10 +1332,8 @@ win_split_ins(
 	    p_wh = size;
     }
 
-#ifdef FEAT_JUMPLIST
     // Keep same changelist position in new window.
     wp->w_changelistidx = oldwin->w_changelistidx;
-#endif
 
     /*
      * make the new window the current window
@@ -1383,9 +1381,7 @@ win_init(win_T *newp, win_T *oldp, int flags UNUSED)
     newp->w_wrow = oldp->w_wrow;
     newp->w_fraction = oldp->w_fraction;
     newp->w_prev_fraction_row = oldp->w_prev_fraction_row;
-#ifdef FEAT_JUMPLIST
     copy_jumplist(oldp, newp);
-#endif
 #ifdef FEAT_QUICKFIX
     if (flags & WSP_NEWLOC)
     {
@@ -1559,7 +1555,7 @@ make_windows(
 
     if (vertical)
     {
-	// Each windows needs at least 'winminwidth' lines and a separator
+	// Each window needs at least 'winminwidth' lines and a separator
 	// column.
 	maxcount = (curwin->w_width + curwin->w_vsep_width
 					     - (p_wiw - p_wmw)) / (p_wmw + 1);
@@ -1725,7 +1721,7 @@ win_rotate(int upwards, int count)
     FOR_ALL_FRAMES(frp, curwin->w_frame->fr_parent->fr_child)
 	if (frp->fr_win == NULL)
 	{
-	    emsg(_("E443: Cannot rotate when another window is split"));
+	    emsg(_(e_cannot_rotate_when_another_window_is_split));
 	    return;
 	}
 
@@ -2113,7 +2109,7 @@ win_equal_rec(
 	    room = height - m;
 	    if (room < 0)
 	    {
-		// The room is less then 'winheight', use all space for the
+		// The room is less than 'winheight', use all space for the
 		// current window.
 		next_curwin_size = p_wh + room;
 		room = 0;
@@ -2433,8 +2429,10 @@ win_close_buffer(win_T *win, int action, int abort_if_last)
 #endif
 
 #ifdef FEAT_QUICKFIX
-    // When the quickfix/location list window is closed, unlist the buffer.
-    if (win->w_buffer != NULL && bt_quickfix(win->w_buffer))
+    // When a quickfix/location list window is closed and the buffer is
+    // displayed in only one window, then unlist the buffer.
+    if (win->w_buffer != NULL && bt_quickfix(win->w_buffer)
+					&& win->w_buffer->b_nwindows == 1)
 	win->w_buffer->b_p_bl = FALSE;
 #endif
 
@@ -2489,7 +2487,7 @@ win_close(win_T *win, int free_buf)
 
     if (last_window())
     {
-	emsg(_("E444: Cannot close last window"));
+	emsg(_(e_cannot_close_last_window));
 	return FAIL;
     }
 
@@ -2498,12 +2496,12 @@ win_close(win_T *win, int free_buf)
 	return FAIL; // window is already being closed
     if (win_unlisted(win))
     {
-	emsg(_(e_autocmd_close));
+	emsg(_(e_cannot_close_autocmd_or_popup_window));
 	return FAIL;
     }
     if ((firstwin == aucmd_win || lastwin == aucmd_win) && one_window())
     {
-	emsg(_("E814: Cannot close window, only autocmd window would remain"));
+	emsg(_(e_cannot_close_window_only_autocmd_window_would_remain));
 	return FAIL;
     }
 
@@ -3665,7 +3663,7 @@ close_others(
     }
 
     if (message && !ONE_WINDOW)
-	emsg(_("E445: Other window contains changes"));
+	emsg(_(e_other_window_contains_changes));
 }
 
     static void
@@ -4190,7 +4188,8 @@ leave_tabpage(
     tp->tp_firstwin = firstwin;
     tp->tp_lastwin = lastwin;
     tp->tp_old_Rows = Rows;
-    tp->tp_old_Columns = Columns;
+    if (tp->tp_old_Columns != -1)
+	tp->tp_old_Columns = Columns;
     firstwin = NULL;
     lastwin = NULL;
     return OK;
@@ -4253,8 +4252,16 @@ enter_tabpage(
 #endif
 		))
 	shell_new_rows();
-    if (curtab->tp_old_Columns != Columns && starting == 0)
-	shell_new_columns();	// update window widths
+    if (curtab->tp_old_Columns != Columns)
+    {
+	if (starting == 0)
+	{
+	    shell_new_columns();	// update window widths
+	    curtab->tp_old_Columns = Columns;
+	}
+	else
+	    curtab->tp_old_Columns = -1;  // update window widths later
+    }
 
     lastused_tabpage = last_tab;
 
@@ -4478,7 +4485,7 @@ win_goto(win_T *wp)
 	return;
     if (popup_is_popup(wp))
     {
-	emsg(_("E366: Not allowed to enter a popup window"));
+	emsg(_(e_not_allowed_to_enter_popup_window));
 	return;
     }
 #endif
@@ -4728,6 +4735,54 @@ win_enter(win_T *wp, int undo_sync)
 }
 
 /*
+ * Used after making another window the current one: change directory if
+ * needed.
+ */
+    static void
+fix_current_dir(void)
+{
+#ifdef FEAT_AUTOCHDIR
+    if (p_acd)
+	do_autochdir();
+    else
+#endif
+    if (curwin->w_localdir != NULL || curtab->tp_localdir != NULL)
+    {
+	char_u	*dirname;
+
+	// Window or tab has a local directory: Save current directory as
+	// global directory (unless that was done already) and change to the
+	// local directory.
+	if (globaldir == NULL)
+	{
+	    char_u	cwd[MAXPATHL];
+
+	    if (mch_dirname(cwd, MAXPATHL) == OK)
+		globaldir = vim_strsave(cwd);
+	}
+	if (curwin->w_localdir != NULL)
+	    dirname = curwin->w_localdir;
+	else
+	    dirname = curtab->tp_localdir;
+
+	if (mch_chdir((char *)dirname) == 0)
+	{
+	    last_chdir_reason = NULL;
+	    shorten_fnames(TRUE);
+	}
+    }
+    else if (globaldir != NULL)
+    {
+	// Window doesn't have a local directory and we are not in the global
+	// directory: Change to the global directory.
+	vim_ignored = mch_chdir((char *)globaldir);
+	VIM_CLEAR(globaldir);
+	last_chdir_reason = NULL;
+	shorten_fnames(TRUE);
+    }
+}
+
+/*
  * Make window "wp" the current window.
  * Can be called with "flags" containing WEE_CURWIN_INVALID, which means that
  * curwin has just been closed and isn't valid.
@@ -4818,9 +4873,7 @@ win_enter_ext(win_T *wp, int flags)
 	    apply_autocmds(EVENT_BUFENTER, NULL, NULL, FALSE, curbuf);
     }
 
-#ifdef FEAT_TITLE
     maketitle();
-#endif
     curwin->w_redr_status = TRUE;
 #ifdef FEAT_TERMINAL
     if (bt_terminal(curwin->w_buffer))
@@ -4851,49 +4904,6 @@ win_enter_ext(win_T *wp, int flags)
     DO_AUTOCHDIR;
 
     return did_decrement;
-}
-
-/*
- * Used after making another window the current one: change directory if
- * needed.
- */
-    void
-fix_current_dir(void)
-{
-    if (curwin->w_localdir != NULL || curtab->tp_localdir != NULL)
-    {
-	char_u	*dirname;
-
-	// Window or tab has a local directory: Save current directory as
-	// global directory (unless that was done already) and change to the
-	// local directory.
-	if (globaldir == NULL)
-	{
-	    char_u	cwd[MAXPATHL];
-
-	    if (mch_dirname(cwd, MAXPATHL) == OK)
-		globaldir = vim_strsave(cwd);
-	}
-	if (curwin->w_localdir != NULL)
-	    dirname = curwin->w_localdir;
-	else
-	    dirname = curtab->tp_localdir;
-
-	if (mch_chdir((char *)dirname) == 0)
-	{
-	    last_chdir_reason = NULL;
-	    shorten_fnames(TRUE);
-	}
-    }
-    else if (globaldir != NULL)
-    {
-	// Window doesn't have a local directory and we are not in the global
-	// directory: Change to the global directory.
-	vim_ignored = mch_chdir((char *)globaldir);
-	VIM_CLEAR(globaldir);
-	last_chdir_reason = NULL;
-	shorten_fnames(TRUE);
-    }
 }
 
 /*
@@ -5147,9 +5157,7 @@ win_free(
     clear_matches(wp);
 #endif
 
-#ifdef FEAT_JUMPLIST
     free_jumplist(wp);
-#endif
 
 #ifdef FEAT_QUICKFIX
     qf_free_all(wp);
@@ -5405,7 +5413,7 @@ win_size_save(garray_T *gap)
 {
     win_T	*wp;
 
-    ga_init2(gap, (int)sizeof(int), 1);
+    ga_init2(gap, sizeof(int), 1);
     if (ga_grow(gap, win_count() * 2 + 1) == OK)
     {
 	// first entry is value of 'lines'
@@ -5510,6 +5518,18 @@ frame_comp_pos(frame_T *topfrp, int *row, int *col)
 	    frame_comp_pos(frp, row, col);
 	}
     }
+}
+
+/*
+ * Make the current window show at least one line and one column.
+ */
+    void
+win_ensure_size()
+{
+    if (curwin->w_height == 0)
+	win_setheight(1);
+    if (curwin->w_width == 0)
+	win_setwidth(1);
 }
 
 /*
@@ -6970,7 +6990,7 @@ check_colorcolumn(win_T *wp)
 	    col = (*s == '-') ? -1 : 1;
 	    ++s;
 	    if (!VIM_ISDIGIT(*s))
-		return e_invarg;
+		return e_invalid_argument;
 	    col = col * getdigits(&s);
 	    if (wp->w_buffer->b_p_tw == 0)
 		goto skip;  // 'textwidth' not set, skip this item
@@ -6981,15 +7001,15 @@ check_colorcolumn(win_T *wp)
 	else if (VIM_ISDIGIT(*s))
 	    col = getdigits(&s);
 	else
-	    return e_invarg;
+	    return e_invalid_argument;
 	color_cols[count++] = col - 1;  // 1-based to 0-based
 skip:
 	if (*s == NUL)
 	    break;
 	if (*s != ',')
-	    return e_invarg;
+	    return e_invalid_argument;
 	if (*++s == NUL)
-	    return e_invarg;  // illegal trailing comma as in "set cc=80,"
+	    return e_invalid_argument;  // illegal trailing comma as in "set cc=80,"
     }
 
     vim_free(wp->w_p_cc_cols);

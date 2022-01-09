@@ -549,6 +549,10 @@ static struct vimoption options[] =
 			    (char_u *)&p_cmp, PV_NONE,
 			    {(char_u *)"internal,keepascii", (char_u *)0L}
 			    SCTX_INIT},
+    {"cdhome",	    "cdh",  P_BOOL|P_VI_DEF|P_VIM|P_SECURE,
+			    (char_u *)&p_cdh, PV_NONE,
+			    {(char_u *)FALSE, (char_u *)0L}
+			    SCTX_INIT},
     {"cdpath",	    "cd",   P_STRING|P_EXPAND|P_VI_DEF|P_SECURE|P_COMMA|P_NODUP,
 #ifdef FEAT_SEARCHPATH
 			    (char_u *)&p_cdpath, PV_NONE,
@@ -684,7 +688,7 @@ static struct vimoption options[] =
 #endif
 			    {(char_u *)0L, (char_u *)0L}
 			    SCTX_INIT},
-    {"completefunc", "cfu", P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE,
+    {"completefunc", "cfu", P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE|P_FUNC,
 #ifdef FEAT_COMPL_FUNC
 			    (char_u *)&p_cfu, PV_CFU,
 			    {(char_u *)"", (char_u *)0L}
@@ -1313,23 +1317,15 @@ static struct vimoption options[] =
 			    (char_u *)&p_hls, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"icon",	    NULL,   P_BOOL|P_VI_DEF,
-#ifdef FEAT_TITLE
 			    (char_u *)&p_icon, PV_NONE,
-#else
-			    (char_u *)NULL, PV_NONE,
-#endif
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"iconstring",  NULL,   P_STRING|P_VI_DEF|P_MLE,
-#ifdef FEAT_TITLE
 			    (char_u *)&p_iconstring, PV_NONE,
-#else
-			    (char_u *)NULL, PV_NONE,
-#endif
 			    {(char_u *)"", (char_u *)0L} SCTX_INIT},
     {"ignorecase",  "ic",   P_BOOL|P_VI_DEF,
 			    (char_u *)&p_ic, PV_NONE,
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
-    {"imactivatefunc","imaf",P_STRING|P_VI_DEF|P_SECURE,
+    {"imactivatefunc","imaf",P_STRING|P_VI_DEF|P_SECURE|P_FUNC,
 #if defined(FEAT_EVAL)
 			    (char_u *)&p_imaf, PV_NONE,
 			    {(char_u *)"", (char_u *)NULL}
@@ -1364,7 +1360,7 @@ static struct vimoption options[] =
 			    (char_u *)&p_imsearch, PV_IMS,
 			    {(char_u *)B_IMODE_USE_INSERT, (char_u *)0L}
 			    SCTX_INIT},
-    {"imstatusfunc","imsf",P_STRING|P_VI_DEF|P_SECURE,
+    {"imstatusfunc","imsf",P_STRING|P_VI_DEF|P_SECURE|P_FUNC,
 #if defined(FEAT_EVAL)
 			    (char_u *)&p_imsf, PV_NONE,
 			    {(char_u *)"", (char_u *)NULL}
@@ -1830,7 +1826,7 @@ static struct vimoption options[] =
 			    (char_u *)NULL, PV_NONE,
 #endif
 			    {(char_u *)8L, (char_u *)4L} SCTX_INIT},
-    {"omnifunc",    "ofu",  P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE,
+    {"omnifunc",    "ofu",  P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE|P_FUNC,
 #ifdef FEAT_COMPL_FUNC
 			    (char_u *)&p_ofu, PV_OFU,
 			    {(char_u *)"", (char_u *)0L}
@@ -1850,7 +1846,7 @@ static struct vimoption options[] =
 #endif
 			    {(char_u *)FALSE, (char_u *)FALSE}
 			    SCTX_INIT},
-    {"operatorfunc", "opfunc", P_STRING|P_VI_DEF|P_SECURE,
+    {"operatorfunc", "opfunc", P_STRING|P_VI_DEF|P_SECURE|P_FUNC,
 			    (char_u *)&p_opfunc, PV_NONE,
 			    {(char_u *)"", (char_u *)0L} SCTX_INIT},
     {"optimize",    "opt",  P_BOOL|P_VI_DEF,
@@ -2063,7 +2059,7 @@ static struct vimoption options[] =
 #endif
 			    {(char_u *)DEFAULT_PYTHON_VER, (char_u *)0L}
 			    SCTX_INIT},
-    {"quickfixtextfunc", "qftf", P_STRING|P_ALLOCED|P_VI_DEF|P_VIM|P_SECURE,
+    {"quickfixtextfunc", "qftf", P_STRING|P_ALLOCED|P_VI_DEF|P_VIM|P_SECURE|P_FUNC,
 #if defined(FEAT_QUICKFIX) && defined(FEAT_EVAL)
 			    (char_u *)&p_qftf, PV_NONE,
 			    {(char_u *)"", (char_u *)0L}
@@ -2515,7 +2511,7 @@ static struct vimoption options[] =
     {"tagcase",	    "tc",   P_STRING|P_VIM,
 			    (char_u *)&p_tc, PV_TC,
 			    {(char_u *)"followic", (char_u *)"followic"} SCTX_INIT},
-    {"tagfunc",    "tfu",   P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE,
+    {"tagfunc",    "tfu",   P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE|P_FUNC,
 #ifdef FEAT_EVAL
 			    (char_u *)&p_tfu, PV_TFU,
 			    {(char_u *)"", (char_u *)0L}
@@ -2632,7 +2628,7 @@ static struct vimoption options[] =
     {"thesaurus",   "tsr",  P_STRING|P_EXPAND|P_VI_DEF|P_ONECOMMA|P_NODUP|P_NDNAME,
 			    (char_u *)&p_tsr, PV_TSR,
 			    {(char_u *)"", (char_u *)0L} SCTX_INIT},
-    {"thesaurusfunc", "tsrfu",  P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE,
+    {"thesaurusfunc", "tsrfu",  P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE|P_FUNC,
 #ifdef FEAT_COMPL_FUNC
 			    (char_u *)&p_tsrfu, PV_TSRFU,
 			    {(char_u *)"", (char_u *)0L}
@@ -2651,35 +2647,18 @@ static struct vimoption options[] =
 			    (char_u *)&p_tm, PV_NONE,
 			    {(char_u *)1000L, (char_u *)0L} SCTX_INIT},
     {"title",	    NULL,   P_BOOL|P_VI_DEF,
-#ifdef FEAT_TITLE
 			    (char_u *)&p_title, PV_NONE,
-#else
-			    (char_u *)NULL, PV_NONE,
-#endif
 			    {(char_u *)FALSE, (char_u *)0L} SCTX_INIT},
     {"titlelen",    NULL,   P_NUM|P_VI_DEF,
-#ifdef FEAT_TITLE
 			    (char_u *)&p_titlelen, PV_NONE,
-#else
-			    (char_u *)NULL, PV_NONE,
-#endif
 			    {(char_u *)85L, (char_u *)0L} SCTX_INIT},
     {"titleold",    NULL,   P_STRING|P_VI_DEF|P_GETTEXT|P_SECURE|P_NO_MKRC,
-#ifdef FEAT_TITLE
 			    (char_u *)&p_titleold, PV_NONE,
 			    {(char_u *)N_("Thanks for flying Vim"),
 							       (char_u *)0L}
-#else
-			    (char_u *)NULL, PV_NONE,
-			    {(char_u *)0L, (char_u *)0L}
-#endif
 			    SCTX_INIT},
     {"titlestring", NULL,   P_STRING|P_VI_DEF|P_MLE,
-#ifdef FEAT_TITLE
 			    (char_u *)&p_titlestring, PV_NONE,
-#else
-			    (char_u *)NULL, PV_NONE,
-#endif
 			    {(char_u *)"", (char_u *)0L} SCTX_INIT},
     {"toolbar",     "tb",   P_STRING|P_ONECOMMA|P_VI_DEF|P_NODUP,
 #if defined(FEAT_TOOLBAR) && !defined(FEAT_GUI_MSWIN)
@@ -2962,6 +2941,9 @@ static struct vimoption options[] =
     {"writedelay",  "wd",   P_NUM|P_VI_DEF,
 			    (char_u *)&p_wd, PV_NONE,
 			    {(char_u *)0L, (char_u *)0L} SCTX_INIT},
+    {"xtermcodes",  NULL,   P_BOOL|P_VI_DEF,
+			    (char_u *)&p_xtermcodes, PV_NONE,
+			    {(char_u *)TRUE, (char_u *)0L} SCTX_INIT},
 
 // terminal output codes
 #define p_term(sss, vvv)   {sss, NULL, P_STRING|P_VI_DEF|P_RALL|P_SECURE, \

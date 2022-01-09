@@ -76,7 +76,7 @@ static int	KeyNoremap = 0;	    // remapping flags
 
 // typebuf.tb_buf has three parts: room in front (for result of mappings), the
 // middle for typeahead and room for new characters (which needs to be 3 *
-// MAXMAPLEN) for the Amiga).
+// MAXMAPLEN for the Amiga).
 #define TYPELEN_INIT	(5 * (MAXMAPLEN + 3))
 static char_u	typebuf_init[TYPELEN_INIT];	// initial typebuf.tb_buf
 static char_u	noremapbuf_init[TYPELEN_INIT];	// initial typebuf.tb_noremap
@@ -208,7 +208,7 @@ add_buff(
     }
     else if (buf->bh_curr == NULL)	// buffer has already been read
     {
-	iemsg(_("E222: Add to read buffer"));
+	iemsg(_(e_add_to_internal_buffer_that_was_already_read_from));
 	return;
     }
     else if (buf->bh_index != 0)
@@ -238,6 +238,22 @@ add_buff(
 	p->b_next = buf->bh_curr->b_next;
 	buf->bh_curr->b_next = p;
 	buf->bh_curr = p;
+    }
+}
+
+/*
+ * Delete "slen" bytes from the end of "buf".
+ * Only works when it was just added.
+ */
+    static void
+delete_buff_tail(buffheader_T *buf, int slen)
+{
+    int len = (int)STRLEN(buf->bh_curr->b_str);
+
+    if (len >= slen)
+    {
+	buf->bh_curr->b_str[len - slen] = NUL;
+	buf->bh_space += slen;
     }
 }
 
@@ -941,7 +957,7 @@ noremap_keys(void)
  *
  * If noremap is REMAP_YES, new string can be mapped again.
  * If noremap is REMAP_NONE, new string cannot be mapped again.
- * If noremap is REMAP_SKIP, fist char of new string cannot be mapped again,
+ * If noremap is REMAP_SKIP, first char of new string cannot be mapped again,
  * but abbreviations are allowed.
  * If noremap is REMAP_SCRIPT, new string cannot be mapped again, except for
  *			script-local mappings.
@@ -1010,7 +1026,7 @@ ins_typebuf(
 	if (typebuf.tb_len > 2147483647 - extra)
 	{
 	    // string is getting too long for a 32 bit int
-	    emsg(_(e_toocompl));    // also calls flush_buffers
+	    emsg(_(e_command_too_complex));    // also calls flush_buffers
 	    setcursor();
 	    return FAIL;
 	}
@@ -1100,12 +1116,13 @@ ins_typebuf(
  * Can be used for a character obtained by vgetc() that needs to be put back.
  * Uses cmd_silent, KeyTyped and KeyNoremap to restore the flags belonging to
  * the char.
+ * Returns the length of what was inserted.
  */
-    void
+    int
 ins_char_typebuf(int c, int modifier)
 {
-    char_u	buf[MB_MAXBYTES + 4];
-    int		idx = 0;
+    char_u	buf[MB_MAXBYTES * 3 + 4];
+    int		len = 0;
 
     if (modifier != 0)
     {
@@ -1113,19 +1130,33 @@ ins_char_typebuf(int c, int modifier)
 	buf[1] = KS_MODIFIER;
 	buf[2] = modifier;
 	buf[3] = NUL;
-	idx = 3;
+	len = 3;
     }
     if (IS_SPECIAL(c))
     {
-	buf[idx] = K_SPECIAL;
-	buf[idx + 1] = K_SECOND(c);
-	buf[idx + 2] = K_THIRD(c);
-	buf[idx + 3] = NUL;
-	idx += 3;
+	buf[len] = K_SPECIAL;
+	buf[len + 1] = K_SECOND(c);
+	buf[len + 2] = K_THIRD(c);
+	buf[len + 3] = NUL;
+	len += 3;
     }
     else
-	buf[(*mb_char2bytes)(c, buf + idx) + idx] = NUL;
+    {
+	char_u	*p = buf + len;
+	int	char_len = (*mb_char2bytes)(c, p);
+#ifdef FEAT_GUI
+	int	save_gui_in_use = gui.in_use;
+
+	gui.in_use = FALSE;
+#endif
+	// if the character contains CSI or K_SPECIAL bytes they need escaping
+	len += fix_input_buffer(p, char_len);
+#ifdef FEAT_GUI
+	gui.in_use = save_gui_in_use;
+#endif
+    }
     (void)ins_typebuf(buf, KeyNoremap, 0, !KeyTyped, cmd_silent);
+    return len;
 }
 
 /*
@@ -1302,6 +1333,22 @@ gotchars(char_u *chars, int len)
 }
 
 /*
+ * Undo the last gotchars() for "len" bytes.  To be used when putting a typed
+ * character back into the typeahead buffer, thus gotchars() will be called
+ * again.
+ * Only affects recorded characters.
+ */
+    void
+ungetchars(int len)
+{
+    if (reg_recording != 0)
+    {
+	delete_buff_tail(&recordbuff, len);
+	last_recorded_len -= len;
+    }
+}
+
+/*
  * Sync undo.  Called when typed characters are obtained from the typeahead
  * buffer, or when a menu is used.
  * Do not sync:
@@ -1467,7 +1514,7 @@ openscript(
     expand_env(name, NameBuff, MAXPATHL);
     if ((scriptin[curscript] = mch_fopen((char *)NameBuff, READBIN)) == NULL)
     {
-	semsg(_(e_notopen), name);
+	semsg(_(e_cant_open_file_str), name);
 	if (curscript)
 	    --curscript;
 	return;
@@ -2416,7 +2463,7 @@ handle_mapping(
 	    && State != ASKMORE
 	    && State != CONFIRM
 	    && !((ctrl_x_mode_not_default() && at_ctrl_x_key())
-		    || ((compl_cont_status & CONT_LOCAL)
+		    || (compl_status_local()
 			&& (tb_c1 == Ctrl_N || tb_c1 == Ctrl_P))))
     {
 #ifdef FEAT_GUI
@@ -2677,7 +2724,7 @@ handle_mapping(
 		if (mp == NULL)
 		{
 		    *keylenp = keylen;
-		    return map_result_get;    // got character, break for loop
+		    return map_result_get;    // get character from typeahead
 		}
 	}
 
@@ -2758,7 +2805,7 @@ handle_mapping(
 	 */
 	if (++*mapdepth >= p_mmd)
 	{
-	    emsg(_("E223: recursive mapping"));
+	    emsg(_(e_recursive_mapping));
 	    if (State & CMDLINE)
 		redrawcmdline();
 	    else
@@ -3060,7 +3107,7 @@ vgetorpeek(int advance)
 						      typebuf.tb_off];
 			    del_typebuf(1, 0);
 			}
-			break;
+			break;  // got character, break the for loop
 		    }
 
 		    // not enough characters, get more
@@ -3238,6 +3285,9 @@ vgetorpeek(int advance)
 		    // return from main_loop()
 		    if (pending_exmode_active)
 			exmode_active = EXMODE_NORMAL;
+
+		    // no chars to block abbreviation for
+		    typebuf.tb_no_abbr_cnt = 0;
 
 		    break;
 		}
@@ -3457,7 +3507,7 @@ vgetorpeek(int advance)
 inchar(
     char_u	*buf,
     int		maxlen,
-    long	wait_time)	    // milli seconds
+    long	wait_time)	    // milliseconds
 {
     int		len = 0;	    // init for GCC
     int		retesc = FALSE;	    // return ESC with gotint
@@ -3604,7 +3654,6 @@ fix_input_buffer(char_u *buf, int len)
 	    p += 2;
 	    i -= 2;
 	}
-# ifndef MSWIN
 	// When the GUI is not used CSI needs to be escaped.
 	else if (!gui.in_use && p[0] == CSI)
 	{
@@ -3614,7 +3663,6 @@ fix_input_buffer(char_u *buf, int len)
 	    *p = (int)KE_CSI;
 	    len += 2;
 	}
-# endif
 	else
 #endif
 	if (p[0] == NUL || (p[0] == K_SPECIAL

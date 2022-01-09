@@ -59,6 +59,7 @@
 #define P_NDNAME      0x8000000L // only normal dir name chars allowed
 #define P_RWINONLY   0x10000000L // only redraw current window
 #define P_MLE	     0x20000000L // under control of 'modelineexpr'
+#define P_FUNC	     0x40000000L // accept a function reference or a lambda
 
 // Returned by get_option_value().
 typedef enum {
@@ -484,7 +485,10 @@ EXTERN int	p_deco;		// 'delcombine'
 #ifdef FEAT_EVAL
 EXTERN char_u	*p_ccv;		// 'charconvert'
 #endif
+EXTERN int	p_cdh;		// 'cdhome'
+#ifdef FEAT_CINDENT
 EXTERN char_u	*p_cino;	// 'cinoptions'
+#endif
 #ifdef FEAT_CMDWIN
 EXTERN char_u	*p_cedit;	// 'cedit'
 EXTERN long	p_cwh;		// 'cmdwinheight'
@@ -657,10 +661,8 @@ EXTERN int	p_hkmapp;	// 'hkmapp'
 EXTERN int	p_arshape;	// 'arabicshape'
 # endif
 #endif
-#ifdef FEAT_TITLE
 EXTERN int	p_icon;		// 'icon'
 EXTERN char_u	*p_iconstring;	// 'iconstring'
-#endif
 EXTERN int	p_ic;		// 'ignorecase'
 #if defined(FEAT_XIM) && defined(FEAT_GUI_GTK)
 EXTERN char_u	*p_imak;	// 'imactivatekey'
@@ -730,13 +732,6 @@ EXTERN char_u	*p_mef;		// 'makeef'
 EXTERN char_u	*p_mp;		// 'makeprg'
 #endif
 EXTERN char_u	*p_mps;		// 'matchpairs'
-#ifdef FEAT_SIGNS
-EXTERN char_u  *p_scl;		// signcolumn
-#endif
-#ifdef FEAT_SYN_HL
-EXTERN char_u   *p_cc;		// 'colorcolumn'
-EXTERN int      p_cc_cols[256]; // array for 'colorcolumn' columns
-#endif
 EXTERN long	p_mat;		// 'matchtime'
 EXTERN long	p_mco;		// 'maxcombine'
 #ifdef FEAT_EVAL
@@ -840,7 +835,9 @@ EXTERN int	p_ru;		// 'ruler'
 EXTERN char_u	*p_ruf;		// 'rulerformat'
 #endif
 EXTERN char_u	*p_pp;		// 'packpath'
+#ifdef FEAT_QUICKFIX
 EXTERN char_u	*p_qftf;	// 'quickfixtextfunc'
+#endif
 EXTERN char_u	*p_rtp;		// 'runtimepath'
 EXTERN long	p_sj;		// 'scrolljump'
 #if defined(MSWIN) && defined(FEAT_GUI)
@@ -949,7 +946,9 @@ EXTERN unsigned	swb_flags;
 #define SWB_NEWTAB		0x008
 #define SWB_VSPLIT		0x010
 #define SWB_USELAST		0x020
+#ifdef FEAT_SYN_HL
 EXTERN char_u	*p_syn;		// 'syntax'
+#endif
 EXTERN long	p_ts;		// 'tabstop'
 EXTERN int	p_tbs;		// 'tagbsearch'
 EXTERN char_u	*p_tc;		// 'tagcase'
@@ -986,12 +985,10 @@ EXTERN long	p_tw;		// 'textwidth'
 EXTERN int	p_to;		// 'tildeop'
 EXTERN int	p_timeout;	// 'timeout'
 EXTERN long	p_tm;		// 'timeoutlen'
-#ifdef FEAT_TITLE
 EXTERN int	p_title;	// 'title'
 EXTERN long	p_titlelen;	// 'titlelen'
 EXTERN char_u	*p_titleold;	// 'titleold'
 EXTERN char_u	*p_titlestring;	// 'titlestring'
-#endif
 EXTERN char_u	*p_tsr;		// 'thesaurus'
 EXTERN int	p_ttimeout;	// 'ttimeout'
 EXTERN long	p_ttm;		// 'ttimeoutlen'
@@ -1028,8 +1025,8 @@ EXTERN unsigned ttym_flags;
 # define TTYM_URXVT		0x40
 # define TTYM_SGR		0x80
 #endif
-EXTERN char_u	*p_udir;	// 'undodir'
 #ifdef FEAT_PERSISTENT_UNDO
+EXTERN char_u	*p_udir;	// 'undodir'
 EXTERN int	p_udf;		// 'undofile'
 #endif
 EXTERN long	p_ul;		// 'undolevels'
@@ -1097,6 +1094,7 @@ EXTERN int	p_write;	// 'write'
 EXTERN int	p_wa;		// 'writeany'
 EXTERN int	p_wb;		// 'writebackup'
 EXTERN long	p_wd;		// 'writedelay'
+EXTERN int	p_xtermcodes;	// 'xtermcodes'
 
 /*
  * "indir" values for buffer-local options.

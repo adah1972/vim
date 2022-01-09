@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 8.2.  Last change: 2021 Nov 26
+*todo.txt*      For Vim version 8.2.  Last change: 2022 Jan 08
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -38,41 +38,27 @@ browser use: https://github.com/vim/vim/issues/1234
 							*known-bugs*
 -------------------- Known bugs and current work -----------------------
 
-refactor ex_let_one() to subfunctions.
-
-Vim9 - Make everything work:
-- "filter #pat# ls" should work, #pat# is not a comment
-    vim9script
-    edit foobar
-    filter #foobar# ls
-- Check TODO items in vim9compile.c and vim9execute.c
-- use CheckLegacyAndVim9Success(lines) in many more places
-- For builtin functions using tv_get_string*() use check_for_string() to be
-  more strict about the argument type (not a bool).
-    done: balloon_()
-- Check many more builtin function arguments at compile time.
-    map() could check that the return type of the function argument matches
-    the type of the list or dict member. (#8092)
-    Same for other functions, such as searchpair().
-- Test try/catch and throw better, also nested.
-  Test that return inside try/finally jumps to finally and then returns.
-- Test that a function defined inside a :def function is local to that
-  function, g: functions can be defined and script-local functions cannot be
-  defined.
-- Unexpected error message when using "var x: any | x.key = 9", because "x" is
-  given the type number.  Can we use VAR_ANY?
-- Check performance with callgrind and kcachegrind.
+Autoload import syntax:
+    import autoload "filename"
+    import autoload "filename" as name
+doesn't load the script yet
+  autoload items can be used without the "#dir#file#" prefix, but file.item
+  Add a test_override() item to load the script and compile functions the
+  moment it is encountered, so that types are checked.
+"vim9script autoload" in an autoload script, using "export" will prefix
+  "dir#file#" to the exported item.
 
 Once Vim9 is stable:
-- Add the "vim9script" feature, can use has('vim9script')
-- Change the help to prefer Vim9 syntax where appropriate
 - Add all the error numbers in a good place in documentation.
-- In the generic eval docs, point out the Vim9 syntax where it differs.
+    done until E653
 - Use Vim9 for runtime files.
-    PR #7497 for autoload/ccomplete.vim
 
 Further Vim9 improvements, possibly after launch:
-- better implementation for partial and tests for that.
+- Check performance with callgrind and kcachegrind.
+- Better implementation for partial and tests for that.
+- when using "const" mark the variable type as const with TTFLAG_CONST, so
+  that an error is given at compile time when trying to change it.  E.g. for a
+  const list and trying to call add().
 - Compile options that are an expression, e.g. "expr:" in 'spellsuggest',
   'foldexpr', 'foldtext', 'printexpr', 'diffexpr', 'patchexpr', 'charconvert',
   'balloonexpr', 'includeexpr', 'indentexpr', 'formatexpr'.
@@ -81,10 +67,9 @@ Further Vim9 improvements, possibly after launch:
   evaluation.
   Use the location where the option was set for deciding whether it's to be
   evaluated in Vim9 script context.
-- Handle command that is only a range more efficient than calling ISN_EXEC
 - implement :type, "import type"
-- implement enum,  "import enum".
-- implement class and interface: See |vim9-classes|
+- implement :enum,  "import enum".
+- implement :class and :interface: See |vim9-classes|
 - For range: make table of first ASCII character with flag to quickly check if
   it can be a Vim9 command. E.g. "+" can, but "." can't.
 - Inline call to map() and filter(), better type checking.
@@ -95,6 +80,9 @@ Further Vim9 improvements, possibly after launch:
     has(featureName), len(someString)
 - Implement as part of an expression: ++expr, --expr, expr++, expr--.
 
+Update list of features to vote on:
+- multiple cursors
+- built-in LSP support
 
 Popup windows:
 - Preview popup not properly updated when it overlaps with completion menu.
@@ -137,8 +125,6 @@ Text properties:
   where property fits in.
   Or Should we let the textprop highlight overrule other (e.g. diff) highlight
   if the priority is above a certain value?  (#7392)
-- Popup attached to text property stays visible when text is no longer
-  visible. (#7736)
 - Popup attached to text property stays visible when text is deleted with
   "cc". (#7737)  "C" works OK.  "dd" also files in a buffer with a single
   line.
@@ -200,8 +186,6 @@ Terminal emulator window:
 - GUI: When using ":set go+=!" a system() call causes the hit-enter prompt.
   (#3327)
 - Allow for specifying the directory, with ++cwd={dir}.
-- With a vertical split only one window is updated. (Linwei, 2018 Jun 2,
-  #2977)
 - When pasting should call vterm_keyboard_start_paste(), e.g. when using
   K_MIDDLEMOUSE, calling insert_reg().
 - Users expect parsing the :term argument like a shell does, also support
@@ -263,6 +247,10 @@ test_arglist func Test_all_not_allowed_from_cmdwin() hangs on MS-Windows.
 
 Mapping with partial match not executed properly in GTK. (Ingo Karkat, #7082)
 
+Information for a specific terminal (e.g. gnome, tmux, konsole, alacritty) is
+spread out.  Make a section with copy/paste examples of script and pointers to
+more information.
+
 Problem that a previous silent ":throw" causes a following try/catch not to
 work. (ZyX, 2013 Sep 28) With examples: (Malcolm Rowe, 2015 Dec 24)
 Also see #8487 for an example.
@@ -272,6 +260,8 @@ Was originally written by Felipe Morales.
 
 Request to use "." for the cursor column in search pattern \%<.c and \%<.v.
 (#8179)
+
+":filter set termcap" only filters terminal codes, not keys. (#9297)
 
 Remove SPACE_IN_FILENAME ? It is only used for completion.
 
@@ -416,8 +406,6 @@ Athena is OK.
 Motif: Build on Ubuntu can't enter any text in dialog text fields.
 Running test_gui and test_gui_init with Motif sometimes kills the window
 manager.  Problem with Motif?
-
-Patch to add :argdedupe. (Nir Lichtman, #6235)
 
 When editing a file with ":edit" the output of :swapname is relative, while
 editing it with "vim file" it is absolute. (#355)
@@ -848,9 +836,7 @@ window for the buffer.
 Win32 key codes are messy.  Mike Williams tried to fix that, but now old
 mappings no longer work.  Create a new terminal for the better solution?
 
-Compiler warnings (geeknik, 2017 Oct 26):
-- signed integer overflow in do_sub() (#2249)
-- signed integer overflow in get_address() (#2248)
+Compiler warning (geeknik, 2017 Oct 26):
 - undefined left shift in get_string_tv() (#2250)
 
 Add Native language protocol server (LSP) support. (Yegappan Lakshmanan, 2018
@@ -1469,10 +1455,6 @@ Patch to avoid redrawing tabline when the popup menu is visible.
 When the CursorMovedI event triggers, and CTRL-X was typed, a script cannot
 restore the mode properly. (Andrew Stewart, 2016 Apr 20)
 Do not trigger the event?
-
-Patch to fix display of listchars on the cursorline. (Nayuri Aohime, 2013)
-Update suggested by Yasuhiro Matsumoto, 2014 Nov 25:
-https://gist.github.com/presuku/d3d6b230b9b6dcfc0477
 
 Patch to make the behavior of "w" more straightforward, but not Vi compatible.
 With a 'cpo' flag.  (Christian Brabandt, 2016 Feb 8)
@@ -3901,7 +3883,7 @@ User Friendlier:
     $HOME/_vimrc, etc.) and add "edit vimrc" to the File menu.
 -   Add a way to save local settings and mappings into a new plugin file.
     ":mkplugin <file>"?
--   Add mappings local to a window: ":map <window> ..."?
+-   Add mappings local to a window: ":map <window> ..."  #9339
 9   Add buffer-local menu.  Should offer a choice between removing the menu or
     disabling it.  Be careful that tear-offs don't disappear (keep one empty
     item?).

@@ -648,12 +648,23 @@ func Test_usercmd_with_block()
   call CheckScriptFailure(lines, 'E1026:')
 
   let lines =<< trim END
-      command BarCommand {
+      command HelloThere {
          echo 'hello' | echo 'there'
         }
-      BarCommand
+      HelloThere
   END
-  call CheckScriptFailure(lines, 'E1231:')
+  call CheckScriptSuccess(lines)
+  delcommand HelloThere
+
+  let lines =<< trim END
+      command BadCommand {
+         echo  {
+         'key': 'value',
+          }
+          }
+      BadCommand
+  END
+  call CheckScriptFailure(lines, 'E1128:')
 endfunc
 
 func Test_delcommand_buffer()
@@ -676,5 +687,52 @@ func Test_delcommand_buffer()
   delcommand Global
   call assert_equal(0, exists(':Global'))
 endfunc
+
+def Test_count_with_quotes()
+  command -count GetCount g:nr = <count>
+  execute("GetCount 1'2")
+  assert_equal(12, g:nr)
+  execute("GetCount 1'234'567")
+  assert_equal(1'234'567, g:nr)
+
+  execute("GetCount 1'234'567'890'123'456'789'012")
+  assert_equal(v:sizeoflong == 8 ? 9223372036854775807 : 2147483647, g:nr)
+
+  # TODO: test with negative number once this is supported
+
+  assert_fails("GetCount '12", "E488:")
+  assert_fails("GetCount 12'", "E488:")
+  assert_fails("GetCount 1''2", "E488:")
+
+  assert_fails(":1'2GetCount", 'E492:')
+  new
+  setline(1, 'text')
+  normal ma
+  execute(":1, 'aprint")
+  bwipe!
+
+  unlet g:nr
+  delcommand GetCount
+enddef
+
+func DefCmd(name)
+  if len(a:name) > 30
+    return
+  endif
+  exe 'command ' .. a:name .. ' call DefCmd("' .. a:name .. 'x")'
+  echo a:name
+  exe a:name
+endfunc
+
+func Test_recursive_define()
+  call DefCmd('Command')
+
+  let name = 'Command'
+  while len(name) < 30
+    exe 'delcommand ' .. name
+    let name ..= 'x'
+  endwhile
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

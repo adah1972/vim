@@ -118,15 +118,12 @@ static void clip_update(void);
 static void xterm_update(void);
 # endif
 
-# if defined(FEAT_XCLIPBOARD) || defined(FEAT_TITLE)
 Window	    x11_window = 0;
-# endif
 Display	    *x11_display = NULL;
 #endif
 
 static int ignore_sigtstp = FALSE;
 
-#ifdef FEAT_TITLE
 static int get_x11_title(int);
 
 static char_u	*oldtitle = NULL;
@@ -134,7 +131,6 @@ static volatile sig_atomic_t oldtitle_outdated = FALSE;
 static int	unix_did_set_title = FALSE;
 static char_u	*oldicon = NULL;
 static int	did_set_icon = FALSE;
-#endif
 
 static void may_core_dump(void);
 
@@ -161,6 +157,11 @@ static void handle_resize(void);
 #if defined(SIGWINCH)
 static RETSIGTYPE sig_winch SIGPROTOARG;
 #endif
+#if defined(SIGTSTP)
+static RETSIGTYPE sig_tstp SIGPROTOARG;
+// volatile because it is used in signal handler sig_tstp() and sigcont_handler().
+static volatile sig_atomic_t in_mch_suspend = FALSE;
+#endif
 #if defined(SIGINT)
 static RETSIGTYPE catch_sigint SIGPROTOARG;
 #endif
@@ -170,8 +171,7 @@ static RETSIGTYPE catch_sigusr1 SIGPROTOARG;
 #if defined(SIGPWR)
 static RETSIGTYPE catch_sigpwr SIGPROTOARG;
 #endif
-#if defined(SIGALRM) && defined(FEAT_X11) \
-	&& defined(FEAT_TITLE) && !defined(FEAT_GUI_GTK)
+#if defined(SIGALRM) && defined(FEAT_X11) && !defined(FEAT_GUI_GTK)
 # define SET_SIG_ALARM
 static RETSIGTYPE sig_alarm SIGPROTOARG;
 // volatile because it is used in signal handler sig_alarm().
@@ -202,6 +202,8 @@ static int save_patterns(int num_pat, char_u **pat, int *num_file, char_u ***fil
 
 // volatile because it is used in signal handler sig_winch().
 static volatile sig_atomic_t do_resize = FALSE;
+// volatile because it is used in signal handler sig_tstp().
+static volatile sig_atomic_t got_tstp = FALSE;
 static char_u	*extra_shell_arg = NULL;
 static int	show_shell_mess = TRUE;
 // volatile because it is used in signal handler deathtrap().
@@ -856,6 +858,24 @@ sig_winch SIGDEFARG(sigarg)
 }
 #endif
 
+#if defined(SIGTSTP)
+    static RETSIGTYPE
+sig_tstp SIGDEFARG(sigarg)
+{
+    // Second time we get called we actually need to suspend
+    if (in_mch_suspend)
+    {
+	signal(SIGTSTP, ignore_sigtstp ? SIG_IGN : SIG_DFL);
+	raise(sigarg);
+    }
+
+    // this is not required on all systems, but it doesn't hurt anybody
+    signal(SIGTSTP, (RETSIGTYPE (*)())sig_tstp);
+    got_tstp = TRUE;
+    SIGRETURN;
+}
+#endif
+
 #if defined(SIGINT)
     static RETSIGTYPE
 catch_sigint SIGDEFARG(sigarg)
@@ -1152,11 +1172,10 @@ deathtrap SIGDEFARG(sigarg)
     static void
 after_sigcont(void)
 {
-# ifdef FEAT_TITLE
     // Don't change "oldtitle" in a signal handler, set a flag to obtain it
     // again later.
     oldtitle_outdated = TRUE;
-# endif
+
     settmode(TMODE_RAW);
     need_check_timestamps = TRUE;
     did_check_timestamps = FALSE;
@@ -1164,7 +1183,6 @@ after_sigcont(void)
 
 #if defined(SIGCONT)
 static RETSIGTYPE sigcont_handler SIGPROTOARG;
-static volatile sig_atomic_t in_mch_suspend = FALSE;
 
 /*
  * With multi-threading, suspending might not work immediately.  Catch the
@@ -1359,7 +1377,7 @@ set_signals(void)
 
 #ifdef SIGTSTP
     // See mch_init() for the conditions under which we ignore SIGTSTP.
-    signal(SIGTSTP, ignore_sigtstp ? SIG_IGN : SIG_DFL);
+    signal(SIGTSTP, ignore_sigtstp ? SIG_IGN : (RETSIGTYPE (*)())sig_tstp);
 #endif
 #if defined(SIGCONT)
     signal(SIGCONT, sigcont_handler);
@@ -1579,8 +1597,7 @@ mch_input_isatty(void)
 
 #ifdef FEAT_X11
 
-# if defined(ELAPSED_TIMEVAL) \
-	&& (defined(FEAT_XCLIPBOARD) || defined(FEAT_TITLE))
+# if defined(ELAPSED_TIMEVAL)
 
 /*
  * Give a message about the elapsed time for opening the X window.
@@ -1593,7 +1610,7 @@ xopen_message(long elapsed_msec)
 # endif
 #endif
 
-#if defined(FEAT_X11) && (defined(FEAT_TITLE) || defined(FEAT_XCLIPBOARD))
+#if defined(FEAT_X11)
 /*
  * A few functions shared by X11 title and clipboard code.
  */
@@ -1776,7 +1793,6 @@ test_x11_window(Display *dpy)
 }
 #endif
 
-#ifdef FEAT_TITLE
 
 #ifdef FEAT_X11
 
@@ -2316,7 +2332,6 @@ mch_restore_title(int which)
     }
 }
 
-#endif // FEAT_TITLE
 
 /*
  * Return TRUE if "name" looks like some xterm name.
@@ -2349,6 +2364,7 @@ use_xterm_like_mouse(char_u *name)
 	    && (term_is_xterm
 		|| STRNICMP(name, "screen", 6) == 0
 		|| STRNICMP(name, "tmux", 4) == 0
+		|| STRNICMP(name, "gnome", 5) == 0
 		|| STRICMP(name, "st") == 0
 		|| STRNICMP(name, "st-", 3) == 0
 		|| STRNICMP(name, "stterm", 6) == 0));
@@ -2686,7 +2702,7 @@ mch_FullName(
 #endif
 		l = mch_chdir((char *)olddir);
 	    if (l != 0)
-		emsg(_(e_prev_dir));
+		emsg(_(e_cannot_go_back_to_previous_directory));
 	}
 #ifdef HAVE_FCHDIR
 	if (fd >= 0)
@@ -3173,7 +3189,7 @@ executable_file(char_u *name)
     // Therefore, this check does not have any sense - let keep us to the
     // conventions instead:
     // *.COM and *.EXE files are the executables - the rest are not. This is
-    // not ideal but better then it was.
+    // not ideal but better than it was.
     int vms_executable = 0;
     if (S_ISREG(st.st_mode) && mch_access((char *)name, X_OK) == 0)
     {
@@ -3349,10 +3365,8 @@ mch_free_mem(void)
 # if defined(HAVE_SIGALTSTACK) || defined(HAVE_SIGSTACK)
     VIM_CLEAR(signal_stack);
 # endif
-# ifdef FEAT_TITLE
     vim_free(oldtitle);
     vim_free(oldicon);
-# endif
 }
 #endif
 
@@ -3386,7 +3400,15 @@ exit_scroll(void)
 }
 
 #ifdef USE_GCOV_FLUSH
-extern void __gcov_flush();
+# if (defined(__GNUC__) \
+	    && ((__GNUC__ == 11 && __GNUC_MINOR__ >= 1) || (__GNUC__ >= 12))) \
+	|| (defined(__clang__) && (__clang_major__ >= 12))
+extern void __gcov_dump(void);
+extern void __gcov_reset(void);
+#  define __gcov_flush() do { __gcov_dump(); __gcov_reset(); } while (0)
+# else
+extern void __gcov_flush(void);
+# endif
 #endif
 
     void
@@ -3403,14 +3425,13 @@ mch_exit(int r)
 #endif
     {
 	settmode(TMODE_COOK);
-#ifdef FEAT_TITLE
 	if (!is_not_a_term())
 	{
 	    // restore xterm title and icon name
 	    mch_restore_title(SAVE_RESTORE_BOTH);
 	    term_pop_title(SAVE_RESTORE_BOTH);
 	}
-#endif
+
 	/*
 	 * When t_ti is not empty but it doesn't cause swapping terminal
 	 * pages, need to output a newline when msg_didout is set.  But when
@@ -4600,9 +4621,7 @@ mch_call_shell_system(
 	cur_tmode = TMODE_UNKNOWN;
 	settmode(TMODE_RAW);	// set to raw mode
     }
-# ifdef FEAT_TITLE
     resettitle();
-# endif
 # if defined(FEAT_CLIPBOARD) && defined(FEAT_X11)
     restore_clipboard();
 # endif
@@ -5441,9 +5460,7 @@ error:
     if (!did_settmode)
 	if (tmode == TMODE_RAW)
 	    settmode(TMODE_RAW);	// set to raw mode
-# ifdef FEAT_TITLE
     resettitle();
-# endif
     vim_free(argv);
     vim_free(tofree1);
     vim_free(tofree2);
@@ -5511,7 +5528,7 @@ mch_job_start(char **argv, job_T *job, jobopt_T *options, int is_terminal)
 	fd_in[0] = mch_open((char *)fname, O_RDONLY, 0);
 	if (fd_in[0] < 0)
 	{
-	    semsg(_(e_notopen), fname);
+	    semsg(_(e_cant_open_file_str), fname);
 	    goto failed;
 	}
     }
@@ -5529,7 +5546,7 @@ mch_job_start(char **argv, job_T *job, jobopt_T *options, int is_terminal)
 	fd_out[1] = mch_open((char *)fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (fd_out[1] < 0)
 	{
-	    semsg(_(e_notopen), fname);
+	    semsg(_(e_cant_open_file_str), fname);
 	    goto failed;
 	}
     }
@@ -5543,7 +5560,7 @@ mch_job_start(char **argv, job_T *job, jobopt_T *options, int is_terminal)
 	fd_err[1] = mch_open((char *)fname, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	if (fd_err[1] < 0)
 	{
-	    semsg(_(e_notopen), fname);
+	    semsg(_(e_cant_open_file_str), fname);
 	    goto failed;
 	}
     }
@@ -6393,6 +6410,15 @@ select_eintr:
 # ifdef EINTR
 	if (ret == -1 && errno == EINTR)
 	{
+	    // Check whether the EINTR is caused by SIGTSTP
+	    if (got_tstp && !in_mch_suspend)
+	    {
+		exarg_T ea;
+		ea.forceit = TRUE;
+		ex_stop(&ea);
+		got_tstp = FALSE;
+	    }
+
 	    // Check whether window has been resized, EINTR may be caused by
 	    // SIGWINCH.
 	    if (do_resize)
@@ -6601,7 +6627,7 @@ mch_expand_wildcards(
      */
     if ((tempname = vim_tempname('o', FALSE)) == NULL)
     {
-	emsg(_(e_notmp));
+	emsg(_(e_cant_get_temp_file_name));
 	return FAIL;
     }
 
@@ -6813,7 +6839,7 @@ mch_expand_wildcards(
 	    if (!(flags & EW_SILENT))
 #endif
 	    {
-		msg(_(e_wildexpand));
+		msg(_(e_cannot_expand_wildcards));
 		msg_start();		// don't overwrite this message
 	    }
 	}
@@ -6833,7 +6859,7 @@ mch_expand_wildcards(
 	// Something went wrong, perhaps a file name with a special char.
 	if (!(flags & EW_SILENT))
 	{
-	    msg(_(e_wildexpand));
+	    msg(_(e_cannot_expand_wildcards));
 	    msg_start();		// don't overwrite this message
 	}
 	vim_free(tempname);
@@ -6862,7 +6888,7 @@ mch_expand_wildcards(
     if (i != (int)len)
     {
 	// unexpected read error
-	semsg(_(e_notread), tempname);
+	semsg(_(e_cant_read_file_str), tempname);
 	vim_free(tempname);
 	vim_free(buffer);
 	return FAIL;
@@ -7183,7 +7209,7 @@ gpm_open(void)
 	    // we are going to suspend or starting an external process
 	    // so we shouldn't  have problem with this
 # ifdef SIGTSTP
-	    signal(SIGTSTP, restricted ? SIG_IGN : SIG_DFL);
+	    signal(SIGTSTP, restricted ? SIG_IGN : (RETSIGTYPE (*)())sig_tstp);
 # endif
 	    return 1; // succeed
 	}
@@ -7549,7 +7575,7 @@ mch_libcall(
 	    for (i = 0; signal_info[i].sig != -1; i++)
 		if (lc_signal == signal_info[i].sig)
 		    break;
-	    semsg("E368: got SIG%s in libcall()", signal_info[i].name);
+	    semsg(e_got_sig_str_in_libcall, signal_info[i].name);
 	}
 #  endif
 # endif
@@ -7568,7 +7594,7 @@ mch_libcall(
 
     if (!success)
     {
-	semsg(_(e_libcall), funcname);
+	semsg(_(e_library_call_failed_for_str), funcname);
 	return FAIL;
     }
 

@@ -348,16 +348,32 @@ put_view(
     // Edit the file.  Skip this when ":next" already did it.
     if (add_edit && (!did_next || wp->w_arg_idx_invalid))
     {
+	if (bt_help(wp->w_buffer))
+	{
+	    char *curtag = "";
+
+	    // A help buffer needs some options to be set.
+	    // First, create a new empty buffer with "buftype=help".
+	    // Then ":help" will re-use both the buffer and the window and set
+	    // the options, even when "options" is not in 'sessionoptions'.
+	    if (0 < wp->w_tagstackidx
+		    && wp->w_tagstackidx <= wp->w_tagstacklen)
+		curtag = (char *)wp->w_tagstack[wp->w_tagstackidx - 1].tagname;
+
+	    if (put_line(fd, "enew | setl bt=help") == FAIL
+		    || fprintf(fd, "help %s", curtag) < 0
+		    || put_eol(fd) == FAIL)
+		return FAIL;
+	}
 # ifdef FEAT_TERMINAL
-	if (bt_terminal(wp->w_buffer))
+	else if (bt_terminal(wp->w_buffer))
 	{
 	    if (term_write_session(fd, wp, terminal_bufs) == FAIL)
 		return FAIL;
 	}
-	else
 # endif
 	// Load the file.
-	if (wp->w_buffer->b_ffname != NULL
+	else if (wp->w_buffer->b_ffname != NULL
 # ifdef FEAT_QUICKFIX
 		&& !bt_nofilename(wp->w_buffer)
 # endif
@@ -1298,7 +1314,7 @@ ex_mkrc(exarg_T	*eap)
 			|| ((ssop_flags & SSOP_CURDIR) && globaldir != NULL)))
 		    {
 			if (mch_chdir((char *)dirnow) != 0)
-			    emsg(_(e_prev_dir));
+			    emsg(_(e_cannot_go_back_to_previous_directory));
 			shorten_fnames(TRUE);
 		    }
 		    vim_free(dirnow);
@@ -1331,7 +1347,7 @@ ex_mkrc(exarg_T	*eap)
 	failed |= fclose(fd);
 
 	if (failed)
-	    emsg(_(e_write));
+	    emsg(_(e_error_while_writing));
 #if defined(FEAT_SESSION)
 	else if (eap->cmdidx == CMD_mksession)
 	{

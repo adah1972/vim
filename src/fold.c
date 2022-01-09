@@ -65,8 +65,6 @@ static void foldDelMarker(linenr_T lnum, char_u *marker, int markerlen);
 static void foldUpdateIEMS(win_T *wp, linenr_T top, linenr_T bot);
 static void parseMarker(win_T *wp);
 
-static char *e_nofold = N_("E490: No fold found");
-
 /*
  * While updating the folds lines between invalid_top and invalid_bot have an
  * undefined fold level.  Only used for the window currently being updated.
@@ -412,7 +410,7 @@ opFoldRange(
 	    (void)hasFolding(lnum, NULL, &lnum_next);
     }
     if (done == DONE_NOTHING)
-	emsg(_(e_nofold));
+	emsg(_(e_no_fold_found));
     // Force a redraw to remove the Visual highlighting.
     if (had_visual)
 	redraw_curbuf_later(INVERTED);
@@ -563,9 +561,9 @@ foldManualAllowed(int create)
     if (foldmethodIsManual(curwin) || foldmethodIsMarker(curwin))
 	return TRUE;
     if (create)
-	emsg(_("E350: Cannot create fold with current 'foldmethod'"));
+	emsg(_(e_cannot_create_fold_with_current_foldmethod));
     else
-	emsg(_("E351: Cannot delete fold with current 'foldmethod'"));
+	emsg(_(e_cannot_delete_fold_with_current_foldmethod));
     return FALSE;
 }
 
@@ -649,7 +647,7 @@ foldCreate(linenr_T start, linenr_T end)
     if (ga_grow(gap, 1) == OK)
     {
 	fp = (fold_T *)gap->ga_data + i;
-	ga_init2(&fold_ga, (int)sizeof(fold_T), 10);
+	ga_init2(&fold_ga, sizeof(fold_T), 10);
 
 	// Count number of folds that will be contained in the new fold.
 	for (cont = 0; i + cont < gap->ga_len; ++cont)
@@ -785,7 +783,7 @@ deleteFold(
     }
     if (!did_one)
     {
-	emsg(_(e_nofold));
+	emsg(_(e_no_fold_found));
 	// Force a redraw to remove the Visual highlighting.
 	if (had_visual)
 	    redraw_curbuf_later(INVERTED);
@@ -1020,7 +1018,7 @@ foldMoveTo(
     void
 foldInitWin(win_T *new_win)
 {
-    ga_init2(&new_win->w_folds, (int)sizeof(fold_T), 10);
+    ga_init2(&new_win->w_folds, sizeof(fold_T), 10);
 }
 
 // find_wl_entry() {{{2
@@ -1235,7 +1233,7 @@ setFoldRepeat(linenr_T lnum, long count, int do_open)
 	{
 	    // Only give an error message when no fold could be opened.
 	    if (n == 0 && !(done & DONE_FOLD))
-		emsg(_(e_nofold));
+		emsg(_(e_no_fold_found));
 	    break;
 	}
     }
@@ -1387,7 +1385,7 @@ setManualFoldWin(
 	done |= DONE_FOLD;
     }
     else if (donep == NULL && wp == curwin)
-	emsg(_(e_nofold));
+	emsg(_(e_no_fold_found));
 
     if (donep != NULL)
 	*donep |= done;
@@ -2513,7 +2511,7 @@ foldUpdateIEMSRecurse(
 	     */
 	    while (!got_int)
 	    {
-		// set concat to 1 if it's allowed to concatenated this fold
+		// set concat to 1 if it's allowed to concatenate this fold
 		// with a previous one that touches it.
 		if (flp->start != 0 || flp->had_end <= MAX_LEVEL)
 		    concat = 0;
@@ -2870,7 +2868,7 @@ foldInsert(garray_T *gap, int i)
     if (gap->ga_len > 0 && i < gap->ga_len)
 	mch_memmove(fp + 1, fp, sizeof(fold_T) * (gap->ga_len - i));
     ++gap->ga_len;
-    ga_init2(&fp->fd_nested, (int)sizeof(fold_T), 10);
+    ga_init2(&fp->fd_nested, sizeof(fold_T), 10);
     return OK;
 }
 

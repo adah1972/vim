@@ -171,7 +171,7 @@ vim_strsave_shellescape(char_u *string, int do_special, int do_newline)
     // itself must be escaped to get a literal '\'.
     fish_like = fish_like_shell();
 
-    // PowerShell uses it's own version for quoting single quotes
+    // PowerShell uses its own version for quoting single quotes
     shname = gettail(p_sh);
     powershell = strstr((char *)shname, "pwsh") != NULL;
 # ifdef MSWIN
@@ -764,7 +764,6 @@ concat_str(char_u *str1, char_u *str2)
 }
 
 #if defined(FEAT_EVAL) || defined(PROTO)
-
 /*
  * Return string "str" in ' quotes, doubling ' characters.
  * If "str" is NULL an empty string is assumed.
@@ -807,6 +806,183 @@ string_quote(char_u *str, int function)
 	*r++ = NUL;
     }
     return s;
+}
+
+/*
+ * Count the number of times "needle" occurs in string "haystack". Case is
+ * ignored if "ic" is TRUE.
+ */
+    long
+string_count(char_u *haystack, char_u *needle, int ic)
+{
+    long	n = 0;
+    char_u	*p = haystack;
+    char_u	*next;
+
+    if (p == NULL || needle == NULL || *needle == NUL)
+	return 0;
+
+    if (ic)
+    {
+	size_t len = STRLEN(needle);
+
+	while (*p != NUL)
+	{
+	    if (MB_STRNICMP(p, needle, len) == 0)
+	    {
+		++n;
+		p += len;
+	    }
+	    else
+		MB_PTR_ADV(p);
+	}
+    }
+    else
+	while ((next = (char_u *)strstr((char *)p, (char *)needle)) != NULL)
+	{
+	    ++n;
+	    p = next + STRLEN(needle);
+	}
+
+    return n;
+}
+
+/*
+ * Make a typval_T of the first character of "input" and store it in "output".
+ * Return OK or FAIL.
+ */
+    static int
+copy_first_char_to_tv(char_u *input, typval_T *output)
+{
+    char_u	buf[MB_MAXBYTES + 1];
+    int		len;
+
+    if (input == NULL || output == NULL)
+	return FAIL;
+
+    len = has_mbyte ? mb_ptr2len(input) : 1;
+    STRNCPY(buf, input, len);
+    buf[len] = NUL;
+    output->v_type = VAR_STRING;
+    output->vval.v_string = vim_strsave(buf);
+
+    return output->vval.v_string == NULL ? FAIL : OK;
+}
+
+/*
+ * Implementation of map() and filter() for a String. Apply "expr" to every
+ * character in string "str" and return the result in "rettv".
+ */
+    void
+string_filter_map(
+	char_u		*str,
+	filtermap_T	filtermap,
+	typval_T	*expr,
+	typval_T	*rettv)
+{
+    char_u	*p;
+    typval_T	tv;
+    garray_T	ga;
+    int		len = 0;
+    int		idx = 0;
+    int		rem;
+
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
+
+    // set_vim_var_nr() doesn't set the type
+    set_vim_var_type(VV_KEY, VAR_NUMBER);
+
+    ga_init2(&ga, sizeof(char), 80);
+    for (p = str; *p != NUL; p += len)
+    {
+	typval_T newtv;
+
+	if (copy_first_char_to_tv(p, &tv) == FAIL)
+	    break;
+	len = (int)STRLEN(tv.vval.v_string);
+
+	set_vim_var_nr(VV_KEY, idx);
+	if (filter_map_one(&tv, expr, filtermap, &newtv, &rem) == FAIL
+		|| did_emsg)
+	{
+	    clear_tv(&newtv);
+	    clear_tv(&tv);
+	    break;
+	}
+	else if (filtermap != FILTERMAP_FILTER)
+	{
+	    if (newtv.v_type != VAR_STRING)
+	    {
+		clear_tv(&newtv);
+		clear_tv(&tv);
+		emsg(_(e_string_required));
+		break;
+	    }
+	    else
+		ga_concat(&ga, newtv.vval.v_string);
+	}
+	else if (!rem)
+	    ga_concat(&ga, tv.vval.v_string);
+
+	clear_tv(&newtv);
+	clear_tv(&tv);
+
+	++idx;
+    }
+    ga_append(&ga, NUL);
+    rettv->vval.v_string = ga.ga_data;
+}
+
+/*
+ * reduce() String argvars[0] using the function 'funcname' with arguments in
+ * 'funcexe' starting with the initial value argvars[2] and return the result
+ * in 'rettv'.
+ */
+    void
+string_reduce(
+	typval_T	*argvars,
+	char_u		*func_name,
+	funcexe_T	*funcexe,
+	typval_T	*rettv)
+{
+    char_u	*p = tv_get_string(&argvars[0]);
+    int		len;
+    typval_T	argv[3];
+    int		r;
+    int		called_emsg_start = called_emsg;
+
+    if (argvars[2].v_type == VAR_UNKNOWN)
+    {
+	if (*p == NUL)
+	{
+	    semsg(_(e_reduce_of_an_empty_str_with_no_initial_value), "String");
+	    return;
+	}
+	if (copy_first_char_to_tv(p, rettv) == FAIL)
+	    return;
+	p += STRLEN(rettv->vval.v_string);
+    }
+    else if (argvars[2].v_type != VAR_STRING)
+    {
+	semsg(_(e_string_expected_for_argument_nr), 3);
+	return;
+    }
+    else
+	copy_tv(&argvars[2], rettv);
+
+    for ( ; *p != NUL; p += len)
+    {
+	argv[0] = *rettv;
+	if (copy_first_char_to_tv(p, &argv[1]) == FAIL)
+	    break;
+	len = (int)STRLEN(argv[1].vval.v_string);
+	r = call_func(func_name, -1, rettv, 2, argv, funcexe);
+	clear_tv(&argv[0]);
+	clear_tv(&argv[1]);
+	if (r == FAIL || called_emsg != called_emsg_start)
+	    return;
+    }
 }
 
     static void
@@ -885,7 +1061,7 @@ f_charidx(typval_T *argvars, typval_T *rettv)
 					   && argvars[2].v_type != VAR_NUMBER
 					   && argvars[2].v_type != VAR_BOOL))
     {
-	emsg(_(e_invarg));
+	emsg(_(e_invalid_argument));
 	return;
     }
 
@@ -987,7 +1163,7 @@ f_str2nr(typval_T *argvars, typval_T *rettv)
 	base = (int)tv_get_number(&argvars[1]);
 	if (base != 2 && base != 8 && base != 10 && base != 16)
 	{
-	    emsg(_(e_invarg));
+	    emsg(_(e_invalid_argument));
 	    return;
 	}
 	if (argvars[2].v_type != VAR_UNKNOWN && tv_get_bool(&argvars[2]))
@@ -1497,14 +1673,14 @@ f_tr(typval_T *argvars, typval_T *rettv)
     rettv->vval.v_string = NULL;
     if (fromstr == NULL || tostr == NULL)
 	    return;		// type error; errmsg already given
-    ga_init2(&ga, (int)sizeof(char), 80);
+    ga_init2(&ga, sizeof(char), 80);
 
     if (!has_mbyte)
 	// not multi-byte: fromstr and tostr must be the same length
 	if (STRLEN(fromstr) != STRLEN(tostr))
 	{
 error:
-	    semsg(_(e_invarg2), fromstr);
+	    semsg(_(e_invalid_argument_str), fromstr);
 	    ga_clear(&ga);
 	    return;
 	}
@@ -1612,7 +1788,7 @@ f_trim(typval_T *argvars, typval_T *rettv)
 
     if (argvars[1].v_type != VAR_UNKNOWN && argvars[1].v_type != VAR_STRING)
     {
-	semsg(_(e_invarg2), tv_get_string(&argvars[1]));
+	semsg(_(e_invalid_argument_str), tv_get_string(&argvars[1]));
 	return;
     }
 
@@ -1630,7 +1806,7 @@ f_trim(typval_T *argvars, typval_T *rettv)
 		return;
 	    if (dir < 0 || dir > 2)
 	    {
-		semsg(_(e_invarg2), tv_get_string(&argvars[2]));
+		semsg(_(e_invalid_argument_str), tv_get_string(&argvars[2]));
 		return;
 	    }
 	}
@@ -1686,10 +1862,7 @@ f_trim(typval_T *argvars, typval_T *rettv)
     rettv->vval.v_string = vim_strnsave(head, tail - head);
 }
 
-#endif
-
-#if defined(FEAT_EVAL)
-static char *e_printf = N_("E766: Insufficient arguments for printf()");
+static char *e_printf = N_(e_insufficient_arguments_for_printf);
 
 /*
  * Get number argument from "idxp" entry in "tvs".  First entry is 1.
@@ -1761,11 +1934,12 @@ tv_float(typval_T *tvs, int *idxp)
 	else if (tvs[idx].v_type == VAR_NUMBER)
 	    f = (double)tvs[idx].vval.v_number;
 	else
-	    emsg(_("E807: Expected Float argument for printf()"));
+	    emsg(_(e_expected_float_argument_for_printf));
     }
     return f;
 }
 # endif
+
 #endif
 
 #ifdef FEAT_FLOAT
@@ -2787,7 +2961,7 @@ vim_vsnprintf_typval(
     }
 
     if (tvs != NULL && tvs[arg_idx - 1].v_type != VAR_UNKNOWN)
-	emsg(_("E767: Too many arguments to printf()"));
+	emsg(_(e_too_many_arguments_to_printf));
 
     // Return the number of characters formatted (excluding trailing nul
     // character), that is, the number of characters that would have been

@@ -72,6 +72,10 @@
 # define CYGWIN
 #endif
 
+#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__CYGWIN__)
+# define _XOPEN_SOURCE 700   /* for fdopen() */
+#endif
+
 #include <stdio.h>
 #ifdef VAXC
 # include <file.h>
@@ -275,12 +279,8 @@ fputs_or_die(char *s, FILE *fpo)
     perror_exit(3);
 }
 
-  static void
-fprintf_or_die(FILE *fpo, char *format, char *s, int d)
-{
-  if (fprintf(fpo, format, s, d) < 0)
-    perror_exit(3);
-}
+/* Use a macro to allow for different arguments. */
+#define FPRINTF_OR_DIE(args) if (fprintf args < 0) perror_exit(3)
 
   static void
 fclose_or_die(FILE *fpi, FILE *fpo)
@@ -377,7 +377,7 @@ huntype(
 	    have_off = base_off + want_off;
 #endif
 	  if (base_off + want_off < have_off)
-	    error_exit(5, "sorry, cannot seek backwards.");
+	    error_exit(5, "Sorry, cannot seek backwards.");
 	  for (; have_off < base_off + want_off; have_off++)
 	    putc_or_die(0, fpo);
 	}
@@ -714,7 +714,7 @@ main(int argc, char *argv[])
   if (revert)
     {
       if (hextype && (hextype != HEX_POSTSCRIPT))
-	error_exit(-1, "sorry, cannot revert this type of hexdump");
+	error_exit(-1, "Sorry, cannot revert this type of hexdump");
       return huntype(fp, fpo, cols, hextype,
 		negseek ? -seekoff : seekoff);
     }
@@ -728,7 +728,7 @@ main(int argc, char *argv[])
 	e = fseek(fp, negseek ? -seekoff : seekoff,
 						negseek ? SEEK_END : SEEK_SET);
       if (e < 0 && negseek)
-	error_exit(4, "sorry cannot seek.");
+	error_exit(4, "Sorry, cannot seek.");
       if (e >= 0)
 	seekoff = ftell(fp);
       else
@@ -737,9 +737,9 @@ main(int argc, char *argv[])
 	  long s = seekoff;
 
 	  while (s--)
-	    if ((c = getc_or_die(fp)) == EOF)
+	    if (getc_or_die(fp) == EOF)
 	    {
-	      error_exit(4, "sorry cannot seek.");
+	      error_exit(4, "Sorry, cannot seek.");
 	    }
 	}
     }
@@ -748,7 +748,7 @@ main(int argc, char *argv[])
     {
       if (fp != stdin)
 	{
-	  fprintf_or_die(fpo, "unsigned char %s", isdigit((int)argv[1][0]) ? "__" : "", 0);
+	  FPRINTF_OR_DIE((fpo, "unsigned char %s", isdigit((int)argv[1][0]) ? "__" : ""));
 	  for (e = 0; (c = argv[1][e]) != 0; e++)
 	    putc_or_die(isalnum(c) ? CONDITIONAL_CAPITALIZE(c) : '_', fpo);
 	  fputs_or_die("[] = {\n", fpo);
@@ -758,8 +758,8 @@ main(int argc, char *argv[])
       c = 0;
       while ((length < 0 || p < length) && (c = getc_or_die(fp)) != EOF)
 	{
-	  fprintf_or_die(fpo, (hexx == hexxa) ? "%s0x%02x" : "%s0X%02X",
-		(p % cols) ? ", " : (!p ? "  " : ",\n  "),  c);
+	  FPRINTF_OR_DIE((fpo, (hexx == hexxa) ? "%s0x%02x" : "%s0X%02X",
+		(p % cols) ? ", " : (!p ? "  " : ",\n  "), c));
 	  p++;
 	}
 
@@ -769,10 +769,10 @@ main(int argc, char *argv[])
       if (fp != stdin)
 	{
 	  fputs_or_die("};\n", fpo);
-	  fprintf_or_die(fpo, "unsigned int %s", isdigit((int)argv[1][0]) ? "__" : "", 0);
+	  FPRINTF_OR_DIE((fpo, "unsigned int %s", isdigit((int)argv[1][0]) ? "__" : ""));
 	  for (e = 0; (c = argv[1][e]) != 0; e++)
 	    putc_or_die(isalnum(c) ? CONDITIONAL_CAPITALIZE(c) : '_', fpo);
-	  fprintf_or_die(fpo, "_%s = %d;\n", capitalize ? "LEN" : "len", p);
+	  FPRINTF_OR_DIE((fpo, "_%s = %d;\n", capitalize ? "LEN" : "len", p));
 	}
 
       fclose_or_die(fp, fpo);
@@ -782,7 +782,6 @@ main(int argc, char *argv[])
   if (hextype == HEX_POSTSCRIPT)
     {
       p = cols;
-      e = 0;
       while ((length < 0 || n < length) && (e = getc_or_die(fp)) != EOF)
 	{
 	  putc_or_die(hexx[(e >> 4) & 0xf], fpo);
@@ -807,7 +806,6 @@ main(int argc, char *argv[])
   else	/* hextype == HEX_BITS */
     grplen = 8 * octspergrp + 1;
 
-  e = 0;
   while ((length < 0 || n < length) && (e = getc_or_die(fp)) != EOF)
     {
       int x;

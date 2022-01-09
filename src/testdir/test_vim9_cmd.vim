@@ -183,11 +183,18 @@ def Test_expand_alternate_file()
 enddef
 
 def Test_global_backtick_expansion()
+  var name = 'xxx'
   new
-  setline(1, 'xx')
-  var name = 'foobar'
-  g/^xx/s/.*/`=name`
-  assert_equal('foobar', getline(1))
+  setline(1, ['one', 'two', 'three'])
+  set nomod
+  g/two/edit `=name`
+  assert_equal('xxx', bufname())
+  bwipe!
+
+  new
+  setline(1, ['one', 'two', 'three'])
+  g/two/s/^/`=name`/
+  assert_equal('`=name`two', getline(2))
   bwipe!
 enddef
 
@@ -206,6 +213,15 @@ def Test_folddo_backtick_expansion()
   folddoclose edit `=name`
   assert_equal('xxx', bufname())
   bwipe!
+
+  var lines =<< trim END
+      g:val = 'value'
+      def Test()
+        folddoopen echo `=g:val`
+      enddef
+      call Test()
+  END
+  CheckScriptFailure(lines, 'E15: Invalid expression: "`=g:val`"')
 enddef
 
 def Test_hardcopy_wildcards()
@@ -282,16 +298,24 @@ def Test_condition_types()
       elseif 'text'
       endif
   END
-  CheckDefFailure(lines, 'E1012:', 3)
-  CheckScriptFailure(['vim9script'] + lines, 'E1135:', 4)
+  CheckDefAndScriptFailure(lines, 'E1135:', 3)
 
   lines =<< trim END
+      g:cond = 0
+      if g:cond
+      elseif 'text' garbage
+      endif
+  END
+  CheckDefAndScriptFailure(lines, 'E488:', 3)
+
+  lines =<< trim END
+      g:cond = 0
       if g:cond
       elseif [1]
       endif
   END
-  CheckDefFailure(lines, 'E1012:', 2)
-  CheckScriptFailure(['vim9script'] + lines, 'E745:', 3)
+  CheckDefFailure(lines, 'E1012:', 3)
+  CheckScriptFailure(['vim9script'] + lines, 'E745:', 4)
 
   lines =<< trim END
       g:cond = 'text'
@@ -714,6 +738,16 @@ def Test_command_modifier_filter()
       assert_match('very specific z3d37dh234 string', Screenline(&lines))
   END
   CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      edit foobar
+      redir => g:filter_out
+      filter #foobar# ls
+      redir END
+      assert_match('"foobar"', g:filter_out)
+      unlet g:filter_out
+  END
+  CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_win_command_modifiers()
@@ -985,6 +1019,11 @@ def Test_range_after_command_modifier()
   CheckScriptSuccess(['vim9script', 'silent keepjump :1d _'])
   assert_equal('', getline(1))
   bwipe!
+
+  var lines =<< trim END
+      legacy /pat/
+  END
+  CheckDefExecAndScriptFailure(lines, 'E486: Pattern not found: pat')
 enddef
 
 def Test_silent_pattern()
@@ -1353,6 +1392,10 @@ def Test_lockvar()
   s:theList[1] = 44
   assert_equal([1, 44, 3], s:theList)
 
+  if 0
+    lockvar whatever
+  endif
+
   var d = {a: 1, b: 2}
   d.a = 3
   d.b = 4
@@ -1519,6 +1562,23 @@ def Test_redir_to_var()
     redir END
   END
   CheckDefFailure(lines, 'E1141:')
+
+  lines =<< trim END
+      var text: string
+      redir => text
+        echo 'hello'
+        redir > Xfile
+      redir END
+  END
+  CheckDefFailure(lines, 'E1185:')
+
+  lines =<< trim END
+      var text: number
+      redir => text
+        echo 'hello'
+      redir END
+  END
+  CheckDefFailure(lines, 'E1012:')
 enddef
 
 def Test_echo_void()
@@ -1561,7 +1621,7 @@ def Test_var_not_cmd()
   var lines =<< trim END
       g:notexist:cmd
   END
-  CheckDefAndScriptFailure2(lines, 'E488: Trailing characters: :cmd', 'E121: Undefined variable: g:notexist', 1)
+  CheckDefAndScriptFailure(lines, ['E488: Trailing characters: :cmd', 'E121: Undefined variable: g:notexist'], 1)
 
   lines =<< trim END
       g-pat-cmd
@@ -1570,12 +1630,12 @@ def Test_var_not_cmd()
   lines =<< trim END
       g.pat.cmd
   END
-  CheckDefAndScriptFailure2(lines, 'E1001: Variable not found: g', 'E121: Undefined variable: g', 1)
+  CheckDefAndScriptFailure(lines, ['E1001: Variable not found: g', 'E121: Undefined variable: g'], 1)
 
   lines =<< trim END
       s:notexist:repl
   END
-  CheckDefAndScriptFailure2(lines, 'E488: Trailing characters: :repl', 'E121: Undefined variable: s:notexist', 1)
+  CheckDefAndScriptFailure(lines, ['E488: Trailing characters: :repl', 'E121: Undefined variable: s:notexist'], 1)
 
   lines =<< trim END
       s-pat-repl
@@ -1584,7 +1644,7 @@ def Test_var_not_cmd()
   lines =<< trim END
       s.pat.repl
   END
-  CheckDefAndScriptFailure2(lines, 'E1001: Variable not found: s', 'E121: Undefined variable: s', 1)
+  CheckDefAndScriptFailure(lines, ['E1001: Variable not found: s', 'E121: Undefined variable: s'], 1)
 
   lines =<< trim END
       w:notexist->len()

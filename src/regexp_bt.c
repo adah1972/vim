@@ -1242,7 +1242,7 @@ seen_endbrace(int refnum)
 		break;
 	if (*p == NUL)
 	{
-	    emsg(_("E65: Illegal back reference"));
+	    emsg(_(e_illegal_back_reference));
 	    rc_did_emsg = TRUE;
 	    return FALSE;
 	}
@@ -1347,7 +1347,7 @@ regatom(int *flagp)
       case Magic('U'):
 	p = vim_strchr(classchars, no_Magic(c));
 	if (p == NULL)
-	    EMSG_RET_NULL(_("E63: invalid use of \\_"));
+	    EMSG_RET_NULL(_(e_invalid_use_of_underscore));
 
 	// When '.' is followed by a composing char ignore the dot, so that
 	// the composing char is matched here.
@@ -1392,7 +1392,8 @@ regatom(int *flagp)
       case Magic(')'):
 	if (one_exactly)
 	    EMSG_ONE_RET_NULL;
-	IEMSG_RET_NULL(_(e_internal));	// Supposed to be caught earlier.
+	// Supposed to be caught earlier.
+	IEMSG_RET_NULL(_(e_internal_error_in_regexp));
 	// NOTREACHED
 
       case Magic('='):
@@ -1402,7 +1403,7 @@ regatom(int *flagp)
       case Magic('{'):
       case Magic('*'):
 	c = no_Magic(c);
-	EMSG3_RET_NULL(_("E64: %s%c follows nothing"),
+	EMSG3_RET_NULL(_(e_str_chr_follows_nothing),
 		(c == '*' ? reg_magic >= MAGIC_ON : reg_magic == MAGIC_ALL), c);
 	// NOTREACHED
 
@@ -1453,7 +1454,7 @@ regatom(int *flagp)
 	    {
 #ifdef FEAT_SYN_HL
 		case '(': if ((reg_do_extmatch & REX_SET) == 0)
-			      EMSG_RET_NULL(_(e_z_not_allowed));
+			      EMSG_RET_NULL(_(e_z_not_allowed_here));
 			  if (one_exactly)
 			      EMSG_ONE_RET_NULL;
 			  ret = reg(REG_ZPAREN, &flags);
@@ -1472,7 +1473,7 @@ regatom(int *flagp)
 		case '7':
 		case '8':
 		case '9': if ((reg_do_extmatch & REX_USE) == 0)
-			      EMSG_RET_NULL(_(e_z1_not_allowed));
+			      EMSG_RET_NULL(_(e_z1_z9_not_allowed_here));
 			  ret = regnode(ZREF + c - '0');
 			  re_has_z = REX_USE;
 			  break;
@@ -1488,7 +1489,7 @@ regatom(int *flagp)
 			      return NULL;
 			  break;
 
-		default:  EMSG_RET_NULL(_("E68: Invalid character after \\z"));
+		default:  EMSG_RET_NULL(_(e_invalid_character_after_bsl_z));
 	    }
 	}
 	break;
@@ -1544,7 +1545,7 @@ regatom(int *flagp)
 			      while ((c = getchr()) != ']')
 			      {
 				  if (c == NUL)
-				      EMSG2_RET_NULL(_(e_missing_sb),
+				      EMSG2_RET_NULL(_(e_missing_sb_after_str),
 						      reg_magic == MAGIC_ALL);
 				  br = regnode(BRANCH);
 				  if (ret == NULL)
@@ -1564,7 +1565,7 @@ regatom(int *flagp)
 				      return NULL;
 			      }
 			      if (ret == NULL)
-				  EMSG2_RET_NULL(_(e_empty_sb),
+				  EMSG2_RET_NULL(_(e_empty_str_brackets),
 						      reg_magic == MAGIC_ALL);
 			      lastbranch = regnode(BRANCH);
 			      br = regnode(NOTHING);
@@ -1611,8 +1612,8 @@ regatom(int *flagp)
 
 			      if (i < 0 || i > INT_MAX)
 				  EMSG2_RET_NULL(
-					_("E678: Invalid character after %s%%[dxouU]"),
-					reg_magic == MAGIC_ALL);
+					    _(e_invalid_character_after_str_2),
+						       reg_magic == MAGIC_ALL);
 			      if (use_multibytecode(i))
 				  ret = regnode(MULTIBYTECODE);
 			      else
@@ -1712,7 +1713,7 @@ regatom(int *flagp)
 			      }
 			  }
 
-			  EMSG2_RET_NULL(_("E71: Invalid character after %s%%"),
+			  EMSG2_RET_NULL(_(e_invalid_character_after_str),
 						      reg_magic == MAGIC_ALL);
 	    }
 	}
@@ -1781,13 +1782,13 @@ collection:
 				endc = coll_get_char();
 
 			    if (startc > endc)
-				EMSG_RET_NULL(_(e_reverse_range));
+				EMSG_RET_NULL(_(e_reverse_range_in_character_class));
 			    if (has_mbyte && ((*mb_char2len)(startc) > 1
 						 || (*mb_char2len)(endc) > 1))
 			    {
 				// Limit to a range of 256 chars.
 				if (endc > startc + 256)
-				    EMSG_RET_NULL(_(e_large_class));
+				    EMSG_RET_NULL(_(e_range_too_large_in_character_class));
 				while (++startc <= endc)
 				    regmbc(startc);
 			    }
@@ -2001,13 +2002,14 @@ collection:
 		regc(NUL);
 		prevchr_len = 1;	// last char was the ']'
 		if (*regparse != ']')
-		    EMSG_RET_NULL(_(e_toomsbra));	// Cannot happen?
+		    EMSG_RET_NULL(_(e_too_many_brackets));  // Cannot happen?
 		skipchr();	    // let's be friends with the lexer again
 		*flagp |= HASWIDTH | SIMPLE;
 		break;
 	    }
 	    else if (reg_strict)
-		EMSG2_RET_NULL(_(e_missingbracket), reg_magic > MAGIC_OFF);
+		EMSG2_RET_NULL(_(e_missing_rsb_after_str_lsb),
+							reg_magic > MAGIC_OFF);
 	}
 	// FALLTHROUGH
 
@@ -2215,8 +2217,8 @@ regpiece(int *flagp)
     {
 	// Can't have a multi follow a multi.
 	if (peekchr() == Magic('*'))
-	    EMSG2_RET_NULL(_("E61: Nested %s*"), reg_magic >= MAGIC_ON);
-	EMSG3_RET_NULL(_("E62: Nested %s%c"), reg_magic == MAGIC_ALL,
+	    EMSG2_RET_NULL(_(e_nested_str), reg_magic >= MAGIC_ON);
+	EMSG3_RET_NULL(_(e_nested_str_chr), reg_magic == MAGIC_ALL,
 							  no_Magic(peekchr()));
     }
 
@@ -2450,7 +2452,7 @@ reg(
 	if (curchr == Magic(')'))
 	    EMSG2_RET_NULL(_(e_unmatched_str_close), reg_magic == MAGIC_ALL);
 	else
-	    EMSG_RET_NULL(_(e_trailing));	// "Can't happen".
+	    EMSG_RET_NULL(_(e_trailing_characters));	// "Can't happen".
 	// NOTREACHED
     }
     // Here we set the flag allowing back references to this set of
@@ -2516,7 +2518,7 @@ bt_regcomp(char_u *expr, int re_flags)
     {
 	vim_free(r);
 	if (reg_toolong)
-	    EMSG_RET_NULL(_("E339: Pattern too long"));
+	    EMSG_RET_NULL(_(e_pattern_too_long));
 	return NULL;
     }
 
@@ -3138,7 +3140,7 @@ regstack_push(regstate_T state, char_u *scan)
 
     if ((long)((unsigned)regstack.ga_len >> 10) >= p_mmp)
     {
-	emsg(_(e_maxmempat));
+	emsg(_(e_pattern_uses_more_memory_than_maxmempattern));
 	return NULL;
     }
     if (ga_grow(&regstack, sizeof(regitem_T)) == FAIL)
@@ -4212,7 +4214,7 @@ regmatch(
 		    // a regstar_T on the regstack.
 		    if ((long)((unsigned)regstack.ga_len >> 10) >= p_mmp)
 		    {
-			emsg(_(e_maxmempat));
+			emsg(_(e_pattern_uses_more_memory_than_maxmempattern));
 			status = RA_FAIL;
 		    }
 		    else if (ga_grow(&regstack, sizeof(regstar_T)) == FAIL)
@@ -4257,7 +4259,7 @@ regmatch(
 	    // Need a bit of room to store extra positions.
 	    if ((long)((unsigned)regstack.ga_len >> 10) >= p_mmp)
 	    {
-		emsg(_(e_maxmempat));
+		emsg(_(e_pattern_uses_more_memory_than_maxmempattern));
 		status = RA_FAIL;
 	    }
 	    else if (ga_grow(&regstack, sizeof(regbehind_T)) == FAIL)

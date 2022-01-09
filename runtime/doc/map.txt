@@ -1,4 +1,4 @@
-*map.txt*       For Vim version 8.2.  Last change: 2021 Nov 20
+*map.txt*       For Vim version 8.2.  Last change: 2022 Jan 03
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -6,7 +6,7 @@
 
 Key mapping, abbreviations and user-defined commands.
 
-This subject is introduced in sections |05.3|, |24.7| and |40.1| of the user
+This subject is introduced in sections |05.4|, |24.7| and |40.1| of the user
 manual.
 
 1. Key mapping			|key-mapping|
@@ -97,8 +97,7 @@ modes.
 			map command applies.  The mapping may remain defined
 			for other modes where it applies.
 			It also works when {lhs} matches the {rhs} of a
-			mapping. This is for when when an abbreviation
-			applied.
+			mapping. This is for when an abbreviation applied.
 			Note: Trailing spaces are included in the {lhs}.  This
 			unmap does NOT work: >
 				:map @@ foo
@@ -173,7 +172,7 @@ type "a", then "bar" will get inserted.
 "<unique>" can be used in any order.  They must appear right after the
 command, before any other arguments.
 
-				*:map-local* *:map-<buffer>* *E224* *E225*
+			*:map-local* *:map-<buffer>* *:map-buffer* *E224* *E225*
 If the first argument to one of these commands is "<buffer>" the mapping will
 be effective in the current buffer only.  Example: >
 	:map <buffer>  ,w  /[.,;]<CR>
@@ -232,7 +231,7 @@ Note: ":map <script>" and ":noremap <script>" do the same thing.  The
 "<script>" overrules the command name.  Using ":noremap <script>" is
 preferred, because it's clearer that remapping is (mostly) disabled.
 
-						*:map-<unique>* *E226* *E227*
+				*:map-<unique>* *:map-unique* *E226* *E227*
 If the first argument to one of these commands is "<unique>" and it is used to
 define a new mapping or abbreviation, the command will fail if the mapping or
 abbreviation already exists.  Example: >
@@ -356,7 +355,7 @@ Note:
 - In Select mode, |:map| and |:vmap| command mappings are executed in
   Visual mode.  Use |:smap| to handle Select mode differently.
 
-							*E1135* *E1136*
+							*E1255* *E1136*
 <Cmd> commands must terminate, that is, they must be followed by <CR> in the
 {rhs} of the mapping definition.  |Command-line| mode is never entered.
 
@@ -962,8 +961,7 @@ g@{motion}		Call the function set by the 'operatorfunc' option.
 			    "line"	{motion} was |linewise|
 			    "char"	{motion} was |characterwise|
 			    "block"	{motion} was |blockwise-visual|
-			Although "block" would rarely appear, since it can
-			only result from Visual mode where "g@" is not useful.
+			The type can be forced, see |forced-motion|.
 			{not available when compiled without the |+eval|
 			feature}
 
@@ -974,28 +972,56 @@ Here is an example that counts the number of spaces with <F4>: >
 	" doubling <F4> works on a line
 	nnoremap <expr> <F4><F4> CountSpaces() .. '_'
 
-	function CountSpaces(type = '') abort
+	function CountSpaces(context = {}, type = '') abort
 	  if a:type == ''
-	    set opfunc=CountSpaces
+	    let context = #{
+	      \ dot_command: v:false,
+	      \ extend_block: '',
+	      \ virtualedit: [&l:virtualedit, &g:virtualedit],
+	      \ }
+	    let &operatorfunc = function('CountSpaces', [context])
+	    set virtualedit=block
 	    return 'g@'
- 	  endif
+	  endif
 
-	  let sel_save = &selection
-	  let reg_save = getreginfo('"')
-	  let cb_save = &clipboard
-	  let visual_marks_save = [getpos("'<"), getpos("'>")]
+	  let save = #{
+	    \ clipboard: &clipboard,
+	    \ selection: &selection,
+	    \ virtualedit: [&l:virtualedit, &g:virtualedit],
+	    \ register: getreginfo('"'),
+	    \ visual_marks: [getpos("'<"), getpos("'>")],
+	    \ }
 
 	  try
-	    set clipboard= selection=inclusive
-	    let commands = #{line: "'[V']y", char: "`[v`]y", block: "`[\<c-v>`]y"}
-	    silent exe 'noautocmd keepjumps normal! ' .. get(commands, a:type, '')
-	    echom getreg('"')->count(' ')
+	    set clipboard= selection=inclusive virtualedit=
+	    let commands = #{
+	      \ line: "'[V']",
+	      \ char: "`[v`]",
+	      \ block: "`[\<C-V>`]",
+	      \ }[a:type]
+	    let [_, _, col, off] = getpos("']")
+	    if off != 0
+	      let vcol = getline("'[")->strpart(0, col + off)->strdisplaywidth()
+	      if vcol >= [line("'["), '$']->virtcol() - 1
+	        let a:context.extend_block = '$'
+	      else
+	        let a:context.extend_block = vcol .. '|'
+	      endif
+	    endif
+	    if a:context.extend_block != ''
+	      let commands ..= 'oO' .. a:context.extend_block
+	    endif
+	    let commands ..= 'y'
+	    execute 'silent noautocmd keepjumps normal! ' .. commands
+	    echomsg getreg('"')->count(' ')
 	  finally
-	    call setreg('"', reg_save)
-	    call setpos("'<", visual_marks_save[0])
-	    call setpos("'>", visual_marks_save[1])
-	    let &clipboard = cb_save
-	    let &selection = sel_save
+	    call setreg('"', save.register)
+	    call setpos("'<", save.visual_marks[0])
+	    call setpos("'>", save.visual_marks[1])
+	    let &clipboard = save.clipboard
+	    let &selection = save.selection
+	    let [&l:virtualedit, &g:virtualedit] = get(a:context.dot_command ? save : a:context, 'virtualedit')
+	    let a:context.dot_command = v:true
 	  endtry
 	endfunction
 

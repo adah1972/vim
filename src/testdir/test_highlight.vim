@@ -740,6 +740,7 @@ func Test_highlight_cmd_errors()
     call assert_fails('hi Xcomment ctermbg=fg', 'E419:')
     call assert_fails('hi Xcomment ctermfg=bg', 'E420:')
     call assert_fails('hi Xcomment ctermfg=ul', 'E453:')
+    call assert_fails('hi ' .. repeat('a', 201) .. ' ctermfg=black', 'E1249:')
   endif
 
   " Try using a very long terminal code. Define a dummy terminal code for this
@@ -921,17 +922,20 @@ func Test_highlight_default_colorscheme_restores_links()
   let hlTestHiPre = HighlightArgs('TestHi')
 
   " Test colorscheme
+  call assert_equal("\ndefault", execute('colorscheme'))
   hi clear
   if exists('syntax_on')
     syntax reset
   endif
   let g:colors_name = 'test'
+  call assert_equal("\ntest", execute('colorscheme'))
   hi link TestLink ErrorMsg
   hi TestHi ctermbg=green
 
   " Restore default highlighting
   colorscheme default
   " 'default' should work no matter if highlight group was cleared
+  call assert_equal("\ndefault", execute('colorscheme'))
   hi def link TestLink Identifier
   hi def TestHi ctermbg=red
   let hlTestLinkPost = HighlightArgs('TestLink')

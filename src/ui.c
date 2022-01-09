@@ -577,7 +577,7 @@ ui_suspend(void)
 suspend_shell(void)
 {
     if (*p_sh == NUL)
-	emsg(_(e_shellempty));
+	emsg(_(e_shell_option_is_empty));
     else
     {
 	msg_puts(_("new shell started\n"));
@@ -1028,22 +1028,27 @@ fill_input_buf(int exit_on_error UNUSED)
 				     len + unconverted, INBUFLEN - inbufcount,
 				       rest == NULL ? &rest : NULL, &restlen);
 	}
-	while (len-- > 0)
+	while (len > 0)
 	{
 	    // If a CTRL-C was typed, remove it from the buffer and set
-	    // got_int.  Also recognize CTRL-C with modifyOtherKeys set, in two
-	    // forms.
+	    // got_int.  Also recognize CTRL-C with modifyOtherKeys set, lower
+	    // and upper case, in two forms.
 	    if (ctrl_c_interrupts && (inbuf[inbufcount] == 3
 			|| (len >= 10 && STRNCMP(inbuf + inbufcount,
 						   "\033[27;5;99~", 10) == 0)
+			|| (len >= 10 && STRNCMP(inbuf + inbufcount,
+						   "\033[27;5;67~", 10) == 0)
 			|| (len >= 7 && STRNCMP(inbuf + inbufcount,
-						       "\033[99;5u", 7) == 0)))
+						       "\033[99;5u", 7) == 0)
+			|| (len >= 7 && STRNCMP(inbuf + inbufcount,
+						       "\033[67;5u", 7) == 0)))
 	    {
 		// remove everything typed before the CTRL-C
-		mch_memmove(inbuf, inbuf + inbufcount, (size_t)(len + 1));
+		mch_memmove(inbuf, inbuf + inbufcount, (size_t)(len));
 		inbufcount = 0;
 		got_int = TRUE;
 	    }
+	    --len;
 	    ++inbufcount;
 	}
     }
@@ -1145,6 +1150,10 @@ ui_focus_change(
 	last_time = time(NULL);
     }
 
+#ifdef FEAT_TERMINAL
+    term_focus_change(in_focus);
+#endif
+
     /*
      * Fire the focus gained/lost autocommand.
      */
@@ -1152,34 +1161,11 @@ ui_focus_change(
 				: EVENT_FOCUSLOST, NULL, NULL, FALSE, curbuf);
 
     if (need_redraw)
-    {
-	// Something was executed, make sure the cursor is put back where it
-	// belongs.
-	need_wait_return = FALSE;
+	redraw_after_callback(TRUE, TRUE);
 
-	if (State & CMDLINE)
-	    redrawcmdline();
-	else if (State == HITRETURN || State == SETWSIZE || State == ASKMORE
-		|| State == EXTERNCMD || State == CONFIRM || exmode_active)
-	    repeat_message();
-	else if ((State & NORMAL) || (State & INSERT))
-	{
-	    if (must_redraw != 0)
-		update_screen(0);
-	    setcursor();
-	}
-	cursor_on();	    // redrawing may have switched it off
-	out_flush_cursor(FALSE, TRUE);
-# ifdef FEAT_GUI
-	if (gui.in_use)
-	    gui_update_scrollbars(FALSE);
-# endif
-    }
-#ifdef FEAT_TITLE
     // File may have been changed from 'readonly' to 'noreadonly'
     if (need_maketitle)
 	maketitle();
-#endif
 }
 
 #if defined(HAVE_INPUT_METHOD) || defined(PROTO)

@@ -2123,9 +2123,7 @@ set_termname(char_u *term)
     {
 	starttermcap();		// may change terminal mode
 	setmouse();		// may start using the mouse
-#ifdef FEAT_TITLE
 	maketitle();		// may display window title
-#endif
     }
 
 	// display initial screen after ttest() checking. jw.
@@ -2224,13 +2222,13 @@ tgetent_error(char_u *tbuf, char_u *term)
 
 	if (i < 0)
 # ifdef TGETENT_ZERO_ERR
-	    return _("E557: Cannot open termcap file");
+	    return _(e_cannot_open_termcap_file);
 	if (i == 0)
 # endif
 #ifdef TERMINFO
-	    return _("E558: Terminal entry not found in terminfo");
+	    return _(e_terminal_entry_not_found_in_terminfo);
 #else
-	    return _("E559: Terminal entry not found in termcap");
+	    return _(e_terminal_entry_not_found_in_termcap);
 #endif
     }
     return NULL;
@@ -2386,7 +2384,7 @@ add_termcap_entry(char_u *name, int force)
 	    emsg(error_msg);
 	else
 #endif
-	    semsg(_("E436: No \"%s\" entry in termcap"), name);
+	    semsg(_(e_no_str_entry_in_termcap), name);
     }
     return FAIL;
 }
@@ -3091,8 +3089,7 @@ term_ul_rgb_color(guicolor_T rgb)
 }
 #endif
 
-#if (defined(FEAT_TITLE) && (defined(UNIX) || defined(VMS) \
-	|| defined(MACOS_X))) || defined(PROTO)
+#if (defined(UNIX) || defined(VMS) || defined(MACOS_X)) || defined(PROTO)
 /*
  * Generic function to set window title, using t_ts and t_fs.
  */
@@ -3164,7 +3161,7 @@ ttest(int pairs)
      * MUST have "cm": cursor motion.
      */
     if (*T_CM == NUL)
-	emsg(_("E437: terminal capability \"cm\" required"));
+	emsg(_(e_terminal_capability_cm_required));
 
     /*
      * if "cs" defined, use a scroll region, it's faster.
@@ -3505,9 +3502,8 @@ set_shellsize(int width, int height, int mustset)
 
     if (starting != NO_SCREEN)
     {
-#ifdef FEAT_TITLE
 	maketitle();
-#endif
+
 	changed_line_abv_curs();
 	invalidate_botline();
 
@@ -3805,7 +3801,7 @@ check_terminal_behavior(void)
 	line_was_clobbered(1);
     }
 
-    if (xcc_status.tr_progress == STATUS_GET)
+    if (xcc_status.tr_progress == STATUS_GET && Rows > 2)
     {
 	// 2. Check compatibility with xterm.
 	// We move the cursor to (2, 0), print a test sequence and then query
@@ -3995,6 +3991,7 @@ cursor_off(void)
     }
 }
 
+#ifdef FEAT_GUI
 /*
  * Check whether the cursor is invisible due to an ongoing cursor-less sleep
  */
@@ -4003,6 +4000,7 @@ cursor_is_sleeping(void)
 {
     return cursor_is_asleep;
 }
+#endif
 
 /*
  * Disable the cursor and mark it disabled by cursor-less sleep
@@ -4464,7 +4462,7 @@ static int orig_topfill = 0;
 #endif
 #if defined(CHECK_DOUBLE_CLICK) || defined(PROTO)
 /*
- * Checking for double clicks ourselves.
+ * Checking for double-clicks ourselves.
  * "orig_topline" is used to avoid detecting a double-click when the window
  * contents scrolled (e.g., when 'scrolloff' is non-zero).
  */
@@ -4698,7 +4696,7 @@ handle_version_response(int first, int *arg, int argc, char_u *tp)
 
 	// If xterm version >= 141 try to get termcap codes.  For other
 	// terminals the request should be ignored.
-	if (version >= 141)
+	if (version >= 141 && p_xtermcodes)
 	{
 	    LOG_TR(("Enable checking for XT codes"));
 	    check_for_codes = TRUE;
@@ -5416,6 +5414,8 @@ check_termcode(
 		if (STRNCMP(termcodes[idx].code, tp,
 				     (size_t)(slen > len ? len : slen)) == 0)
 		{
+		    int	    looks_like_mouse_start = FALSE;
+
 		    if (len < slen)		// got a partial sequence
 			return -1;		// need to get more chars
 
@@ -5438,15 +5438,48 @@ check_termcode(
 			    }
 		    }
 
-		    // The mouse termcode "ESC [" is also the prefix of
-		    // "ESC [ I" (focus gained).  Only use it when there is
-		    // no other match.  Do use it when a digit is following to
-		    // avoid waiting for more bytes.
 		    if (slen == 2 && len > 2
 			    && termcodes[idx].code[0] == ESC
-			    && termcodes[idx].code[1] == '['
-			    && !isdigit(tp[2]))
+			    && termcodes[idx].code[1] == '[')
 		    {
+			// The mouse termcode "ESC [" is also the prefix of
+			// "ESC [ I" (focus gained) and other keys.  Check some
+			// more bytes to find out.
+			if (!isdigit(tp[2]))
+			{
+			    // ESC [ without number following: Only use it when
+			    // there is no other match.
+			    looks_like_mouse_start = TRUE;
+			}
+			else if (termcodes[idx].name[0] == KS_DEC_MOUSE)
+			{
+			    char_u  *nr = tp + 2;
+			    int	    count = 0;
+
+			    // If a digit is following it could be a key with
+			    // modifier, e.g., ESC [ 1;2P.  Can be confused
+			    // with DEC_MOUSE, which requires four numbers
+			    // following.  If not then it can't be a DEC_MOUSE
+			    // code.
+			    for (;;)
+			    {
+				++count;
+				(void)getdigits(&nr);
+				if (nr >= tp + len)
+				    return -1;	// partial sequence
+				if (*nr != ';')
+				    break;
+				++nr;
+				if (nr >= tp + len)
+				    return -1;	// partial sequence
+			    }
+			    if (count < 4)
+				continue;	// no match
+			}
+		    }
+		    if (looks_like_mouse_start)
+		    {
+			// Only use it when there is no other match.
 			if (mouse_index_found < 0)
 			    mouse_index_found = idx;
 		    }
@@ -5990,7 +6023,7 @@ replace_termcodes(
 	    if (STRNICMP(src, "<SID>", 5) == 0)
 	    {
 		if (current_sctx.sc_sid <= 0)
-		    emsg(_(e_usingsid));
+		    emsg(_(e_using_sid_not_in_script_context));
 		else
 		{
 		    src += 5;
@@ -6186,9 +6219,10 @@ gather_termleader(void)
 /*
  * Show all termcodes (for ":set termcap")
  * This code looks a lot like showoptions(), but is different.
+ * "flags" can have OPT_ONECOLUMN.
  */
     void
-show_termcodes(void)
+show_termcodes(int flags)
 {
     int		col;
     int		*items;
@@ -6213,12 +6247,13 @@ show_termcodes(void)
     msg_puts_title(_("\n--- Terminal keys ---"));
 
     /*
-     * do the loop two times:
+     * Do the loop three times:
      * 1. display the short items (non-strings and short strings)
      * 2. display the medium items (medium length strings)
      * 3. display the long items (remaining strings)
+     * When "flags" has OPT_ONECOLUMN do everything in 3.
      */
-    for (run = 1; run <= 3 && !got_int; ++run)
+    for (run = (flags & OPT_ONECOLUMN) ? 3 : 1; run <= 3 && !got_int; ++run)
     {
 	/*
 	 * collect the items in items[]
@@ -6228,9 +6263,10 @@ show_termcodes(void)
 	{
 	    len = show_one_termcode(termcodes[i].name,
 						    termcodes[i].code, FALSE);
-	    if (len <= INC3 - GAP ? run == 1
+	    if ((flags & OPT_ONECOLUMN) ||
+		    (len <= INC3 - GAP ? run == 1
 			: len <= INC2 - GAP ? run == 2
-			: run == 3)
+			: run == 3))
 		items[item_count++] = i;
 	}
 
@@ -6412,8 +6448,7 @@ got_code_from_term(char_u *code, int len)
 	    if (name[0] == 'C' && name[1] == 'o')
 	    {
 		// Color count is not a key code.
-		i = atoi((char *)str);
-		may_adjust_color_count(i);
+		may_adjust_color_count(atoi((char *)str));
 	    }
 	    else
 	    {

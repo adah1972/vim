@@ -247,7 +247,7 @@ main
 		mch_dirname(start_dir, MAXPATHL);
 	    // Temporarily add '(' and ')' to 'isfname'.  These are valid
 	    // filename characters but are excluded from 'isfname' to make
-	    // "gf" work on a file name in parenthesis (e.g.: see vim.h).
+	    // "gf" work on a file name in parentheses (e.g.: see vim.h).
 	    do_cmdline_cmd((char_u *)":set isf+=(,)");
 	    alist_expand(NULL, 0);
 	    do_cmdline_cmd((char_u *)":set isf&");
@@ -668,7 +668,7 @@ vim_main2(void)
 	scroll_region_reset();		// In case Rows changed
     scroll_start();	// may scroll the screen to the right position
 
-#if defined(FEAT_TITLE) && (defined(UNIX) || defined(VMS) || defined(MACOS_X))
+#if defined(UNIX) || defined(VMS) || defined(MACOS_X)
     term_push_title(SAVE_RESTORE_BOTH);
 #endif
 
@@ -835,7 +835,7 @@ vim_main2(void)
 #if defined(FEAT_GUI)
     // When tab pages were created, may need to update the tab pages line and
     // scrollbars.  This is skipped while creating them.
-    if (first_tabpage->tp_next != NULL)
+    if (gui.in_use && first_tabpage->tp_next != NULL)
     {
 	out_flush();
 	gui_init_which_components(NULL);
@@ -1091,12 +1091,15 @@ state_no_longer_safe(char *reason UNUSED)
     was_safe = FALSE;
 }
 
+#if defined(FEAT_EVAL) || defined(MESSAGE_QUEUE) || defined(PROTO)
     int
 get_was_safe_state(void)
 {
     return was_safe;
 }
+#endif
 
+#if defined(MESSAGE_QUEUE) || defined(PROTO)
 /*
  * Invoked when leaving code that invokes callbacks.  Then trigger
  * SafeStateAgain, if it was safe when starting to wait for a character.
@@ -1137,6 +1140,7 @@ may_trigger_safestateagain(void)
 		  "SafeState: back to waiting, not triggering SafeStateAgain");
 #endif
 }
+#endif
 
 
 /*
@@ -1395,10 +1399,8 @@ main_loop(
 	    else if (redraw_cmdline || clear_cmdline)
 		showmode();
 	    redraw_statuslines();
-#ifdef FEAT_TITLE
 	    if (need_maketitle)
 		maketitle();
-#endif
 #ifdef FEAT_VIMINFO
 	    curbuf->b_last_used = vim_time();
 #endif
@@ -2096,7 +2098,7 @@ command_line_scan(mparm_T *parmp)
 #ifdef FEAT_ARABIC
 		set_option_value((char_u *)"arabic", 1L, NULL, 0);
 #else
-		mch_errmsg(_(e_noarabic));
+		mch_errmsg(_(e_arabic_cannot_be_used_not_enabled_at_compile_time));
 		mch_exit(2);
 #endif
 		break;
@@ -3143,7 +3145,7 @@ source_startup_scripts(mparm_T *parmp)
 	else
 	{
 	    if (do_source(parmp->use_vimrc, FALSE, DOSO_NONE, NULL) != OK)
-		semsg(_("E282: Cannot read from \"%s\""), parmp->use_vimrc);
+		semsg(_(e_cannot_read_from_str_2), parmp->use_vimrc);
 	}
     }
     else if (!silent_mode)

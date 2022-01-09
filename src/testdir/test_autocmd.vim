@@ -1896,6 +1896,7 @@ endfunc
 func Test_autocommand_all_events()
   call assert_fails('au * * bwipe', 'E1155:')
   call assert_fails('au * x bwipe', 'E1155:')
+  call assert_fails('au! * x bwipe', 'E1155:')
 endfunc
 
 function s:Before_test_dirchanged()
@@ -2808,6 +2809,16 @@ func Test_close_autocmd_tab()
     au!
   augroup END
   augroup! aucmd_win_test
+  %bwipe!
+endfunc
+
+func Test_Visual_doautoall_redraw()
+  call setline(1, ['a', 'b'])
+  new 
+  wincmd p
+  call feedkeys("G\<C-V>", 'txn')
+  autocmd User Explode ++once redraw
+  doautoall User Explode
   %bwipe!
 endfunc
 

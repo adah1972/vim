@@ -1,4 +1,4 @@
-*helphelp.txt*	For Vim version 8.2.  Last change: 2021 Nov 18
+*helphelp.txt*	For Vim version 8.2.  Last change: 2022 Jan 08
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -163,7 +163,7 @@ If you would like to open the help in the current window, see this tip:
 
 The initial height of the help window can be set with the 'helpheight' option
 (default 20).
-
+						*help-buffer-options*
 When the help buffer is created, several local options are set to make sure
 the help text is displayed as it was intended:
     'iskeyword'		nearly all ASCII chars except ' ', '*', '"' and '|'
@@ -224,7 +224,7 @@ command: >
 			dialog.  {only when compiled with |+GUI_GTK|}
 
 					*:helpt* *:helptags*
-				*E154* *E150* *E151* *E152* *E153* *E670*
+				*E150* *E151* *E152* *E153* *E154* *E670*
 :helpt[ags] [++t] {dir}
 			Generate the help tags file(s) for directory {dir}.
 			When {dir} is ALL then all "doc" directories in

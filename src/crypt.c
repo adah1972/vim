@@ -200,7 +200,7 @@ crypt_method_nr_from_magic(char *ptr, int len)
 
     i = (int)STRLEN(crypt_magic_head);
     if (len >= i && memcmp(ptr, crypt_magic_head, i) == 0)
-	emsg(_("E821: File is encrypted with unknown method"));
+	emsg(_(e_file_is_encrypted_with_unknown_method));
 
     return -1;
 }
@@ -247,6 +247,7 @@ crypt_get_header_len(int method_nr)
 }
 
 
+#if defined(FEAT_SODIUM) || defined(PROTO)
 /*
  * Get maximum crypt method specific length of the file header in bytes.
  */
@@ -265,6 +266,7 @@ crypt_get_max_header_len()
     }
     return max;
 }
+#endif
 
 /*
  * Set the crypt method for buffer "buf" to "method_nr" using the int value as

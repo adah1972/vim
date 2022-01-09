@@ -46,7 +46,7 @@
 #endif
 
 #ifndef PROTO
-# if defined(FEAT_TITLE) && !defined(FEAT_GUI_MSWIN)
+# if !defined(FEAT_GUI_MSWIN)
 #  include <shellapi.h>
 # endif
 #endif
@@ -716,7 +716,7 @@ dyn_libintl_init(void)
 	if (p_verbose > 0)
 	{
 	    verbose_enter();
-	    semsg(_(e_loadlib), GETTEXT_DLL, GetWin32Error());
+	    semsg(_(e_could_not_load_library_str_str), GETTEXT_DLL, GetWin32Error());
 	    verbose_leave();
 	}
 	return 0;
@@ -731,7 +731,7 @@ dyn_libintl_init(void)
 	    if (p_verbose > 0)
 	    {
 		verbose_enter();
-		semsg(_(e_loadfunc), libintl_entry[i].name);
+		semsg(_(e_could_not_load_library_function_str), libintl_entry[i].name);
 		verbose_leave();
 	    }
 	    return 0;
@@ -2187,7 +2187,7 @@ executable_exists(char *name, char_u **path, int use_path, int use_pathext)
 	}
     }
 
-    // Prepend single "." to pathext, it's means no extension added.
+    // Prepend single "." to pathext, it means no extension added.
     if (pathext == NULL)
 	pathext = (char_u *)".";
     else if (noext == TRUE)
@@ -2683,7 +2683,6 @@ static ConsoleBuffer g_cbOrig = { 0 };
 static ConsoleBuffer g_cbNonTermcap = { 0 };
 static ConsoleBuffer g_cbTermcap = { 0 };
 
-# ifdef FEAT_TITLE
 char g_szOrigTitle[256] = { 0 };
 HWND g_hWnd = NULL;	// also used in os_mswin.c
 static HICON g_hOrigIconSmall = NULL;
@@ -2692,12 +2691,12 @@ static HICON g_hVimIcon = NULL;
 static BOOL g_fCanChangeIcon = FALSE;
 
 // ICON* are not defined in VC++ 4.0
-#  ifndef ICON_SMALL
-#   define ICON_SMALL 0
-#  endif
-#  ifndef ICON_BIG
-#   define ICON_BIG 1
-#  endif
+# ifndef ICON_SMALL
+#  define ICON_SMALL 0
+# endif
+# ifndef ICON_BIG
+#  define ICON_BIG 1
+# endif
 /*
  * GetConsoleIcon()
  * Description:
@@ -2789,7 +2788,6 @@ SaveConsoleTitleAndIcon(void)
     if (g_hVimIcon != NULL)
 	g_fCanChangeIcon = TRUE;
 }
-# endif
 
 static int g_fWindInitCalled = FALSE;
 static int g_fTermcapMode = FALSE;
@@ -2850,7 +2848,6 @@ mch_init_c(void)
     GetConsoleMode(g_hConIn,  &g_cmodein);
     GetConsoleMode(g_hConOut, &g_cmodeout);
 
-# ifdef FEAT_TITLE
     SaveConsoleTitleAndIcon();
     /*
      * Set both the small and big icons of the console window to Vim's icon.
@@ -2859,7 +2856,6 @@ mch_init_c(void)
      */
     if (g_fCanChangeIcon)
 	SetConsoleIcon(g_hWnd, g_hVimIcon, g_hVimIcon);
-# endif
 
     ui_get_shellsize();
 
@@ -2909,7 +2905,6 @@ mch_exit_c(int r)
 
     if (g_fWindInitCalled)
     {
-# ifdef FEAT_TITLE
 	mch_restore_title(SAVE_RESTORE_BOTH);
 	/*
 	 * Restore both the small and big icons of the console window to
@@ -2918,7 +2913,6 @@ mch_exit_c(int r)
 	 */
 	if (g_fCanChangeIcon && !g_fForceExit)
 	    SetConsoleIcon(g_hWnd, g_hOrigIconSmall, g_hOrigIcon);
-# endif
 
 # ifdef MCH_WRITE_DUMP
 	if (fdDump)
@@ -4765,7 +4759,6 @@ mch_call_shell(
 {
     int		x = 0;
     int		tmode = cur_tmode;
-#ifdef FEAT_TITLE
     WCHAR	szShellTitle[512];
 
     // Change the title to reflect that we are in a subshell.
@@ -4788,7 +4781,6 @@ mch_call_shell(
 	    }
 	}
     }
-#endif
 
     out_flush();
 
@@ -4821,9 +4813,7 @@ mch_call_shell(
 	{
 	    // Use a terminal window to run the command in.
 	    x = mch_call_shell_terminal(cmd, options);
-# ifdef FEAT_TITLE
 	    resettitle();
-# endif
 	    return x;
 	}
     }
@@ -4972,7 +4962,7 @@ mch_call_shell(
 # ifdef VIMDLL
 		if (gui.in_use)
 # endif
-		    emsg(_("E371: Command not found"));
+		    emsg(_(e_command_not_found));
 #endif
 	    }
 
@@ -5070,9 +5060,7 @@ mch_call_shell(
 	smsg(_("shell returned %d"), x);
 	msg_putchar('\n');
     }
-#ifdef FEAT_TITLE
     resettitle();
-#endif
 
     signal(SIGINT, SIG_DFL);
 #if defined(__GNUC__) && !defined(__MINGW32__)
@@ -5300,7 +5288,7 @@ mch_job_start(char *cmd, job_T *job, jobopt_T *options)
     ofd[1] = INVALID_HANDLE_VALUE;
     efd[0] = INVALID_HANDLE_VALUE;
     efd[1] = INVALID_HANDLE_VALUE;
-    ga_init2(&ga, (int)sizeof(wchar_t), 500);
+    ga_init2(&ga, sizeof(wchar_t), 500);
 
     jo = CreateJobObject(NULL, NULL);
     if (jo == NULL)
@@ -5331,7 +5319,7 @@ mch_job_start(char *cmd, job_T *job, jobopt_T *options)
 		&saAttr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL);
 	if (ifd[0] == INVALID_HANDLE_VALUE)
 	{
-	    semsg(_(e_notopen), fname);
+	    semsg(_(e_cant_open_file_str), fname);
 	    goto failed;
 	}
     }
@@ -5349,7 +5337,7 @@ mch_job_start(char *cmd, job_T *job, jobopt_T *options)
 		&saAttr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL);
 	if (ofd[1] == INVALID_HANDLE_VALUE)
 	{
-	    semsg(_(e_notopen), fname);
+	    semsg(_(e_cant_open_file_str), fname);
 	    goto failed;
 	}
     }
@@ -5367,7 +5355,7 @@ mch_job_start(char *cmd, job_T *job, jobopt_T *options)
 		&saAttr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL);
 	if (efd[1] == INVALID_HANDLE_VALUE)
 	{
-	    semsg(_(e_notopen), fname);
+	    semsg(_(e_cant_open_file_str), fname);
 	    goto failed;
 	}
     }
@@ -5639,9 +5627,7 @@ termcap_mode_start(void)
 	ResizeConBufAndWindow(g_hConOut, Columns, Rows);
     }
 
-# ifdef FEAT_TITLE
     resettitle();
-# endif
 
     GetConsoleMode(g_hConIn, &cmodein);
     if (g_fMouseActive)
@@ -7772,7 +7758,7 @@ fix_arg_enc(void)
 	// Now expand wildcards in the arguments.
 	// Temporarily add '(' and ')' to 'isfname'.  These are valid
 	// filename characters but are excluded from 'isfname' to make
-	// "gf" work on a file name in parenthesis (e.g.: see vim.h).
+	// "gf" work on a file name in parentheses (e.g.: see vim.h).
 	// Also, unset wildignore to not be influenced by this option.
 	// The arguments specified in command-line should be kept even if
 	// encoding options were changed.

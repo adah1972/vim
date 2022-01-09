@@ -1,7 +1,7 @@
 " Vim functions for file type detection
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2020 Aug 17
+" Last Change:	2021 Dec 17
 
 " These functions are moved here from runtime/filetype.vim to make startup
 " faster.
@@ -231,7 +231,7 @@ func dist#ft#FTfs()
 	  \ || line =~ '^\s*: \S'
       setf forth
     else
-      setf fs
+      setf fsharp
     endif
   endif
 endfunc
@@ -811,6 +811,23 @@ func dist#ft#Redif()
   endwhile
 endfunc
 
+" This function is called for all files under */debian/patches/*, make sure not
+" to non-dep3patch files, such as README and other text files.
+func dist#ft#Dep3patch()
+  if expand('%:t') ==# 'series'
+    return
+  endif
+
+  for ln in getline(1, 100)
+    if ln =~# '^\%(Description\|Subject\|Origin\|Bug\|Forwarded\|Author\|From\|Reviewed-by\|Acked-by\|Last-Updated\|Applied-Upstream\):'
+      setf dep3patch
+      return
+    elseif ln =~# '^---'
+      " end of headers found. stop processing
+      return
+    endif
+  endfor
+endfunc
 
 " Restore 'cpoptions'
 let &cpo = s:cpo_save

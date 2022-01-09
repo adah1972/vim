@@ -128,8 +128,6 @@ static void	nv_drop(cmdarg_T *cap);
 #endif
 static void	nv_cursorhold(cmdarg_T *cap);
 
-static char *e_noident = N_("E349: No identifier under cursor");
-
 /*
  * Function to be called for a Normal or Visual mode command.
  * The argument is a cmdarg_T.
@@ -594,12 +592,19 @@ normal_cmd(
 	    && VIsual_select
 	    && (vim_isprintc(c) || c == NL || c == CAR || c == K_KENTER))
     {
+	int len;
+
 	// Fake a "c"hange command.  When "restart_edit" is set (e.g., because
 	// 'insertmode' is set) fake a "d"elete command, Insert mode will
 	// restart automatically.
 	// Insert the typed character in the typeahead buffer, so that it can
 	// be mapped in Insert mode.  Required for ":lmap" to work.
-	ins_char_typebuf(vgetc_char, vgetc_mod_mask);
+	len = ins_char_typebuf(vgetc_char, vgetc_mod_mask);
+
+	// When recording the character will be recorded again, remove the
+	// previously recording.
+	ungetchars(len);
+
 	if (restart_edit != 0)
 	    c = 'd';
 	else
@@ -607,6 +612,11 @@ normal_cmd(
 	msg_nowait = TRUE;	// don't delay going to insert mode
 	old_mapped_len = 0;	// do go to Insert mode
     }
+
+    // If the window was made so small that nothing shows, make it at least one
+    // line and one column when typing a command.
+    if (KeyTyped && !KeyStuffed)
+	win_ensure_size();
 
 #ifdef FEAT_CMDL_INFO
     need_flushbuf = add_to_showcmd(c);
@@ -1640,9 +1650,9 @@ find_ident_at_pos(
 	if ((find_type & FIND_NOERROR) == 0)
 	{
 	    if (find_type & FIND_STRING)
-		emsg(_("E348: No string under cursor"));
+		emsg(_(e_no_string_under_cursor));
 	    else
-		emsg(_(e_noident));
+		emsg(_(e_no_identifier_under_cursor));
 	}
 	return 0;
     }
@@ -3077,7 +3087,7 @@ dozet:
 		    deleteFold((linenr_T)1, curbuf->b_ml.ml_line_count,
 								 TRUE, FALSE);
 		else
-		    emsg(_("E352: Cannot erase folds with current 'foldmethod'"));
+		    emsg(_(e_cannot_erase_folds_with_current_foldmethod));
 		break;
 
 		// "zn": fold none: reset 'foldenable'
@@ -3678,7 +3688,7 @@ nv_ident(cmdarg_T *cap)
 						 || STRCMP(kp, ":help") == 0);
     if (kp_help && *skipwhite(ptr) == NUL)
     {
-	emsg(_(e_noident));	 // found white space only
+	emsg(_(e_no_identifier_under_cursor));	 // found white space only
 	return;
     }
     kp_ex = (*kp == ':');
@@ -3729,7 +3739,8 @@ nv_ident(cmdarg_T *cap)
 		}
 		if (n == 0)
 		{
-		    emsg(_(e_noident));	 // found dashes only
+		    // found dashes only
+		    emsg(_(e_no_identifier_under_cursor));
 		    vim_free(buf);
 		    return;
 		}
@@ -4383,7 +4394,7 @@ nv_search(cmdarg_T *cap)
 
     // When using 'incsearch' the cursor may be moved to set a different search
     // start position.
-    cap->searchbuf = getcmdline(cap->cmdchar, cap->count1, 0, TRUE);
+    cap->searchbuf = getcmdline(cap->cmdchar, cap->count1, 0, 0);
 
     if (cap->searchbuf == NULL)
     {
@@ -5588,12 +5599,11 @@ nv_gomark(cmdarg_T *cap)
     static void
 nv_pcmark(cmdarg_T *cap)
 {
-#ifdef FEAT_JUMPLIST
     pos_T	*pos;
-# ifdef FEAT_FOLDING
+#ifdef FEAT_FOLDING
     linenr_T	lnum = curwin->w_cursor.lnum;
     int		old_KeyTyped = KeyTyped;    // getting file may reset it
-# endif
+#endif
 
     if (!checkclearopq(cap->oap))
     {
@@ -5617,11 +5627,11 @@ nv_pcmark(cmdarg_T *cap)
 	else if (cap->cmdchar == 'g')
 	{
 	    if (curbuf->b_changelistlen == 0)
-		emsg(_("E664: changelist is empty"));
+		emsg(_(e_changelist_is_empty));
 	    else if (cap->count1 < 0)
-		emsg(_("E662: At start of changelist"));
+		emsg(_(e_at_start_of_changelist));
 	    else
-		emsg(_("E663: At end of changelist"));
+		emsg(_(e_at_end_of_changelist));
 	}
 	else
 	    clearopbeep(cap->oap);
@@ -5633,9 +5643,6 @@ nv_pcmark(cmdarg_T *cap)
 	    foldOpenCursor();
 # endif
     }
-#else
-    clearopbeep(cap->oap);
-#endif
 }
 
 /*
@@ -6121,14 +6128,9 @@ nv_g_cmd(cmdarg_T *cap)
 
     case 'M':
 	{
-	    char_u  *ptr = ml_get_curline();
-
 	    oap->motion_type = MCHAR;
 	    oap->inclusive = FALSE;
-	    if (has_mbyte)
-		i = mb_string2cells(ptr, (int)STRLEN(ptr));
-	    else
-		i = (int)STRLEN(ptr);
+	    i = linetabsize(ml_get_curline());
 	    if (cap->count0 > 0 && cap->count0 <= 100)
 		coladvance((colnr_T)(i * cap->count0 / 100));
 	    else
@@ -6439,7 +6441,6 @@ nv_g_cmd(cmdarg_T *cap)
 	    do_exmode(TRUE);
 	break;
 
-#ifdef FEAT_JUMPLIST
     case ',':
 	nv_pcmark(cap);
 	break;
@@ -6448,7 +6449,6 @@ nv_g_cmd(cmdarg_T *cap)
 	cap->count1 = -cap->count1;
 	nv_pcmark(cap);
 	break;
-#endif
 
     case 't':
 	if (!checkclearop(oap))
@@ -6506,7 +6506,7 @@ n_opencmd(cmdarg_T *cap)
 		       ) == OK
 		&& open_line(cap->cmdchar == 'O' ? BACKWARD : FORWARD,
 			 has_format_option(FO_OPEN_COMS) ? OPENLINE_DO_COM : 0,
-								      0) == OK)
+								0, NULL) == OK)
 	{
 #ifdef FEAT_CONCEAL
 	    if (curwin->w_p_cole > 0 && oldline != curwin->w_cursor.lnum)

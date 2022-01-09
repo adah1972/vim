@@ -1240,10 +1240,15 @@ getvcol(
 	posptr = NULL;  // continue until the NUL
     else
     {
-	// Special check for an empty line, which can happen on exit, when
-	// ml_get_buf() always returns an empty string.
-	if (*ptr == NUL)
-	    pos->col = 0;
+	colnr_T i;
+
+	// In a few cases the position can be beyond the end of the line.
+	for (i = 0; i < pos->col; ++i)
+	    if (ptr[i] == NUL)
+	    {
+		pos->col = i;
+		break;
+	    }
 	posptr = ptr + pos->col;
 	if (has_mbyte)
 	    // always start on the first byte
@@ -1459,17 +1464,32 @@ getvcols(
 }
 
 /*
- * skipwhite: skip over ' ' and '\t'.
+ * Skip over ' ' and '\t'.
  */
     char_u *
 skipwhite(char_u *q)
 {
     char_u	*p = q;
 
-    while (VIM_ISWHITE(*p)) // skip to next non-white
+    while (VIM_ISWHITE(*p))
 	++p;
     return p;
 }
+
+#if defined(FEAT_EVAL) || defined(PROTO)
+/*
+ * skip over ' ', '\t' and '\n'.
+ */
+    char_u *
+skipwhite_and_nl(char_u *q)
+{
+    char_u	*p = q;
+
+    while (VIM_ISWHITE(*p) || *p == NL)
+	++p;
+    return p;
+}
+#endif
 
 /*
  * getwhitecols: return the number of whitespace
@@ -1748,7 +1768,7 @@ skiptowhite_esc(char_u *p)
 }
 
 /*
- * Getdigits: Get a number from a string and skip over it.
+ * Get a number from a string and skip over it.
  * Note: the argument is a pointer to a char_u pointer!
  */
     long
@@ -1762,6 +1782,38 @@ getdigits(char_u **pp)
     if (*p == '-')		// skip negative sign
 	++p;
     p = skipdigits(p);		// skip to next non-digit
+    *pp = p;
+    return retval;
+}
+
+/*
+ * Like getdigits() but allow for embedded single quotes.
+ */
+    long
+getdigits_quoted(char_u **pp)
+{
+    char_u	*p = *pp;
+    long	retval = 0;
+
+    if (*p == '-')
+	++p;
+    while (VIM_ISDIGIT(*p))
+    {
+	if (retval >= LONG_MAX / 10 - 10)
+	    retval = LONG_MAX;
+	else
+	    retval = retval * 10 - '0' + *p;
+	++p;
+	if (in_vim9script() && *p == '\'' && VIM_ISDIGIT(p[1]))
+	    ++p;
+    }
+    if (**pp == '-')
+    {
+	if (retval == LONG_MAX)
+	    retval = LONG_MIN;
+	else
+	    retval = -retval;
+    }
     *pp = p;
     return retval;
 }

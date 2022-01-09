@@ -38,41 +38,53 @@ static void	copy_yank_reg(yankreg_T *reg);
 #endif
 static void	dis_msg(char_u *p, int skip_esc);
 
+#if defined(FEAT_VIMINFO) || defined(PROTO)
     yankreg_T *
 get_y_regs(void)
 {
     return y_regs;
 }
+#endif
 
+#if defined(FEAT_CLIPBOARD) || defined(PROTO)
     yankreg_T *
 get_y_register(int reg)
 {
     return &y_regs[reg];
 }
+#endif
 
+#if defined(FEAT_CLIPBOARD) || defined(FEAT_VIMINFO) || defined(FEAT_EVAL) || defined(PROTO)
     yankreg_T *
 get_y_current(void)
 {
     return y_current;
 }
+#endif
 
+#if defined(FEAT_CLIPBOARD) || defined(FEAT_VIMINFO) || defined(PROTO)
     yankreg_T *
 get_y_previous(void)
 {
     return y_previous;
 }
+#endif
 
+#if defined(FEAT_CLIPBOARD) || defined(PROTO)
     void
 set_y_current(yankreg_T *yreg)
 {
     y_current = yreg;
 }
+#endif
 
+#if defined(FEAT_CLIPBOARD) || defined(FEAT_VIMINFO) || defined(PROTO)
     void
 set_y_previous(yankreg_T *yreg)
 {
     y_previous = yreg;
 }
+#endif
 
     void
 reset_y_append(void)
@@ -97,7 +109,7 @@ get_expr_register(void)
 {
     char_u	*new_line;
 
-    new_line = getcmdline('=', 0L, 0, TRUE);
+    new_line = getcmdline('=', 0L, 0, 0);
     if (new_line == NULL)
 	return NUL;
     if (*new_line == NUL)	// use previous line
@@ -474,6 +486,7 @@ stuff_yank(int regname, char_u *p)
  */
 static int execreg_lastc = NUL;
 
+#if defined(FEAT_VIMINFO) || defined(PROTO)
     int
 get_execreg_lastc(void)
 {
@@ -485,6 +498,7 @@ set_execreg_lastc(int lastc)
 {
     execreg_lastc = lastc;
 }
+#endif
 
 /*
  * When executing a register as a series of ex-commands, if the
@@ -513,7 +527,7 @@ execreg_line_continuation(char_u **lines, long *idx)
     int		j;
     char_u	*str;
 
-    ga_init2(&ga, (int)sizeof(char_u), 400);
+    ga_init2(&ga, sizeof(char_u), 400);
 
     // search backwards to find the first line of this command.
     // Any line not starting with \ or "\ is the start of the
@@ -575,7 +589,7 @@ do_execreg(
     {
 	if (execreg_lastc == NUL)
 	{
-	    emsg(_("E748: No previously used register"));
+	    emsg(_(e_no_previously_used_register));
 	    return FAIL;
 	}
 	regname = execreg_lastc;
@@ -1089,26 +1103,8 @@ free_yank(long n)
 	long	    i;
 
 	for (i = n; --i >= 0; )
-	{
-#ifdef AMIGA	    // only for very slow machines
-	    if ((i & 1023) == 1023)  // this may take a while
-	    {
-		// This message should never cause a hit-return message.
-		// Overwrite this message with any next message.
-		++no_wait_return;
-		smsg(_("freeing %ld lines"), i + 1);
-		--no_wait_return;
-		msg_didout = FALSE;
-		msg_col = 0;
-	    }
-#endif
 	    vim_free(y_current->y_array[i]);
-	}
 	VIM_CLEAR(y_current->y_array);
-#ifdef AMIGA
-	if (n >= 1000)
-	    msg("");
-#endif
     }
 }
 
@@ -1550,6 +1546,7 @@ do_put(
     long	j;
     struct block_def bd;
     char_u	**y_array = NULL;
+    yankreg_T	*y_current_used = NULL;
     long	nr_lines = 0;
     pos_T	new_cursor;
     int		indent;
@@ -1660,6 +1657,7 @@ do_put(
 	y_width = y_current->y_width;
 	y_size = y_current->y_size;
 	y_array = y_current->y_array;
+	y_current_used = y_current;
     }
 
     if (y_type == MLINE)
@@ -1707,7 +1705,7 @@ do_put(
 
     if (y_size == 0 || y_array == NULL)
     {
-	semsg(_("E353: Nothing in register %s"),
+	semsg(_(e_nothing_in_register_str),
 		  regname == 0 ? (char_u *)"\"" : transchar(regname));
 	goto end;
     }
@@ -2208,6 +2206,14 @@ error:
 	    else
 		changed_lines(curbuf->b_op_start.lnum, 0,
 					   curbuf->b_op_start.lnum, nr_lines);
+	    if (y_current_used != NULL && (y_current_used != y_current
+					     || y_current->y_array != y_array))
+	    {
+		// Something invoked through changed_lines() has changed the
+		// yank buffer, e.g. a GUI clipboard callback.
+		emsg(_(e_yank_register_changed_while_using_it));
+		goto end;
+	    }
 
 	    // Put the '] mark on the first byte of the last inserted character.
 	    // Correct the length for change in indent.
@@ -2316,6 +2322,7 @@ get_register_name(int num)
     }
 }
 
+#if defined(FEAT_EVAL) || defined(PROTO)
 /*
  * Return the index of the register "" points to.
  */
@@ -2324,6 +2331,7 @@ get_unname_register()
 {
     return y_previous == NULL ? -1 : y_previous - &y_regs[0];
 }
+#endif
 
 /*
  * ":dis" and ":registers": Display the contents of the yank registers.
@@ -2788,8 +2796,7 @@ write_reg_contents_lst(
 	    s = (char_u *)"";
 	else if (strings[1] != NULL)
 	{
-	    emsg(_("E883: search pattern and expression register may not "
-			"contain two or more lines"));
+	    emsg(_(e_search_pattern_and_expression_register_may_not_contain_two_or_more_lines));
 	    return;
 	}
 	else
@@ -2844,7 +2851,7 @@ write_reg_contents_ex(
 
 	    buf = buflist_findnr(num);
 	    if (buf == NULL)
-		semsg(_(e_nobufnr), (long)num);
+		semsg(_(e_buffer_nr_does_not_exist), (long)num);
 	}
 	else
 	    buf = buflist_findnr(buflist_findpat(str, str + STRLEN(str),

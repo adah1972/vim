@@ -56,10 +56,10 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char_u **valuep, long_
 static int put_setnum(FILE *fd, char *cmd, char *name, long *valuep);
 static int put_setbool(FILE *fd, char *cmd, char *name, int value);
 static int istermoption(struct vimoption *p);
-static char_u *get_varp_scope(struct vimoption *p, int opt_flags);
+static char_u *get_varp_scope(struct vimoption *p, int scope);
 static char_u *get_varp(struct vimoption *);
 static void check_win_options(win_T *win);
-static void option_value2string(struct vimoption *, int opt_flags);
+static void option_value2string(struct vimoption *, int scope);
 static void check_winopt(winopt_T *wop);
 static int wc_use_keyname(char_u *varp, long *wcp);
 static void paste_option_changed(void);
@@ -753,6 +753,7 @@ set_number_default(char *name, long val)
 	options[opt_idx].def_val[VI_DEFAULT] = (char_u *)(long_i)val;
 }
 
+#if defined(FEAT_PROP_POPUP) || defined(PROTO)
 /*
  * Set all window-local and buffer-local options to the Vim default.
  * local-global options will use the global value.
@@ -784,6 +785,7 @@ set_local_options_default(win_T *wp, int do_buffer)
     curwin = save_curwin;
     curbuf = curwin->w_buffer;
 }
+#endif
 
 #if defined(EXITFREE) || defined(PROTO)
 /*
@@ -1102,9 +1104,7 @@ set_init_3(void)
 	    set_fileformat(default_fileformat(), OPT_LOCAL);
     }
 
-#ifdef FEAT_TITLE
     set_title_defaults();
-#endif
 }
 
 #if defined(FEAT_MULTI_LANG) || defined(PROTO)
@@ -1148,7 +1148,6 @@ set_helplang_default(char_u *lang)
 }
 #endif
 
-#ifdef FEAT_TITLE
 /*
  * 'title' and 'icon' only default to true if they have not been set or reset
  * in .vimrc and we can read the old value.
@@ -1192,7 +1191,6 @@ set_title_defaults(void)
 	p_icon = val;
     }
 }
-#endif
 
     void
 ex_set(exarg_T *eap)
@@ -1222,11 +1220,12 @@ ex_set(exarg_T *eap)
  * does not need to be expanded with option_expand().
  * "opt_flags":
  * 0 for ":set"
- * OPT_GLOBAL   for ":setglobal"
- * OPT_LOCAL    for ":setlocal" and a modeline
- * OPT_MODELINE for a modeline
- * OPT_WINONLY  to only set window-local options
- * OPT_NOWIN	to skip setting window-local options
+ * OPT_GLOBAL     for ":setglobal"
+ * OPT_LOCAL      for ":setlocal" and a modeline
+ * OPT_MODELINE   for a modeline
+ * OPT_WINONLY    to only set window-local options
+ * OPT_NOWIN	  to skip setting window-local options
+ * OPT_ONECOLUMN  do not use multiple columns
  *
  * returns FAIL if an error is detected, OK otherwise
  */
@@ -1294,7 +1293,7 @@ do_set(
 	else if (STRNCMP(arg, "termcap", 7) == 0 && !(opt_flags & OPT_MODELINE))
 	{
 	    showoptions(2, opt_flags);
-	    show_termcodes();
+	    show_termcodes(opt_flags);
 	    did_show = TRUE;
 	    arg += 7;
 	}
@@ -1328,7 +1327,7 @@ do_set(
 		}
 		if (arg[len] != '>')
 		{
-		    errmsg = e_invarg;
+		    errmsg = e_invalid_argument;
 		    goto skip;
 		}
 		arg[len] = NUL;			    // put NUL after name
@@ -1409,7 +1408,7 @@ do_set(
 				  && vim_strchr((char_u *)"!&<", *arg) != NULL)
 		    errmsg = e_no_white_space_allowed_between_option_and;
 		else
-		    errmsg = N_("E518: Unknown option");
+		    errmsg = N_(e_unknown_option);
 		goto skip;
 	    }
 
@@ -1422,7 +1421,7 @@ do_set(
 		    if (vim_strchr((char_u *)"=:!&<", nextchar) == NULL
 			    && (!(options[opt_idx].flags & P_BOOL)
 				|| nextchar == '?'))
-			errmsg = N_("E519: Option not supported");
+			errmsg = N_(e_option_not_supported);
 		    goto skip;
 		}
 
@@ -1460,12 +1459,12 @@ do_set(
 	    {
 		if (flags & (P_SECURE | P_NO_ML))
 		{
-		    errmsg = N_("E520: Not allowed in a modeline");
+		    errmsg = N_(e_not_allowed_in_modeline);
 		    goto skip;
 		}
 		if ((flags & P_MLE) && !p_mle)
 		{
-		    errmsg = N_("E992: Not allowed in a modeline when 'modelineexpr' is off");
+		    errmsg = N_(e_not_allowed_in_modeline_when_modelineexpr_is_off);
 		    goto skip;
 		}
 #ifdef FEAT_DIFF
@@ -1512,7 +1511,7 @@ do_set(
 		if (vim_strchr((char_u *)"?!&<", nextchar) != NULL
 			&& arg[1] != NUL && !VIM_ISWHITE(arg[1]))
 		{
-		    errmsg = e_trailing;
+		    errmsg = e_trailing_characters;
 		    goto skip;
 		}
 	    }
@@ -1561,7 +1560,7 @@ do_set(
 		    p = find_termcode(key_name);
 		    if (p == NULL)
 		    {
-			errmsg = N_("E846: Key code not set");
+			errmsg = N_(e_key_code_not_set);
 			goto skip;
 		    }
 		    else
@@ -1569,7 +1568,7 @@ do_set(
 		}
 		if (nextchar != '?'
 			&& nextchar != NUL && !VIM_ISWHITE(afterchar))
-		    errmsg = e_trailing;
+		    errmsg = e_trailing_characters;
 	    }
 	    else
 	    {
@@ -1580,7 +1579,7 @@ do_set(
 		{
 		    if (nextchar == '=' || nextchar == ':')
 		    {
-			errmsg = e_invarg;
+			errmsg = e_invalid_argument;
 			goto skip;
 		    }
 
@@ -1613,7 +1612,7 @@ do_set(
 			 */
 			if (nextchar != NUL && !VIM_ISWHITE(afterchar))
 			{
-			    errmsg = e_trailing;
+			    errmsg = e_trailing_characters;
 			    goto skip;
 			}
 			if (prefix == 2)	// inv
@@ -1630,7 +1629,7 @@ do_set(
 		    if (vim_strchr((char_u *)"=:&<", nextchar) == NULL
 							       || prefix != 1)
 		    {
-			errmsg = e_invarg;
+			errmsg = e_invalid_argument;
 			goto skip;
 		    }
 
@@ -1672,7 +1671,7 @@ do_set(
 			    value = string_to_key(arg, FALSE);
 			    if (value == 0 && (long *)varp != &p_wcm)
 			    {
-				errmsg = e_invarg;
+				errmsg = e_invalid_argument;
 				goto skip;
 			    }
 			}
@@ -1685,13 +1684,13 @@ do_set(
 			    if (i == 0 || (arg[i] != NUL
 						      && !VIM_ISWHITE(arg[i])))
 			    {
-				errmsg = N_("E521: Number required after =");
+				errmsg = N_(e_number_required_after_equal);
 				goto skip;
 			    }
 			}
 			else
 			{
-			    errmsg = N_("E521: Number required after =");
+			    errmsg = N_(e_number_required_after_equal);
 			    goto skip;
 			}
 
@@ -1777,7 +1776,7 @@ do_set(
 			    else if ((char_u **)varp == &p_fencs && enc_utf8)
 				newval = fencs_utf8_default;
 
-			    // expand environment variables and ~ (since the
+			    // expand environment variables and ~ since the
 			    // default value was already expanded, only
 			    // required when an environment variable was set
 			    // later
@@ -2143,7 +2142,7 @@ do_set(
 			if (nextchar == '&')
 			{
 			    if (add_termcap_entry(key_name, TRUE) == FAIL)
-				errmsg = N_("E522: Not found in termcap");
+				errmsg = N_(e_not_found_in_termcap);
 			}
 			else
 			{
@@ -2272,7 +2271,6 @@ string_to_key(char_u *arg, int multi_byte)
     return *arg;
 }
 
-#ifdef FEAT_TITLE
 /*
  * When changing 'title', 'titlestring', 'icon' or 'iconstring', call
  * maketitle() to create and display it.
@@ -2289,7 +2287,6 @@ did_set_title(void)
 				)
 	maketitle();
 }
-#endif
 
 /*
  * set_options_bin -  called when 'bin' changes value.
@@ -2558,7 +2555,6 @@ insecure_flag(int opt_idx, int opt_flags)
 }
 #endif
 
-#if defined(FEAT_TITLE) || defined(PROTO)
 /*
  * Redraw the window title and/or tab page text later.
  */
@@ -2567,7 +2563,6 @@ void redraw_titles(void)
     need_maketitle = TRUE;
     redraw_tabline = TRUE;
 }
-#endif
 
 /*
  * Return TRUE if "val" is a valid name: only consists of alphanumeric ASCII
@@ -2717,7 +2712,7 @@ set_bool_option(
 		|| sandbox != 0
 #endif
 		) && (options[opt_idx].flags & P_SECURE))
-	return e_secure;
+	return e_not_allowed_here;
 
 #if defined(FEAT_EVAL)
     // Save the global value before changing anything. This is needed as for
@@ -2809,9 +2804,7 @@ set_bool_option(
 	if (curbuf->b_p_ro)
 	    curbuf->b_did_warn = FALSE;
 
-#ifdef FEAT_TITLE
 	redraw_titles();
-#endif
     }
 
 #ifdef FEAT_GUI
@@ -2831,14 +2824,11 @@ set_bool_option(
 		      && curbuf->b_term != NULL && !term_is_finished(curbuf))))
 	{
 	    curbuf->b_p_ma = FALSE;
-	    return N_("E946: Cannot make a terminal with running job modifiable");
+	    return N_(e_cannot_make_terminal_with_running_job_modifiable);
 	}
 # endif
-# ifdef FEAT_TITLE
 	redraw_titles();
-# endif
     }
-#ifdef FEAT_TITLE
     // when 'endofline' is changed, redraw the window title
     else if ((int *)varp == &curbuf->b_p_eol)
     {
@@ -2854,15 +2844,12 @@ set_bool_option(
     {
 	redraw_titles();
     }
-#endif
 
     // when 'bin' is set also set some other options
     else if ((int *)varp == &curbuf->b_p_bin)
     {
 	set_options_bin(old_value, curbuf->b_p_bin, opt_flags);
-#ifdef FEAT_TITLE
 	redraw_titles();
-#endif
     }
 
     // when 'buflisted' changes, trigger autocommands
@@ -2965,7 +2952,7 @@ set_bool_option(
 		if (win->w_p_pvw && win != curwin)
 		{
 		    curwin->w_p_pvw = FALSE;
-		    return N_("E590: A preview window already exists");
+		    return N_(e_preview_window_already_exists);
 		}
 	}
     }
@@ -2996,21 +2983,17 @@ set_bool_option(
     }
 #endif
 
-#ifdef FEAT_TITLE
     // when 'title' changed, may need to change the title; same for 'icon'
     else if ((int *)varp == &p_title || (int *)varp == &p_icon)
     {
 	did_set_title();
     }
-#endif
 
     else if ((int *)varp == &curbuf->b_changed)
     {
 	if (!value)
 	    save_file_ff(curbuf);	// Buffer is unchanged
-#ifdef FEAT_TITLE
 	redraw_titles();
-#endif
 	modified_was_set = value;
     }
 
@@ -3158,7 +3141,7 @@ set_bool_option(
 		}
 	    }
 
-	    // Arabic requires a utf-8 encoding, inform the user if its not
+	    // Arabic requires a utf-8 encoding, inform the user if it's not
 	    // set.
 	    if (STRCMP(p_enc, "utf-8") != 0)
 	    {
@@ -3242,7 +3225,7 @@ set_bool_option(
 	    !has_vtp_working())
 	{
 	    p_tgc = 0;
-	    return N_("E954: 24-bit colors are not supported on this environment");
+	    return N_(e_24_bit_colors_are_not_supported_on_this_environment);
 	}
 	if (is_term_win32())
 	    swap_tcap();
@@ -3323,7 +3306,7 @@ set_num_option(
 		|| sandbox != 0
 #endif
 		) && (options[opt_idx].flags & P_SECURE))
-	return e_secure;
+	return e_not_allowed_here;
 
 #if defined(FEAT_EVAL)
     // Save the global value before changing anything. This is needed as for
@@ -3345,7 +3328,7 @@ set_num_option(
 
     if (curbuf->b_p_sw < 0)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 #ifdef FEAT_VARTABS
 	// Use the first 'vartabstop' value, or 'tabstop' if vts isn't in use.
 	curbuf->b_p_sw = tabstop_count(curbuf->b_p_vts_array) > 0
@@ -3364,17 +3347,17 @@ set_num_option(
 	// 'winheight' and 'helpheight'
 	if (p_wh < 1)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    p_wh = 1;
 	}
 	if (p_wmh > p_wh)
 	{
-	    errmsg = e_winheight;
+	    errmsg = e_winheight_cannot_be_smaller_than_winminheight;
 	    p_wh = p_wmh;
 	}
 	if (p_hh < 0)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    p_hh = 0;
 	}
 
@@ -3392,12 +3375,12 @@ set_num_option(
 	// 'winminheight'
 	if (p_wmh < 0)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    p_wmh = 0;
 	}
 	if (p_wmh > p_wh)
 	{
-	    errmsg = e_winheight;
+	    errmsg = e_winheight_cannot_be_smaller_than_winminheight;
 	    p_wmh = p_wh;
 	}
 	win_setminheight();
@@ -3407,12 +3390,12 @@ set_num_option(
 	// 'winwidth'
 	if (p_wiw < 1)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    p_wiw = 1;
 	}
 	if (p_wmw > p_wiw)
 	{
-	    errmsg = e_winwidth;
+	    errmsg = e_winwidth_cannot_be_smaller_than_winminwidth;
 	    p_wiw = p_wmw;
 	}
 
@@ -3425,12 +3408,12 @@ set_num_option(
 	// 'winminwidth'
 	if (p_wmw < 0)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    p_wmw = 0;
 	}
 	if (p_wmw > p_wiw)
 	{
-	    errmsg = e_winwidth;
+	    errmsg = e_winwidth_cannot_be_smaller_than_winminwidth;
 	    p_wmw = p_wiw;
 	}
 	win_setminwidth();
@@ -3485,12 +3468,12 @@ set_num_option(
     {
 	if (curwin->w_p_fdc < 0)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    curwin->w_p_fdc = 0;
 	}
 	else if (curwin->w_p_fdc > 12)
 	{
-	    errmsg = e_invarg;
+	    errmsg = e_invalid_argument;
 	    curwin->w_p_fdc = 12;
 	}
     }
@@ -3527,7 +3510,7 @@ set_num_option(
     {
 	if (curbuf->b_p_iminsert < 0 || curbuf->b_p_iminsert > B_IMODE_LAST)
 	{
-	    errmsg = e_invarg;
+	    errmsg = e_invalid_argument;
 	    curbuf->b_p_iminsert = B_IMODE_NONE;
 	}
 	p_iminsert = curbuf->b_p_iminsert;
@@ -3544,7 +3527,7 @@ set_num_option(
     else if (pp == &p_imst)
     {
 	if (p_imst != IM_ON_THE_SPOT && p_imst != IM_OVER_THE_SPOT)
-	    errmsg = e_invarg;
+	    errmsg = e_invalid_argument;
     }
 #endif
 
@@ -3560,32 +3543,30 @@ set_num_option(
     {
 	if (curbuf->b_p_imsearch < -1 || curbuf->b_p_imsearch > B_IMODE_LAST)
 	{
-	    errmsg = e_invarg;
+	    errmsg = e_invalid_argument;
 	    curbuf->b_p_imsearch = B_IMODE_NONE;
 	}
 	p_imsearch = curbuf->b_p_imsearch;
     }
 
-#ifdef FEAT_TITLE
     // if 'titlelen' has changed, redraw the title
     else if (pp == &p_titlelen)
     {
 	if (p_titlelen < 0)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    p_titlelen = 85;
 	}
 	if (starting != NO_SCREEN && old_value != p_titlelen)
 	    need_maketitle = TRUE;
     }
-#endif
 
     // if p_ch changed value, change the command line height
     else if (pp == &p_ch)
     {
 	if (p_ch < 1)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    p_ch = 1;
 	}
 	if (p_ch > Rows - min_rows() + 1)
@@ -3606,7 +3587,7 @@ set_num_option(
     {
 	if (p_uc < 0)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    p_uc = 100;
 	}
 	if (p_uc && !old_value)
@@ -3617,12 +3598,12 @@ set_num_option(
     {
 	if (curwin->w_p_cole < 0)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    curwin->w_p_cole = 0;
 	}
 	else if (curwin->w_p_cole > 3)
 	{
-	    errmsg = e_invarg;
+	    errmsg = e_invalid_argument;
 	    curwin->w_p_cole = 3;
 	}
     }
@@ -3637,7 +3618,7 @@ set_num_option(
     else if (pp == &p_pyx)
     {
 	if (p_pyx != 0 && p_pyx != 2 && p_pyx != 3)
-	    errmsg = e_invarg;
+	    errmsg = e_invalid_argument;
     }
 #endif
 
@@ -3663,12 +3644,12 @@ set_num_option(
     {
 	if (curwin->w_p_nuw < 1)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    curwin->w_p_nuw = 1;
 	}
 	if (curwin->w_p_nuw > 20)
 	{
-	    errmsg = e_invarg;
+	    errmsg = e_invalid_argument;
 	    curwin->w_p_nuw = 20;
 	}
 	curwin->w_nrwidth_line_count = 0; // trigger a redraw
@@ -3679,7 +3660,7 @@ set_num_option(
     {
 	if (curbuf->b_p_tw < 0)
 	{
-	    errmsg = e_positive;
+	    errmsg = e_argument_must_be_positive;
 	    curbuf->b_p_tw = 0;
 	}
 #ifdef FEAT_SYN_HL
@@ -3701,7 +3682,7 @@ set_num_option(
 	if (errbuf != NULL)
 	{
 	    vim_snprintf((char *)errbuf, errbuflen,
-			       _("E593: Need at least %d lines"), min_rows());
+			       _(e_need_at_least_nr_lines), min_rows());
 	    errmsg = errbuf;
 	}
 	Rows = min_rows();
@@ -3711,7 +3692,7 @@ set_num_option(
 	if (errbuf != NULL)
 	{
 	    vim_snprintf((char *)errbuf, errbuflen,
-			    _("E594: Need at least %d columns"), MIN_COLUMNS);
+			    _(e_need_at_least_nr_columns), MIN_COLUMNS);
 	    errmsg = errbuf;
 	}
 	Columns = MIN_COLUMNS;
@@ -3747,12 +3728,12 @@ set_num_option(
 
     if (curbuf->b_p_ts <= 0)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	curbuf->b_p_ts = 8;
     }
     if (p_tm < 0)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	p_tm = 0;
     }
     if ((curwin->w_p_scr <= 0
@@ -3775,22 +3756,22 @@ set_num_option(
     }
     if (p_hi < 0)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	p_hi = 0;
     }
     else if (p_hi > 10000)
     {
-	errmsg = e_invarg;
+	errmsg = e_invalid_argument;
 	p_hi = 10000;
     }
     if (p_re < 0 || p_re > 2)
     {
-	errmsg = e_invarg;
+	errmsg = e_invalid_argument;
 	p_re = 0;
     }
     if (p_report < 0)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	p_report = 1;
     }
     if ((p_sj < -100 || p_sj >= Rows) && full_screen)
@@ -3805,29 +3786,29 @@ set_num_option(
     }
     if (p_so < 0 && full_screen)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	p_so = 0;
     }
     if (p_siso < 0 && full_screen)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	p_siso = 0;
     }
 #ifdef FEAT_CMDWIN
     if (p_cwh < 1)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	p_cwh = 1;
     }
 #endif
     if (p_ut < 0)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	p_ut = 2000;
     }
     if (p_ss < 0)
     {
-	errmsg = e_positive;
+	errmsg = e_argument_must_be_positive;
 	p_ss = 0;
     }
 
@@ -3958,13 +3939,16 @@ findoption(char_u *arg)
  * Hidden Toggle option: gov_hidden_bool.
  * Hidden String option: gov_hidden_string.
  * Unknown option: gov_unknown.
+ *
+ * "flagsp" (if not NULL) is set to the option flags (P_xxxx).
  */
     getoption_T
 get_option_value(
     char_u	*name,
     long	*numval,
     char_u	**stringval,	    // NULL when only checking existence
-    int		opt_flags)
+    int		*flagsp,
+    int		scope)
 {
     int		opt_idx;
     char_u	*varp;
@@ -3979,6 +3963,9 @@ get_option_value(
 	{
 	    char_u key_name[2];
 	    char_u *p;
+
+	    if (flagsp != NULL)
+		*flagsp = 0;  // terminal option has no flags
 
 	    // check for a terminal option
 	    if (key < 0)
@@ -4002,7 +3989,11 @@ get_option_value(
 	return gov_unknown;
     }
 
-    varp = get_varp_scope(&(options[opt_idx]), opt_flags);
+    varp = get_varp_scope(&(options[opt_idx]), scope);
+
+    if (flagsp != NULL)
+	// Return the P_xxxx option flags.
+	*flagsp = options[opt_idx].flags;
 
     if (options[opt_idx].flags & P_STRING)
     {
@@ -4363,7 +4354,7 @@ set_option_value(
 	    return NULL;
 	}
 
-	semsg(_("E355: Unknown option: %s"), name);
+	semsg(_(e_unknown_option_str_2), name);
     }
     else
     {
@@ -4396,7 +4387,7 @@ set_option_value(
 			// There's another character after zeros or the string
 			// is empty.  In both cases, we are trying to set a
 			// num option using a string.
-			semsg(_("E521: Number required: &%s = '%s'"),
+			semsg(_(e_number_required_after_str_equal_str),
 								name, string);
 			return NULL;     // do nothing as we hit an error
 
@@ -4971,9 +4962,7 @@ clear_termoptions(void)
      * screen will be cleared later, so this is OK.
      */
     mch_setmouse(FALSE);	    // switch mouse off
-#ifdef FEAT_TITLE
     mch_restore_title(SAVE_RESTORE_BOTH);    // restore window titles
-#endif
 #if defined(FEAT_XCLIPBOARD) && defined(FEAT_GUI)
     // When starting the GUI close the display opened for the clipboard.
     // After restoring the title, because that will need the display.
@@ -5202,17 +5191,18 @@ unset_global_local_option(char_u *name, void *from)
 
 /*
  * Get pointer to option variable, depending on local or global scope.
+ * "scope" can be OPT_LOCAL, OPT_GLOBAL or a combination.
  */
     static char_u *
-get_varp_scope(struct vimoption *p, int opt_flags)
+get_varp_scope(struct vimoption *p, int scope)
 {
-    if ((opt_flags & OPT_GLOBAL) && p->indir != PV_NONE)
+    if ((scope & OPT_GLOBAL) && p->indir != PV_NONE)
     {
 	if (p->var == VAR_WIN)
 	    return (char_u *)GLOBAL_WO(get_varp(p));
 	return p->var;
     }
-    if ((opt_flags & OPT_LOCAL) && ((int)p->indir & PV_BOTH))
+    if ((scope & OPT_LOCAL) && ((int)p->indir & PV_BOTH))
     {
 	switch ((int)p->indir)
 	{
@@ -5271,9 +5261,9 @@ get_varp_scope(struct vimoption *p, int opt_flags)
  * scope.
  */
     char_u *
-get_option_varp_scope(int opt_idx, int opt_flags)
+get_option_varp_scope(int opt_idx, int scope)
 {
-    return get_varp_scope(&(options[opt_idx]), opt_flags);
+    return get_varp_scope(&(options[opt_idx]), scope);
 }
 
 /*
@@ -5532,7 +5522,7 @@ get_varp(struct vimoption *p)
 	case PV_VSTS:	return (char_u *)&(curbuf->b_p_vsts);
 	case PV_VTS:	return (char_u *)&(curbuf->b_p_vts);
 #endif
-	default:	iemsg(_("E356: get_varp ERROR"));
+	default:	iemsg(_(e_get_varp_error));
     }
     // always return a valid pointer to avoid a crash!
     return (char_u *)&(curbuf->b_p_wm);
@@ -5547,6 +5537,7 @@ get_option_var(int opt_idx)
     return options[opt_idx].var;
 }
 
+#if defined(FEAT_EVAL) || defined(PROTO)
 /*
  * Return the full name of the option at 'opt_idx'
  */
@@ -5555,6 +5546,7 @@ get_option_fullname(int opt_idx)
 {
     return (char_u *)options[opt_idx].fullname;
 }
+#endif
 
 /*
  * Get the value of 'equalprg', either the buffer-local one or the global one.
@@ -5940,7 +5932,7 @@ buf_copy_options(buf_T *buf, int flags)
 	    else
 	    {
 		buf->b_p_swf = p_swf;
-		COPY_OPT_SCTX(buf, BV_INF);
+		COPY_OPT_SCTX(buf, BV_SWF);
 	    }
 	    buf->b_p_cpt = vim_strsave(p_cpt);
 	    COPY_OPT_SCTX(buf, BV_CPT);
@@ -5951,13 +5943,15 @@ buf_copy_options(buf_T *buf, int flags)
 #ifdef FEAT_COMPL_FUNC
 	    buf->b_p_cfu = vim_strsave(p_cfu);
 	    COPY_OPT_SCTX(buf, BV_CFU);
+	    set_buflocal_cfu_callback(buf);
 	    buf->b_p_ofu = vim_strsave(p_ofu);
 	    COPY_OPT_SCTX(buf, BV_OFU);
+	    set_buflocal_ofu_callback(buf);
 #endif
 #ifdef FEAT_EVAL
 	    buf->b_p_tfu = vim_strsave(p_tfu);
 	    COPY_OPT_SCTX(buf, BV_TFU);
-	    buf_set_tfu_callback(buf);
+	    set_buflocal_tfu_callback(buf);
 #endif
 	    buf->b_p_sts = p_sts;
 	    COPY_OPT_SCTX(buf, BV_STS);
@@ -6140,6 +6134,7 @@ buf_copy_options(buf_T *buf, int flags)
 		COPY_OPT_SCTX(buf, BV_ISK);
 		did_isk = TRUE;
 		buf->b_p_ts = p_ts;
+		COPY_OPT_SCTX(buf, BV_TS);
 #ifdef FEAT_VARTABS
 		buf->b_p_vts = vim_strsave(p_vts);
 		COPY_OPT_SCTX(buf, BV_VTS);
@@ -6639,11 +6634,11 @@ ExpandOldSetting(int *num_file, char_u ***file)
     static void
 option_value2string(
     struct vimoption	*opp,
-    int			opt_flags)	// OPT_GLOBAL and/or OPT_LOCAL
+    int			scope)	// OPT_GLOBAL and/or OPT_LOCAL
 {
     char_u	*varp;
 
-    varp = get_varp_scope(opp, opt_flags);
+    varp = get_varp_scope(opp, scope);
 
     if (opp->flags & P_NUM)
     {
@@ -7211,7 +7206,7 @@ option_set_callback_func(char_u *optval UNUSED, callback_T *optcb UNUSED)
 	return OK;
     }
 
-    if (*optval == '{'
+    if (*optval == '{' || (in_vim9script() && *optval == '(')
 	    || (STRNCMP(optval, "function(", 9) == 0)
 	    || (STRNCMP(optval, "funcref(", 8) == 0))
 	// Lambda expression or a funcref
@@ -7223,7 +7218,7 @@ option_set_callback_func(char_u *optval UNUSED, callback_T *optcb UNUSED)
 	return FAIL;
 
     cb = get_callback(tv);
-    if (cb.cb_name == NULL)
+    if (cb.cb_name == NULL || *cb.cb_name == NUL)
     {
 	free_tv(tv);
 	return FAIL;

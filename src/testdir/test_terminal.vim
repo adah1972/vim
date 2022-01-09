@@ -1124,6 +1124,47 @@ func Test_terminal_response_to_control_sequence()
   unlet g:job
 endfunc
 
+" Run this first, it fails when run after other tests.
+func Test_aa_terminal_focus_events()
+  CheckNotGui
+  CheckUnix
+  CheckRunVimInTerminal
+
+  let save_term = &term
+  let save_ttymouse = &ttymouse
+  set term=xterm ttymouse=xterm2
+
+  let lines =<< trim END
+      set term=xterm ttymouse=xterm2
+      au FocusLost * call setline(1, 'I am lost') | set nomod
+      au FocusGained * call setline(1, 'I am back') | set nomod
+  END
+  call writefile(lines, 'XtermFocus')
+  let buf = RunVimInTerminal('-S XtermFocus', #{rows: 6})
+
+  " Send a focus event to ourselves, it should be forwarded to the terminal
+  call feedkeys("\<Esc>[O", "Lx!")
+  call TermWait(buf)
+  call VerifyScreenDump(buf, 'Test_terminal_focus_1', {})
+
+  call feedkeys("\<Esc>[I", "Lx!")
+  call TermWait(buf)
+  call VerifyScreenDump(buf, 'Test_terminal_focus_2', {})
+
+  " check that a command line being edited is redrawn in place
+  call term_sendkeys(buf, ":" .. repeat('x', 80))
+  call TermWait(buf)
+  call feedkeys("\<Esc>[O", "Lx!")
+  call TermWait(buf)
+  call VerifyScreenDump(buf, 'Test_terminal_focus_3', {})
+  call term_sendkeys(buf, "\<Esc>")
+
+  call StopVimInTerminal(buf)
+  call delete('XtermFocus')
+  let &term = save_term
+  let &ttymouse = save_ttymouse
+endfunc
+
 " Run Vim, start a terminal in that Vim with the kill argument,
 " :qall works.
 func Run_terminal_qall_kill(line1, line2)
@@ -1335,6 +1376,34 @@ func Test_terminal_popup_bufload()
   exe 'bwipe! ' .. newbuf
 endfunc
 
+func Test_terminal_popup_two_windows()
+  CheckRunVimInTerminal
+  CheckUnix
+
+  " use "sh" instead of "&shell" in the hope it will use a short prompt
+  let lines =<< trim END
+      let termbuf = term_start('sh', #{hidden: v:true, term_finish: 'close'})
+      exe 'buffer ' .. termbuf
+
+      let winid = popup_create(termbuf, #{line: 2, minwidth: 30, border: []})
+      sleep 50m
+
+      call term_sendkeys(termbuf, "echo 'test'")
+  END
+  call writefile(lines, 'XpopupScript')
+  let buf = RunVimInTerminal('-S XpopupScript', {})
+
+  " typed text appears both in normal window and in popup
+  call WaitForAssert({-> assert_match("echo 'test'", term_getline(buf, 1))})
+  call WaitForAssert({-> assert_match("echo 'test'", term_getline(buf, 3))})
+
+  call term_sendkeys(buf, "\<CR>\<CR>exit\<CR>")
+  call TermWait(buf)
+  call term_sendkeys(buf, ":q\<CR>")
+  call StopVimInTerminal(buf)
+  call delete('XpopupScript')
+endfunc
+
 func Test_terminal_popup_insert_cmd()
   CheckUnix
 
@@ -1360,6 +1429,7 @@ endfunc
 
 func Test_terminal_dumpwrite_composing()
   CheckRunVimInTerminal
+
   let save_enc = &encoding
   set encoding=utf-8
   call assert_equal(1, winnr('$'))
@@ -1526,6 +1596,7 @@ endfunc
 " 4. 0.5 sec later: should be done, clean up
 func Test_terminal_statusline()
   CheckUnix
+  CheckFeature timers
 
   set statusline=x
   terminal
@@ -1539,6 +1610,31 @@ func Test_terminal_statusline()
   exe tbuf . 'bwipe!'
   au! BufLeave
   set statusline=
+endfunc
+
+func CheckTerminalWindowWorks(buf)
+  call WaitForAssert({-> assert_match('!sh \[running\]', term_getline(a:buf, 10))})
+  call term_sendkeys(a:buf, "exit\<CR>")
+  call WaitForAssert({-> assert_match('!sh \[finished\]', term_getline(a:buf, 10))})
+  call term_sendkeys(a:buf, ":q\<CR>")
+  call WaitForAssert({-> assert_match('^\~', term_getline(a:buf, 10))})
+endfunc
+
+func Test_start_terminal_from_timer()
+  CheckUnix
+  CheckFeature timers
+
+  " Open a terminal window from a timer, typed text goes to the terminal
+  call writefile(["call timer_start(100, { -> term_start('sh') })"], 'XtimerTerm')
+  let buf = RunVimInTerminal('-S XtimerTerm', {})
+  call CheckTerminalWindowWorks(buf)
+
+  " do the same in Insert mode
+  call term_sendkeys(buf, ":call timer_start(200, { -> term_start('sh') })\<CR>a")
+  call CheckTerminalWindowWorks(buf)
+
+  call StopVimInTerminal(buf)
+  call delete('XtimerTerm')
 endfunc
 
 func Test_terminal_window_focus()

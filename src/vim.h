@@ -638,12 +638,13 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define POPF_HIDDEN	0x02	// popup is not displayed
 #define POPF_CURSORLINE	0x04	// popup is highlighting at the cursorline
 #define POPF_ON_CMDLINE	0x08	// popup overlaps command line
-#define POPF_DRAG	0x10	// popup can be moved by dragging
-#define POPF_RESIZE	0x20	// popup can be resized by dragging
-#define POPF_MAPPING	0x40	// mapping keys
-#define POPF_INFO	0x80	// used for info of popup menu
-#define POPF_INFO_MENU	0x100	// align info popup with popup menu
-#define POPF_POSINVERT	0x200	// vertical position can be inverted
+#define POPF_DRAG	0x10	// popup can be moved by dragging border
+#define POPF_DRAGALL	0x20	// popup can be moved by dragging everywhere
+#define POPF_RESIZE	0x40	// popup can be resized by dragging
+#define POPF_MAPPING	0x80	// mapping keys
+#define POPF_INFO	0x100	// used for info of popup menu
+#define POPF_INFO_MENU	0x200	// align info popup with popup menu
+#define POPF_POSINVERT	0x400	// vertical position can be inverted
 
 // flags used in w_popup_handled
 #define POPUP_HANDLED_1	    0x01    // used by mouse_find_win()
@@ -1011,7 +1012,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define DOBUF_UNLOAD	2	// unload specified buffer(s)
 #define DOBUF_DEL	3	// delete specified buffer(s) from buflist
 #define DOBUF_WIPE	4	// delete specified buffer(s) really
-#define DOBUF_WIPE_REUSE 5	// like DOBUF_WIPE an keep number for reuse
+#define DOBUF_WIPE_REUSE 5	// like DOBUF_WIPE and keep number for reuse
 
 // Values for start argument for do_buffer()
 #define DOBUF_CURRENT	0	// "count" buffer from current buffer
@@ -2066,7 +2067,8 @@ typedef int sock_T;
 #define VV_SIZEOFINT	100
 #define VV_SIZEOFLONG	101
 #define VV_SIZEOFPOINTER 102
-#define VV_LEN		103	// number of v: vars
+#define VV_MAXCOL	103
+#define VV_LEN		104	// number of v: vars
 
 // used for v_number in VAR_BOOL and VAR_SPECIAL
 #define VVAL_FALSE	0L	// VAR_BOOL
@@ -2176,12 +2178,12 @@ typedef struct stat stat_T;
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-# define likely(x)      __builtin_expect((x), 1)
-# define unlikely(x)    __builtin_expect((x), 0)
-# define ATTRIBUTE_COLD __attribute__((cold))
+# define likely(x)	__builtin_expect((x), 1)
+# define unlikely(x)	__builtin_expect((x), 0)
+# define ATTRIBUTE_COLD	__attribute__((cold))
 #else
-# define unlikely(x)  (x)
-# define likely(x)    (x)
+# define unlikely(x)	(x)
+# define likely(x)	(x)
 # define ATTRIBUTE_COLD
 #endif
 
@@ -2781,6 +2783,7 @@ long elapsed(DWORD start_tick);
 #define EVAL_VAR_VERBOSE	1   // may give error message
 #define EVAL_VAR_NOAUTOLOAD	2   // do not use script autoloading
 #define EVAL_VAR_IMPORT		4   // may return special variable for import
+#define EVAL_VAR_NO_FUNC	8   // do not look for a function
 
 // Maximum number of characters that can be fuzzy matched
 #define MAX_FUZZY_MATCHES	256

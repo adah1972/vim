@@ -32,6 +32,7 @@ func Test_fnamemodify()
   call assert_equal('fb2.tar.gz', fnamemodify('abc.fb2.tar.gz', ':e:e:e'))
   call assert_equal('fb2.tar.gz', fnamemodify('abc.fb2.tar.gz', ':e:e:e:e'))
   call assert_equal('tar', fnamemodify('abc.fb2.tar.gz', ':e:e:r'))
+  call assert_equal(getcwd(), fnamemodify('', ':p:h'))
 
   let cwd = getcwd()
   call chdir($HOME)
@@ -93,6 +94,7 @@ func Test_fnamemodify_er()
   call assert_equal('b.c', fnamemodify('a.b.c.d.e', ':r:r:e:e:e'))
   call assert_equal('b.c', fnamemodify('a.b.c.d.e', ':r:r:e:e:e:e'))
 
+  call assert_equal('', fnamemodify('', ':p:t'))
   call assert_equal('', fnamemodify(test_null_string(), test_null_string()))
 endfunc
 

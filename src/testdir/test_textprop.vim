@@ -1615,6 +1615,60 @@ def Test_prop_add_delete_line()
   bwipe!
 enddef
 
+func Test_prop_in_linebreak()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    set breakindent linebreak breakat+=]
+    call printf('%s]%s', repeat('x', 50), repeat('x', 70))->setline(1)
+    call prop_type_add('test', #{highlight: 'ErrorMsg'})
+    call prop_add(1, 51, #{length: 1, type: 'test'})
+  END
+  call writefile(lines, 'XscriptPropLinebreak')
+  let buf = RunVimInTerminal('-S XscriptPropLinebreak', #{rows: 10})
+  call TermWait(buf)
+  call VerifyScreenDump(buf, 'Test_prop_linebreak', {})
+
+  call StopVimInTerminal(buf)
+  call delete('XscriptPropLinebreak')
+endfunc
+
+func Test_prop_after_tab()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    set breakindent linebreak breakat+=]
+    call setline(1, "\t[xxx]")
+    call prop_type_add('test', #{highlight: 'ErrorMsg'})
+    call prop_add(1, 2, #{length: 1, type: 'test'})
+  END
+  call writefile(lines, 'XscriptPropAfterTab')
+  let buf = RunVimInTerminal('-S XscriptPropAfterTab', #{rows: 10})
+  call TermWait(buf)
+  call VerifyScreenDump(buf, 'Test_prop_after_tab', {})
+
+  call StopVimInTerminal(buf)
+  call delete('XscriptPropAfterTab')
+endfunc
+
+func Test_prop_after_linebreak()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      set linebreak wrap
+      call printf('%s+(%s)', 'x'->repeat(&columns / 2), 'x'->repeat(&columns / 2))->setline(1)
+      call prop_type_add('test', #{highlight: 'ErrorMsg'})
+      call prop_add(1, (&columns / 2) + 2, #{length: 1, type: 'test'})
+  END
+  call writefile(lines, 'XscriptPropAfterLinebreak')
+  let buf = RunVimInTerminal('-S XscriptPropAfterLinebreak', #{rows: 10})
+  call TermWait(buf)
+  call VerifyScreenDump(buf, 'Test_prop_after_linebreak', {})
+
+  call StopVimInTerminal(buf)
+  call delete('XscriptPropAfterLinebreak')
+endfunc
+
 " Buffer number of 0 should be ignored, as if the parameter wasn't passed.
 def Test_prop_bufnr_zero()
   new

@@ -324,6 +324,16 @@ func Test_edit_11_indentexpr()
   set cinkeys&vim indentkeys&vim
   set nocindent indentexpr=
   delfu Do_Indent
+
+  " Using a script-local function
+  func s:NewIndentExpr()
+  endfunc
+  set indentexpr=s:NewIndentExpr()
+  call assert_equal(expand('<SID>') .. 'NewIndentExpr()', &indentexpr)
+  set indentexpr=<SID>NewIndentExpr()
+  call assert_equal(expand('<SID>') .. 'NewIndentExpr()', &indentexpr)
+  set indentexpr&
+
   bw!
 endfunc
 
@@ -723,8 +733,13 @@ func Test_edit_CTRL_N()
     call feedkeys("Ii\<c-n>\<cr>\<esc>", "tnix")
     call feedkeys("ILO\<c-n>\<cr>\<esc>", 'tnix')
     call assert_equal(['INFER', 'loWER', 'infer', 'LOWER', '', ''], getline(1, '$'), e)
-
-    set noignorecase noinfercase complete&
+    set noignorecase noinfercase
+    %d
+    call setline(1, ['one word', 'two word'])
+    exe "normal! Goo\<C-P>\<C-X>\<C-P>"
+    call assert_equal('one word', getline(3))
+    %d
+    set complete&
     bw!
   endfor
 endfunc
@@ -888,6 +903,23 @@ func Test_edit_CTRL_T()
   call assert_equal(['mad'], getline(1, '$'))
   call delete('Xthesaurus')
   bw!
+endfunc
+
+" Test thesaurus completion with different encodings
+func Test_thesaurus_complete_with_encoding()
+  call writefile(['angry furious mad enraged'], 'Xthesaurus')
+  set thesaurus=Xthesaurus
+  for e in ['latin1', 'utf-8']
+    exe 'set encoding=' .. e
+    new
+    call setline(1, 'mad')
+    call cursor(1, 1)
+    call feedkeys("A\<c-x>\<c-t>\<cr>\<esc>", 'tnix')
+    call assert_equal(['mad', ''], getline(1, '$'))
+    bw!
+  endfor
+  set thesaurus=
+  call delete('Xthesaurus')
 endfunc
 
 " Test 'thesaurusfunc'
@@ -1326,6 +1358,7 @@ func Test_edit_forbidden()
   call assert_fails(':Sandbox', 'E48:')
   delcom Sandbox
   call assert_equal(['a'], getline(1,'$'))
+
   " 2) edit with textlock set
   fu! DoIt()
     call feedkeys("i\<del>\<esc>", 'tnix')
@@ -1345,6 +1378,7 @@ func Test_edit_forbidden()
   catch /^Vim\%((\a\+)\)\=:E117/ " catch E117: unknown function
   endtry
   au! InsertCharPre
+
   " 3) edit when completion is shown
   fun! Complete(findstart, base)
     if a:findstart
@@ -1362,6 +1396,7 @@ func Test_edit_forbidden()
   endtry
   delfu Complete
   set completefunc=
+
   if has("rightleft") && exists("+fkmap")
     " 4) 'R' when 'fkmap' and 'revins' is set.
     set revins fkmap

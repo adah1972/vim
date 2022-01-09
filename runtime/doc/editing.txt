@@ -1,4 +1,4 @@
-*editing.txt*   For Vim version 8.2.  Last change: 2021 Oct 16
+*editing.txt*   For Vim version 8.2.  Last change: 2021 Dec 27
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -650,11 +650,18 @@ list of the current window.
 			And after the last one:
 				:+2argadd y	a b c x y
 			There is no check for duplicates, it is possible to
-			add a file to the argument list twice.
-			The currently edited file is not changed.
+			add a file to the argument list twice.  You can use
+			|:argdedupe| to fix it afterwards: >
+				:argadd *.txt | argdedupe
+<			The currently edited file is not changed.
 			Note: you can also use this method: >
 				:args ## x
 <			This will add the "x" item and sort the new list.
+
+:argded[upe]					*:argded* *:argdedupe*
+			Remove duplicate filenames from the argument list.
+			If your current file is a duplicate, your current file
+			will change to the original file index.
 
 :argd[elete] {pattern} ..		*:argd* *:argdelete* *E480* *E610*
 			Delete files from the argument list that match the
@@ -1140,6 +1147,9 @@ The names can be in upper- or lowercase.
 			made.
 			When 'hidden' is set and there are more windows, the
 			current buffer becomes hidden, after writing the file.
+			This command is not supported in |Vim9| script,
+			because it is too easily confused with a variable
+			name.
 
 							*:exi* *:exit*
 :[range]exi[t][!] [++opt] [file]
@@ -1298,11 +1308,12 @@ Changing directory fails when the current buffer is modified, the '.' flag is
 present in 'cpoptions' and "!" is not used in the command.
 
 							*:cd* *E747* *E472*
-:cd[!]			On non-Unix systems: Print the current directory
-			name.  On Unix systems: Change the current directory
-			to the home directory.  Use |:pwd| to print the
-			current directory on all systems.
-			On Unix systems: clear any window-local directory.
+:cd[!]			On non-Unix systems when 'cdhome' is off: Print the
+			current directory name.
+			Otherwise: Change the current directory to the home
+			directory.  Clear any window-local directory.
+			Use |:pwd| to print the current directory on all
+			systems.
 
 :cd[!] {path}		Change the current directory to {path}.
 			If {path} is relative, it is searched for in the
@@ -1759,7 +1770,7 @@ There are three different types of searching:
 	/u/user_x/work/include
 	/u/user_x/include
 
-<   Note: If your 'path' setting includes an non-existing directory, Vim will
+<   Note: If your 'path' setting includes a non-existing directory, Vim will
    skip the non-existing directory, but continues searching in the parent of
    the non-existing directory if upwards searching is used.  E.g. when
    searching "../include" and that doesn't exist, and upward searching is

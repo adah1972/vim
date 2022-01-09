@@ -190,7 +190,7 @@ f_reltime(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 	if (list2proftime(&argvars[0], &res) == FAIL)
 	{
 	    if (in_vim9script())
-		emsg(_(e_invarg));
+		emsg(_(e_invalid_argument));
 	    return;
 	}
 	profile_end(&res);
@@ -202,7 +202,7 @@ f_reltime(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 		|| list2proftime(&argvars[1], &res) == FAIL)
 	{
 	    if (in_vim9script())
-		emsg(_(e_invarg));
+		emsg(_(e_invalid_argument));
 	    return;
 	}
 	profile_sub(&res, &start);
@@ -240,7 +240,7 @@ f_reltimefloat(typval_T *argvars UNUSED, typval_T *rettv)
     if (list2proftime(&argvars[0], &tm) == OK)
 	rettv->vval.v_float = profile_float(&tm);
     else if (in_vim9script())
-	emsg(_(e_invarg));
+	emsg(_(e_invalid_argument));
 #  endif
 }
 # endif
@@ -264,7 +264,7 @@ f_reltimestr(typval_T *argvars UNUSED, typval_T *rettv)
     if (list2proftime(&argvars[0], &tm) == OK)
 	rettv->vval.v_string = vim_strsave((char_u *)profile_msg(&tm));
     else if (in_vim9script())
-	emsg(_(e_invarg));
+	emsg(_(e_invalid_argument));
 # endif
 }
 
@@ -501,8 +501,9 @@ check_due_timer(void)
     int		need_update_screen = FALSE;
     long	current_id = last_timer_id;
 
-    // Don't run any timers while exiting or dealing with an error.
-    if (exiting || aborting())
+    // Don't run any timers while exiting, dealing with an error or at the
+    // debug prompt.
+    if (exiting || aborting() || debug_mode)
 	return next_due;
 
     profile_start(&now);
@@ -595,7 +596,7 @@ check_due_timer(void)
     }
 
     if (did_one)
-	redraw_after_callback(need_update_screen);
+	redraw_after_callback(need_update_screen, FALSE);
 
 #ifdef FEAT_BEVAL_TERM
     if (bevalexpr_due_set)
@@ -696,7 +697,8 @@ add_timer_info(typval_T *rettv, timer_T *timer)
     dict_add_number(dict, "remaining", (long)remaining);
 
     dict_add_number(dict, "repeat",
-		    (long)(timer->tr_repeat < 0 ? -1 : timer->tr_repeat + 1));
+	    (long)(timer->tr_repeat < 0 ? -1
+			     : timer->tr_repeat + (timer->tr_firing ? 0 : 1)));
     dict_add_number(dict, "paused", (long)(timer->tr_paused));
 
     di = dictitem_alloc((char_u *)"callback");
@@ -841,7 +843,7 @@ f_timer_start(typval_T *argvars, typval_T *rettv)
 	if (argvars[2].v_type != VAR_DICT
 				   || (dict = argvars[2].vval.v_dict) == NULL)
 	{
-	    semsg(_(e_invarg2), tv_get_string(&argvars[2]));
+	    semsg(_(e_invalid_argument_str), tv_get_string(&argvars[2]));
 	    return;
 	}
 	if (dict_find(dict, (char_u *)"repeat", -1) != NULL)

@@ -44,9 +44,7 @@ static int	buf_same_ino(buf_T *buf, stat_T *stp);
 #else
 static int	otherfile_buf(buf_T *buf, char_u *ffname);
 #endif
-#ifdef FEAT_TITLE
 static int	value_changed(char_u *str, char_u **last);
-#endif
 static int	append_arg_number(win_T *wp, char_u *buf, int buflen, int add_file);
 static void	free_buffer(buf_T *);
 static void	free_buffer_stuff(buf_T *buf, int free_options);
@@ -65,7 +63,6 @@ static void	clear_wininfo(buf_T *buf);
 static char *msg_loclist = N_("[Location List]");
 static char *msg_qflist = N_("[Quickfix List]");
 #endif
-static char *e_auabort = N_("E855: Autocommands caused command to abort");
 
 // Number of times free_buffer() was called.
 static int	buf_free_count = 0;
@@ -141,6 +138,7 @@ read_buffer(
     return retval;
 }
 
+#if defined(FEAT_EVAL) || defined(PROTO)
 /*
  * Ensure buffer "buf" is loaded.  Does not trigger the swap-exists action.
  */
@@ -157,6 +155,7 @@ buffer_ensure_loaded(buf_T *buf)
 	aucmd_restbuf(&aco);
     }
 }
+#endif
 
 /*
  * Open current buffer, that is: open the memfile and read the file into
@@ -195,7 +194,7 @@ open_buffer(
 	// This is OK, since there are no changes to lose.
 	if (curbuf == NULL)
 	{
-	    emsg(_("E82: Cannot allocate any buffer, exiting..."));
+	    emsg(_(e_cannot_allocate_any_buffer_exiting));
 
 	    // Don't try to do any saving, with "curbuf" NULL almost nothing
 	    // will work.
@@ -203,7 +202,7 @@ open_buffer(
 	    getout(2);
 	}
 
-	emsg(_("E83: Cannot allocate buffer, using other one..."));
+	emsg(_(e_cannot_allocate_buffer_using_other_one));
 	enter_buffer(curbuf);
 #ifdef FEAT_SYN_HL
 	if (old_tw != curbuf->b_p_tw)
@@ -429,7 +428,7 @@ buf_hashtab_add(buf_T *buf)
 {
     sprintf((char *)buf->b_key, "%x", buf->b_fnum);
     if (hash_add(&buf_hashtab, buf->b_key) == FAIL)
-	emsg(_("E931: Buffer cannot be registered"));
+	emsg(_(e_buffer_cannot_be_registered));
 }
 
     static void
@@ -463,8 +462,7 @@ can_unload_buffer(buf_T *buf)
 	    }
     }
     if (!can_unload)
-	semsg(_("E937: Attempt to delete a buffer that is in use: %s"),
-								 buf->b_fname);
+	semsg(_(e_attempt_to_delete_buffer_that_is_in_use_str), buf->b_fname);
     return can_unload;
 }
 
@@ -596,7 +594,7 @@ close_buffer(
 	{
 	    // Autocommands deleted the buffer.
 aucmd_abort:
-	    emsg(_(e_auabort));
+	    emsg(_(e_autocommands_caused_command_to_abort));
 	    return FALSE;
 	}
 	--buf->b_locked;
@@ -1184,7 +1182,7 @@ empty_curbuf(
 
     if (action == DOBUF_UNLOAD)
     {
-	emsg(_("E90: Cannot unload last buffer"));
+	emsg(_(e_cannot_unload_last_buffer));
 	return FAIL;
     }
 
@@ -1257,7 +1255,7 @@ do_buffer_ext(
 	}
 	if (!bufIsChanged(buf))
 	{
-	    emsg(_("E84: No modified buffer found"));
+	    emsg(_(e_no_modified_buffer_found));
 	    return FAIL;
 	}
     }
@@ -1296,7 +1294,7 @@ do_buffer_ext(
 	    if (bp == buf)
 	    {
 		// back where we started, didn't find anything.
-		emsg(_("E85: There is no listed buffer"));
+		emsg(_(e_there_is_no_listed_buffer));
 		return FAIL;
 	    }
 	}
@@ -1308,12 +1306,12 @@ do_buffer_ext(
 	{
 	    // don't warn when deleting
 	    if (!unload)
-		semsg(_(e_nobufnr), count);
+		semsg(_(e_buffer_nr_does_not_exist), count);
 	}
 	else if (dir == FORWARD)
-	    emsg(_("E87: Cannot go beyond last buffer"));
+	    emsg(_(e_cannot_go_beyond_last_buffer));
 	else
-	    emsg(_("E88: Cannot go before first buffer"));
+	    emsg(_(e_cannot_go_before_first_buffer));
 	return FAIL;
     }
 #ifdef FEAT_PROP_POPUP
@@ -1366,7 +1364,7 @@ do_buffer_ext(
 	    else
 #endif
 	    {
-		semsg(_("E89: No write since last change for buffer %d (add ! to override)"),
+		semsg(_(e_no_write_since_last_change_for_buffer_nr_add_bang_to_override),
 								 buf->b_fnum);
 		return FAIL;
 	    }
@@ -1418,7 +1416,6 @@ do_buffer_ext(
 	bp = NULL;	// used when no loaded buffer found
 	if (au_new_curbuf.br_buf != NULL && bufref_valid(&au_new_curbuf))
 	    buf = au_new_curbuf.br_buf;
-#ifdef FEAT_JUMPLIST
 	else if (curwin->w_jumplistlen > 0)
 	{
 	    int     jumpidx;
@@ -1454,7 +1451,6 @@ do_buffer_ext(
 		    break;
 	    }
 	}
-#endif
 
 	if (buf == NULL)	// No previous buffer, Try 2'nd approach
 	{
@@ -1614,7 +1610,7 @@ do_bufdel(
 	if (addr_count == 2)
 	{
 	    if (*arg)		// both range and argument is not allowed
-		return ex_errmsg(e_trailing_arg, arg);
+		return ex_errmsg(e_trailing_characters_str, arg);
 	    bnr = start_bnr;
 	}
 	else	// addr_count == 1
@@ -1664,11 +1660,11 @@ do_bufdel(
 	if (deleted == 0)
 	{
 	    if (command == DOBUF_UNLOAD)
-		STRCPY(IObuff, _("E515: No buffers were unloaded"));
+		STRCPY(IObuff, _(e_no_buffers_were_unloaded));
 	    else if (command == DOBUF_DEL)
-		STRCPY(IObuff, _("E516: No buffers were deleted"));
+		STRCPY(IObuff, _(e_no_buffers_were_deleted));
 	    else
-		STRCPY(IObuff, _("E517: No buffers were wiped out"));
+		STRCPY(IObuff, _(e_no_buffers_were_wiped_out));
 	    errormsg = (char *)IObuff;
 	}
 	else if (deleted >= p_report)
@@ -1827,7 +1823,7 @@ enter_buffer(buf_T *buf)
     if (curbuf->b_ml.ml_mfp == NULL)	// need to load the file
     {
 	// If there is no filetype, allow for detecting one.  Esp. useful for
-	// ":ball" used in a autocommand.  If there already is a filetype we
+	// ":ball" used in an autocommand.  If there already is a filetype we
 	// might prefer to keep it.
 	if (*curbuf->b_p_ft == NUL)
 	    did_filetype = FALSE;
@@ -1856,9 +1852,7 @@ enter_buffer(buf_T *buf)
 	buflist_getfpos();
 
     check_arg_idx(curwin);		// check for valid arg_idx
-#ifdef FEAT_TITLE
     maketitle();
-#endif
 	// when autocmds didn't change it
     if (curwin->w_topline == 1 && !curwin->w_topline_was_set)
 	scroll_cursor_halfway(FALSE);	// redisplay at correct position
@@ -1911,7 +1905,7 @@ no_write_message(void)
 {
 #ifdef FEAT_TERMINAL
     if (term_job_running(curbuf->b_term))
-	emsg(_("E948: Job still running (add ! to end the job)"));
+	emsg(_(e_job_still_running_add_bang_to_end_the_job));
     else
 #endif
 	emsg(_(e_no_write_since_last_change_add_bang_to_override));
@@ -1922,7 +1916,7 @@ no_write_message_nobang(buf_T *buf UNUSED)
 {
 #ifdef FEAT_TERMINAL
     if (term_job_running(buf->b_term))
-	emsg(_("E948: Job still running"));
+	emsg(_(e_job_still_running));
     else
 #endif
 	emsg(_(e_no_write_since_last_change));
@@ -2330,8 +2324,11 @@ free_buf_options(
     clear_string_option(&buf->b_p_cpt);
 #ifdef FEAT_COMPL_FUNC
     clear_string_option(&buf->b_p_cfu);
+    free_callback(&buf->b_cfu_cb);
     clear_string_option(&buf->b_p_ofu);
+    free_callback(&buf->b_ofu_cb);
     clear_string_option(&buf->b_p_tsrfu);
+    free_callback(&buf->b_tsrfu_cb);
 #endif
 #ifdef FEAT_QUICKFIX
     clear_string_option(&buf->b_p_gp);
@@ -2388,7 +2385,7 @@ buflist_getfile(
 	if ((options & GETF_ALT) && n == 0)
 	    emsg(_(e_no_alternate_file));
 	else
-	    semsg(_("E92: Buffer %d not found"), n);
+	    semsg(_(e_buffer_nr_not_found), n);
 	return FAIL;
     }
 
@@ -2672,9 +2669,9 @@ buflist_findpat(
     }
 
     if (match == -2)
-	semsg(_("E93: More than one match for %s"), pattern);
+	semsg(_(e_more_than_one_match_for_str), pattern);
     else if (match < 0)
-	semsg(_("E94: No matching buffer for %s"), pattern);
+	semsg(_(e_no_matching_buffer_for_str), pattern);
     return match;
 }
 
@@ -3376,7 +3373,7 @@ setfname(
 	    if (obuf->b_ml.ml_mfp != NULL || in_use)
 	    {
 		if (message)
-		    emsg(_("E95: Buffer with this name already exists"));
+		    emsg(_(e_buffer_with_this_name_already_exists));
 		vim_free(ffname);
 		return FAIL;
 	    }
@@ -3461,9 +3458,7 @@ buf_name_changed(buf_T *buf)
 
     if (curwin->w_buffer == buf)
 	check_arg_idx(curwin);	// check file name for arg list
-#ifdef FEAT_TITLE
     maketitle();		// set window title
-#endif
     status_redraw_all();	// status lines need to be redrawn
     fmarks_check_names(buf);	// check named file marks
     ml_timestamp(buf);		// reset timestamp
@@ -3780,7 +3775,6 @@ col_print(
 	vim_snprintf((char *)buf, buflen, "%d-%d", col, vcol);
 }
 
-#if defined(FEAT_TITLE) || defined(PROTO)
 static char_u *lasttitle = NULL;
 static char_u *lasticon = NULL;
 
@@ -4045,7 +4039,6 @@ free_titles(void)
 }
 # endif
 
-#endif // FEAT_TITLE
 
 #if defined(FEAT_STL_OPT) || defined(FEAT_GUI_TABLINE) || defined(PROTO)
 
@@ -5038,7 +5031,7 @@ build_stl_str_hl(
 	sp->userhl = 0;
     }
 
-    // When inside update_screen we do not want redrawing a stausline, ruler,
+    // When inside update_screen we do not want redrawing a statusline, ruler,
     // title, etc. to trigger another redraw, it may cause an endless loop.
     if (updating_screen)
     {
@@ -5618,6 +5611,7 @@ bt_prompt(buf_T *buf)
     return buf != NULL && buf->b_p_bt[0] == 'p' && buf->b_p_bt[1] == 'r';
 }
 
+#if defined(FEAT_PROP_POPUP) || defined(PROTO)
 /*
  * Return TRUE if "buf" is a buffer for a popup window.
  */
@@ -5627,6 +5621,7 @@ bt_popup(buf_T *buf)
     return buf != NULL && buf->b_p_bt != NULL
 	&& buf->b_p_bt[0] == 'p' && buf->b_p_bt[1] == 'o';
 }
+#endif
 
 /*
  * Return TRUE if "buf" is a "nofile", "acwrite", "terminal" or "prompt"
@@ -5641,6 +5636,7 @@ bt_nofilename(buf_T *buf)
 	    || buf->b_p_bt[0] == 'p');
 }
 
+#if defined(FEAT_QUICKFIX) || defined(PROTO)
 /*
  * Return TRUE if "buf" has 'buftype' set to "nofile".
  */
@@ -5649,6 +5645,7 @@ bt_nofile(buf_T *buf)
 {
     return buf != NULL && buf->b_p_bt[0] == 'n' && buf->b_p_bt[2] == 'f';
 }
+#endif
 
 /*
  * Return TRUE if "buf" is a "nowrite", "nofile", "terminal" or "prompt"
@@ -5668,7 +5665,7 @@ bt_dontwrite_msg(buf_T *buf)
 {
     if (bt_dontwrite(buf))
     {
-	emsg(_("E382: Cannot write, 'buftype' option is set"));
+	emsg(_(e_cannot_write_buftype_option_is_set));
 	return TRUE;
     }
     return FALSE;

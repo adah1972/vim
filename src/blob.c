@@ -209,7 +209,7 @@ write_blob(FILE *fd, blob_T *blob)
     if (fwrite(blob->bv_ga.ga_data, 1, blob->bv_ga.ga_len, fd)
 						  < (size_t)blob->bv_ga.ga_len)
     {
-	emsg(_(e_write));
+	emsg(_(e_error_while_writing));
 	return FAIL;
     }
     return OK;
@@ -240,6 +240,7 @@ blob2string(blob_T *blob, char_u **tofree, char_u *numbuf)
 	vim_snprintf((char *)numbuf, NUMBUFLEN, "%02X", (int)blob_get(blob, i));
 	ga_concat(&ga, numbuf);
     }
+    ga_append(&ga, NUL);		// append a NUL at the end
     *tofree = ga.ga_data;
     return *tofree;
 }
@@ -349,7 +350,7 @@ blob_slice_or_index(
 	}
 	else
 	{
-	    semsg(_(e_blobidx), n1);
+	    semsg(_(e_blob_index_out_of_range_nr), n1);
 	    return FAIL;
 	}
     }
@@ -365,7 +366,7 @@ check_blob_index(long bloblen, varnumber_T n1, int quiet)
     if (n1 < 0 || n1 > bloblen)
     {
 	if (!quiet)
-	    semsg(_(e_blobidx), n1);
+	    semsg(_(e_blob_index_out_of_range_nr), n1);
 	return FAIL;
     }
     return OK;
@@ -380,7 +381,7 @@ check_blob_range(long bloblen, varnumber_T n1, varnumber_T n2, int quiet)
     if (n2 < 0 || n2 >= bloblen || n2 < n1)
     {
 	if (!quiet)
-	    semsg(_(e_blobidx), n2);
+	    semsg(_(e_blob_index_out_of_range_nr), n2);
 	return FAIL;
     }
     return OK;
@@ -398,7 +399,7 @@ blob_set_range(blob_T *dest, long n1, long n2, typval_T *src)
 
     if (n2 - n1 + 1 != blob_len(src->vval.v_blob))
     {
-	emsg(_("E972: Blob value does not have the right number of bytes"));
+	emsg(_(e_blob_value_does_not_have_right_number_of_bytes));
 	return FAIL;
     }
 
@@ -409,78 +410,306 @@ blob_set_range(blob_T *dest, long n1, long n2, typval_T *src)
 }
 
 /*
- * "remove({blob})" function
+ * "add(blob, item)" function
+ */
+    void
+blob_add(typval_T *argvars, typval_T *rettv)
+{
+    blob_T	*b = argvars[0].vval.v_blob;
+    int		error = FALSE;
+    varnumber_T n;
+
+    if (b == NULL)
+    {
+	if (in_vim9script())
+	    emsg(_(e_cannot_add_to_null_blob));
+	return;
+    }
+
+    if (value_check_lock(b->bv_lock, (char_u *)N_("add() argument"), TRUE))
+	return;
+
+    n = tv_get_number_chk(&argvars[1], &error);
+    if (error)
+	return;
+
+    ga_append(&b->bv_ga, (int)n);
+    copy_tv(&argvars[0], rettv);
+}
+
+/*
+ * "remove({blob}, {idx} [, {end}])" function
  */
     void
 blob_remove(typval_T *argvars, typval_T *rettv, char_u *arg_errmsg)
 {
     blob_T	*b = argvars[0].vval.v_blob;
+    blob_T	*newblob;
     int		error = FALSE;
     long	idx;
     long	end;
+    int		len;
+    char_u	*p;
 
     if (b != NULL && value_check_lock(b->bv_lock, arg_errmsg, TRUE))
 	return;
 
     idx = (long)tv_get_number_chk(&argvars[1], &error);
-    if (!error)
-    {
-	int	len = blob_len(b);
-	char_u  *p;
+    if (error)
+	return;
 
-	if (idx < 0)
-	    // count from the end
-	    idx = len + idx;
-	if (idx < 0 || idx >= len)
+    len = blob_len(b);
+
+    if (idx < 0)
+	// count from the end
+	idx = len + idx;
+    if (idx < 0 || idx >= len)
+    {
+	semsg(_(e_blob_index_out_of_range_nr), idx);
+	return;
+    }
+    if (argvars[2].v_type == VAR_UNKNOWN)
+    {
+	// Remove one item, return its value.
+	p = (char_u *)b->bv_ga.ga_data;
+	rettv->vval.v_number = (varnumber_T) *(p + idx);
+	mch_memmove(p + idx, p + idx + 1, (size_t)len - idx - 1);
+	--b->bv_ga.ga_len;
+	return;
+    }
+
+    // Remove range of items, return blob with values.
+    end = (long)tv_get_number_chk(&argvars[2], &error);
+    if (error)
+	return;
+    if (end < 0)
+	// count from the end
+	end = len + end;
+    if (end >= len || idx > end)
+    {
+	semsg(_(e_blob_index_out_of_range_nr), end);
+	return;
+    }
+    newblob = blob_alloc();
+    if (newblob == NULL)
+	return;
+    newblob->bv_ga.ga_len = end - idx + 1;
+    if (ga_grow(&newblob->bv_ga, end - idx + 1) == FAIL)
+    {
+	vim_free(newblob);
+	return;
+    }
+    p = (char_u *)b->bv_ga.ga_data;
+    mch_memmove((char_u *)newblob->bv_ga.ga_data, p + idx,
+	    (size_t)(end - idx + 1));
+    ++newblob->bv_refcount;
+    rettv->v_type = VAR_BLOB;
+    rettv->vval.v_blob = newblob;
+
+    if (len - end - 1 > 0)
+	mch_memmove(p + idx, p + end + 1, (size_t)(len - end - 1));
+    b->bv_ga.ga_len -= end - idx + 1;
+}
+
+/*
+ * Implementation of map() and filter() for a Blob.  Apply "expr" to every
+ * number in Blob "blob_arg" and return the result in "rettv".
+ */
+    void
+blob_filter_map(
+	blob_T		*blob_arg,
+	filtermap_T	filtermap,
+	typval_T	*expr,
+	typval_T	*rettv)
+{
+    blob_T	*b;
+    int		i;
+    typval_T	tv;
+    varnumber_T	val;
+    blob_T	*b_ret;
+    int		idx = 0;
+    int		rem;
+
+    if (filtermap == FILTERMAP_MAPNEW)
+    {
+	rettv->v_type = VAR_BLOB;
+	rettv->vval.v_blob = NULL;
+    }
+    if ((b = blob_arg) == NULL)
+	return;
+
+    b_ret = b;
+    if (filtermap == FILTERMAP_MAPNEW)
+    {
+	if (blob_copy(b, rettv) == FAIL)
+	    return;
+	b_ret = rettv->vval.v_blob;
+    }
+
+    // set_vim_var_nr() doesn't set the type
+    set_vim_var_type(VV_KEY, VAR_NUMBER);
+
+    for (i = 0; i < b->bv_ga.ga_len; i++)
+    {
+	typval_T newtv;
+
+	tv.v_type = VAR_NUMBER;
+	val = blob_get(b, i);
+	tv.vval.v_number = val;
+	set_vim_var_nr(VV_KEY, idx);
+	if (filter_map_one(&tv, expr, filtermap, &newtv, &rem) == FAIL
+		|| did_emsg)
+	    break;
+	if (newtv.v_type != VAR_NUMBER && newtv.v_type != VAR_BOOL)
 	{
-	    semsg(_(e_blobidx), idx);
+	    clear_tv(&newtv);
+	    emsg(_(e_invalid_operation_for_blob));
+	    break;
+	}
+	if (filtermap != FILTERMAP_FILTER)
+	{
+	    if (newtv.vval.v_number != val)
+		blob_set(b_ret, i, newtv.vval.v_number);
+	}
+	else if (rem)
+	{
+	    char_u *p = (char_u *)blob_arg->bv_ga.ga_data;
+
+	    mch_memmove(p + i, p + i + 1,
+		    (size_t)b->bv_ga.ga_len - i - 1);
+	    --b->bv_ga.ga_len;
+	    --i;
+	}
+	++idx;
+    }
+}
+
+/*
+ * "insert(blob, {item} [, {idx}])" function
+ */
+    void
+blob_insert_func(typval_T *argvars, typval_T *rettv)
+{
+    blob_T	*b = argvars[0].vval.v_blob;
+    long	before = 0;
+    int		error = FALSE;
+    int		val, len;
+    char_u	*p;
+
+    if (b == NULL)
+    {
+	if (in_vim9script())
+	    emsg(_(e_cannot_add_to_null_blob));
+	return;
+    }
+
+    if (value_check_lock(b->bv_lock, (char_u *)N_("insert() argument"), TRUE))
+	return;
+
+    len = blob_len(b);
+    if (argvars[2].v_type != VAR_UNKNOWN)
+    {
+	before = (long)tv_get_number_chk(&argvars[2], &error);
+	if (error)
+	    return;		// type error; errmsg already given
+	if (before < 0 || before > len)
+	{
+	    semsg(_(e_invalid_argument_str), tv_get_string(&argvars[2]));
 	    return;
 	}
-	if (argvars[2].v_type == VAR_UNKNOWN)
-	{
-	    // Remove one item, return its value.
-	    p = (char_u *)b->bv_ga.ga_data;
-	    rettv->vval.v_number = (varnumber_T) *(p + idx);
-	    mch_memmove(p + idx, p + idx + 1, (size_t)len - idx - 1);
-	    --b->bv_ga.ga_len;
-	}
-	else
-	{
-	    blob_T  *blob;
-
-	    // Remove range of items, return blob with values.
-	    end = (long)tv_get_number_chk(&argvars[2], &error);
-	    if (error)
-		return;
-	    if (end < 0)
-		// count from the end
-		end = len + end;
-	    if (end >= len || idx > end)
-	    {
-		semsg(_(e_blobidx), end);
-		return;
-	    }
-	    blob = blob_alloc();
-	    if (blob == NULL)
-		return;
-	    blob->bv_ga.ga_len = end - idx + 1;
-	    if (ga_grow(&blob->bv_ga, end - idx + 1) == FAIL)
-	    {
-		vim_free(blob);
-		return;
-	    }
-	    p = (char_u *)b->bv_ga.ga_data;
-	    mch_memmove((char_u *)blob->bv_ga.ga_data, p + idx,
-						  (size_t)(end - idx + 1));
-	    ++blob->bv_refcount;
-	    rettv->v_type = VAR_BLOB;
-	    rettv->vval.v_blob = blob;
-
-	    if (len - end - 1 > 0)
-		mch_memmove(p + idx, p + end + 1, (size_t)(len - end - 1));
-	    b->bv_ga.ga_len -= end - idx + 1;
-	}
     }
+    val = tv_get_number_chk(&argvars[1], &error);
+    if (error)
+	return;
+    if (val < 0 || val > 255)
+    {
+	semsg(_(e_invalid_argument_str), tv_get_string(&argvars[1]));
+	return;
+    }
+
+    if (ga_grow(&b->bv_ga, 1) == FAIL)
+	return;
+    p = (char_u *)b->bv_ga.ga_data;
+    mch_memmove(p + before + 1, p + before, (size_t)len - before);
+    *(p + before) = val;
+    ++b->bv_ga.ga_len;
+
+    copy_tv(&argvars[0], rettv);
+}
+
+/*
+ * reduce() Blob argvars[0] using the function 'funcname' with arguments in
+ * 'funcexe' starting with the initial value argvars[2] and return the result
+ * in 'rettv'.
+ */
+    void
+blob_reduce(
+	typval_T	*argvars,
+	char_u		*func_name,
+	funcexe_T	*funcexe,
+	typval_T	*rettv)
+{
+    blob_T	*b = argvars[0].vval.v_blob;
+    int		called_emsg_start = called_emsg;
+    int		r;
+    typval_T	initial;
+    typval_T	argv[3];
+    int	i;
+
+    if (argvars[2].v_type == VAR_UNKNOWN)
+    {
+	if (b == NULL || b->bv_ga.ga_len == 0)
+	{
+	    semsg(_(e_reduce_of_an_empty_str_with_no_initial_value), "Blob");
+	    return;
+	}
+	initial.v_type = VAR_NUMBER;
+	initial.vval.v_number = blob_get(b, 0);
+	i = 1;
+    }
+    else if (argvars[2].v_type != VAR_NUMBER)
+    {
+	emsg(_(e_number_expected));
+	return;
+    }
+    else
+    {
+	initial = argvars[2];
+	i = 0;
+    }
+
+    copy_tv(&initial, rettv);
+    if (b == NULL)
+	return;
+
+    for ( ; i < b->bv_ga.ga_len; i++)
+    {
+	argv[0] = *rettv;
+	argv[1].v_type = VAR_NUMBER;
+	argv[1].vval.v_number = blob_get(b, i);
+	r = call_func(func_name, -1, rettv, 2, argv, funcexe);
+	clear_tv(&argv[0]);
+	if (r == FAIL || called_emsg != called_emsg_start)
+	    return;
+    }
+}
+
+/*
+ * "reverse({blob})" function
+ */
+    void
+blob_reverse(blob_T *b, typval_T *rettv)
+{
+    int	i, len = blob_len(b);
+
+    for (i = 0; i < len / 2; i++)
+    {
+	int tmp = blob_get(b, i);
+
+	blob_set(b, i, blob_get(b, len - i - 1));
+	blob_set(b, len - i - 1, tmp);
+    }
+    rettv_blob_set(rettv, b);
 }
 
 /*
@@ -526,6 +755,7 @@ f_list2blob(typval_T *argvars, typval_T *rettv)
     if (l == NULL)
 	return;
 
+    CHECK_LIST_MATERIALIZE(l);
     FOR_ALL_LIST_ITEMS(l, li)
     {
 	int		error;

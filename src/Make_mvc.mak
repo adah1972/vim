@@ -147,6 +147,8 @@
 #
 #	Static Code Analysis: ANALYZE=yes (works with VS2012 or later)
 #
+#	Address Sanitizer: ASAN=yes (works with VS2019 or later)
+#
 # You can combine any of these interfaces
 #
 # Example: To build the non-debug, GUI version with Perl interface:
@@ -662,6 +664,12 @@ CFLAGS = $(CFLAGS) -DHAVE_STDINT_H
 CFLAGS = $(CFLAGS) /analyze
 !endif
 
+# Address Sanitizer (ASAN) generally available starting with VS2019 version
+# 16.9
+!if ("$(ASAN)" == "yes") && ($(MSVC_MAJOR) >= 14)
+CFLAGS = $(CFLAGS) /fsanitize=address
+!endif
+
 !ifdef NODEBUG
 VIM = vim
 ! if "$(OPTIMIZE)" == "SPACE"
@@ -834,8 +842,11 @@ OBJ = \
 	$(OUTDIR)\undo.obj \
 	$(OUTDIR)\usercmd.obj \
 	$(OUTDIR)\userfunc.obj \
+	$(OUTDIR)\vim9cmds.obj \
 	$(OUTDIR)\vim9compile.obj \
 	$(OUTDIR)\vim9execute.obj \
+	$(OUTDIR)\vim9expr.obj \
+	$(OUTDIR)\vim9instr.obj \
 	$(OUTDIR)\vim9script.obj \
 	$(OUTDIR)\vim9type.obj \
 	$(OUTDIR)\viminfo.obj \
@@ -1826,9 +1837,15 @@ $(OUTDIR)/userfunc.obj:	$(OUTDIR) userfunc.c  $(INCL)
 
 $(OUTDIR)/version.obj:	$(OUTDIR) version.c  $(INCL) version.h
 
+$(OUTDIR)/vim9cmds.obj:	$(OUTDIR) vim9cmds.c  $(INCL)
+
 $(OUTDIR)/vim9compile.obj:	$(OUTDIR) vim9compile.c  $(INCL)
 
 $(OUTDIR)/vim9execute.obj:	$(OUTDIR) vim9execute.c  $(INCL)
+
+$(OUTDIR)/vim9expr.obj:	$(OUTDIR) vim9expr.c  $(INCL)
+
+$(OUTDIR)/vim9instr.obj:	$(OUTDIR) vim9instr.c  $(INCL)
 
 $(OUTDIR)/vim9script.obj:	$(OUTDIR) vim9script.c  $(INCL)
 
@@ -2033,8 +2050,11 @@ proto.h: \
 	proto/undo.pro \
 	proto/usercmd.pro \
 	proto/userfunc.pro \
+	proto/vim9cmds.pro \
 	proto/vim9compile.pro \
 	proto/vim9execute.pro \
+	proto/vim9expr.pro \
+	proto/vim9instr.pro \
 	proto/vim9script.pro \
 	proto/vim9type.pro \
 	proto/viminfo.pro \

@@ -1,6 +1,7 @@
 " Test for the quickfix feature.
 
 source check.vim
+source vim9.vim
 CheckFeature quickfix
 
 source screendump.vim
@@ -83,6 +84,12 @@ func s:setup_commands(cchar)
     let g:Xsetlist = function('setloclist', [0])
     call setloclist(0, [], 'f')
   endif
+endfunc
+
+" This must be run before any error lists are created.
+func Test_AA_cc_no_errors()
+  call assert_fails('cc', 'E42:')
+  call assert_fails('ll', 'E42:')
 endfunc
 
 " Tests for the :clist and :llist commands
@@ -4626,6 +4633,13 @@ func Xqfbuf_test(cchar)
   call assert_equal(qfbnum, bufnr(''))
   Xclose
 
+  " When quickfix buffer is wiped out, getqflist() should return 0
+  %bw!
+  Xexpr ""
+  Xopen
+  bw!
+  call assert_equal(0, g:Xgetlist({'qfbufnr': 0}).qfbufnr)
+
   if a:cchar == 'l'
     %bwipe
     " For a location list, when both the file window and the location list
@@ -5275,6 +5289,155 @@ func Test_qftextfunc()
   call Xtest_qftextfunc('l')
 endfunc
 
+func Test_qftextfunc_callback()
+  let lines =<< trim END
+    set efm=%f:%l:%c:%m
+
+    #" Test for using a function name
+    LET &qftf = 'g:Tqfexpr'
+    cexpr "F0:0:0:L0"
+    copen
+    call assert_equal('F0-L0C0-L0', getline(1))
+    cclose
+
+    #" Test for using a function()
+    set qftf=function('g:Tqfexpr')
+    cexpr "F1:1:1:L1"
+    copen
+    call assert_equal('F1-L1C1-L1', getline(1))
+    cclose
+
+    #" Using a funcref variable to set 'quickfixtextfunc'
+    VAR Fn = function('g:Tqfexpr')
+    LET &qftf = Fn
+    cexpr "F2:2:2:L2"
+    copen
+    call assert_equal('F2-L2C2-L2', getline(1))
+    cclose
+
+    #" Using string(funcref_variable) to set 'quickfixtextfunc'
+    LET Fn = function('g:Tqfexpr')
+    LET &qftf = string(Fn)
+    cexpr "F3:3:3:L3"
+    copen
+    call assert_equal('F3-L3C3-L3', getline(1))
+    cclose
+
+    #" Test for using a funcref()
+    set qftf=funcref('g:Tqfexpr')
+    cexpr "F4:4:4:L4"
+    copen
+    call assert_equal('F4-L4C4-L4', getline(1))
+    cclose
+
+    #" Using a funcref variable to set 'quickfixtextfunc'
+    LET Fn = funcref('g:Tqfexpr')
+    LET &qftf = Fn
+    cexpr "F5:5:5:L5"
+    copen
+    call assert_equal('F5-L5C5-L5', getline(1))
+    cclose
+
+    #" Using a string(funcref_variable) to set 'quickfixtextfunc'
+    LET Fn = funcref('g:Tqfexpr')
+    LET &qftf = string(Fn)
+    cexpr "F5:5:5:L5"
+    copen
+    call assert_equal('F5-L5C5-L5', getline(1))
+    cclose
+
+    #" Test for using a lambda function with set
+    VAR optval = "LSTART a LMIDDLE Tqfexpr(a) LEND"
+    LET optval = substitute(optval, ' ', '\\ ', 'g')
+    exe "set qftf=" .. optval
+    cexpr "F6:6:6:L6"
+    copen
+    call assert_equal('F6-L6C6-L6', getline(1))
+    cclose
+
+    #" Set 'quickfixtextfunc' to a lambda expression
+    LET &qftf = LSTART a LMIDDLE Tqfexpr(a) LEND
+    cexpr "F7:7:7:L7"
+    copen
+    call assert_equal('F7-L7C7-L7', getline(1))
+    cclose
+
+    #" Set 'quickfixtextfunc' to string(lambda_expression)
+    LET &qftf = "LSTART a LMIDDLE Tqfexpr(a) LEND"
+    cexpr "F8:8:8:L8"
+    copen
+    call assert_equal('F8-L8C8-L8', getline(1))
+    cclose
+
+    #" Set 'quickfixtextfunc' to a variable with a lambda expression
+    VAR Lambda = LSTART a LMIDDLE Tqfexpr(a) LEND
+    LET &qftf = Lambda
+    cexpr "F9:9:9:L9"
+    copen
+    call assert_equal('F9-L9C9-L9', getline(1))
+    cclose
+
+    #" Set 'quickfixtextfunc' to a string(variable with a lambda expression)
+    LET Lambda = LSTART a LMIDDLE Tqfexpr(a) LEND
+    LET &qftf = string(Lambda)
+    cexpr "F9:9:9:L9"
+    copen
+    call assert_equal('F9-L9C9-L9', getline(1))
+    cclose
+  END
+  call CheckLegacyAndVim9Success(lines)
+
+  " Test for using a script-local function name
+  func s:TqfFunc2(info)
+    let g:TqfFunc2Args = [a:info.start_idx, a:info.end_idx]
+    return ''
+  endfunc
+  let g:TqfFunc2Args = []
+  set quickfixtextfunc=s:TqfFunc2
+  cexpr "F10:10:10:L10"
+  cclose
+  call assert_equal([1, 1], g:TqfFunc2Args)
+
+  let &quickfixtextfunc = 's:TqfFunc2'
+  cexpr "F11:11:11:L11"
+  cclose
+  call assert_equal([1, 1], g:TqfFunc2Args)
+  delfunc s:TqfFunc2
+
+  " set 'quickfixtextfunc' to a partial with dict. This used to cause a crash.
+  func SetQftfFunc()
+    let params = {'qftf': function('g:DictQftfFunc')}
+    let &quickfixtextfunc = params.qftf
+  endfunc
+  func g:DictQftfFunc(_) dict
+  endfunc
+  call SetQftfFunc()
+  new
+  call SetQftfFunc()
+  bw
+  call test_garbagecollect_now()
+  new
+  set qftf=
+  wincmd w
+  set qftf=
+  :%bw!
+
+  " set per-quickfix list 'quickfixtextfunc' to a partial with dict. This used
+  " to cause a crash.
+  let &qftf = ''
+  func SetLocalQftfFunc()
+    let params = {'qftf': function('g:DictQftfFunc')}
+    call setqflist([], 'a', {'quickfixtextfunc' : params.qftf})
+  endfunc
+  call SetLocalQftfFunc()
+  call test_garbagecollect_now()
+  call setqflist([], 'a', {'quickfixtextfunc' : ''})
+  delfunc g:DictQftfFunc
+  delfunc SetQftfFunc
+  delfunc SetLocalQftfFunc
+  set efm&
+endfunc
+
 " Test for updating a location list for some other window and check that
 " 'qftextfunc' uses the correct location list.
 func Test_qftextfunc_other_loclist()
@@ -5619,6 +5782,57 @@ func Test_win_gettype()
   wincmd p
   call assert_equal("loclist", win_gettype(wid))
   lclose
+endfunc
+
+fun Test_vimgrep_nomatch()
+  call XexprTests('c')
+  call g:Xsetlist([{'lnum':10,'text':'Line1'}])
+  copen
+  if has("win32")
+    call assert_fails('vimgrep foo *.zzz', 'E479:')
+    let expected = [{'lnum': 10, 'bufnr': 0, 'end_lnum': 0, 'pattern': '', 'valid': 0, 'vcol': 0, 'nr': 0, 'module': '', 'type': '', 'end_col': 0, 'col': 0, 'text': 'Line1'}]
+  else
+    call assert_fails('vimgrep foo *.zzz', 'E480:')
+    let expected = []
+  endif
+  call assert_equal(expected, getqflist())
+  cclose
+endfunc
+
+" Test for opening the quickfix window in two tab pages and then closing one
+" of the quickfix windows. This should not make the quickfix buffer unlisted.
+" (github issue #9300).
+func Test_two_qf_windows()
+  cexpr "F1:1:line1"
+  copen
+  tabnew
+  copen
+  call assert_true(&buflisted)
+  cclose
+  tabfirst
+  call assert_true(&buflisted)
+  let bnum = bufnr()
+  cclose
+  " if all the quickfix windows are closed, then buffer should be unlisted.
+  call assert_false(buflisted(bnum))
+  %bw!
+
+  " Repeat the test for a location list
+  lexpr "F2:2:line2"
+  lopen
+  let bnum = bufnr()
+  tabnew
+  exe "buffer" bnum
+  tabfirst
+  lclose
+  tablast
+  call assert_true(buflisted(bnum))
+  tabclose
+  lopen
+  call assert_true(buflisted(bnum))
+  lclose
+  call assert_false(buflisted(bnum))
+  %bw!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -66,8 +66,6 @@ cin_is_cinword(char_u *line)
 }
 #endif
 
-#if defined(FEAT_CINDENT) || defined(FEAT_SYN_HL)
-
 /*
  * Skip to the end of a "string" and a 'c' character.
  * If there is no string or character, return argument unmodified.
@@ -138,6 +136,21 @@ skip_string(char_u *p)
 }
 
 /*
+ * Return TRUE if "line[col]" is inside a C string.
+ */
+    int
+is_pos_in_string(char_u *line, colnr_T col)
+{
+    char_u *p;
+
+    for (p = line; *p && (colnr_T)(p - line) < col; ++p)
+	p = skip_string(p);
+    return !((colnr_T)(p - line) <= col);
+}
+
+#if defined(FEAT_CINDENT) || defined(FEAT_SYN_HL)
+
+/*
  * Find the start of a comment, not knowing if we are in a comment right now.
  * Search starts at w_cursor.lnum and goes backwards.
  * Return NULL when not inside a comment.
@@ -152,8 +165,6 @@ ind_find_start_comment(void)	    // XXX
 find_start_comment(int ind_maxcomment)	// XXX
 {
     pos_T	*pos;
-    char_u	*line;
-    char_u	*p;
     int		cur_maxcomment = ind_maxcomment;
 
     for (;;)
@@ -164,10 +175,7 @@ find_start_comment(int ind_maxcomment)	// XXX
 
 	// Check if the comment start we found is inside a string.
 	// If it is then restrict the search to below this line and try again.
-	line = ml_get(pos->lnum);
-	for (p = line; *p && (colnr_T)(p - line) < pos->col; ++p)
-	    p = skip_string(p);
-	if ((colnr_T)(p - line) <= pos->col)
+	if (!is_pos_in_string(ml_get(pos->lnum), pos->col))
 	    break;
 	cur_maxcomment = curwin->w_cursor.lnum - pos->lnum - 1;
 	if (cur_maxcomment <= 0)
@@ -188,8 +196,6 @@ find_start_comment(int ind_maxcomment)	// XXX
 find_start_rawstring(int ind_maxcomment)	// XXX
 {
     pos_T	*pos;
-    char_u	*line;
-    char_u	*p;
     int		cur_maxcomment = ind_maxcomment;
 
     for (;;)
@@ -200,10 +206,7 @@ find_start_rawstring(int ind_maxcomment)	// XXX
 
 	// Check if the raw string start we found is inside a string.
 	// If it is then restrict the search to below this line and try again.
-	line = ml_get(pos->lnum);
-	for (p = line; *p && (colnr_T)(p - line) < pos->col; ++p)
-	    p = skip_string(p);
-	if ((colnr_T)(p - line) <= pos->col)
+	if (!is_pos_in_string(ml_get(pos->lnum), pos->col))
 	    break;
 	cur_maxcomment = curwin->w_cursor.lnum - pos->lnum - 1;
 	if (cur_maxcomment <= 0)
@@ -755,6 +758,10 @@ cin_is_cpp_namespace(char_u *s)
     int		has_name_start = FALSE;
 
     s = cin_skipcomment(s);
+
+    if (STRNCMP(s, "inline", 6) == 0 && (s[6] == NUL || !vim_iswordc(s[6])))
+	s = cin_skipcomment(skipwhite(s + 6));
+
     if (STRNCMP(s, "namespace", 9) == 0 && (s[9] == NUL || !vim_iswordc(s[9])))
     {
 	p = cin_skipcomment(skipwhite(s + 9));
@@ -1219,7 +1226,7 @@ cin_isfuncdecl(
 	if (*s == ')' && cin_nocode(s + 1))
 	{
 	    // ')' at the end: may have found a match
-	    // Check for he previous line not to end in a backslash:
+	    // Check for the previous line not to end in a backslash:
 	    //       #if defined(x) && {backslash}
 	    //		 defined(y)
 	    lnum = first_lnum - 1;
@@ -1788,7 +1795,7 @@ parse_cino(buf_T *buf)
     buf->b_ind_unclosed2 = sw;
 
     // Suppress ignoring spaces from the indent of a line starting with an
-    // unclosed parentheses.
+    // unclosed parenthesis.
     buf->b_ind_unclosed_noignore = 0;
 
     // If the opening paren is the last nonwhite character on the line, and
@@ -1800,11 +1807,11 @@ parse_cino(buf_T *buf)
     // an unclosed parenthesis.
     buf->b_ind_unclosed_whiteok = 0;
 
-    // Indent a closing parentheses under the line start of the matching
-    // opening parentheses.
+    // Indent a closing parenthesis under the line start of the matching
+    // opening parenthesis.
     buf->b_ind_matching_paren = 0;
 
-    // Indent a closing parentheses under the previous line.
+    // Indent a closing parenthesis under the previous line.
     buf->b_ind_paren_prev = 0;
 
     // Extra indent for comments.
@@ -2144,13 +2151,30 @@ get_c_indent(void)
 
     // If we're inside a "//" comment and there is a "//" comment in a
     // previous line, lineup with that one.
-    if (cin_islinecomment(theline)
-	    && (trypos = find_line_comment()) != NULL) // XXX
+    if (cin_islinecomment(theline))
     {
-	// find how indented the line beginning the comment is
-	getvcol(curwin, trypos, &col, NULL, NULL);
-	amount = col;
-	goto theend;
+	pos_T	linecomment_pos;
+
+	trypos = find_line_comment(); // XXX
+	if (trypos == NULL && curwin->w_cursor.lnum > 1)
+	{
+	    // There may be a statement before the comment, search from the end
+	    // of the line for a comment start.
+	    linecomment_pos.col =
+			  check_linecomment(ml_get(curwin->w_cursor.lnum - 1));
+	    if (linecomment_pos.col != MAXCOL)
+	    {
+	        trypos = &linecomment_pos;
+	        trypos->lnum = curwin->w_cursor.lnum - 1;
+	    }
+	}
+	if (trypos  != NULL)
+	{
+	    // find how indented the line beginning the comment is
+	    getvcol(curwin, trypos, &col, NULL, NULL);
+	    amount = col;
+	    goto theend;
+	}
     }
 
     // If we're inside a comment and not looking at the start of the

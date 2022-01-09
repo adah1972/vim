@@ -3,6 +3,7 @@
 source shared.vim
 source check.vim
 source view_util.vim
+source vim9.vim
 
 func Setup_NewWindow()
   10new
@@ -252,6 +253,45 @@ func Test_normal_formatexpr_returns_nonzero()
   close!
 endfunc
 
+" Test for using a script-local function for 'formatexpr'
+func Test_formatexpr_scriptlocal_func()
+  func! s:Format()
+    let g:FormatArgs = [v:lnum, v:count]
+  endfunc
+  set formatexpr=s:Format()
+  call assert_equal(expand('<SID>') .. 'Format()', &formatexpr)
+  new | only
+  call setline(1, range(1, 40))
+  let g:FormatArgs = []
+  normal! 2GVjgq
+  call assert_equal([2, 2], g:FormatArgs)
+  bw!
+  set formatexpr=<SID>Format()
+  call assert_equal(expand('<SID>') .. 'Format()', &formatexpr)
+  new | only
+  call setline(1, range(1, 40))
+  let g:FormatArgs = []
+  normal! 4GVjgq
+  call assert_equal([4, 2], g:FormatArgs)
+  bw!
+  let &formatexpr = 's:Format()'
+  new | only
+  call setline(1, range(1, 40))
+  let g:FormatArgs = []
+  normal! 6GVjgq
+  call assert_equal([6, 2], g:FormatArgs)
+  bw!
+  let &formatexpr = '<SID>Format()'
+  new | only
+  call setline(1, range(1, 40))
+  let g:FormatArgs = []
+  normal! 8GVjgq
+  call assert_equal([8, 2], g:FormatArgs)
+  setlocal formatexpr=
+  delfunc s:Format
+  bw!
+endfunc
+
 " basic test for formatprg
 func Test_normal06_formatprg()
   " only test on non windows platform
@@ -386,70 +426,6 @@ func Test_normal09a_operatorfunc()
   norm V10j,,
   call assert_equal(22, g:a)
 
-  " Use a lambda function for 'opfunc'
-  unmap <buffer> ,,
-  call cursor(1, 1)
-  let g:a=0
-  nmap <buffer><silent> ,, :set opfunc={type\ ->\ CountSpaces(type)}<CR>g@
-  vmap <buffer><silent> ,, :<C-U>call CountSpaces(visualmode(), 1)<CR>
-  50
-  norm V2j,,
-  call assert_equal(6, g:a)
-  norm V,,
-  call assert_equal(2, g:a)
-  norm ,,l
-  call assert_equal(0, g:a)
-  50
-  exe "norm 0\<c-v>10j2l,,"
-  call assert_equal(11, g:a)
-  50
-  norm V10j,,
-  call assert_equal(22, g:a)
-
-  " use a partial function for 'opfunc'
-  let g:OpVal = 0
-  func! Test_opfunc1(x, y, type)
-    let g:OpVal =  a:x + a:y
-  endfunc
-  set opfunc=function('Test_opfunc1',\ [5,\ 7])
-  normal! g@l
-  call assert_equal(12, g:OpVal)
-  " delete the function and try to use g@
-  delfunc Test_opfunc1
-  call test_garbagecollect_now()
-  call assert_fails('normal! g@l', 'E117:')
-  set opfunc=
-
-  " use a funcref for 'opfunc'
-  let g:OpVal = 0
-  func! Test_opfunc2(x, y, type)
-    let g:OpVal =  a:x + a:y
-  endfunc
-  set opfunc=funcref('Test_opfunc2',\ [4,\ 3])
-  normal! g@l
-  call assert_equal(7, g:OpVal)
-  " delete the function and try to use g@
-  delfunc Test_opfunc2
-  call test_garbagecollect_now()
-  call assert_fails('normal! g@l', 'E933:')
-  set opfunc=
-
-  " Try to use a function with two arguments for 'operatorfunc'
-  let g:OpVal = 0
-  func! Test_opfunc3(x, y)
-    let g:OpVal = 4
-  endfunc
-  set opfunc=Test_opfunc3
-  call assert_fails('normal! g@l', 'E119:')
-  call assert_equal(0, g:OpVal)
-  set opfunc=
-  delfunc Test_opfunc3
-  unlet g:OpVal
-
-  " Try to use a lambda function with two arguments for 'operatorfunc'
-  set opfunc={x,\ y\ ->\ 'done'}
-  call assert_fails('normal! g@l', 'E119:')
-
   " clean up
   unmap <buffer> ,,
   set opfunc=
@@ -488,6 +464,10 @@ func OperatorfuncRedo(_)
   let g:opfunc_count = v:count
 endfunc
 
+func Underscorize(_)
+  normal! '[V']r_
+endfunc
+
 func Test_normal09c_operatorfunc()
   " Test redoing operatorfunc
   new
@@ -501,7 +481,238 @@ func Test_normal09c_operatorfunc()
 
   bw!
   unlet g:opfunc_count
+
+  " Test redoing Visual mode
+  set operatorfunc=Underscorize
+  new
+  call setline(1, ['first', 'first', 'third', 'third', 'second'])
+  normal! 1GVjg@
+  normal! 5G.
+  normal! 3G.
+  call assert_equal(['_____', '_____', '_____', '_____', '______'], getline(1, '$'))
+  bwipe!
   set operatorfunc=
+endfunc
+
+" Test for different ways of setting the 'operatorfunc' option
+func Test_opfunc_callback()
+  new
+  func OpFunc1(callnr, type)
+    let g:OpFunc1Args = [a:callnr, a:type]
+  endfunc
+  func OpFunc2(type)
+    let g:OpFunc2Args = [a:type]
+  endfunc
+
+  let lines =<< trim END
+    #" Test for using a function name
+    LET &opfunc = 'g:OpFunc2'
+    LET g:OpFunc2Args = []
+    normal! g@l
+    call assert_equal(['char'], g:OpFunc2Args)
+
+    #" Test for using a function()
+    set opfunc=function('g:OpFunc1',\ [10])
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([10, 'char'], g:OpFunc1Args)
+
+    #" Using a funcref variable to set 'operatorfunc'
+    VAR Fn = function('g:OpFunc1', [11])
+    LET &opfunc = Fn
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([11, 'char'], g:OpFunc1Args)
+
+    #" Using a string(funcref_variable) to set 'operatorfunc'
+    LET Fn = function('g:OpFunc1', [12])
+    LET &operatorfunc = string(Fn)
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([12, 'char'], g:OpFunc1Args)
+
+    #" Test for using a funcref()
+    set operatorfunc=funcref('g:OpFunc1',\ [13])
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([13, 'char'], g:OpFunc1Args)
+
+    #" Using a funcref variable to set 'operatorfunc'
+    LET Fn = funcref('g:OpFunc1', [14])
+    LET &opfunc = Fn
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([14, 'char'], g:OpFunc1Args)
+
+    #" Using a string(funcref_variable) to set 'operatorfunc'
+    LET Fn = funcref('g:OpFunc1', [15])
+    LET &opfunc = string(Fn)
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([15, 'char'], g:OpFunc1Args)
+
+    #" Test for using a lambda function using set
+    VAR optval = "LSTART a LMIDDLE OpFunc1(16, a) LEND"
+    LET optval = substitute(optval, ' ', '\\ ', 'g')
+    exe "set opfunc=" .. optval
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([16, 'char'], g:OpFunc1Args)
+
+    #" Test for using a lambda function using LET
+    LET &opfunc = LSTART a LMIDDLE OpFunc1(17, a) LEND
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([17, 'char'], g:OpFunc1Args)
+
+    #" Set 'operatorfunc' to a string(lambda expression)
+    LET &opfunc = 'LSTART a LMIDDLE OpFunc1(18, a) LEND'
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([18, 'char'], g:OpFunc1Args)
+
+    #" Set 'operatorfunc' to a variable with a lambda expression
+    VAR Lambda = LSTART a LMIDDLE OpFunc1(19, a) LEND
+    LET &opfunc = Lambda
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([19, 'char'], g:OpFunc1Args)
+
+    #" Set 'operatorfunc' to a string(variable with a lambda expression)
+    LET Lambda = LSTART a LMIDDLE OpFunc1(20, a) LEND
+    LET &opfunc = string(Lambda)
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([20, 'char'], g:OpFunc1Args)
+
+    #" Try to use 'operatorfunc' after the function is deleted
+    func g:TmpOpFunc1(type)
+      let g:TmpOpFunc1Args = [21, a:type]
+    endfunc
+    LET &opfunc = function('g:TmpOpFunc1')
+    delfunc g:TmpOpFunc1
+    call test_garbagecollect_now()
+    LET g:TmpOpFunc1Args = []
+    call assert_fails('normal! g@l', 'E117:')
+    call assert_equal([], g:TmpOpFunc1Args)
+
+    #" Try to use a function with two arguments for 'operatorfunc'
+    func g:TmpOpFunc2(x, y)
+      let g:TmpOpFunc2Args = [a:x, a:y]
+    endfunc
+    set opfunc=TmpOpFunc2
+    LET g:TmpOpFunc2Args = []
+    call assert_fails('normal! g@l', 'E119:')
+    call assert_equal([], g:TmpOpFunc2Args)
+    delfunc TmpOpFunc2
+
+    #" Try to use a lambda function with two arguments for 'operatorfunc'
+    LET &opfunc = LSTART a, b LMIDDLE OpFunc1(22, b) LEND
+    LET g:OpFunc1Args = []
+    call assert_fails('normal! g@l', 'E119:')
+    call assert_equal([], g:OpFunc1Args)
+
+    #" Test for clearing the 'operatorfunc' option
+    set opfunc=''
+    set opfunc&
+    call assert_fails("set opfunc=function('abc')", "E700:")
+    call assert_fails("set opfunc=funcref('abc')", "E700:")
+
+    #" set 'operatorfunc' to a non-existing function
+    LET &opfunc = function('g:OpFunc1', [23])
+    call assert_fails("set opfunc=function('NonExistingFunc')", 'E700:')
+    call assert_fails("LET &opfunc = function('NonExistingFunc')", 'E700:')
+    LET g:OpFunc1Args = []
+    normal! g@l
+    call assert_equal([23, 'char'], g:OpFunc1Args)
+  END
+  call CheckTransLegacySuccess(lines)
+
+  " Test for using a script-local function name
+  func s:OpFunc3(type)
+    let g:OpFunc3Args = [a:type]
+  endfunc
+  set opfunc=s:OpFunc3
+  let g:OpFunc3Args = []
+  normal! g@l
+  call assert_equal(['char'], g:OpFunc3Args)
+
+  let &opfunc = 's:OpFunc3'
+  let g:OpFunc3Args = []
+  normal! g@l
+  call assert_equal(['char'], g:OpFunc3Args)
+  delfunc s:OpFunc3
+
+  " Using Vim9 lambda expression in legacy context should fail
+  set opfunc=(a)\ =>\ OpFunc1(24,\ a)
+  let g:OpFunc1Args = []
+  call assert_fails('normal! g@l', 'E117:')
+  call assert_equal([], g:OpFunc1Args)
+
+  " set 'operatorfunc' to a partial with dict. This used to cause a crash.
+  func SetOpFunc()
+    let operator = {'execute': function('OperatorExecute')}
+    let &opfunc = operator.execute
+  endfunc
+  func OperatorExecute(_) dict
+  endfunc
+  call SetOpFunc()
+  call test_garbagecollect_now()
+  set operatorfunc=
+  delfunc SetOpFunc
+  delfunc OperatorExecute
+
+  " Vim9 tests
+  let lines =<< trim END
+    vim9script
+
+    def g:Vim9opFunc(val: number, type: string): void
+      g:OpFunc1Args = [val, type]
+    enddef
+
+    # Test for using a def function with opfunc
+    set opfunc=function('g:Vim9opFunc',\ [60])
+    g:OpFunc1Args = []
+    normal! g@l
+    assert_equal([60, 'char'], g:OpFunc1Args)
+
+    # Test for using a global function name
+    &opfunc = g:OpFunc2
+    g:OpFunc2Args = []
+    normal! g@l
+    assert_equal(['char'], g:OpFunc2Args)
+    bw!
+
+    # Test for using a script-local function name
+    def s:LocalOpFunc(type: string): void
+      g:LocalOpFuncArgs = [type]
+    enddef
+    &opfunc = s:LocalOpFunc
+    g:LocalOpFuncArgs = []
+    normal! g@l
+    assert_equal(['char'], g:LocalOpFuncArgs)
+    bw!
+  END
+  call CheckScriptSuccess(lines)
+
+  " setting 'opfunc' to a script local function outside of a script context
+  " should fail
+  let cleanup =<< trim END
+    call writefile([execute('messages')], 'Xtest.out')
+    qall
+  END
+  call writefile(cleanup, 'Xverify.vim')
+  call RunVim([], [], "-c \"set opfunc=s:abc\" -S Xverify.vim")
+  call assert_match('E81: Using <SID> not in a', readfile('Xtest.out')[0])
+  call delete('Xtest.out')
+  call delete('Xverify.vim')
+
+  " cleanup
+  set opfunc&
+  delfunc OpFunc1
+  delfunc OpFunc2
+  unlet g:OpFunc1Args g:OpFunc2Args
+  %bw!
 endfunc
 
 func Test_normal10_expand()
@@ -661,7 +872,7 @@ func Test_normal14_page()
   set nostartofline
   exe "norm! $\<c-b>"
   call assert_equal('92', getline('.'))
-  call assert_equal([0, 92, 2, 0, 2147483647], getcurpos())
+  call assert_equal([0, 92, 2, 0, v:maxcol], getcurpos())
   " cleanup
   set startofline
   bw!
@@ -705,7 +916,7 @@ func Test_normal15_z_scroll_vert()
   norm! >>$ztzb
   call assert_equal('	30', getline('.'))
   call assert_equal(30, winsaveview()['topline']+winheight(0)-1)
-  call assert_equal([0, 30, 3, 0, 2147483647], getcurpos())
+  call assert_equal([0, 30, 3, 0, v:maxcol], getcurpos())
 
   " Test for z-
   1
@@ -2223,7 +2434,6 @@ endfunc
 " Test for g`, g;, g,, g&, gv, gk, gj, gJ, g0, g^, g_, gm, g$, gM, g CTRL-G,
 " gi and gI commands
 func Test_normal33_g_cmd2()
-  CheckFeature jumplist
   call Setup_NewWindow()
   " Test for g`
   clearjumps
@@ -2384,7 +2594,15 @@ func Test_normal33_g_cmd2()
   call assert_equal(87, col('.'))
   call assert_equal('E', getreg(0))
 
+  " Test for gM with Tab characters
+  call setline('.', "\ta\tb\tc\td\te\tf")
+  norm! gMyl
+  call assert_equal(6, col('.'))
+  call assert_equal("c", getreg(0))
+
   " Test for g Ctrl-G
+  call setline('.', lineC)
+  norm! 60gMyl
   set ff=unix
   let a=execute(":norm! g\<c-g>")
   call assert_match('Col 87 of 144; Line 2 of 2; Word 1 of 1; Byte 88 of 146', a)
@@ -2594,7 +2812,7 @@ func Test_normal36_g_cmd5()
   call assert_equal([0, 14, 1, 0, 1], getcurpos())
   " count > buffer content
   norm! 120go
-  call assert_equal([0, 14, 1, 0, 2147483647], getcurpos())
+  call assert_equal([0, 14, 1, 0, v:maxcol], getcurpos())
   " clean up
   bw!
 endfunc
@@ -2776,7 +2994,7 @@ func Test_normal42_halfpage()
   set nostartofline
   exe "norm! $\<c-u>"
   call assert_equal('95', getline('.'))
-  call assert_equal([0, 95, 2, 0, 2147483647], getcurpos())
+  call assert_equal([0, 95, 2, 0, v:maxcol], getcurpos())
   " cleanup
   set startofline
   bw!
@@ -3157,7 +3375,6 @@ endfunc
 
 " Tests for g cmds
 func Test_normal_gdollar_cmd()
-  CheckFeature jumplist
   call Setup_NewWindow()
   " Make long lines that will wrap
   %s/$/\=repeat(' foobar', 10)/

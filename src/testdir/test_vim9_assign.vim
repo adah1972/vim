@@ -2,6 +2,7 @@
 
 source check.vim
 source vim9.vim
+source term_util.vim
 
 let s:appendToMe = 'xxx'
 let s:addToMe = 111
@@ -280,12 +281,12 @@ def Test_assign_concat()
     var s = '-'
     s ..= [1, 2]
   END
-  CheckDefAndScriptFailure2(lines, 'E1105: Cannot convert list to string', 'E734: Wrong variable type for .=', 2)
+  CheckDefAndScriptFailure(lines, ['E1105: Cannot convert list to string', 'E734: Wrong variable type for .='], 2)
   lines =<< trim END
     var s = '-'
     s ..= {a: 2}
   END
-  CheckDefAndScriptFailure2(lines, 'E1105: Cannot convert dict to string', 'E734: Wrong variable type for .=', 2)
+  CheckDefAndScriptFailure(lines, ['E1105: Cannot convert dict to string', 'E734: Wrong variable type for .='], 2)
 enddef
 
 def Test_assign_register()
@@ -386,6 +387,27 @@ def Test_assign_unpack()
   lines =<< trim END
       var v1: number
       var v2: number
+      [v1, v2] = [1, 2, 3]
+  END
+  CheckDefFailure(lines, 'E1093: Expected 2 items but got 3', 3)
+
+  lines =<< trim END
+      var v1: number
+      var v2: number
+      [v1, v2] = [1]
+  END
+  CheckDefFailure(lines, 'E1093: Expected 2 items but got 1', 3)
+
+  lines =<< trim END
+      var v1: number
+      var v2: number
+      [v1, v2; _] = [1]
+  END
+  CheckDefFailure(lines, 'E1093: Expected 2 items but got 1', 3)
+
+  lines =<< trim END
+      var v1: number
+      var v2: number
       [v1, v2] = 
   END
   CheckDefFailure(lines, 'E1097:', 5)
@@ -472,7 +494,7 @@ def Test_assign_linebreak()
           + 4
           + 5
   END
-  CheckDefExecAndScriptFailure2(lines, 'E1148:', 'E1203:', 2)
+  CheckDefExecAndScriptFailure(lines, ['E1148:', 'E1203:'], 2)
 enddef
 
 def Test_assign_index()
@@ -618,6 +640,23 @@ def Test_extend_list()
       extend(test_null_list(), ['x'])
   END
   CheckScriptFailure(lines, 'E1134:', 2)
+
+  # using global var has no declared type
+  g:myList = []
+  g:myList->extend([1])
+  g:myList->extend(['x'])
+  assert_equal([1, 'x'], g:myList)
+  unlet g:myList
+
+  # using declared list gives an error
+  lines =<< trim END
+      var l: list<number>
+      g:myList = l
+      g:myList->extend([1])
+      g:myList->extend(['x'])
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected list<number> but got list<string>', 4)
+  unlet g:myList
 enddef
 
 def Test_extend_dict()
@@ -732,10 +771,13 @@ def Test_assignment_list()
   assert_equal(['sdf', 'asdf', 'end'], list3)
 
   CheckDefExecFailure(['var ll = [1, 2, 3]', 'll[-4] = 6'], 'E684:')
-  CheckDefExecFailure(['var [v1, v2] = [1, 2]'], 'E1092:')
 
   # type becomes list<any>
   var somelist = rand() > 0 ? [1, 2, 3] : ['a', 'b', 'c']
+
+  # type is list<any> even though initializer is list<number>
+  var anyList: list<any> = [0]
+  assert_equal([0, 'x'], extend(anyList, ['x']))
 
   var lines =<< trim END
     var d = {dd: test_null_list()}
@@ -751,6 +793,60 @@ def Test_assignment_list()
       var fl: list<func(bool, bool, bool)> = [OneArg, TwoArgs]
   END
   CheckDefExecAndScriptFailure(lines, 'E1012:', 5)
+enddef
+
+def Test_list_declaration()
+  var [v1, v2] = [1, 2]
+  v1 += 3
+  assert_equal(4, v1)
+  v2 *= 3
+  assert_equal(6, v2)
+
+  var lines =<< trim END
+      var [v1, v2] = [1]
+  END
+  CheckDefExecAndScriptFailure(lines, ['E1093: Expected 2 items but got 1', 'E688:'])
+  lines =<< trim END
+      var testlist = [1]
+      var [v1, v2] = testlist
+  END
+  CheckDefExecAndScriptFailure(lines, ['E1093: Expected 2 items but got 1', 'E688:'])
+  lines =<< trim END
+      var [v1, v2] = [1, 2, 3]
+  END
+  CheckDefExecAndScriptFailure(lines, ['E1093: Expected 2 items but got 3', 'E687:'])
+  lines =<< trim END
+      var testlist = [1, 2, 3]
+      var [v1, v2] = testlist
+  END
+  CheckDefExecAndScriptFailure(lines, ['E1093: Expected 2 items but got 3', 'E687:'])
+
+  var [vnr, vstr] = [123, 'text']
+  vnr += 3
+  assert_equal(126, vnr)
+  vstr ..= 'end'
+  assert_equal('textend', vstr)
+
+  var [vnr2: number, vstr2: string] = [123, 'text']
+  vnr2 += 3
+  assert_equal(126, vnr2)
+  vstr2 ..= 'end'
+  assert_equal('textend', vstr2)
+
+  var [vnr3: number; vlist: list<string>] = [123, 'foo', 'bar']
+  vnr3 += 5
+  assert_equal(128, vnr3)
+  assert_equal(['foo', 'bar'], vlist)
+
+  lines =<< trim END
+      var [vnr2: number, vstr2: number] = [123, 'text']
+  END
+  CheckDefExecAndScriptFailure(lines, ['E1163: Variable 2: type mismatch, expected number but got string', 'E1012: Type mismatch; expected number but got string'])
+  lines =<< trim END
+      var testlist = [234, 'text']
+      var [vnr2: number, vstr2: number] = testlist
+  END
+  CheckDefExecAndScriptFailure(lines, ['E1163: Variable 2: type mismatch, expected number but got string', 'E1012: Type mismatch; expected number but got string'])
 enddef
 
 def PartFuncBool(b: bool): string
@@ -773,6 +869,36 @@ def Test_assignment_partial()
       Ref()
   END
   CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+
+      var nres: any
+      var sres: any
+      def Func(nr: number, s = '')
+        nres = nr
+        sres = s
+      enddef
+
+      var n: number
+      var Ref = function(Func, [n])
+      Ref('x')
+      assert_equal(0, nres)
+      assert_equal('x', sres)
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+
+      def Func(nr: number, s = '')
+      enddef
+
+      var n: number
+      var Ref = function(Func, [n])
+      Ref(0)
+  END
+  CheckScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected string but got number')
 enddef
 
 def Test_assignment_list_any_index()
@@ -851,6 +977,27 @@ def Test_assignment_dict()
   # type becomes dict<any>
   var somedict = rand() > 0 ? {a: 1, b: 2} : {a: 'a', b: 'b'}
 
+  # type is dict<any> even though initializer is dict<number>
+  var anyDict: dict<any> = {a: 0}
+  assert_equal({a: 0, b: 'x'}, extend(anyDict, {b: 'x'}))
+
+  # using global var, which has no declared type
+  g:myDict = {}
+  g:myDict->extend({a: 1})
+  g:myDict->extend({b: 'x'})
+  assert_equal({a: 1, b: 'x'}, g:myDict)
+  unlet g:myDict
+
+  # using list with declared type gives an error
+  lines =<< trim END
+      var d: dict<number>
+      g:myDict = d
+      g:myDict->extend({a: 1})
+      g:myDict->extend({b: 'x'})
+  END
+  CheckDefExecAndScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected dict<number> but got dict<string>', 4)
+  unlet g:myDict
+
   # assignment to script-local dict
   lines =<< trim END
     vim9script
@@ -915,7 +1062,7 @@ def Test_assignment_dict()
     var n: any
     n.key = 5
   END
-  CheckDefExecAndScriptFailure2(lines, 'E1148:', 'E1203: Dot can only be used on a dictionary: n.key = 5', 2)
+  CheckDefExecAndScriptFailure(lines, ['E1148:', 'E1203: Dot can only be used on a dictionary: n.key = 5'], 2)
 enddef
 
 def Test_assignment_local()
@@ -1383,13 +1530,13 @@ def Test_assign_with_op_fails()
       var s = 'abc'
       s[1] += 'x'
   END
-  CheckDefAndScriptFailure2(lines, 'E1141:', 'E689:', 2)
+  CheckDefAndScriptFailure(lines, ['E1141:', 'E689:'], 2)
 
   lines =<< trim END
       var s = 'abc'
       s[1] ..= 'x'
   END
-  CheckDefAndScriptFailure2(lines, 'E1141:', 'E689:', 2)
+  CheckDefAndScriptFailure(lines, ['E1141:', 'E689:'], 2)
 
   lines =<< trim END
       var dd: dict<dict<list<any>>>
@@ -1854,6 +2001,12 @@ def Test_unlet()
     'var ll = [1, 2]',
     'unlet ll[0: 1]',
     ], 'E1004:', 2)
+  # command recognized as assignment when skipping, should not give an error
+  CheckScriptSuccess([
+    'vim9script',
+    'for i in []',
+    "  put =''",
+    'endfor'])
 
   CheckDefFailure([
     'var ll = [1, 2]',
@@ -1937,16 +2090,32 @@ def Test_unlet()
    'defcompile',
    ], 'E1081:')
 
+  CheckScriptFailure([
+   'vim9script',
+   'def Delcount(dict: dict<any>)',
+   '  unlet dict.count',
+   'enddef',
+   'Delcount(v:)',
+   ], 'E742:')
+
+  CheckScriptFailure([
+   'vim9script',
+   'def DelChangedtick(dict: dict<any>)',
+   '  unlet dict.changedtick',
+   'enddef',
+   'DelChangedtick(b:)',
+   ], 'E795:')
+
   writefile(['vim9script', 'export var svar = 1234'], 'XunletExport.vim')
   var lines =<< trim END
     vim9script
-    import svar from './XunletExport.vim'
+    import './XunletExport.vim' as exp
     def UnletSvar()
-      unlet svar
+      unlet exp.svar
     enddef
     defcompile
   END
-  CheckScriptFailure(lines, 'E1081:', 1)
+  CheckScriptFailure(lines, 'E1260:', 1)
   delete('XunletExport.vim')
 
   $ENVVAR = 'foobar'
@@ -2050,6 +2219,23 @@ def Test_script_funcref_case()
   CheckScriptFailure(lines, 'E704:')
 enddef
 
+def Test_script_funcref_runtime_type_check()
+  var lines =<< trim END
+      vim9script
+      def FuncWithNumberArg(n: number)
+      enddef
+      def Test()
+        var Ref: func(string) = function(FuncWithNumberArg)
+      enddef
+      defcompile
+  END
+  # OK at compile time
+  CheckScriptSuccess(lines)
+
+  # Type check fails at runtime
+  CheckScriptFailure(lines + ['Test()'], 'E1012: Type mismatch; expected func(string) but got func(number)')
+enddef
+
 def Test_inc_dec()
   var lines =<< trim END
       var nr = 7
@@ -2094,6 +2280,23 @@ def Test_abort_after_error()
   assert_fails('so Xtestscript', [expected, expected], 3)
 
   delete('Xtestscript')
+enddef
+
+func Test_declare_command_line()
+  CheckRunVimInTerminal
+  call Run_Test_declare_command_line()
+endfunc
+
+def Run_Test_declare_command_line()
+  # On the command line the type is parsed but not used.
+  # To get rid of the script context have to run this in another Vim instance.
+  var buf = RunVimInTerminal('', {'rows': 6})
+  term_sendkeys(buf, ":vim9 var abc: list<list<number>> = [ [1, 2, 3], [4, 5, 6] ]\<CR>")
+  TermWait(buf)
+  term_sendkeys(buf, ":echo abc\<CR>")
+  TermWait(buf)
+  WaitForAssert(() => assert_match('\[\[1, 2, 3\], \[4, 5, 6\]\]', term_getline(buf, 6)))
+  StopVimInTerminal(buf)
 enddef
 
 

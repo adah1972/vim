@@ -854,6 +854,7 @@ typedef struct sign_attrs_S {
     int		sat_texthl;
     int		sat_linehl;
     int		sat_culhl;
+    int		sat_numhl;
     int		sat_priority;
 } sign_attrs_T;
 
@@ -1421,6 +1422,11 @@ struct type_S {
     type_T	    **tt_args;	    // func argument types, allocated
 };
 
+typedef struct {
+    type_T	*type_curr;	    // current type, value type
+    type_T	*type_decl;	    // declared type or equal to type_current
+} type2_T;
+
 #define TTFLAG_VARARGS	1	    // func args ends with "..."
 #define TTFLAG_OPTARG	2	    // func arg type with "?"
 #define TTFLAG_BOOL_OK	4	    // can be converted to bool
@@ -1506,7 +1512,7 @@ struct listvar_S
 	    int		lv_idx;		// cached index of an item
 	} mat;
     } lv_u;
-    type_T	*lv_type;	// allocated by alloc_type()
+    type_T	*lv_type;	// current type, allocated by alloc_type()
     list_T	*lv_copylist;	// copied list used by deepcopy()
     list_T	*lv_used_next;	// next list in used lists list
     list_T	*lv_used_prev;	// previous list in used lists list
@@ -1570,7 +1576,7 @@ struct dictvar_S
     int		dv_refcount;	// reference count
     int		dv_copyID;	// ID used by deepcopy()
     hashtab_T	dv_hashtab;	// hashtab that refers to the items
-    type_T	*dv_type;	// allocated by alloc_type()
+    type_T	*dv_type;	// current type, allocated by alloc_type()
     dict_T	*dv_copydict;	// copied dict used by deepcopy()
     dict_T	*dv_used_next;	// next dict in used dicts list
     dict_T	*dv_used_prev;	// previous dict in used dicts list
@@ -1699,6 +1705,7 @@ typedef struct
 #define FC_VIM9	    0x400	// defined in vim9 script file
 #define FC_CFUNC    0x800	// defined as Lua C func
 #define FC_COPY	    0x1000	// copy of another function by copy_func()
+#define FC_LAMBDA   0x2000	// one line "return {expr}"
 
 #define MAX_FUNC_ARGS	20	// maximum number of function arguments
 #define VAR_SHORT_LEN	20	// short variable name length
@@ -1808,25 +1815,17 @@ struct svar_S {
     char_u	*sv_name;	// points into "sn_all_vars" di_key
     typval_T	*sv_tv;		// points into "sn_vars" or "sn_all_vars" di_tv
     type_T	*sv_type;
+    int		sv_type_allocated;  // call free_type() for sv_type
     int		sv_const;	// 0, ASSIGN_CONST or ASSIGN_FINAL
     int		sv_export;	// "export let var = val"
 };
 
 typedef struct {
     char_u	*imp_name;	    // name imported as (allocated)
-    int		imp_sid;	    // script ID of "from"
-
+    scid_T	imp_sid;	    // script ID of "from"
     int		imp_flags;	    // IMP_FLAGS_ values
-
-    // for a variable
-    type_T	*imp_type;
-    int		imp_var_vals_idx;   // index in sn_var_vals of "from"
-
-    // for a function
-    char_u	*imp_funcname;	    // user func name (NOT allocated)
 } imported_T;
 
-#define IMP_FLAGS_STAR		1   // using "import * as Name"
 #define IMP_FLAGS_RELOAD	2   // script reloaded, OK to redefine
 
 /*
@@ -1863,6 +1862,7 @@ typedef struct
     int		sn_version;	// :scriptversion
     int		sn_state;	// SN_STATE_ values
     char_u	*sn_save_cpo;	// 'cpo' value when :vim9script found
+    char	sn_is_vimrc;	// .vimrc file, do not restore 'cpo'
 
 # ifdef FEAT_PROFILE
     int		sn_prof_on;	// TRUE when script is/was profiled
@@ -1990,23 +1990,30 @@ typedef struct
 //							called_func_argcount)
 //
 typedef struct {
-    int		(* argv_func)(int, typval_T *, int, int);
-    linenr_T	firstline;	// first line of range
-    linenr_T	lastline;	// last line of range
-    int		*doesrange;	// if not NULL: return: function handled range
-    int		evaluate;	// actually evaluate expressions
-    partial_T	*partial;	// for extra arguments
-    dict_T	*selfdict;	// Dictionary for "self"
-    typval_T	*basetv;	// base for base->method()
-    type_T	*check_type;	// type from funcref or NULL
+    int		(* fe_argv_func)(int, typval_T *, int, int);
+    linenr_T	fe_firstline;	// first line of range
+    linenr_T	fe_lastline;	// last line of range
+    int		*fe_doesrange;	// if not NULL: return: function handled range
+    int		fe_evaluate;	// actually evaluate expressions
+    partial_T	*fe_partial;	// for extra arguments
+    dict_T	*fe_selfdict;	// Dictionary for "self"
+    typval_T	*fe_basetv;	// base for base->method()
+    type_T	*fe_check_type;	// type from funcref or NULL
+    int		fe_found_var;	// if the function is not found then give an
+				// error that a variable is not callable.
 } funcexe_T;
 
 /*
  * Structure to hold the context of a compiled function, used by closures
  * defined in that function.
  */
-typedef struct funcstack_S
+typedef struct funcstack_S funcstack_T;
+
+struct funcstack_S
 {
+    funcstack_T *fs_next;	// linked list at "first_funcstack"
+    funcstack_T *fs_prev;
+
     garray_T	fs_ga;		// contains the stack, with:
 				// - arguments
 				// - frame
@@ -2017,7 +2024,7 @@ typedef struct funcstack_S
     int		fs_refcount;	// nr of closures referencing this funcstack
     int		fs_min_refcount; // nr of closures on this funcstack
     int		fs_copyID;	// for garray_T collection
-} funcstack_T;
+};
 
 typedef struct outer_S outer_T;
 struct outer_S {
@@ -2759,14 +2766,12 @@ struct file_buffer
     pos_T	b_last_insert;	// where Insert mode was left
     pos_T	b_last_change;	// position of last change: '. mark
 
-#ifdef FEAT_JUMPLIST
     /*
      * the changelist contains old change positions
      */
     pos_T	b_changelist[JUMPLISTSIZE];
     int		b_changelistlen;	// number of active entries
     int		b_new_change;		// set by u_savecommon()
-#endif
 
     /*
      * Character table, only used in charset.c for 'iskeyword'
@@ -2875,7 +2880,9 @@ struct file_buffer
 #endif
 #ifdef FEAT_COMPL_FUNC
     char_u	*b_p_cfu;	// 'completefunc'
+    callback_T	b_cfu_cb;	// 'completefunc' callback
     char_u	*b_p_ofu;	// 'omnifunc'
+    callback_T	b_ofu_cb;	// 'omnifunc' callback
 #endif
 #ifdef FEAT_EVAL
     char_u	*b_p_tfu;	// 'tagfunc' option value
@@ -2981,6 +2988,7 @@ struct file_buffer
     char_u	*b_p_tsr;	// 'thesaurus' local value
 #ifdef FEAT_COMPL_FUNC
     char_u	*b_p_tsrfu;	// 'thesaurusfunc' local value
+    callback_T	b_tsrfu_cb;	// 'thesaurusfunc' callback
 #endif
     long	b_p_ul;		// 'undolevels' local value
 #ifdef FEAT_PERSISTENT_UNDO
@@ -3211,7 +3219,8 @@ struct tabpage_S
     win_T	    *tp_first_popupwin; // first popup window in this Tab page
 #endif
     long	    tp_old_Rows;    // Rows when Tab page was left
-    long	    tp_old_Columns; // Columns when Tab page was left
+    long	    tp_old_Columns; // Columns when Tab page was left, -1 when
+				    // calling shell_new_columns() postponed
     long	    tp_ch_used;	    // value of 'cmdheight' when frame size
 				    // was set
 #ifdef FEAT_GUI
@@ -3722,7 +3731,6 @@ struct window_S
     pos_T	w_pcmark;	// previous context mark
     pos_T	w_prev_pcmark;	// previous w_pcmark
 
-#ifdef FEAT_JUMPLIST
     /*
      * the jumplist contains old cursor positions
      */
@@ -3731,7 +3739,6 @@ struct window_S
     int		w_jumplistidx;		// current position
 
     int		w_changelistidx;	// current position in b_changelist
-#endif
 
 #ifdef FEAT_SEARCH_EXTRA
     matchitem_T	*w_match_head;		// head of match list
@@ -4024,6 +4031,7 @@ typedef struct
     int		save_prevwin_id;    // ID of saved prevwin
     bufref_T	new_curbuf;	    // new curbuf
     char_u	*globaldir;	    // saved value of globaldir
+    int		save_VIsual_active; // saved VIsual_active
 } aco_save_T;
 
 /*
@@ -4248,6 +4256,10 @@ typedef struct lval_S
     char_u	*ll_name_end;	// end of variable name (can be NULL)
     type_T	*ll_type;	// type of variable (can be NULL)
     char_u	*ll_exp_name;	// NULL or expanded name in allocated memory.
+
+    scid_T	ll_sid;		// for an imported item: the script ID it was
+				// imported from; zero otherwise
+
     typval_T	*ll_tv;		// Typeval of item being used.  If "newkey"
 				// isn't NULL it's the Dict to which to add
 				// the item.
@@ -4483,3 +4495,18 @@ typedef struct {
     int		sve_did_save;
     hashtab_T	sve_hashtab;
 } save_v_event_T;
+
+// Enum used by filter(), map() and mapnew()
+typedef enum {
+    FILTERMAP_FILTER,
+    FILTERMAP_MAP,
+    FILTERMAP_MAPNEW
+} filtermap_T;
+
+// Structure used by switch_win() to pass values to restore_win()
+typedef struct {
+    win_T	*sw_curwin;
+    tabpage_T	*sw_curtab;
+    int		sw_same_win;	    // VIsual_active was not reset
+    int		sw_visual_active;
+} switchwin_T;
