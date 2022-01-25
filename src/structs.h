@@ -1827,6 +1827,7 @@ typedef struct {
 } imported_T;
 
 #define IMP_FLAGS_RELOAD	2   // script reloaded, OK to redefine
+#define IMP_FLAGS_AUTOLOAD	4   // script still needs to be loaded
 
 /*
  * Info about an already sourced scripts.
@@ -1864,6 +1865,9 @@ typedef struct
     char_u	*sn_save_cpo;	// 'cpo' value when :vim9script found
     char	sn_is_vimrc;	// .vimrc file, do not restore 'cpo'
 
+    // for "vim9script autoload" this is "dir#scriptname#"
+    char_u	*sn_autoload_prefix;
+
 # ifdef FEAT_PROFILE
     int		sn_prof_on;	// TRUE when script is/was profiled
     int		sn_pr_force;	// forceit: profile functions in this script
@@ -1886,7 +1890,8 @@ typedef struct
 } scriptitem_T;
 
 #define SN_STATE_NEW		0   // newly loaded script, nothing done
-#define SN_STATE_RELOAD		1   // script loaded before, nothing done
+#define SN_STATE_NOT_LOADED	1   // script located but not loaded
+#define SN_STATE_RELOAD		2   // script loaded before, nothing done
 #define SN_STATE_HAD_COMMAND	9   // a command was executed
 
 // Struct passed through eval() functions.
@@ -3690,6 +3695,8 @@ struct window_S
      */
     winopt_T	w_onebuf_opt;
     winopt_T	w_allbuf_opt;
+    // transform a pointer to a "onebuf" option into a "allbuf" option
+#define GLOBAL_WO(p)	((char *)p + sizeof(winopt_T))
 
     // A few options have local flags for P_INSECURE.
 #ifdef FEAT_STL_OPT
@@ -3712,9 +3719,6 @@ struct window_S
     int		w_briopt_sbr;	    // sbr in 'briopt'
     int		w_briopt_list;      // additional indent for lists
 #endif
-
-    // transform a pointer to a "onebuf" option into a "allbuf" option
-#define GLOBAL_WO(p)	((char *)p + sizeof(winopt_T))
 
     long	w_scbind_pos;
 

@@ -68,6 +68,8 @@ ex_vim9script(exarg_T *eap UNUSED)
 #ifdef FEAT_EVAL
     int		    sid = current_sctx.sc_sid;
     scriptitem_T    *si;
+    int		    found_noclear = FALSE;
+    char_u	    *p;
 
     if (!getline_equal(eap->getline, eap->cookie, getsourceline))
     {
@@ -81,12 +83,26 @@ ex_vim9script(exarg_T *eap UNUSED)
 	emsg(_(e_vim9script_must_be_first_command_in_script));
 	return;
     }
-    if (!IS_WHITE_OR_NUL(*eap->arg) && STRCMP(eap->arg, "noclear") != 0)
+
+    for (p = eap->arg; !IS_WHITE_OR_NUL(*p); p = skipwhite(skiptowhite(p)))
     {
-	semsg(_(e_invalid_argument_str), eap->arg);
-	return;
+	if (STRNCMP(p, "noclear", 7) == 0 && IS_WHITE_OR_NUL(p[7]))
+	{
+	    if (found_noclear)
+	    {
+		semsg(_(e_duplicate_argument_str), p);
+		return;
+	    }
+	    found_noclear = TRUE;
+	}
+	else
+	{
+	    semsg(_(e_invalid_argument_str), eap->arg);
+	    return;
+	}
     }
-    if (si->sn_state == SN_STATE_RELOAD && IS_WHITE_OR_NUL(*eap->arg))
+
+    if (si->sn_state == SN_STATE_RELOAD && !found_noclear)
     {
 	hashtab_T	*ht = &SCRIPT_VARS(sid);
 
@@ -100,6 +116,10 @@ ex_vim9script(exarg_T *eap UNUSED)
 	free_imports_and_script_vars(sid);
     }
     si->sn_state = SN_STATE_HAD_COMMAND;
+
+    // Store the prefix with the script, it is used to find exported functions.
+    if (si->sn_autoload_prefix == NULL)
+	si->sn_autoload_prefix = get_autoload_prefix(si);
 
     current_sctx.sc_version = SCRIPT_VERSION_VIM9;
     si->sn_version = SCRIPT_VERSION_VIM9;
@@ -216,6 +236,8 @@ ex_incdec(exarg_T *eap)
     void
 ex_export(exarg_T *eap)
 {
+    int	    prev_did_emsg = did_emsg;
+
     if (!in_vim9script())
     {
 	emsg(_(e_export_can_only_be_used_in_vim9script));
@@ -226,11 +248,11 @@ ex_export(exarg_T *eap)
     (void)find_ex_command(eap, NULL, lookup_scriptitem, NULL);
     switch (eap->cmdidx)
     {
-	case CMD_let:
 	case CMD_var:
 	case CMD_final:
 	case CMD_const:
 	case CMD_def:
+	case CMD_function:
 	// case CMD_class:
 	    is_export = TRUE;
 	    do_cmdline(eap->cmd, eap->getline, eap->cookie,
@@ -239,12 +261,14 @@ ex_export(exarg_T *eap)
 	    // The command will reset "is_export" when exporting an item.
 	    if (is_export)
 	    {
-		emsg(_(e_export_with_invalid_argument));
+		if (did_emsg == prev_did_emsg)
+		    emsg(_(e_export_with_invalid_argument));
 		is_export = FALSE;
 	    }
 	    break;
 	default:
-	    emsg(_(e_invalid_command_after_export));
+	    if (did_emsg == prev_did_emsg)
+		emsg(_(e_invalid_command_after_export));
 	    break;
     }
 }
@@ -366,16 +390,23 @@ handle_import(
 {
     char_u	*arg = arg_start;
     char_u	*nextarg;
+    int		is_autoload = FALSE;
     int		getnext;
     char_u	*expr_end;
     int		ret = FAIL;
     char_u	*as_name = NULL;
     typval_T	tv;
-    int		sid = -1;
+    int		sid = -2;
     int		res;
     long	start_lnum = SOURCING_LNUM;
     garray_T	*import_gap;
     int		i;
+
+    if (STRNCMP(arg, "autoload", 8) == 0 && VIM_ISWHITE(arg[8]))
+    {
+	is_autoload = TRUE;
+	arg = skipwhite(arg + 8);
+    }
 
     // The name of the file can be an expression, which must evaluate to a
     // string.
@@ -402,23 +433,66 @@ handle_import(
 	char_u		*tail = gettail(si->sn_name);
 	char_u		*from_name;
 
-	// Relative to current script: "./name.vim", "../../name.vim".
-	len = STRLEN(si->sn_name) - STRLEN(tail) + STRLEN(tv.vval.v_string) + 2;
+	if (is_autoload)
+	    res = FAIL;
+	else
+	{
+
+	    // Relative to current script: "./name.vim", "../../name.vim".
+	    len = STRLEN(si->sn_name) - STRLEN(tail)
+						+ STRLEN(tv.vval.v_string) + 2;
+	    from_name = alloc((int)len);
+	    if (from_name == NULL)
+		goto erret;
+	    vim_strncpy(from_name, si->sn_name, tail - si->sn_name);
+	    add_pathsep(from_name);
+	    STRCAT(from_name, tv.vval.v_string);
+	    simplify_filename(from_name);
+
+	    res = do_source(from_name, FALSE, DOSO_NONE, &sid);
+	    vim_free(from_name);
+	}
+    }
+    else if (mch_isFullName(tv.vval.v_string)
+#ifdef BACKSLASH_IN_FILENAME
+	    // On MS-Windows omitting the drive is still handled like an
+	    // absolute path, not using 'runtimepath'.
+	    || *tv.vval.v_string == '/' || *tv.vval.v_string == '\\'
+#endif
+	    )
+    {
+	// Absolute path: "/tmp/name.vim"
+	if (is_autoload)
+	    res = FAIL;
+	else
+	    res = do_source(tv.vval.v_string, FALSE, DOSO_NONE, &sid);
+    }
+    else if (is_autoload)
+    {
+	size_t	    len = 9 + STRLEN(tv.vval.v_string) + 1;
+	char_u	    *from_name;
+
+	// Find file in "autoload" subdirs in 'runtimepath'.
 	from_name = alloc((int)len);
 	if (from_name == NULL)
 	    goto erret;
-	vim_strncpy(from_name, si->sn_name, tail - si->sn_name);
-	add_pathsep(from_name);
-	STRCAT(from_name, tv.vval.v_string);
-	simplify_filename(from_name);
-
-	res = do_source(from_name, FALSE, DOSO_NONE, &sid);
+	vim_snprintf((char *)from_name, len, "autoload/%s", tv.vval.v_string);
+	// we need a scriptitem without loading the script
+	sid = find_script_in_rtp(from_name);
 	vim_free(from_name);
-    }
-    else if (mch_isFullName(tv.vval.v_string))
-    {
-	// Absolute path: "/tmp/name.vim"
-	res = do_source(tv.vval.v_string, FALSE, DOSO_NONE, &sid);
+	if (SCRIPT_ID_VALID(sid))
+	{
+	    scriptitem_T    *si = SCRIPT_ITEM(sid);
+
+	    if (si->sn_autoload_prefix == NULL)
+		si->sn_autoload_prefix = get_autoload_prefix(si);
+	    res = OK;
+	    if (override_autoload && si->sn_state == SN_STATE_NOT_LOADED)
+		// testing override: load autoload script right away
+		(void)do_source(si->sn_name, FALSE, DOSO_NONE, NULL);
+	}
+	else
+	    res = FAIL;
     }
     else
     {
@@ -428,9 +502,7 @@ handle_import(
 	// Find file in "import" subdirs in 'runtimepath'.
 	from_name = alloc((int)len);
 	if (from_name == NULL)
-	{
 	    goto erret;
-	}
 	vim_snprintf((char *)from_name, len, "import/%s", tv.vval.v_string);
 	res = source_in_path(p_rtp, from_name, DIP_NOAFTER, &sid);
 	vim_free(from_name);
@@ -438,7 +510,9 @@ handle_import(
 
     if (res == FAIL || sid <= 0)
     {
-	semsg(_(e_could_not_import_str), tv.vval.v_string);
+	semsg(_(is_autoload && sid == -2
+		    ? e_autoload_import_cannot_use_absolute_or_relative_path
+		    : e_could_not_import_str), tv.vval.v_string);
 	goto erret;
     }
 
@@ -451,7 +525,7 @@ handle_import(
 	{
 	    if (import->imp_flags & IMP_FLAGS_RELOAD)
 	    {
-		// encountering same script first ime on a reload is OK
+		// encountering same script first time on a reload is OK
 		import->imp_flags &= ~IMP_FLAGS_RELOAD;
 		break;
 	    }
@@ -513,7 +587,7 @@ handle_import(
     {
 	imported_T  *imported;
 
-	imported = find_imported(as_name, STRLEN(as_name), cctx);
+	imported = find_imported(as_name, FALSE, STRLEN(as_name), cctx);
 	if (imported != NULL && imported->imp_sid != sid)
 	{
 	    semsg(_(e_name_already_defined_str), as_name);
@@ -523,12 +597,17 @@ handle_import(
 		&& check_defined(as_name, STRLEN(as_name), cctx, FALSE) == FAIL)
 	    goto erret;
 
-	imported = new_imported(import_gap);
 	if (imported == NULL)
-	    goto erret;
-	imported->imp_name = as_name;
-	as_name = NULL;
-	imported->imp_sid = sid;
+	{
+	    imported = new_imported(import_gap);
+	    if (imported == NULL)
+		goto erret;
+	    imported->imp_name = as_name;
+	    as_name = NULL;
+	    imported->imp_sid = sid;
+	    if (is_autoload)
+		imported->imp_flags = IMP_FLAGS_AUTOLOAD;
+	}
     }
 
 erret:
@@ -596,39 +675,68 @@ find_exported(
     }
     else
     {
+	size_t	len = STRLEN(name);
 	char_u	buffer[200];
 	char_u	*funcname;
 
-	// it could be a user function.
-	if (STRLEN(name) < sizeof(buffer) - 15)
+	// It could be a user function.  Normally this is stored as
+	// "<SNR>99_name".  For an autoload script a function is stored with
+	// the autoload prefix: "dir#script#name".
+	if (script->sn_autoload_prefix != NULL)
+	    len += STRLEN(script->sn_autoload_prefix) + 2;
+	else
+	    len += 15;
+
+	if (len < sizeof(buffer))
 	    funcname = buffer;
 	else
 	{
-	    funcname = alloc(STRLEN(name) + 15);
+	    funcname = alloc(len);
 	    if (funcname == NULL)
 		return -1;
 	}
-	funcname[0] = K_SPECIAL;
-	funcname[1] = KS_EXTRA;
-	funcname[2] = (int)KE_SNR;
-	sprintf((char *)funcname + 3, "%ld_%s", (long)sid, name);
-	*ufunc = find_func(funcname, FALSE, NULL);
-	if (funcname != buffer)
-	    vim_free(funcname);
+	if (script->sn_autoload_prefix != NULL)
+	{
+	    sprintf((char *)funcname, "%s%s", script->sn_autoload_prefix, name);
+	}
+	else
+	{
+	    funcname[0] = K_SPECIAL;
+	    funcname[1] = KS_EXTRA;
+	    funcname[2] = (int)KE_SNR;
+	    sprintf((char *)funcname + 3, "%ld_%s", (long)sid, name);
+	}
+	*ufunc = find_func(funcname, FALSE);
 
 	if (*ufunc == NULL)
 	{
 	    if (verbose)
-		semsg(_(e_item_not_found_in_script_str), name);
-	    return -1;
+	    {
+		ufunc_T *alt_ufunc = NULL;
+
+		if (script->sn_autoload_prefix != NULL)
+		{
+		    // try find the function by the script-local name
+		    funcname[0] = K_SPECIAL;
+		    funcname[1] = KS_EXTRA;
+		    funcname[2] = (int)KE_SNR;
+		    sprintf((char *)funcname + 3, "%ld_%s", (long)sid, name);
+		    alt_ufunc = find_func(funcname, FALSE);
+		}
+		if (alt_ufunc != NULL)
+		    semsg(_(e_item_not_exported_in_script_str), name);
+		else
+		    semsg(_(e_item_not_found_in_script_str), name);
+	    }
 	}
 	else if (((*ufunc)->uf_flags & FC_EXPORT) == 0)
 	{
 	    if (verbose)
 		semsg(_(e_item_not_exported_in_script_str), name);
 	    *ufunc = NULL;
-	    return -1;
 	}
+	if (funcname != buffer)
+	    vim_free(funcname);
     }
 
     return idx;
@@ -715,6 +823,7 @@ vim9_declare_scriptvar(exarg_T *eap, char_u *arg)
 update_vim9_script_var(
 	int	    create,
 	dictitem_T  *di,
+	char_u	    *name,
 	int	    flags,
 	typval_T    *tv,
 	type_T	    **type,
@@ -734,7 +843,7 @@ update_vim9_script_var(
 	if (ga_grow(&si->sn_var_vals, 1) == FAIL)
 	    return;
 
-	hi = hash_find(&si->sn_all_vars.dv_hashtab, di->di_key);
+	hi = hash_find(&si->sn_all_vars.dv_hashtab, name);
 	if (!HASHITEM_EMPTY(hi))
 	{
 	    // Variable with this name exists, either in this block or in
@@ -766,7 +875,7 @@ update_vim9_script_var(
 	    // svar_T and create a new sallvar_T.
 	    sv = ((svar_T *)si->sn_var_vals.ga_data) + si->sn_var_vals.ga_len;
 	    newsav = (sallvar_T *)alloc_clear(
-				       sizeof(sallvar_T) + STRLEN(di->di_key));
+				       sizeof(sallvar_T) + STRLEN(name));
 	    if (newsav == NULL)
 		return;
 
@@ -776,7 +885,7 @@ update_vim9_script_var(
 	    sv->sv_export = is_export;
 	    newsav->sav_var_vals_idx = si->sn_var_vals.ga_len;
 	    ++si->sn_var_vals.ga_len;
-	    STRCPY(&newsav->sav_key, di->di_key);
+	    STRCPY(&newsav->sav_key, name);
 	    sv->sv_name = newsav->sav_key;
 	    newsav->sav_di = di;
 	    newsav->sav_block_id = si->sn_current_block_id;

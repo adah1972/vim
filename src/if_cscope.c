@@ -18,7 +18,62 @@
 #if defined(UNIX)
 # include <sys/wait.h>
 #endif
-#include "if_cscope.h"
+
+#if defined (MSWIN)
+# ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+# endif
+# include <windows.h>
+#endif
+
+#define CSCOPE_SUCCESS		0
+#define CSCOPE_FAILURE		-1
+
+#define	CSCOPE_DBFILE		"cscope.out"
+#define	CSCOPE_PROMPT		">> "
+
+/*
+ * See ":help cscope-find" for the possible queries.
+ */
+
+typedef struct {
+    char *  name;
+    int     (*func)(exarg_T *eap);
+    char *  help;
+    char *  usage;
+    int	    cansplit;		// if supports splitting window
+} cscmd_T;
+
+typedef struct csi {
+    char *	    fname;	// cscope db name
+    char *	    ppath;	// path to prepend (the -P option)
+    char *	    flags;	// additional cscope flags/options (e.g, -p2)
+#if defined(UNIX)
+    pid_t	    pid;	// PID of the connected cscope process.
+    dev_t	    st_dev;	// ID of dev containing cscope db
+    ino_t	    st_ino;	// inode number of cscope db
+#else
+# if defined(MSWIN)
+    DWORD	    pid;	// PID of the connected cscope process.
+    HANDLE	    hProc;	// cscope process handle
+    DWORD	    nVolume;	// Volume serial number, instead of st_dev
+    DWORD	    nIndexHigh;	// st_ino has no meaning in the Windows
+    DWORD	    nIndexLow;
+# endif
+#endif
+
+    FILE *	    fr_fp;	// from cscope: FILE.
+    FILE *	    to_fp;	// to cscope: FILE.
+} csinfo_T;
+
+typedef enum { Add, Find, Help, Kill, Reset, Show } csid_e;
+
+typedef enum {
+    Store,
+    Get,
+    Free,
+    Print
+} mcmd_e;
 
 static int	    cs_add(exarg_T *eap);
 static int	    cs_add_common(char *, char *, char *);
@@ -783,11 +838,6 @@ cs_create_connection(int i)
     HANDLE	stdin_rd, stdout_rd;
     HANDLE	stdout_wr, stdin_wr;
     BOOL	created;
-# if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__MINGW32__)
-#  define OPEN_OH_ARGTYPE intptr_t
-# else
-#  define OPEN_OH_ARGTYPE long
-# endif
 #endif
 
 #if defined(UNIX)
@@ -811,12 +861,16 @@ err_closing:
 	return CSCOPE_FAILURE;
     }
 
-    switch (csinfo[i].pid = fork())
+    if ((csinfo[i].pid = fork()) == -1)
     {
-    case -1:
 	(void)emsg(_(e_could_not_fork_for_cscope));
 	goto err_closing;
-    case 0:				// child: run cscope.
+    }
+    else if (csinfo[i].pid == 0)	// child: run cscope.
+    {
+	char **argv = NULL;
+	int argc = 0;
+
 	if (dup2(to_cs[0], STDIN_FILENO) == -1)
 	    PERROR("cs_create_connection 1");
 	if (dup2(from_cs[1], STDOUT_FILENO) == -1)
@@ -856,7 +910,7 @@ err_closing:
 	if ((prog = alloc(MAXPATHL + 1)) == NULL)
 	{
 #ifdef UNIX
-	    return CSCOPE_FAILURE;
+	    exit(EXIT_FAILURE);
 #else
 	    // MSWIN
 	    goto err_closing;
@@ -873,7 +927,7 @@ err_closing:
 	    {
 		vim_free(prog);
 #ifdef UNIX
-		return CSCOPE_FAILURE;
+		exit(EXIT_FAILURE);
 #else
 		// MSWIN
 		goto err_closing;
@@ -892,20 +946,16 @@ err_closing:
 	    vim_free(prog);
 	    vim_free(ppath);
 #ifdef UNIX
-	    return CSCOPE_FAILURE;
+	    exit(EXIT_FAILURE);
 #else
 	    // MSWIN
 	    goto err_closing;
 #endif
 	}
 
-	// run the cscope command; is there execl for non-unix systems?
-#if defined(UNIX)
-	(void)sprintf(cmd, "exec %s -dl -f %s", prog, csinfo[i].fname);
-#else
-	// MSWIN
+	// run the cscope command
 	(void)sprintf(cmd, "%s -dl -f %s", prog, csinfo[i].fname);
-#endif
+
 	if (csinfo[i].ppath != NULL)
 	{
 	    (void)strcat(cmd, " -P");
@@ -932,12 +982,17 @@ err_closing:
 	    PERROR(_("cs_create_connection setpgid failed"));
 #  endif
 # endif
-	if (execl("/bin/sh", "sh", "-c", cmd, (char *)NULL) == -1)
+	if (build_argv_from_string((char_u *)cmd, &argv, &argc) == FAIL)
+	    exit(EXIT_FAILURE);
+
+	if (execvp(argv[0], argv) == -1)
 	    PERROR(_("cs_create_connection exec failed"));
 
 	exit(127);
 	// NOTREACHED
-    default:	// parent.
+    }
+    else	// parent.
+    {
 	/*
 	 * Save the file descriptors for later duplication, and
 	 * reopen as streams.
@@ -950,10 +1005,7 @@ err_closing:
 	// close unused
 	(void)close(to_cs[0]);
 	(void)close(from_cs[1]);
-
-	break;
     }
-
 #else
     // MSWIN
     // Create a new process to run cscope and use pipes to talk with it
@@ -980,11 +1032,11 @@ err_closing:
     CloseHandle(pi.hThread);
 
     // TODO - tidy up after failure to create files on pipe handles.
-    if (((fd = _open_osfhandle((OPEN_OH_ARGTYPE)stdin_wr,
+    if (((fd = _open_osfhandle((intptr_t)stdin_wr,
 						      _O_TEXT|_O_APPEND)) < 0)
 	    || ((csinfo[i].to_fp = _fdopen(fd, "w")) == NULL))
 	PERROR(_("cs_create_connection: fdopen for to_fp failed"));
-    if (((fd = _open_osfhandle((OPEN_OH_ARGTYPE)stdout_rd,
+    if (((fd = _open_osfhandle((intptr_t)stdout_rd,
 						      _O_TEXT|_O_RDONLY)) < 0)
 	    || ((csinfo[i].fr_fp = _fdopen(fd, "r")) == NULL))
 	PERROR(_("cs_create_connection: fdopen for fr_fp failed"));

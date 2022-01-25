@@ -667,7 +667,6 @@ def Test_try_catch_throw()
     finally
       return 6
     endtry
-    return -1
   enddef
   assert_equal(6, ReturnInFinally())
 
@@ -706,6 +705,64 @@ def Test_try_catch_throw()
       endif
   END
   CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_try_ends_in_return()
+  var lines =<< trim END
+      vim9script
+      def Foo(): string
+        try
+          return 'foo'
+        catch
+          return 'caught'
+        endtry
+      enddef
+      assert_equal('foo', Foo())
+  END
+  CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      def Foo(): string
+        try
+          return 'foo'
+        catch
+          return 'caught'
+        endtry
+        echo 'notreached'
+      enddef
+      assert_equal('foo', Foo())
+  END
+  CheckScriptFailure(lines, 'E1095:')
+
+  lines =<< trim END
+      vim9script
+      def Foo(): string
+        try
+          return 'foo'
+        catch /x/
+          return 'caught'
+        endtry
+      enddef
+      assert_equal('foo', Foo())
+  END
+  CheckScriptFailure(lines, 'E1027:')
+
+  lines =<< trim END
+      vim9script
+      def Foo(): string
+        try
+          echo 'foo'
+        catch
+          echo 'caught'
+        finally
+          return 'done'
+        endtry
+      enddef
+      assert_equal('done', Foo())
+  END
+  CheckScriptSuccess(lines)
+
 enddef
 
 def Test_try_in_catch()
@@ -2994,154 +3051,6 @@ def Test_vim9_copen()
   quit
 enddef
 
-" test using an auto-loaded function and variable
-def Test_vim9_autoload()
-  var lines =<< trim END
-     vim9script
-     def some#gettest(): string
-       return 'test'
-     enddef
-     g:some#name = 'name'
-     g:some#dict = {key: 'value'}
-
-     def some#varargs(a1: string, ...l: list<string>): string
-       return a1 .. l[0] .. l[1]
-     enddef
-  END
-
-  mkdir('Xdir/autoload', 'p')
-  writefile(lines, 'Xdir/autoload/some.vim')
-  var save_rtp = &rtp
-  exe 'set rtp^=' .. getcwd() .. '/Xdir'
-
-  assert_equal('test', g:some#gettest())
-  assert_equal('name', g:some#name)
-  assert_equal('value', g:some#dict.key)
-  g:some#other = 'other'
-  assert_equal('other', g:some#other)
-
-  assert_equal('abc', some#varargs('a', 'b', 'c'))
-
-  # upper case script name works
-  lines =<< trim END
-     vim9script
-     def Other#getOther(): string
-       return 'other'
-     enddef
-  END
-  writefile(lines, 'Xdir/autoload/Other.vim')
-  assert_equal('other', g:Other#getOther())
-
-  delete('Xdir', 'rf')
-  &rtp = save_rtp
-enddef
-
-" test disassembling an auto-loaded function starting with "debug"
-def Test_vim9_autoload_disass()
-  mkdir('Xdir/autoload', 'p')
-  var save_rtp = &rtp
-  exe 'set rtp^=' .. getcwd() .. '/Xdir'
-
-  var lines =<< trim END
-     vim9script
-     def debugit#test(): string
-       return 'debug'
-     enddef
-  END
-  writefile(lines, 'Xdir/autoload/debugit.vim')
-
-  lines =<< trim END
-     vim9script
-     def profileit#test(): string
-       return 'profile'
-     enddef
-  END
-  writefile(lines, 'Xdir/autoload/profileit.vim')
-
-  lines =<< trim END
-    vim9script
-    assert_equal('debug', debugit#test())
-    disass debugit#test
-    assert_equal('profile', profileit#test())
-    disass profileit#test
-  END
-  CheckScriptSuccess(lines)
-
-  delete('Xdir', 'rf')
-  &rtp = save_rtp
-enddef
-
-" test using a vim9script that is auto-loaded from an autocmd
-def Test_vim9_aucmd_autoload()
-  var lines =<< trim END
-     vim9script
-     def foo#test()
-         echomsg getreg('"')
-     enddef
-  END
-
-  mkdir('Xdir/autoload', 'p')
-  writefile(lines, 'Xdir/autoload/foo.vim')
-  var save_rtp = &rtp
-  exe 'set rtp^=' .. getcwd() .. '/Xdir'
-  augroup test
-    autocmd TextYankPost * call foo#test()
-  augroup END
-
-  normal Y
-
-  augroup test
-    autocmd!
-  augroup END
-  delete('Xdir', 'rf')
-  &rtp = save_rtp
-enddef
-
-" This was causing a crash because suppress_errthrow wasn't reset.
-def Test_vim9_autoload_error()
-  var lines =<< trim END
-      vim9script
-      def crash#func()
-          try
-              for x in List()
-              endfor
-          catch
-          endtry
-          g:ok = true
-      enddef
-      fu List()
-          invalid
-      endfu
-      try
-          alsoinvalid
-      catch /wontmatch/
-      endtry
-  END
-  call mkdir('Xruntime/autoload', 'p')
-  call writefile(lines, 'Xruntime/autoload/crash.vim')
-
-  # run in a separate Vim to avoid the side effects of assert_fails()
-  lines =<< trim END
-    exe 'set rtp^=' .. getcwd() .. '/Xruntime'
-    call crash#func()
-    call writefile(['ok'], 'Xdidit')
-    qall!
-  END
-  writefile(lines, 'Xscript')
-  RunVim([], [], '-S Xscript')
-  assert_equal(['ok'], readfile('Xdidit'))
-
-  delete('Xdidit')
-  delete('Xscript')
-  delete('Xruntime', 'rf')
-
-  lines =<< trim END
-    vim9script
-    var foo#bar = 'asdf'
-  END
-  CheckScriptFailure(lines, 'E461: Illegal variable name: foo#bar', 2)
-enddef
-
 def Test_script_var_in_autocmd()
   # using a script variable from an autocommand, defined in a :def function in a
   # legacy Vim script, cannot check the variable type.
@@ -3753,6 +3662,36 @@ def ProfiledNestedProfiled()
       return x
   enddef
   Nested()
+enddef
+
+def Test_ambigous_command_error()
+  var lines =<< trim END
+      vim9script
+      command CmdA echomsg 'CmdA'
+      command CmdB echomsg 'CmdB'
+      Cmd
+  END
+  CheckScriptFailure(lines, 'E464: Ambiguous use of user-defined command: Cmd', 4)
+
+  lines =<< trim END
+      vim9script
+      def Func()
+        Cmd
+      enddef
+      Func()
+  END
+  CheckScriptFailure(lines, 'E464: Ambiguous use of user-defined command: Cmd', 1)
+
+  lines =<< trim END
+      vim9script
+      nnoremap <F3> <ScriptCmd>Cmd<CR>
+      feedkeys("\<F3>", 'xt')
+  END
+  CheckScriptFailure(lines, 'E464: Ambiguous use of user-defined command: Cmd', 3)
+
+  delcommand CmdA
+  delcommand CmdB
+  nunmap <F3>
 enddef
 
 " Execute this near the end, profiling doesn't stop until Vim exits.

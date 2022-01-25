@@ -529,31 +529,21 @@ block_insert(
 	}
 
 	if (has_mbyte && spaces > 0)
-	{
-	    int off;
+	    // avoid copying part of a multi-byte character
+	    offset -= (*mb_head_off)(oldp, oldp + offset);
 
-	    // Avoid starting halfway a multi-byte character.
-	    if (b_insert)
-	    {
-		off = (*mb_head_off)(oldp, oldp + offset + spaces);
-	    }
-	    else
-	    {
-		off = (*mb_off_next)(oldp, oldp + offset);
-		offset += off;
-	    }
-	    spaces -= off;
-	    count -= off;
-	}
 	if (spaces < 0)  // can happen when the cursor was moved
 	    spaces = 0;
 
-	newp = alloc(STRLEN(oldp) + s_len + count + 1);
+	// Make sure the allocated size matches what is actually copied below.
+	newp = alloc(STRLEN(oldp) + spaces + s_len
+		    + (spaces > 0 && !bdp->is_short ? ts_val - spaces : 0)
+								  + count + 1);
 	if (newp == NULL)
 	    continue;
 
 	// copy up to shifted part
-	mch_memmove(newp, oldp, (size_t)(offset));
+	mch_memmove(newp, oldp, (size_t)offset);
 	oldp += offset;
 
 	// insert pre-padding
@@ -564,14 +554,21 @@ block_insert(
 	mch_memmove(newp + startcol, s, (size_t)s_len);
 	offset += s_len;
 
-	if (spaces && !bdp->is_short)
+	if (spaces > 0 && !bdp->is_short)
 	{
-	    // insert post-padding
-	    vim_memset(newp + offset + spaces, ' ', (size_t)(ts_val - spaces));
-	    // We're splitting a TAB, don't copy it.
-	    oldp++;
-	    // We allowed for that TAB, remember this now
-	    count++;
+	    if (*oldp == TAB)
+	    {
+		// insert post-padding
+		vim_memset(newp + offset + spaces, ' ',
+						    (size_t)(ts_val - spaces));
+		// we're splitting a TAB, don't copy it
+		oldp++;
+		// We allowed for that TAB, remember this now
+		count++;
+	    }
+	    else
+		// Not a TAB, no extra spaces
+		count = spaces;
 	}
 
 	if (spaces > 0)
@@ -626,6 +623,10 @@ op_delete(oparg_T *oap)
 	emsg(_(e_cannot_make_changes_modifiable_is_off));
 	return FAIL;
     }
+
+    if (VIsual_select && oap->is_VIsual)
+	// use register given with CTRL_R, defaults to zero
+        oap->regname = VIsual_select_reg;
 
 #ifdef FEAT_CLIPBOARD
     adjust_clip_reg(&oap->regname);
@@ -1598,7 +1599,7 @@ op_insert(oparg_T *oap, long count1)
 		    oap->start_vcol = t;
 		}
 		else if (oap->op_type == OP_APPEND
-			&& oap->end.col + oap->end.coladd
+			&& oap->start.col + oap->start.coladd
 				>= curbuf->b_op_start_orig.col
 					      + curbuf->b_op_start_orig.coladd)
 		{
@@ -3501,6 +3502,14 @@ typedef struct {
     int		rv_arg;		// extra argument
 } redo_VIsual_T;
 
+    static int
+is_ex_cmdchar(cmdarg_T *cap)
+{
+    return cap->cmdchar == ':'
+	|| cap->cmdchar == K_COMMAND
+	|| cap->cmdchar == K_SCRIPT_COMMAND;
+}
+
 /*
  * Handle an operator after Visual mode or when the movement is finished.
  * "gui_yank" is true when yanking text for the clipboard.
@@ -3583,8 +3592,7 @@ do_pending_operator(cmdarg_T *cap, int old_col, int gui_yank)
 		&& ((!VIsual_active || oap->motion_force)
 		    // Also redo Operator-pending Visual mode mappings
 		    || (VIsual_active
-			  && (cap->cmdchar == ':' || cap->cmdchar == K_COMMAND)
-						  && oap->op_type != OP_COLON))
+			    && is_ex_cmdchar(cap) && oap->op_type != OP_COLON))
 		&& cap->cmdchar != 'D'
 #ifdef FEAT_FOLDING
 		&& oap->op_type != OP_FOLD
@@ -3608,7 +3616,7 @@ do_pending_operator(cmdarg_T *cap, int old_col, int gui_yank)
 		    AppendToRedobuffLit(cap->searchbuf, -1);
 		AppendToRedobuff(NL_STR);
 	    }
-	    else if (cap->cmdchar == ':' || cap->cmdchar == K_COMMAND)
+	    else if (is_ex_cmdchar(cap))
 	    {
 		// do_cmdline() has stored the first typed line in
 		// "repeat_cmdline".  When several lines are typed repeating
@@ -3806,7 +3814,7 @@ do_pending_operator(cmdarg_T *cap, int old_col, int gui_yank)
 			    get_op_char(oap->op_type),
 			    get_extra_op_char(oap->op_type),
 			    oap->motion_force, cap->cmdchar, cap->nchar);
-		else if (cap->cmdchar != ':' && cap->cmdchar != K_COMMAND)
+		else if (!is_ex_cmdchar(cap))
 		{
 		    int opchar = get_op_char(oap->op_type);
 		    int extra_opchar = get_extra_op_char(oap->op_type);

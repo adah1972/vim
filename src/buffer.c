@@ -1744,7 +1744,11 @@ set_curbuf(buf_T *buf, int action)
 	{
 	    win_T  *previouswin = curwin;
 
-	    if (prevbuf == curbuf)
+	    // Do not sync when in Insert mode and the buffer is open in
+	    // another window, might be a timer doing something in another
+	    // window.
+	    if (prevbuf == curbuf
+			 && ((State & INSERT) == 0 || curbuf->b_nwindows <= 1))
 		u_sync(FALSE);
 	    close_buffer(prevbuf == curwin->w_buffer ? curwin : NULL, prevbuf,
 		    unload ? action : (action == DOBUF_GOTO
@@ -2269,8 +2273,9 @@ free_buf_options(
 #endif
 #ifdef FEAT_CRYPT
 # ifdef FEAT_SODIUM
-    if (buf->b_p_key != NULL && (crypt_get_method_nr(buf) == CRYPT_M_SOD))
-	sodium_munlock(buf->b_p_key, STRLEN(buf->b_p_key));
+    if ((buf->b_p_key != NULL) && (*buf->b_p_key != NUL) &&
+				(crypt_get_method_nr(buf) == CRYPT_M_SOD))
+	crypt_sodium_munlock(buf->b_p_key, STRLEN(buf->b_p_key));
 # endif
     clear_string_option(&buf->b_p_key);
 #endif
@@ -4157,7 +4162,7 @@ build_stl_str_hl(
 	tv.vval.v_number = wp->w_id;
 	set_var((char_u *)"g:statusline_winid", &tv, FALSE);
 
-	usefmt = eval_to_string_safe(fmt + 2, use_sandbox);
+	usefmt = eval_to_string_safe(fmt + 2, use_sandbox, FALSE);
 	if (usefmt == NULL)
 	    usefmt = fmt;
 
@@ -4541,7 +4546,7 @@ build_stl_str_hl(
 	    if (curwin != save_curwin)
 		VIsual_active = FALSE;
 
-	    str = eval_to_string_safe(p, use_sandbox);
+	    str = eval_to_string_safe(p, use_sandbox, FALSE);
 
 	    curwin = save_curwin;
 	    curbuf = save_curbuf;
@@ -4610,15 +4615,7 @@ build_stl_str_hl(
 
 	case STL_VIRTCOL:
 	case STL_VIRTCOL_ALT:
-	    // In list mode virtcol needs to be recomputed
-	    virtcol = wp->w_virtcol;
-	    if (wp->w_p_list && wp->w_lcs_chars.tab1 == NUL)
-	    {
-		wp->w_p_list = FALSE;
-		getvcol(wp, &wp->w_cursor, NULL, &virtcol, NULL);
-		wp->w_p_list = TRUE;
-	    }
-	    ++virtcol;
+	    virtcol = wp->w_virtcol + 1;
 	    // Don't display %V if it's the same as %c.
 	    if (opt == STL_VIRTCOL_ALT
 		    && (virtcol == (colnr_T)(!(State & INSERT) && empty_line

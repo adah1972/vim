@@ -1246,6 +1246,13 @@ main_loop(
 	else
 	    previous_got_int = FALSE;
 
+#ifdef FEAT_EVAL
+	// At the toplevel there is no exception handling.  Discard any that
+	// may be hanging around (e.g. from "interrupt" at the debug prompt).
+	if (did_throw && !ex_normal_busy)
+	    discard_current_exception();
+#endif
+
 	if (!exmode_active)
 	    msg_scroll = FALSE;
 	quit_more = FALSE;
@@ -2004,7 +2011,7 @@ command_line_scan(mparm_T *parmp)
 		{
 		    Columns = 80;	// need to init Columns
 		    info_message = TRUE; // use mch_msg(), not mch_errmsg()
-#if defined(FEAT_GUI) && !defined(ALWAYS_USE_GUI)
+#if defined(FEAT_GUI) && !defined(ALWAYS_USE_GUI) && !defined(VIMDLL)
 		    gui.starting = FALSE; // not starting GUI, will exit
 #endif
 		    list_version();

@@ -2398,6 +2398,10 @@ static funcentry_T global_functions[] =
 			ret_list_number,    f_win_id2tabwin},
     {"win_id2win",	1, 1, FEARG_1,	    arg1_number,
 			ret_number,	    f_win_id2win},
+    {"win_move_separator", 2, 2, FEARG_1,   arg2_number,
+			ret_number_bool,    f_win_move_separator},
+    {"win_move_statusline", 2, 2, FEARG_1,  arg2_number,
+			ret_number_bool,    f_win_move_statusline},
     {"win_screenpos",	1, 1, FEARG_1,	    arg1_number,
 			ret_list_number,    f_win_screenpos},
     {"win_splitmove",   2, 3, FEARG_1,	    arg3_number_number_dict,
@@ -2925,6 +2929,8 @@ f_call(typval_T *argvars, typval_T *rettv)
     char_u	*func;
     partial_T   *partial = NULL;
     dict_T	*selfdict = NULL;
+    char_u	*dot;
+    char_u	*tofree = NULL;
 
     if (in_vim9script()
 	    && (check_for_string_or_func_arg(argvars, 0) == FAIL
@@ -2952,6 +2958,26 @@ f_call(typval_T *argvars, typval_T *rettv)
     if (func == NULL || *func == NUL)
 	return;		// type error, empty name or null function
 
+    dot = vim_strchr(func, '.');
+    if (dot != NULL)
+    {
+	imported_T *import = find_imported(func, dot - func, TRUE, NULL);
+
+	if (import != NULL && SCRIPT_ID_VALID(import->imp_sid))
+	{
+	    scriptitem_T *si = SCRIPT_ITEM(import->imp_sid);
+
+	    if (si->sn_autoload_prefix != NULL)
+	    {
+		// Turn "import.Func" into "scriptname#Func".
+		tofree = concat_str(si->sn_autoload_prefix, dot + 1);
+		if (tofree == NULL)
+		    return;
+		func = tofree;
+	    }
+	}
+    }
+
     if (argvars[2].v_type != VAR_UNKNOWN)
     {
 	if (argvars[2].v_type != VAR_DICT)
@@ -2963,6 +2989,8 @@ f_call(typval_T *argvars, typval_T *rettv)
     }
 
     (void)func_call(func, &argvars[1], partial, selfdict, rettv);
+
+    vim_free(tofree);
 }
 
 /*
@@ -3928,6 +3956,7 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
     char_u	nbuf[NUMBUFLEN];
     int		typed = FALSE;
     int		execute = FALSE;
+    int		context = FALSE;
     int		dangerous = FALSE;
     int		lowlevel = FALSE;
     char_u	*keys_esc;
@@ -3957,6 +3986,7 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 		case 't': typed = TRUE; break;
 		case 'i': insert = TRUE; break;
 		case 'x': execute = TRUE; break;
+		case 'c': context = TRUE; break;
 		case '!': dangerous = TRUE; break;
 		case 'L': lowlevel = TRUE; break;
 	    }
@@ -4003,10 +4033,18 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 
 	    if (execute)
 	    {
-		int save_msg_scroll = msg_scroll;
+		int	save_msg_scroll = msg_scroll;
+		sctx_T	save_sctx;
 
 		// Avoid a 1 second delay when the keys start Insert mode.
 		msg_scroll = FALSE;
+
+		if (context)
+		{
+		    save_sctx = current_sctx;
+		    current_sctx.sc_sid = 0;
+		    current_sctx.sc_version = 0;
+		}
 
 		if (!dangerous)
 		{
@@ -4021,6 +4059,9 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 		}
 
 		msg_scroll |= save_msg_scroll;
+
+		if (context)
+		    current_sctx = save_sctx;
 	    }
 	}
     }
@@ -4113,7 +4154,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 	semsg(_(e_invalid_argument_str), use_string ? tv_get_string(&argvars[0]) : s);
     // Don't check an autoload name for existence here.
     else if (trans_name != NULL && (is_funcref
-			 ? find_func(trans_name, is_global, NULL) == NULL
+			 ? find_func(trans_name, is_global) == NULL
 			 : !translated_function_exists(trans_name, is_global)))
 	semsg(_(e_unknown_function_str_2), s);
     else
@@ -4241,7 +4282,7 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 		}
 		else if (is_funcref)
 		{
-		    pt->pt_func = find_func(trans_name, is_global, NULL);
+		    pt->pt_func = find_func(trans_name, is_global);
 		    func_ptr_ref(pt->pt_func);
 		    vim_free(name);
 		}
@@ -5087,8 +5128,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #endif
 		},
 	{"balloon_multiline",
-#if defined(FEAT_BEVAL_GUI) && !defined(FEAT_GUI_MSWIN)
-			// MS-Windows requires runtime check, see below
+#ifdef FEAT_BEVAL_GUI
 		1
 #else
 		0
@@ -6062,10 +6102,6 @@ f_has(typval_T *argvars, typval_T *rettv)
 	{
 	    // intentionally empty
 	}
-#if defined(FEAT_BEVAL) && defined(FEAT_GUI_MSWIN)
-	else if (STRICMP(name, "balloon_multiline") == 0)
-	    n = multiline_balloon_available();
-#endif
 #ifdef VIMDLL
 	else if (STRICMP(name, "filterpipe") == 0)
 	    n = gui.in_use || gui.starting;
@@ -6244,9 +6280,6 @@ f_has(typval_T *argvars, typval_T *rettv)
 dynamic_feature(char_u *feature)
 {
     return (feature == NULL
-#if defined(FEAT_BEVAL) && defined(FEAT_GUI_MSWIN)
-	    || STRICMP(feature, "balloon_multiline") == 0
-#endif
 #if defined(FEAT_GUI) && defined(FEAT_BROWSE)
 	    || (STRICMP(feature, "browse") == 0 && !gui.in_use)
 #endif
@@ -6699,7 +6732,7 @@ f_islocked(typval_T *argvars, typval_T *rettv)
 	if (*end != NUL)
 	{
 	    semsg(_(lv.ll_name == lv.ll_name_end
-					   ? e_invalid_argument_str : e_trailing_characters_str), end);
+		   ? e_invalid_argument_str : e_trailing_characters_str), end);
 	}
 	else
 	{

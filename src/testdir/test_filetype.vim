@@ -76,6 +76,7 @@ let s:filename_checks = {
     \ 'ave': ['file.ave'],
     \ 'awk': ['file.awk', 'file.gawk'],
     \ 'b': ['file.mch', 'file.ref', 'file.imp'],
+    \ 'basic': ['file.bas', 'file.bi', 'file.bm'],
     \ 'bzl': ['file.bazel', 'file.bzl', 'WORKSPACE'],
     \ 'bc': ['file.bc'],
     \ 'bdf': ['file.bdf'],
@@ -186,43 +187,54 @@ let s:filename_checks = {
     \ 'fortran': ['file.f', 'file.for', 'file.fortran', 'file.fpp', 'file.ftn', 'file.f77', 'file.f90', 'file.f95', 'file.f03', 'file.f08'],
     \ 'fpcmake': ['file.fpc'],
     \ 'framescript': ['file.fsl'],
-    \ 'freebasic': ['file.fb', 'file.bi'],
+    \ 'freebasic': ['file.fb'],
     \ 'fsharp': ['file.fs', 'file.fsi', 'file.fsx'],
     \ 'fstab': ['fstab', 'mtab'],
+    \ 'fusion': ['file.fusion'],
     \ 'fvwm': ['/.fvwm/file', 'any/.fvwm/file'],
     \ 'gdb': ['.gdbinit', 'gdbinit'],
+    \ 'gdresource': ['file.tscn', 'file.tres'],
+    \ 'gdscript': ['file.gd'],
     \ 'gdmo': ['file.mo', 'file.gdmo'],
     \ 'gedcom': ['file.ged', 'lltxxxxx.txt', '/tmp/lltmp', '/tmp/lltmp-file', 'any/tmp/lltmp', 'any/tmp/lltmp-file'],
     \ 'gemtext': ['file.gmi', 'file.gemini'],
     \ 'gift': ['file.gift'],
     \ 'gitcommit': ['COMMIT_EDITMSG', 'MERGE_MSG', 'TAG_EDITMSG', 'NOTES_EDITMSG', 'EDIT_DESCRIPTION'],
-    \ 'gitconfig': ['file.git/config', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'],
+    \ 'gitconfig': ['file.git/config', 'file.git/config.worktree', 'file.git/worktrees/x/config.worktree', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/usr/local/etc/gitconfig', '/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'],
     \ 'gitolite': ['gitolite.conf', '/gitolite-admin/conf/file', 'any/gitolite-admin/conf/file'],
     \ 'gitrebase': ['git-rebase-todo'],
     \ 'gitsendemail': ['.gitsendemail.msg.xxxxxx'],
     \ 'gkrellmrc': ['gkrellmrc', 'gkrellmrc_x'],
+    \ 'glsl': ['file.glsl'],
     \ 'gnash': ['gnashrc', '.gnashrc', 'gnashpluginrc', '.gnashpluginrc'],
-    \ 'gnuplot': ['file.gpi'],
+    \ 'gnuplot': ['file.gpi', '.gnuplot'],
     \ 'go': ['file.go'],
     \ 'gomod': ['go.mod'],
+    \ 'gowork': ['go.work'],
     \ 'gp': ['file.gp', '.gprc'],
     \ 'gpg': ['/.gnupg/options', '/.gnupg/gpg.conf', '/usr/any/gnupg/options.skel', 'any/.gnupg/gpg.conf', 'any/.gnupg/options', 'any/usr/any/gnupg/options.skel'],
     \ 'grads': ['file.gs'],
+    \ 'graphql': ['file.graphql', 'file.graphqls', 'file.gql'],
     \ 'gretl': ['file.gretl'],
     \ 'groovy': ['file.gradle', 'file.groovy'],
     \ 'group': ['any/etc/group', 'any/etc/group-', 'any/etc/group.edit', 'any/etc/gshadow', 'any/etc/gshadow-', 'any/etc/gshadow.edit', 'any/var/backups/group.bak', 'any/var/backups/gshadow.bak', '/etc/group', '/etc/group-', '/etc/group.edit', '/etc/gshadow', '/etc/gshadow-', '/etc/gshadow.edit', '/var/backups/group.bak', '/var/backups/gshadow.bak'],
     \ 'grub': ['/boot/grub/menu.lst', '/boot/grub/grub.conf', '/etc/grub.conf', 'any/boot/grub/grub.conf', 'any/boot/grub/menu.lst', 'any/etc/grub.conf'],
     \ 'gsp': ['file.gsp'],
     \ 'gtkrc': ['.gtkrc', 'gtkrc', '.gtkrc-file', 'gtkrc-file'],
+    \ 'hack': ['file.hack', 'file.hackpartial'],
     \ 'haml': ['file.haml'],
     \ 'hamster': ['file.hsm'],
+    \ 'handlebars': ['file.hbs'],
     \ 'haskell': ['file.hs', 'file.hsc', 'file.hs-boot', 'file.hsig'],
     \ 'haste': ['file.ht'],
     \ 'hastepreproc': ['file.htpp'],
     \ 'hb': ['file.hb'],
+    \ 'hcl': ['file.hcl'],
     \ 'hercules': ['file.vc', 'file.ev', 'file.sum', 'file.errsum'],
+    \ 'heex': ['file.heex'],
     \ 'hex': ['file.hex', 'file.h32'],
     \ 'hgcommit': ['hg-editor-file.txt'],
+    \ 'hjson': ['file.hjson'],
     \ 'hog': ['file.hog', 'snort.conf', 'vision.conf'],
     \ 'hollywood': ['file.hws'],
     \ 'hostconf': ['/etc/host.conf', 'any/etc/host.conf'],
@@ -264,6 +276,7 @@ let s:filename_checks = {
     \ 'jovial': ['file.jov', 'file.j73', 'file.jovial'],
     \ 'jproperties': ['file.properties', 'file.properties_xx', 'file.properties_xx_xx', 'some.properties_xx_xx_file'],
     \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', '.babelrc', '.eslintrc', '.prettierrc', '.firebaserc', 'file.slnf'],
+    \ 'json5': ['file.json5'],
     \ 'jsonc': ['file.jsonc'],
     \ 'jsp': ['file.jsp'],
     \ 'julia': ['file.jl'],
@@ -277,6 +290,7 @@ let s:filename_checks = {
     \ 'latte': ['file.latte', 'file.lte'],
     \ 'ld': ['file.ld'],
     \ 'ldif': ['file.ldif'],
+    \ 'ledger': ['file.ldg', 'file.ledger', 'file.journal'],
     \ 'less': ['file.less'],
     \ 'lex': ['file.lex', 'file.l', 'file.lxx', 'file.l++'],
     \ 'lftp': ['lftp.conf', '.lftprc', 'anylftp/rc', 'lftp/rc', 'some-lftp/rc'],
@@ -351,6 +365,7 @@ let s:filename_checks = {
     \ 'netrc': ['.netrc'],
     \ 'nginx': ['file.nginx', 'nginxfile.conf', 'filenginx.conf', 'any/etc/nginx/file', 'any/usr/local/nginx/conf/file', 'any/nginx/file.conf'],
     \ 'ninja': ['file.ninja'],
+    \ 'nix': ['file.nix'],
     \ 'nqc': ['file.nqc'],
     \ 'nroff': ['file.tr', 'file.nr', 'file.roff', 'file.tmac', 'file.mom', 'tmac.file'],
     \ 'nsis': ['file.nsi', 'file.nsh'],
@@ -393,6 +408,7 @@ let s:filename_checks = {
     \ 'ppd': ['file.ppd'],
     \ 'ppwiz': ['file.it', 'file.ih'],
     \ 'privoxy': ['file.action'],
+    \ 'prisma': ['file.prisma'],
     \ 'proc': ['file.pc'],
     \ 'procmail': ['.procmail', '.procmailrc'],
     \ 'prolog': ['file.pdb'],
@@ -403,10 +419,12 @@ let s:filename_checks = {
     \ 'ps1xml': ['file.ps1xml'],
     \ 'psf': ['file.psf'],
     \ 'psl': ['file.psl'],
+    \ 'pug': ['file.pug'],
     \ 'puppet': ['file.pp'],
     \ 'pyret': ['file.arr'],
     \ 'pyrex': ['file.pyx', 'file.pxd'],
     \ 'python': ['file.py', 'file.pyw', '.pythonstartup', '.pythonrc', 'file.ptl', 'file.pyi', 'SConstruct'],
+    \ 'ql': ['file.ql', 'file.qll'],
     \ 'quake': ['anybaseq2/file.cfg', 'anyid1/file.cfg', 'quake3/file.cfg', 'baseq2/file.cfg', 'id1/file.cfg', 'quake1/file.cfg', 'some-baseq2/file.cfg', 'some-id1/file.cfg', 'some-quake1/file.cfg'],
     \ 'radiance': ['file.rad', 'file.mat'],
     \ 'raku': ['file.pm6', 'file.p6', 'file.t6', 'file.pod6', 'file.raku', 'file.rakumod', 'file.rakudoc', 'file.rakutest'],
@@ -448,7 +466,7 @@ let s:filename_checks = {
     \ 'sdl': ['file.sdl', 'file.pr'],
     \ 'sed': ['file.sed'],
     \ 'svelte': ['file.svelte'],
-    \ 'sensors': ['/etc/sensors.conf', '/etc/sensors3.conf', 'any/etc/sensors.conf', 'any/etc/sensors3.conf'],
+    \ 'sensors': ['/etc/sensors.conf', '/etc/sensors3.conf', '/etc/sensors.d/file', 'any/etc/sensors.conf', 'any/etc/sensors3.conf', 'any/etc/sensors.d/file'],
     \ 'services': ['/etc/services', 'any/etc/services'],
     \ 'setserial': ['/etc/serial.conf', 'any/etc/serial.conf'],
     \ 'sh': ['.bashrc', 'file.bash', '/usr/share/doc/bash-completion/filter.sh','/etc/udev/cdsymlinks.conf', 'any/etc/udev/cdsymlinks.conf'],
@@ -488,6 +506,7 @@ let s:filename_checks = {
     \ 'stata': ['file.ado', 'file.do', 'file.imata', 'file.mata'],
     \ 'stp': ['file.stp'],
     \ 'sudoers': ['any/etc/sudoers', 'sudoers.tmp', '/etc/sudoers', 'any/etc/sudoers.d/file'],
+    \ 'surface': ['file.sface'],
     \ 'svg': ['file.svg'],
     \ 'svn': ['svn-commitfile.tmp', 'svn-commit-file.tmp', 'svn-commit.tmp'],
     \ 'swift': ['file.swift'],
@@ -501,8 +520,10 @@ let s:filename_checks = {
     \ 'taskdata': ['pending.data', 'completed.data', 'undo.data'],
     \ 'taskedit': ['file.task'],
     \ 'tcl': ['file.tcl', 'file.tm', 'file.tk', 'file.itcl', 'file.itk', 'file.jacl', '.tclshrc', 'tclsh.rc', '.wishrc'],
+    \ 'teal': ['file.tl'],
     \ 'teraterm': ['file.ttl'],
     \ 'terminfo': ['file.ti'],
+    \ 'terraform': ['file.tfvars'],
     \ 'tex': ['file.latex', 'file.sty', 'file.dtx', 'file.ltx', 'file.bbl'],
     \ 'texinfo': ['file.texinfo', 'file.texi', 'file.txi'],
     \ 'texmf': ['texmf.cnf'],
@@ -510,6 +531,7 @@ let s:filename_checks = {
     \ 'tf': ['file.tf', '.tfrc', 'tfrc'],
     \ 'tidy': ['.tidyrc', 'tidyrc', 'tidy.conf'],
     \ 'tilde': ['file.t.html'],
+    \ 'tla': ['file.tla'],
     \ 'tli': ['file.tli'],
     \ 'tmux': ['tmuxfile.conf', '.tmuxfile.conf', '.tmux-file.conf', '.tmux.conf', 'tmux-file.conf', 'tmux.conf', 'tmux.conf.local'],
     \ 'toml': ['file.toml', 'Gopkg.lock', 'Pipfile', '/home/user/.cargo/config'],
@@ -570,6 +592,7 @@ let s:filename_checks = {
     \ 'xslt': ['file.xsl', 'file.xslt'],
     \ 'yacc': ['file.yy', 'file.yxx', 'file.y++'],
     \ 'yaml': ['file.yaml', 'file.yml'],
+    \ 'yang': ['file.yang'],
     \ 'raml': ['file.raml'],
     \ 'z8a': ['file.z8a'],
     \ 'zig': ['file.zig'],
@@ -654,7 +677,7 @@ let s:script_checks = {
       \                ['#!/path/nodejs'],
       \                ['#!/path/rhino']],
       \ 'bc': [['#!/path/bc']],
-      \ 'sed': [['#!/path/sed']],
+      \ 'sed': [['#!/path/sed'], ['#n'], ['#n comment']],
       \ 'ocaml': [['#!/path/ocaml']],
       \ 'awk': [['#!/path/awk'],
       \         ['#!/path/gawk']],
@@ -1118,6 +1141,121 @@ func Test_git_file()
   bwipe!
 
   call delete('Xrepo.git', 'rf')
+  filetype off
+endfunc
+
+func Test_foam_file()
+  filetype on
+  call assert_true(mkdir('0', 'p'))
+  call assert_true(mkdir('0.orig', 'p'))
+
+  call writefile(['FoamFile {', '    object something;'], 'Xfile1Dict')
+  split Xfile1Dict
+  call assert_equal('foam', &filetype)
+  bwipe!
+
+  call writefile(['FoamFile {', '    object something;'], 'Xfile1Dict.something')
+  split Xfile1Dict.something
+  call assert_equal('foam', &filetype)
+  bwipe!
+
+  call writefile(['FoamFile {', '    object something;'], 'XfileProperties')
+  split XfileProperties
+  call assert_equal('foam', &filetype)
+  bwipe!
+
+  call writefile(['FoamFile {', '    object something;'], 'XfileProperties.something')
+  split XfileProperties.something
+  call assert_equal('foam', &filetype)
+  bwipe!
+
+  call writefile(['FoamFile {', '    object something;'], 'XfileProperties')
+  split XfileProperties
+  call assert_equal('foam', &filetype)
+  bwipe!
+
+  call writefile(['FoamFile {', '    object something;'], 'XfileProperties.something')
+  split XfileProperties.something
+  call assert_equal('foam', &filetype)
+  bwipe!
+
+  call writefile(['FoamFile {', '    object something;'], '0/Xfile')
+  split 0/Xfile
+  call assert_equal('foam', &filetype)
+  bwipe!
+
+  call writefile(['FoamFile {', '    object something;'], '0.orig/Xfile')
+  split 0.orig/Xfile
+  call assert_equal('foam', &filetype)
+  bwipe!
+
+  call delete('0', 'rf')
+  call delete('0.orig', 'rf')
+  call delete('Xfile1Dict')
+  call delete('Xfile1Dict.something')
+  call delete('XfileProperties')
+  call delete('XfileProperties.something')
+  filetype off
+endfunc
+
+func Test_bas_file()
+  filetype on
+
+  call writefile(['looks like BASIC'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('basic', &filetype)
+  bwipe!
+
+  " Test dist#ft#FTbas()
+
+  let g:filetype_bas = 'freebasic'
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+  unlet g:filetype_bas
+
+  " FreeBASIC
+
+  call writefile(["/' FreeBASIC multiline comment '/"], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+
+  call writefile(['#define TESTING'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+
+  call writefile(['option byval'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+
+  call writefile(['extern "C"'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+
+  " QB64
+
+  call writefile(['$LET TESTING = 1'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('qb64', &filetype)
+  bwipe!
+
+  call writefile(['OPTION _EXPLICIT'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('qb64', &filetype)
+  bwipe!
+
+  " Visual Basic
+
+  call writefile(['Attribute VB_NAME = "Testing"'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('vb', &filetype)
+  bwipe!
+
+  call delete('Xfile.bas')
   filetype off
 endfunc
 

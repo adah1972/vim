@@ -1567,6 +1567,7 @@ errret:
  * "partialp".
  * If "type" is not NULL and a Vim9 script-local variable is found look up the
  * type of the variable.
+ * If "new_function" is TRUE the name is for a new function.
  * If "found_var" is not NULL and a variable was found set it to TRUE.
  */
     char_u *
@@ -1576,6 +1577,7 @@ deref_func_name(
 	partial_T   **partialp,
 	type_T	    **type,
 	int	    no_autoload,
+	int	    new_function,
 	int	    *found_var)
 {
     dictitem_T	*v;
@@ -1608,13 +1610,16 @@ deref_func_name(
 	    p = name + 2;
 	    len -= 2;
 	}
-	import = find_imported(p, len, NULL);
+	import = find_imported(p, len, FALSE, NULL);
 
 	// imported function from another script
 	if (import != NULL)
 	{
 	    name[len] = NUL;
-	    semsg(_(e_cannot_use_str_itself_it_is_imported), name);
+	    if (new_function)
+		semsg(_(e_redefining_imported_item_str), name);
+	    else
+		semsg(_(e_cannot_use_str_itself_it_is_imported), name);
 	    name[len] = cc;
 	    *lenp = 0;
 	    return (char_u *)"";	// just in case
@@ -1674,12 +1679,10 @@ deref_func_name(
     void
 emsg_funcname(char *ermsg, char_u *name)
 {
-    char_u	*p;
+    char_u	*p = name;
 
-    if (*name == K_SPECIAL)
+    if (name[0] == K_SPECIAL && name[1] != NUL && name[2] != NUL)
 	p = concat_str((char_u *)"<SNR>", name + 3);
-    else
-	p = name;
     semsg(_(ermsg), p);
     if (p != name)
 	vim_free(p);
@@ -1703,6 +1706,8 @@ get_func_tv(
     typval_T	argvars[MAX_FUNC_ARGS + 1];	// vars for arguments
     int		argcount = 0;		// number of arguments found
     int		vim9script = in_vim9script();
+    int		evaluate = evalarg == NULL
+			       ? FALSE : (evalarg->eval_flags & EVAL_EVALUATE);
 
     /*
      * Get the arguments.
@@ -1728,7 +1733,9 @@ get_func_tv(
 	{
 	    if (*argp != ',' && *skipwhite(argp) == ',')
 	    {
-		semsg(_(e_no_white_space_allowed_before_str_str), ",", argp);
+		if (evaluate)
+		    semsg(_(e_no_white_space_allowed_before_str_str),
+								    ",", argp);
 		ret = FAIL;
 		break;
 	    }
@@ -1739,7 +1746,8 @@ get_func_tv(
 	    break;
 	if (vim9script && !IS_WHITE_OR_NUL(argp[1]))
 	{
-	    semsg(_(e_white_space_required_after_str_str), ",", argp);
+	    if (evaluate)
+		semsg(_(e_white_space_required_after_str_str), ",", argp);
 	    ret = FAIL;
 	    break;
 	}
@@ -1778,7 +1786,7 @@ get_func_tv(
 
 	funcargs.ga_len -= i;
     }
-    else if (!aborting())
+    else if (!aborting() && evaluate)
     {
 	if (argcount == MAX_FUNC_ARGS)
 	    emsg_funcname(e_too_many_arguments_for_function_str_2, name);
@@ -1866,9 +1874,13 @@ fname_trans_sid(char_u *name, char_u *fname_buf, char_u **tofree, int *error)
     static ufunc_T *
 find_func_with_sid(char_u *name, int sid)
 {
-    hashitem_T	*hi;
-    char_u	buffer[200];
+    hashitem_T	    *hi;
+    char_u	    buffer[200];
 
+    if (!SCRIPT_ID_VALID(sid))
+	return NULL;	// not in a script
+
+    // A script-local function is stored as "<SNR>99_name".
     buffer[0] = K_SPECIAL;
     buffer[1] = KS_EXTRA;
     buffer[2] = (int)KE_SNR;
@@ -1877,22 +1889,70 @@ find_func_with_sid(char_u *name, int sid)
     hi = hash_find(&func_hashtab, buffer);
     if (!HASHITEM_EMPTY(hi))
 	return HI2UF(hi);
+    return NULL;
+}
+
+/*
+ * Find a function "name" in script "sid" prefixing the autoload prefix.
+ */
+    static ufunc_T *
+find_func_with_prefix(char_u *name, int sid)
+{
+    hashitem_T	    *hi;
+    char_u	    buffer[200];
+    scriptitem_T    *si;
+
+    if (vim_strchr(name, AUTOLOAD_CHAR) != 0)
+	return NULL;	// already has the prefix
+    if (!SCRIPT_ID_VALID(sid))
+	return NULL;	// not in a script
+    si = SCRIPT_ITEM(sid);
+    if (si->sn_autoload_prefix != NULL)
+    {
+	size_t	len = STRLEN(si->sn_autoload_prefix) + STRLEN(name) + 1;
+	char_u	*auto_name;
+	char_u	*namep;
+
+	// skip a "<SNR>99_" prefix
+	namep = untrans_function_name(name);
+	if (namep == NULL)
+	    namep = name;
+
+	// An exported function in an autoload script is stored as
+	// "dir#path#name".
+	if (len < sizeof(buffer))
+	    auto_name = buffer;
+	else
+	    auto_name = alloc(len);
+	if (auto_name != NULL)
+	{
+	    vim_snprintf((char *)auto_name, len, "%s%s",
+						si->sn_autoload_prefix, namep);
+	    hi = hash_find(&func_hashtab, auto_name);
+	    if (auto_name != buffer)
+		vim_free(auto_name);
+	    if (!HASHITEM_EMPTY(hi))
+		return HI2UF(hi);
+	}
+    }
 
     return NULL;
 }
 
 /*
  * Find a function by name, return pointer to it in ufuncs.
- * When "is_global" is true don't find script-local or imported functions.
+ * When "flags" has FFED_IS_GLOBAL don't find script-local or imported
+ * functions.
+ * When "flags" has "FFED_NO_GLOBAL" don't find global functions.
  * Return NULL for unknown function.
  */
     ufunc_T *
-find_func_even_dead(char_u *name, int is_global, cctx_T *cctx UNUSED)
+find_func_even_dead(char_u *name, int flags)
 {
     hashitem_T	*hi;
     ufunc_T	*func;
 
-    if (!is_global)
+    if ((flags & FFED_IS_GLOBAL) == 0)
     {
 	int	find_script_local = in_vim9script() && eval_isnamec1(*name)
 					   && (name[1] != ':' || *name == 's');
@@ -1907,12 +1967,17 @@ find_func_even_dead(char_u *name, int is_global, cctx_T *cctx UNUSED)
 	}
     }
 
-    hi = hash_find(&func_hashtab,
+    if ((flags & FFED_NO_GLOBAL) == 0)
+    {
+	hi = hash_find(&func_hashtab,
 				STRNCMP(name, "g:", 2) == 0 ? name + 2 : name);
-    if (!HASHITEM_EMPTY(hi))
-	return HI2UF(hi);
+	if (!HASHITEM_EMPTY(hi))
+	    return HI2UF(hi);
+    }
 
-    return NULL;
+    // Find autoload function if this is an autoload script.
+    return find_func_with_prefix(name[0] == 's' && name[1] == ':'
+				       ? name + 2 : name, current_sctx.sc_sid);
 }
 
 /*
@@ -1921,9 +1986,9 @@ find_func_even_dead(char_u *name, int is_global, cctx_T *cctx UNUSED)
  * Return NULL for unknown or dead function.
  */
     ufunc_T *
-find_func(char_u *name, int is_global, cctx_T *cctx)
+find_func(char_u *name, int is_global)
 {
-    ufunc_T	*fp = find_func_even_dead(name, is_global, cctx);
+    ufunc_T	*fp = find_func_even_dead(name, is_global ? FFED_IS_GLOBAL : 0);
 
     if (fp != NULL && (fp->uf_flags & FC_DEAD) == 0)
 	return fp;
@@ -2294,7 +2359,7 @@ func_clear_free(ufunc_T *fp, int force)
     int
 copy_func(char_u *lambda, char_u *global, ectx_T *ectx)
 {
-    ufunc_T *ufunc = find_func_even_dead(lambda, TRUE, NULL);
+    ufunc_T *ufunc = find_func_even_dead(lambda, FFED_IS_GLOBAL);
     ufunc_T *fp = NULL;
 
     if (ufunc == NULL)
@@ -2303,7 +2368,7 @@ copy_func(char_u *lambda, char_u *global, ectx_T *ectx)
 	return FAIL;
     }
 
-    fp = find_func(global, TRUE, NULL);
+    fp = find_func(global, TRUE);
     if (fp != NULL)
     {
 	// TODO: handle ! to overwrite
@@ -3070,18 +3135,30 @@ free_all_functions(void)
 
 /*
  * Return TRUE if "name" looks like a builtin function name: starts with a
- * lower case letter and doesn't contain AUTOLOAD_CHAR or ':'.
+ * lower case letter, doesn't contain AUTOLOAD_CHAR or ':', no "." after the
+ * name.
  * "len" is the length of "name", or -1 for NUL terminated.
  */
     int
 builtin_function(char_u *name, int len)
 {
-    char_u *p;
+    int i;
 
     if (!ASCII_ISLOWER(name[0]) || name[1] == ':')
 	return FALSE;
-    p = vim_strchr(name, AUTOLOAD_CHAR);
-    return p == NULL || (len > 0 && p > name + len);
+    for (i = 0; name[i] != NUL && (len < 0 || i < len); ++i)
+    {
+	if (name[i] == AUTOLOAD_CHAR)
+	    return FALSE;
+	if (!eval_isnamec(name[i]))
+	{
+	    // "name.something" is not a builtin function
+	    if (name[i] == '.')
+		return FALSE;
+	    break;
+	}
+    }
+    return TRUE;
 }
 
     int
@@ -3190,7 +3267,7 @@ call_callback_retnr(
     typval_T	rettv;
     varnumber_T	retval;
 
-    if (call_callback(callback, 0, &rettv, argcount, argvars) == FAIL)
+    if (call_callback(callback, -1, &rettv, argcount, argvars) == FAIL)
 	return -2;
 
     retval = tv_get_number_chk(&rettv, NULL);
@@ -3337,7 +3414,8 @@ call_func(
 						       && funcexe->fe_evaluate)
     {
 	// Check that the argument types are OK for the types of the funcref.
-	if (check_argument_types(funcexe->fe_check_type, argvars, argcount,
+	if (check_argument_types(funcexe->fe_check_type,
+					 argvars, argcount, funcexe->fe_basetv,
 				     (name != NULL) ? name : funcname) == FAIL)
 	    error = FCERR_OTHER;
     }
@@ -3364,7 +3442,7 @@ call_func(
 	     * User defined function.
 	     */
 	    if (fp == NULL)
-		fp = find_func(rfname, is_global, NULL);
+		fp = find_func(rfname, is_global);
 
 	    // Trigger FuncUndefined event, may load the function.
 	    if (fp == NULL
@@ -3373,13 +3451,13 @@ call_func(
 		    && !aborting())
 	    {
 		// executed an autocommand, search for the function again
-		fp = find_func(rfname, is_global, NULL);
+		fp = find_func(rfname, is_global);
 	    }
 	    // Try loading a package.
 	    if (fp == NULL && script_autoload(rfname, TRUE) && !aborting())
 	    {
 		// loaded a package, search for the function again
-		fp = find_func(rfname, is_global, NULL);
+		fp = find_func(rfname, is_global);
 	    }
 	    if (fp == NULL)
 	    {
@@ -3388,7 +3466,7 @@ call_func(
 		// If using Vim9 script try not local to the script.
 		// Don't do this if the name starts with "s:".
 		if (p != NULL && (funcname[0] != 's' || funcname[1] != ':'))
-		    fp = find_func(p, is_global, NULL);
+		    fp = find_func(p, is_global);
 	    }
 
 	    if (fp != NULL && (fp->uf_flags & FC_DELETED))
@@ -3620,7 +3698,8 @@ trans_function_name(
     // Note that TFN_ flags use the same values as GLV_ flags.
     end = get_lval(start, NULL, &lv, FALSE, skip, flags | GLV_READ_ONLY,
 					      lead > 2 ? 0 : FNE_CHECK_START);
-    if (end == start)
+    if (end == start || (in_vim9script() && end != NULL
+				   && end[-1] == AUTOLOAD_CHAR && *end == '('))
     {
 	if (!skip)
 	    emsg(_(e_function_name_required));
@@ -3689,15 +3768,39 @@ trans_function_name(
     {
 	len = (int)STRLEN(lv.ll_exp_name);
 	name = deref_func_name(lv.ll_exp_name, &len, partial, type,
-						flags & TFN_NO_AUTOLOAD, NULL);
+			  flags & TFN_NO_AUTOLOAD, flags & TFN_NEW_FUNC, NULL);
 	if (name == lv.ll_exp_name)
 	    name = NULL;
+    }
+    else if (lv.ll_sid > 0)
+    {
+	scriptitem_T	*si = SCRIPT_ITEM(lv.ll_sid);
+	int		cc = *lv.ll_name_end;
+
+	// function in another script.  Prefix <SNR>99_ or the autoload prefix.
+	*lv.ll_name_end = NUL;
+	if (si->sn_autoload_prefix != NULL)
+	{
+	    name = concat_str(si->sn_autoload_prefix, lv.ll_name);
+	}
+	else
+	{
+	    sid_buf[0] = K_SPECIAL;
+	    sid_buf[1] = KS_EXTRA;
+	    sid_buf[2] = (int)KE_SNR;
+	    vim_snprintf((char *)sid_buf + 3, sizeof(sid_buf) - 3,
+					    "%ld_", (long)current_sctx.sc_sid);
+	    name = concat_str(sid_buf, lv.ll_name);
+	}
+	*lv.ll_name_end = cc;
+	*pp = end;
+	goto theend;
     }
     else if (!(flags & TFN_NO_DEREF))
     {
 	len = (int)(end - *pp);
 	name = deref_func_name(*pp, &len, partial, type,
-						flags & TFN_NO_AUTOLOAD, NULL);
+			  flags & TFN_NO_AUTOLOAD, flags & TFN_NEW_FUNC, NULL);
 	if (name == *pp)
 	    name = NULL;
     }
@@ -4060,7 +4163,7 @@ define_function(exarg_T *eap, char_u *name_arg, garray_T *lines_to_free)
     else
     {
 	name = save_function_name(&p, &is_global, eap->skip,
-						       TFN_NO_AUTOLOAD, &fudi);
+					TFN_NO_AUTOLOAD | TFN_NEW_FUNC, &fudi);
 	paren = (vim_strchr(p, '(') != NULL);
 	if (name == NULL && (fudi.fd_dict == NULL || !paren) && !eap->skip)
 	{
@@ -4078,6 +4181,20 @@ define_function(exarg_T *eap, char_u *name_arg, garray_T *lines_to_free)
 	    }
 	    else
 		eap->skip = TRUE;
+	}
+
+	// For "export def FuncName()" in an autoload script the function name
+	// is stored with the legacy autoload name "dir#script#FuncName" so
+	// that it can also be found in legacy script.
+	if (is_export && name != NULL)
+	{
+	    char_u *prefixed = may_prefix_autoload(name);
+
+	    if (prefixed != NULL && prefixed != name)
+	    {
+		vim_free(name);
+		name = prefixed;
+	    }
 	}
     }
 
@@ -4101,7 +4218,7 @@ define_function(exarg_T *eap, char_u *name_arg, garray_T *lines_to_free)
 	    *p = NUL;
 	if (!eap->skip && !got_int)
 	{
-	    fp = find_func(name, is_global, NULL);
+	    fp = find_func(name, is_global);
 	    if (fp == NULL && ASCII_ISUPPER(*eap->arg))
 	    {
 		char_u *up = untrans_function_name(name);
@@ -4109,7 +4226,7 @@ define_function(exarg_T *eap, char_u *name_arg, garray_T *lines_to_free)
 		// With Vim9 script the name was made script-local, if not
 		// found try again with the original name.
 		if (up != NULL)
-		    fp = find_func(up, FALSE, NULL);
+		    fp = find_func(up, FALSE);
 	    }
 
 	    if (fp != NULL)
@@ -4324,7 +4441,7 @@ define_function(exarg_T *eap, char_u *name_arg, garray_T *lines_to_free)
 	{
 	    if (fudi.fd_dict != NULL && fudi.fd_newkey == NULL)
 		emsg(_(e_dictionary_entry_already_exists));
-	    else if (name != NULL && find_func(name, is_global, NULL) != NULL)
+	    else if (name != NULL && find_func(name, is_global) != NULL)
 		emsg_funcname(e_function_str_already_exists_add_bang_to_replace, name);
 	}
 
@@ -4350,20 +4467,63 @@ define_function(exarg_T *eap, char_u *name_arg, garray_T *lines_to_free)
     if (fudi.fd_dict == NULL)
     {
 	hashtab_T	*ht;
+	char_u		*find_name = name;
+	int		var_conflict = FALSE;
+	int		ffed_flags = is_global ? FFED_IS_GLOBAL : 0;
 
 	v = find_var(name, &ht, TRUE);
-	if (v != NULL && v->di_tv.v_type == VAR_FUNC)
+	if (v != NULL && (in_vim9script() || v->di_tv.v_type == VAR_FUNC))
+	    var_conflict = TRUE;
+
+	if (SCRIPT_ID_VALID(current_sctx.sc_sid))
+	{
+	    scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
+
+	    if (si->sn_autoload_prefix != NULL)
+	    {
+		if (is_export)
+		{
+		    find_name = name + STRLEN(si->sn_autoload_prefix);
+		    v = find_var(find_name, &ht, TRUE);
+		    if (v != NULL)
+			var_conflict = TRUE;
+		    // Only check if the function already exists in the script,
+		    // global functions can be shadowed.
+		    ffed_flags |= FFED_NO_GLOBAL;
+		}
+		else
+		{
+		    char_u *prefixed = may_prefix_autoload(name);
+
+		    if (prefixed != NULL)
+		    {
+			v = find_var(prefixed, &ht, TRUE);
+			if (v != NULL)
+			    var_conflict = TRUE;
+			vim_free(prefixed);
+		    }
+		}
+	    }
+	    else if (vim9script && vim_strchr(name, AUTOLOAD_CHAR) != NULL)
+	    {
+		semsg(_(e_using_autoload_name_in_non_autoload_script_str),
+									 name);
+		goto erret;
+	    }
+	}
+	if (var_conflict)
 	{
 	    emsg_funcname(e_function_name_conflicts_with_variable_str, name);
 	    goto erret;
 	}
 
-	fp = find_func_even_dead(name, is_global, NULL);
+	fp = find_func_even_dead(find_name, ffed_flags);
 	if (vim9script)
 	{
 	    char_u *uname = untrans_function_name(name);
 
-	    import = find_imported(uname == NULL ? name : uname, 0, NULL);
+	    import = find_imported(uname == NULL ? name : uname, 0,
+								  FALSE, NULL);
 	}
 
 	if (fp != NULL || import != NULL)
@@ -4713,7 +4873,7 @@ translated_function_exists(char_u *name, int is_global)
 {
     if (builtin_function(name, -1))
 	return has_internal_func(name);
-    return find_func(name, is_global, NULL) != NULL;
+    return find_func(name, is_global) != NULL;
 }
 
 /*
@@ -4860,7 +5020,7 @@ ex_delfunction(exarg_T *eap)
 	return;
     }
     if (!eap->skip)
-	fp = find_func(name, is_global, NULL);
+	fp = find_func(name, is_global);
     vim_free(name);
 
     if (!eap->skip)
@@ -4919,7 +5079,7 @@ func_unref(char_u *name)
 
     if (name == NULL || !func_name_refcount(name))
 	return;
-    fp = find_func(name, FALSE, NULL);
+    fp = find_func(name, FALSE);
     if (fp == NULL && numbered_function(name))
     {
 #ifdef EXITFREE
@@ -4960,7 +5120,7 @@ func_ref(char_u *name)
 
     if (name == NULL || !func_name_refcount(name))
 	return;
-    fp = find_func(name, FALSE, NULL);
+    fp = find_func(name, FALSE);
     if (fp != NULL)
 	++fp->uf_refcount;
     else if (numbered_function(name))
@@ -5107,7 +5267,8 @@ ex_call(exarg_T *eap)
     // from trans_function_name().
     len = (int)STRLEN(tofree);
     name = deref_func_name(tofree, &len, partial != NULL ? NULL : &partial,
-	    in_vim9script() && type == NULL ? &type : NULL, FALSE, &found_var);
+	    in_vim9script() && type == NULL ? &type : NULL,
+						     FALSE, FALSE, &found_var);
 
     // Skip white space to allow ":call func ()".  Not good, but required for
     // backward compatibility.
@@ -5455,7 +5616,7 @@ make_partial(dict_T *selfdict_in, typval_T *rettv)
 					      : rettv->vval.v_partial->pt_name;
 	// Translate "s:func" to the stored function name.
 	fname = fname_trans_sid(fname, fname_buf, &tofree, &error);
-	fp = find_func(fname, FALSE, NULL);
+	fp = find_func(fname, FALSE);
 	vim_free(tofree);
     }
 
@@ -5874,7 +6035,7 @@ set_ref_in_func(char_u *name, ufunc_T *fp_in, int copyID)
     if (fp_in == NULL)
     {
 	fname = fname_trans_sid(name, fname_buf, &tofree, &error);
-	fp = find_func(fname, FALSE, NULL);
+	fp = find_func(fname, FALSE);
     }
     if (fp != NULL)
     {

@@ -21,6 +21,9 @@
 # include "vim9.h"
 #endif
 
+// flag passed from compile_subscript() to compile_load_scriptvar()
+static int paren_follows_after_expr = 0;
+
 /*
  * Generate code for any ppconst entries.
  */
@@ -266,7 +269,7 @@ compile_load_scriptvar(
 	return OK;
     }
 
-    import = end == NULL ? NULL : find_imported(name, 0, cctx);
+    import = end == NULL ? NULL : find_imported(name, 0, FALSE, cctx);
     if (import != NULL)
     {
 	char_u	*p = skipwhite(*end);
@@ -274,6 +277,8 @@ compile_load_scriptvar(
 	int	cc;
 	ufunc_T	*ufunc;
 	type_T	*type;
+	int	done = FALSE;
+	int	res = OK;
 
 	// Need to lookup the member.
 	if (*p != '.')
@@ -295,11 +300,30 @@ compile_load_scriptvar(
 	cc = *p;
 	*p = NUL;
 
-	idx = find_exported(import->imp_sid, exp_name, &ufunc, &type,
+	si = SCRIPT_ITEM(import->imp_sid);
+	if (si->sn_autoload_prefix != NULL
+					&& si->sn_state == SN_STATE_NOT_LOADED)
+	{
+	    char_u  *auto_name = concat_str(si->sn_autoload_prefix, exp_name);
+
+	    // autoload script must be loaded later, access by the autoload
+	    // name.
+	    if (cc == '(' || paren_follows_after_expr)
+		res = generate_PUSHFUNC(cctx, auto_name, &t_func_any);
+	    else
+		res = generate_LOAD(cctx, ISN_LOADG, 0, auto_name, &t_any);
+	    vim_free(auto_name);
+	    done = TRUE;
+	}
+	else
+	{
+	    idx = find_exported(import->imp_sid, exp_name, &ufunc, &type,
 								   cctx, TRUE);
+	}
 	*p = cc;
-	p = skipwhite(p);
 	*end = p;
+	if (done)
+	    return res;
 
 	if (idx < 0)
 	{
@@ -327,7 +351,7 @@ compile_load_scriptvar(
     static int
 generate_funcref(cctx_T *cctx, char_u *name)
 {
-    ufunc_T *ufunc = find_func(name, FALSE, cctx);
+    ufunc_T *ufunc = find_func(name, FALSE);
 
     if (ufunc == NULL)
 	return FAIL;
@@ -395,7 +419,7 @@ compile_load(
 		case 'v': res = generate_LOADV(cctx, name, error);
 			  break;
 		case 's': if (is_expr && ASCII_ISUPPER(*name)
-				       && find_func(name, FALSE, cctx) != NULL)
+				       && find_func(name, FALSE) != NULL)
 			      res = generate_funcref(cctx, name);
 			  else
 			      res = compile_load_scriptvar(cctx, name,
@@ -404,7 +428,7 @@ compile_load(
 		case 'g': if (vim_strchr(name, AUTOLOAD_CHAR) == NULL)
 			  {
 			      if (is_expr && ASCII_ISUPPER(*name)
-				       && find_func(name, FALSE, cctx) != NULL)
+				       && find_func(name, FALSE) != NULL)
 				  res = generate_funcref(cctx, name);
 			      else
 				  isn_type = ISN_LOADG;
@@ -474,7 +498,7 @@ compile_load(
 		// "var" can be script-local even without using "s:" if it
 		// already exists in a Vim9 script or when it's imported.
 		if (script_var_exists(*arg, len, cctx) == OK
-			|| find_imported(name, 0, cctx) != NULL)
+			|| find_imported(name, 0, FALSE, cctx) != NULL)
 		   res = compile_load_scriptvar(cctx, name, *arg, &end, FALSE);
 
 		// When evaluating an expression and the name starts with an
@@ -643,6 +667,21 @@ compile_call(
     int		res = FAIL;
     int		is_autoload;
     int		is_searchpair;
+    imported_T	*import;
+
+    if (varlen >= sizeof(namebuf))
+    {
+	semsg(_(e_name_too_long_str), name);
+	return FAIL;
+    }
+    vim_strncpy(namebuf, *arg, varlen);
+
+    import = find_imported(name, varlen, FALSE, cctx);
+    if (import != NULL)
+    {
+	semsg(_(e_cannot_use_str_itself_it_is_imported), namebuf);
+	return FAIL;
+    }
 
     // We can evaluate "has('name')" at compile time.
     // We always evaluate "exists_compiled()" at compile time.
@@ -688,12 +727,6 @@ compile_call(
     if (generate_ppconst(cctx, ppconst) == FAIL)
 	return FAIL;
 
-    if (varlen >= sizeof(namebuf))
-    {
-	semsg(_(e_name_too_long_str), name);
-	return FAIL;
-    }
-    vim_strncpy(namebuf, *arg, varlen);
     name = fname_trans_sid(namebuf, fname_buf, &tofree, &error);
 
     // We handle the "skip" argument of searchpair() and searchpairpos()
@@ -756,7 +789,7 @@ compile_call(
     {
 	// If we can find the function by name generate the right call.
 	// Skip global functions here, a local funcref takes precedence.
-	ufunc = find_func(name, FALSE, cctx);
+	ufunc = find_func(name, FALSE);
 	if (ufunc != NULL && !func_is_global(ufunc))
 	{
 	    res = generate_CALL(cctx, ufunc, argcount);
@@ -1233,7 +1266,7 @@ compile_get_env(char_u **arg, cctx_T *cctx)
     len = get_env_len(arg);
     if (len == 0)
     {
-	semsg(_(e_syntax_error_at_str), start - 1);
+	semsg(_(e_syntax_error_at_str), start);
 	return FAIL;
     }
 
@@ -1560,6 +1593,8 @@ compile_parenthesis(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
     return ret;
 }
 
+static int compile_expr8(char_u **arg,  cctx_T *cctx, ppconst_T *ppconst);
+
 /*
  * Compile whatever comes after "name" or "name()".
  * Advances "*arg" only when something was recognized.
@@ -1628,13 +1663,15 @@ compile_subscript(
 	}
 	else if (*p == '-' && p[1] == '>')
 	{
-	    char_u *pstart = p;
+	    char_u  *pstart = p;
+	    int	    alt;
+	    char_u  *paren;
 
+	    // something->method()
 	    if (generate_ppconst(cctx, ppconst) == FAIL)
 		return FAIL;
 	    ppconst->pp_is_const = FALSE;
 
-	    // something->method()
 	    // Apply the '!', '-' and '+' first:
 	    //   -1.0->func() works like (-1.0)->func()
 	    if (compile_leader(cctx, TRUE, start_leader, end_leader) == FAIL)
@@ -1643,7 +1680,48 @@ compile_subscript(
 	    p += 2;
 	    *arg = skipwhite(p);
 	    // No line break supported right after "->".
+
+	    // Three alternatives handled here:
+	    // 1. "base->name("  only a name, use compile_call()
+	    // 2. "base->(expr)(" evaluate "expr", then use PCALL
+	    // 3. "base->expr("  Same, find the end of "expr" by "("
 	    if (**arg == '(')
+		alt = 2;
+	    else
+	    {
+		// alternative 1 or 3
+		p = *arg;
+		if (!eval_isnamec1(*p))
+		{
+		    semsg(_(e_trailing_characters_str), pstart);
+		    return FAIL;
+		}
+		if (ASCII_ISALPHA(*p) && p[1] == ':')
+		    p += 2;
+		for ( ; eval_isnamec(*p); ++p)
+		    ;
+		if (*p == '(')
+		{
+		    // alternative 1
+		    alt = 1;
+		    if (compile_call(arg, p - *arg, cctx, ppconst, 1) == FAIL)
+			return FAIL;
+		}
+		else
+		{
+		    // Must be alternative 3, find the "(". Only works within
+		    // one line.
+		    alt = 3;
+		    paren = vim_strchr(p, '(');
+		    if (paren == NULL)
+		    {
+			semsg(_(e_missing_parenthesis_str), *arg);
+			return FAIL;
+		    }
+		}
+	    }
+
+	    if (alt != 1)
 	    {
 		int	    argcount = 1;
 		garray_T    *stack = &cctx->ctx_type_stack;
@@ -1653,16 +1731,40 @@ compile_subscript(
 		int	    expr_isn_end;
 		int	    arg_isn_count;
 
-		// Funcref call:  list->(Refs[2])(arg)
-		// or lambda:	  list->((arg) => expr)(arg)
-		//
-		// Fist compile the function expression.
-		if (compile_parenthesis(arg, cctx, ppconst) == FAIL)
-		    return FAIL;
+		if (alt == 2)
+		{
+		    // Funcref call:  list->(Refs[2])(arg)
+		    // or lambda:	  list->((arg) => expr)(arg)
+		    //
+		    // Fist compile the function expression.
+		    if (compile_parenthesis(arg, cctx, ppconst) == FAIL)
+			return FAIL;
+		}
+		else
+		{
+		    int fail;
+		    int save_len = cctx->ctx_ufunc->uf_lines.ga_len;
 
-		// Remember the next instruction index, where the instructions
-		// for arguments are being written.
-		expr_isn_end = cctx->ctx_instr.ga_len;
+		    *paren = NUL;
+
+		    // instead of using LOADG for "import.Func" use PUSHFUNC
+		    ++paren_follows_after_expr;
+
+		    // do not look in the next line
+		    cctx->ctx_ufunc->uf_lines.ga_len = 1;
+
+		    fail = compile_expr8(arg, cctx, ppconst) == FAIL
+						    || *skipwhite(*arg) != NUL;
+		    *paren = '(';
+		    --paren_follows_after_expr;
+		    cctx->ctx_ufunc->uf_lines.ga_len = save_len;
+
+		    if (fail)
+		    {
+			semsg(_(e_invalid_expression_str), pstart);
+			return FAIL;
+		    }
+		}
 
 		// Compile the arguments.
 		if (**arg != '(')
@@ -1673,6 +1775,11 @@ compile_subscript(
 			semsg(_(e_missing_parenthesis_str), *arg);
 		    return FAIL;
 		}
+
+		// Remember the next instruction index, where the instructions
+		// for arguments are being written.
+		expr_isn_end = cctx->ctx_instr.ga_len;
+
 		*arg = skipwhite(*arg + 1);
 		if (compile_arguments(arg, cctx, &argcount, FALSE) == FAIL)
 		    return FAIL;
@@ -1719,27 +1826,7 @@ compile_subscript(
 		if (generate_PCALL(cctx, argcount, p - 2, type, FALSE) == FAIL)
 		    return FAIL;
 	    }
-	    else
-	    {
-		// method call:  list->method()
-		p = *arg;
-		if (!eval_isnamec1(*p))
-		{
-		    semsg(_(e_trailing_characters_str), pstart);
-		    return FAIL;
-		}
-		if (ASCII_ISALPHA(*p) && p[1] == ':')
-		    p += 2;
-		for ( ; eval_isnamec(*p); ++p)
-		    ;
-		if (*p != '(')
-		{
-		    semsg(_(e_missing_parenthesis_str), *arg);
-		    return FAIL;
-		}
-		if (compile_call(arg, p - *arg, cctx, ppconst, 1) == FAIL)
-		    return FAIL;
-	    }
+
 	    if (keeping_dict)
 	    {
 		keeping_dict = FALSE;

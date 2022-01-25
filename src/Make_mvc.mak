@@ -34,7 +34,6 @@
 #	IME support: IME=yes	(default is yes)
 #	  DYNAMIC_IME=[yes or no]  (to load the imm32.dll dynamically, default
 #	  is yes)
-#	Global IME support: GIME=yes (requires GUI=yes)
 #
 #	Terminal support: TERMINAL=yes (default is yes if FEATURES is HUGE)
 #	  Will also enable CHANNEL
@@ -42,10 +41,10 @@
 #	Sound support: SOUND=yes (default is yes)
 #
 #	Sodium support: SODIUM=[Path to Sodium directory]
-#	 Dynamic built with libsodium
-#	 You need to install the msvc package from
-#	 https://download.libsodium.org/libsodium/releases/
-#	 and package the libsodium.dll with Vim
+#	  DYNAMIC_SODIUM=yes (to load the Sodium DLL dynamically)
+#	  You need to install the msvc package from
+#	  https://download.libsodium.org/libsodium/releases/
+#	  and package the libsodium.dll with Vim
 #
 #
 #	DLL support (EXPERIMENTAL): VIMDLL=yes (default is no)
@@ -306,10 +305,6 @@ MSVCRT_NAME = msvcr$(MSVCRT_VER)
 MSVCRT_NAME = vcruntime$(MSVCRT_VER)
 !endif
 
-!if $(MSVC_MAJOR) == 6
-CPU = ix86
-!endif
-
 ### Set the default $(WINVER) to make it work with VC++7.0 (VS.NET)
 !ifndef WINVER
 WINVER = 0x0501
@@ -384,6 +379,9 @@ SOUND = no
 !ifndef SODIUM
 SODIUM = no
 !endif
+!ifndef DYNAMIC_SODIUM
+DYNAMIC_SODIUM = yes
+!endif
 
 !if "$(SODIUM)" != "no"
 ! if "$(CPU)" == "AMD64"
@@ -397,8 +395,13 @@ SODIUM = no
 
 !if "$(SODIUM)" != "no"
 SOD_INC		= /I "$(SODIUM)\include"
+! if "$(DYNAMIC_SODIUM)" == "yes"
+SOD_DEFS	= -DHAVE_SODIUM -DDYNAMIC_SODIUM
+SOD_LIB		=
+! else
 SOD_DEFS	= -DHAVE_SODIUM
 SOD_LIB		= $(SOD_LIB)\libsodium.lib
+! endif
 !endif
 
 !ifndef NETBEANS
@@ -508,7 +511,8 @@ NETBEANS_LIB	= WSock32.lib Ws2_32.lib
 # gdi32.lib and comdlg32.lib for printing support
 # ole32.lib and uuid.lib are needed for FEAT_SHORTCUT
 CON_LIB = oldnames.lib kernel32.lib advapi32.lib shell32.lib gdi32.lib \
-          comdlg32.lib ole32.lib netapi32.lib uuid.lib /machine:$(CPU)
+	  comdlg32.lib ole32.lib netapi32.lib uuid.lib user32.lib \
+	  /machine:$(CPU)
 !if "$(DELAYLOAD)" == "yes"
 CON_LIB = $(CON_LIB) /DELAYLOAD:comdlg32.dll /DELAYLOAD:ole32.dll DelayImp.lib
 !endif
@@ -671,6 +675,7 @@ CFLAGS = $(CFLAGS) /fsanitize=address
 !endif
 
 !ifdef NODEBUG
+
 VIM = vim
 ! if "$(OPTIMIZE)" == "SPACE"
 OPTFLAG = /O1
@@ -698,29 +703,28 @@ RCFLAGS = $(rcflags) $(rcvars) -DNDEBUG
 CFLAGS = $(CFLAGS) /MD
 LIBC = msvcrt.lib
 ! else
-LIBC = libcmt.lib
 CFLAGS = $(CFLAGS) /Zl /MT
+LIBC = libcmt.lib
 ! endif
+
 !else  # DEBUG
+
 VIM = vimd
 ! if ("$(CPU)" == "i386") || ("$(CPU)" == "ix86")
 DEBUGINFO = /ZI
 ! endif
 CFLAGS = $(CFLAGS) -D_DEBUG -DDEBUG /Od
 RCFLAGS = $(rcflags) $(rcvars) -D_DEBUG -DDEBUG
-# The /fixed:no is needed for Quantify. Assume not 4.? as unsupported in VC4.0.
-! if $(MSVC_MAJOR) == 4
-LIBC =
-! else
+# The /fixed:no is needed for Quantify.
 LIBC = /fixed:no
-! endif
 ! ifdef USE_MSVCRT
 CFLAGS = $(CFLAGS) /MDd
 LIBC = $(LIBC) msvcrtd.lib
 ! else
-LIBC = $(LIBC) libcmtd.lib
 CFLAGS = $(CFLAGS) /Zl /MTd
+LIBC = $(LIBC) libcmtd.lib
 ! endif
+
 !endif # DEBUG
 
 !if "$(CL)" == "/D_USING_V110_SDK71_"
@@ -787,7 +791,7 @@ OBJ = \
 	$(OUTDIR)\hashtab.obj \
 	$(OUTDIR)\help.obj \
 	$(OUTDIR)\highlight.obj \
-	$(OBJDIR)\if_cscope.obj \
+	$(OUTDIR)\if_cscope.obj \
 	$(OUTDIR)\indent.obj \
 	$(OUTDIR)\insexpand.obj \
 	$(OUTDIR)\json.obj \
@@ -885,11 +889,6 @@ IME_LIB = imm32.lib
 ! endif
 !endif
 
-!if "$(GIME)" == "yes"
-CFLAGS = $(CFLAGS) -DGLOBAL_IME
-OBJ = $(OBJ) $(OUTDIR)\dimm_i.obj $(OUTDIR)\glbl_ime.obj
-!endif
-
 !if "$(GUI)" == "yes"
 SUBSYSTEM = windows
 CFLAGS = $(CFLAGS) -DFEAT_GUI_MSWIN
@@ -910,9 +909,7 @@ GUI_OBJ = \
 	$(OUTDIR)\gui_beval.obj \
 	$(OUTDIR)\gui_w32.obj
 GUI_LIB = \
-	gdi32.lib version.lib $(IME_LIB) \
-	winspool.lib comctl32.lib advapi32.lib shell32.lib netapi32.lib \
-	/machine:$(CPU)
+	version.lib $(IME_LIB) winspool.lib comctl32.lib
 !else
 SUBSYSTEM = console
 CUI_INCL = iscygpty.h
@@ -1320,11 +1317,11 @@ conflags = $(conflags) /map /mapinfo:lines
 !ENDIF
 
 LINKARGS1 = $(linkdebug) $(conflags)
-LINKARGS2 = $(CON_LIB) $(GUI_LIB) $(NODEFAULTLIB) $(LIBC) $(OLE_LIB) user32.lib \
+LINKARGS2 = $(CON_LIB) $(GUI_LIB) $(NODEFAULTLIB) $(LIBC) $(OLE_LIB) \
 		$(LUA_LIB) $(MZSCHEME_LIB) $(PERL_LIB) $(PYTHON_LIB) $(PYTHON3_LIB) $(RUBY_LIB) \
 		$(TCL_LIB) $(SOUND_LIB) $(NETBEANS_LIB) $(XPM_LIB) $(SOD_LIB) $(LINK_PDB)
 
-# Report link time code generation progress if used. 
+# Report link time code generation progress if used.
 !ifdef NODEBUG
 ! if $(MSVC_MAJOR) >= 8
 !  if "$(OPTIMIZE)" != "SPACE"
@@ -1464,9 +1461,6 @@ clean: testclean
 	- if exist uninstall.exe del uninstall.exe
 	- if exist if_perl.c del if_perl.c
 	- if exist auto\if_perl.c del auto\if_perl.c
-	- if exist dimm.h del dimm.h
-	- if exist dimm_i.c del dimm_i.c
-	- if exist dimm.tlb del dimm.tlb
 	- if exist dosinst.exe del dosinst.exe
 	cd xxd
 	$(MAKE) /NOLOGO -f Make_mvc.mak clean
@@ -1670,7 +1664,7 @@ $(OUTDIR)/gui_w32.obj:	$(OUTDIR) gui_w32.c $(INCL) $(GUI_INCL) version.h
 
 $(OUTDIR)/gui_dwrite.obj:	$(OUTDIR) gui_dwrite.cpp gui_dwrite.h
 
-$(OUTDIR)/if_cscope.obj: $(OUTDIR) if_cscope.c  $(INCL) if_cscope.h
+$(OUTDIR)/if_cscope.obj: $(OUTDIR) if_cscope.c  $(INCL)
 
 $(OUTDIR)/if_lua.obj: $(OUTDIR) if_lua.c  $(INCL)
 	$(CC) $(CFLAGS_OUTDIR) $(LUA_INC) if_lua.c
@@ -1881,13 +1875,6 @@ $(OUTDIR)/vim.res:	$(OUTDIR) vim.rc vim.manifest version.h gui_w32_rc.h \
 iid_ole.c if_ole.h vim.tlb: if_ole.idl
 	midl /nologo /error none /proxy nul /iid iid_ole.c /tlb vim.tlb \
 		/header if_ole.h if_ole.idl
-
-dimm.h dimm_i.c: dimm.idl
-	midl /nologo /error none /proxy nul dimm.idl
-
-$(OUTDIR)/dimm_i.obj: $(OUTDIR) dimm_i.c $(INCL)
-
-$(OUTDIR)/glbl_ime.obj:	$(OUTDIR) glbl_ime.cpp  dimm.h $(INCL)
 
 
 CCCTERM = $(CC) $(CFLAGS) -Ilibvterm/include -DINLINE="" \

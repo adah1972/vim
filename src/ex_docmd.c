@@ -1716,12 +1716,6 @@ comment_start(char_u *p, int starts_with_colon UNUSED)
  *
  * This function may be called recursively!
  */
-#if (_MSC_VER == 1200)
-/*
- * Avoid optimisation bug in VC++ version 6.0
- */
- #pragma optimize( "g", off )
-#endif
     static char_u *
 do_one_cmd(
     char_u	**cmdlinep,
@@ -2374,7 +2368,10 @@ do_one_cmd(
 	else
 	{
 	    ea.line1 = ea.line2;
-	    ea.line2 += n - 1;
+	    if (ea.line2 >= LONG_MAX - (n - 1))
+	        ea.line2 = LONG_MAX;  // avoid overflow
+	    else
+		ea.line2 += n - 1;
 	    ++ea.addr_count;
 	    /*
 	     * Be vi compatible: no error message for out of range.
@@ -2611,7 +2608,7 @@ doend:
 
     if (errormsg != NULL && *errormsg != NUL && !did_emsg)
     {
-	if (sourcing)
+	if (sourcing || !KeyTyped)
 	{
 	    if (errormsg != (char *)IObuff)
 	    {
@@ -2645,9 +2642,6 @@ doend:
 
     return ea.nextcmd;
 }
-#if (_MSC_VER == 1200)
- #pragma optimize( "", on )
-#endif
 
 static char ex_error_buf[MSG_BUF_LEN];
 
@@ -9216,7 +9210,6 @@ eval_vars(
     if (resultlen == 0 || valid != VALID_HEAD + VALID_PATH)
     {
 	if (valid != VALID_HEAD + VALID_PATH)
-	    // xgettext:no-c-format
 	    *errormsg = _(e_empty_file_name_for_percent_or_hash_only_works_with_ph);
 	else
 	    *errormsg = _(e_evaluates_to_an_empty_string);

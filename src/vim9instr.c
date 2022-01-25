@@ -714,7 +714,6 @@ generate_PUSHBLOB(cctx_T *cctx, blob_T *blob)
 
 /*
  * Generate an ISN_PUSHFUNC instruction with name "name".
- * Consumes "name".
  */
     int
 generate_PUSHFUNC(cctx_T *cctx, char_u *name, type_T *type)
@@ -727,7 +726,8 @@ generate_PUSHFUNC(cctx_T *cctx, char_u *name, type_T *type)
 	return FAIL;
     if (name == NULL)
 	funcname = NULL;
-    else if (*name == K_SPECIAL)  // script-local
+    else if (*name == K_SPECIAL				    // script-local
+	    || vim_strchr(name, AUTOLOAD_CHAR) != NULL)	    // autoload
 	funcname = vim_strsave(name);
     else
     {
@@ -1845,6 +1845,25 @@ generate_store_var(
     return FAIL;
 }
 
+/*
+ * Return TRUE when inside a "for" or "while" loop.
+ */
+    int
+inside_loop_scope(cctx_T *cctx)
+{
+    scope_T	*scope = cctx->ctx_scope;
+
+    for (;;)
+    {
+	if (scope == NULL)
+	    break;
+	if (scope->se_type == FOR_SCOPE || scope->se_type == WHILE_SCOPE)
+	    return TRUE;
+	scope = scope->se_outer;
+    }
+    return FALSE;
+}
+
     int
 generate_store_lhs(cctx_T *cctx, lhs_T *lhs, int instr_count, int is_decl)
 {
@@ -1869,8 +1888,9 @@ generate_store_lhs(cctx_T *cctx, lhs_T *lhs, int instr_count, int is_decl)
 	    varnumber_T val = isn->isn_arg.number;
 	    garray_T    *stack = &cctx->ctx_type_stack;
 
-	    if (val == 0 && is_decl)
+	    if (val == 0 && is_decl && !inside_loop_scope(cctx))
 	    {
+		// zero is the default value, no need to do anything
 		--instr->ga_len;
 	    }
 	    else
@@ -2030,7 +2050,7 @@ delete_instr(isn_T *isn)
 	case ISN_NEWFUNC:
 	    {
 		char_u  *lambda = isn->isn_arg.newfunc.nf_lambda;
-		ufunc_T *ufunc = find_func_even_dead(lambda, TRUE, NULL);
+		ufunc_T *ufunc = find_func_even_dead(lambda, FFED_IS_GLOBAL);
 
 		if (ufunc != NULL)
 		{

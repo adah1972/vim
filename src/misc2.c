@@ -1057,6 +1057,7 @@ static struct key_name_entry
     {K_CURSORHOLD,	(char_u *)"CursorHold"},
     {K_IGNORE,		(char_u *)"Ignore"},
     {K_COMMAND,		(char_u *)"Cmd"},
+    {K_SCRIPT_COMMAND,	(char_u *)"ScriptCmd"},
     {K_FOCUSGAINED,	(char_u *)"FocusGained"},
     {K_FOCUSLOST,	(char_u *)"FocusLost"},
     {0,			NULL}
@@ -2901,7 +2902,6 @@ mch_parse_cmd(char_u *cmd, int use_shcf, char ***argv, int *argc)
     return OK;
 }
 
-# if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
 /*
  * Build "argv[argc]" from the string "cmd".
  * "argv[argc]" is set to NULL;
@@ -2928,6 +2928,7 @@ build_argv_from_string(char_u *cmd, char ***argv, int *argc)
     return OK;
 }
 
+# if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
 /*
  * Build "argv[argc]" from the list "l".
  * "argv[argc]" is set to NULL;

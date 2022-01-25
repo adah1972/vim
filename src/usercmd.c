@@ -123,10 +123,10 @@ static struct
     char_u *
 find_ucmd(
     exarg_T	*eap,
-    char_u	*p,	// end of the command (possibly including count)
-    int		*full,	// set to TRUE for a full match
-    expand_T	*xp,	// used for completion, NULL otherwise
-    int		*complp UNUSED)	// completion flags or NULL
+    char_u	*p,	 // end of the command (possibly including count)
+    int		*full,	 // set to TRUE for a full match
+    expand_T	*xp,	 // used for completion, NULL otherwise
+    int		*complp) // completion flags or NULL
 {
     int		len = (int)(p - eap->cmd);
     int		j, k, matchlen = 0;
@@ -548,6 +548,15 @@ uc_list(char_u *name, size_t name_len)
 		{
 		    STRCPY(IObuff + len, command_complete[j].name);
 		    len += (int)STRLEN(IObuff + len);
+#ifdef FEAT_EVAL
+		    if (p_verbose > 0 && cmd->uc_compl_arg != NULL
+					    && STRLEN(cmd->uc_compl_arg) < 200)
+		    {
+			IObuff[len] = ',';
+			STRCPY(IObuff + len + 1, cmd->uc_compl_arg);
+			len += (int)STRLEN(IObuff + len);
+		    }
+#endif
 		    break;
 		}
 

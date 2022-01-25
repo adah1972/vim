@@ -369,17 +369,25 @@ eval_charconvert(
     char_u	*fname_to)
 {
     int		err = FALSE;
+    sctx_T	saved_sctx = current_sctx;
+    sctx_T	*ctx;
 
     set_vim_var_string(VV_CC_FROM, enc_from, -1);
     set_vim_var_string(VV_CC_TO, enc_to, -1);
     set_vim_var_string(VV_FNAME_IN, fname_from, -1);
     set_vim_var_string(VV_FNAME_OUT, fname_to, -1);
+    ctx = get_option_sctx("charconvert");
+    if (ctx != NULL)
+	current_sctx = *ctx;
+
     if (eval_to_bool(p_ccv, &err, NULL, FALSE))
 	err = TRUE;
+
     set_vim_var_string(VV_CC_FROM, NULL, -1);
     set_vim_var_string(VV_CC_TO, NULL, -1);
     set_vim_var_string(VV_FNAME_IN, NULL, -1);
     set_vim_var_string(VV_FNAME_OUT, NULL, -1);
+    current_sctx = saved_sctx;
 
     if (err)
 	return FAIL;
@@ -391,13 +399,21 @@ eval_charconvert(
 eval_printexpr(char_u *fname, char_u *args)
 {
     int		err = FALSE;
+    sctx_T	saved_sctx = current_sctx;
+    sctx_T	*ctx;
 
     set_vim_var_string(VV_FNAME_IN, fname, -1);
     set_vim_var_string(VV_CMDARG, args, -1);
+    ctx = get_option_sctx("printexpr");
+    if (ctx != NULL)
+	current_sctx = *ctx;
+
     if (eval_to_bool(p_pexpr, &err, NULL, FALSE))
 	err = TRUE;
+
     set_vim_var_string(VV_FNAME_IN, NULL, -1);
     set_vim_var_string(VV_CMDARG, NULL, -1);
+    current_sctx = saved_sctx;
 
     if (err)
     {
@@ -415,15 +431,26 @@ eval_diff(
     char_u	*newfile,
     char_u	*outfile)
 {
-    int		err = FALSE;
+    sctx_T	saved_sctx = current_sctx;
+    sctx_T	*ctx;
+    typval_T	*tv;
 
     set_vim_var_string(VV_FNAME_IN, origfile, -1);
     set_vim_var_string(VV_FNAME_NEW, newfile, -1);
     set_vim_var_string(VV_FNAME_OUT, outfile, -1);
-    (void)eval_to_bool(p_dex, &err, NULL, FALSE);
+
+    ctx = get_option_sctx("diffexpr");
+    if (ctx != NULL)
+	current_sctx = *ctx;
+
+    // errors are ignored
+    tv = eval_expr(p_dex, NULL);
+    free_tv(tv);
+
     set_vim_var_string(VV_FNAME_IN, NULL, -1);
     set_vim_var_string(VV_FNAME_NEW, NULL, -1);
     set_vim_var_string(VV_FNAME_OUT, NULL, -1);
+    current_sctx = saved_sctx;
 }
 
     void
@@ -432,15 +459,26 @@ eval_patch(
     char_u	*difffile,
     char_u	*outfile)
 {
-    int		err;
+    sctx_T	saved_sctx = current_sctx;
+    sctx_T	*ctx;
+    typval_T	*tv;
 
     set_vim_var_string(VV_FNAME_IN, origfile, -1);
     set_vim_var_string(VV_FNAME_DIFF, difffile, -1);
     set_vim_var_string(VV_FNAME_OUT, outfile, -1);
-    (void)eval_to_bool(p_pex, &err, NULL, FALSE);
+
+    ctx = get_option_sctx("patchexpr");
+    if (ctx != NULL)
+	current_sctx = *ctx;
+
+    // errors are ignored
+    tv = eval_expr(p_pex, NULL);
+    free_tv(tv);
+
     set_vim_var_string(VV_FNAME_IN, NULL, -1);
     set_vim_var_string(VV_FNAME_DIFF, NULL, -1);
     set_vim_var_string(VV_FNAME_OUT, NULL, -1);
+    current_sctx = saved_sctx;
 }
 # endif
 
@@ -457,12 +495,17 @@ eval_spell_expr(char_u *badword, char_u *expr)
     typval_T	rettv;
     list_T	*list = NULL;
     char_u	*p = skipwhite(expr);
+    sctx_T	saved_sctx = current_sctx;
+    sctx_T	*ctx;
 
     // Set "v:val" to the bad word.
     prepare_vimvar(VV_VAL, &save_val);
     set_vim_var_string(VV_VAL, badword, -1);
     if (p_verbose == 0)
 	++emsg_off;
+    ctx = get_option_sctx("spellsuggest");
+    if (ctx != NULL)
+	current_sctx = *ctx;
 
     if (eval1(&p, &rettv, &EVALARG_EVALUATE) == OK)
     {
@@ -476,6 +519,7 @@ eval_spell_expr(char_u *badword, char_u *expr)
 	--emsg_off;
     clear_tv(get_vim_var_tv(VV_VAL));
     restore_vimvar(VV_VAL, &save_val);
+    current_sctx = saved_sctx;
 
     return list;
 }
@@ -2683,7 +2727,7 @@ eval_variable(
 	char_u	    *p = STRNCMP(name, "s:", 2) == 0 ? name + 2 : name;
 
 	if (sid == 0)
-	    import = find_imported(p, 0, NULL);
+	    import = find_imported(p, 0, TRUE, NULL);
 
 	// imported variable from another script
 	if (import != NULL || sid != 0)
@@ -2711,7 +2755,7 @@ eval_variable(
 		else
 		{
 		    if (flags & EVAL_VAR_VERBOSE)
-			emsg(_(e_import_as_name_not_supported_here));
+			semsg(_(e_expected_dot_after_name_str), name);
 		    ret = FAIL;
 		}
 	    }
@@ -2727,7 +2771,7 @@ eval_variable(
 	}
 	else if (in_vim9script() && (flags & EVAL_VAR_NO_FUNC) == 0)
 	{
-	    ufunc_T *ufunc = find_func(name, FALSE, NULL);
+	    ufunc_T *ufunc = find_func(name, FALSE);
 
 	    // In Vim9 script we can get a function reference by using the
 	    // function name.
@@ -2874,6 +2918,32 @@ find_var(char_u *name, hashtab_T **htp, int no_autoload)
 	}
     }
 
+    // When using "vim9script autoload" script-local items are prefixed but can
+    // be used with s:name.
+    if (SCRIPT_ID_VALID(current_sctx.sc_sid)
+					   && name[0] == 's' && name[1] == ':')
+    {
+	scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
+
+	if (si->sn_autoload_prefix != NULL)
+	{
+	    char_u *auto_name = concat_str(si->sn_autoload_prefix, name + 2);
+
+	    if (auto_name != NULL)
+	    {
+		ht = &globvarht;
+		ret = find_var_in_ht(ht, *name, auto_name, TRUE);
+		vim_free(auto_name);
+		if (ret != NULL)
+		{
+		    if (htp != NULL)
+			*htp = ht;
+		    return ret;
+		}
+	    }
+	}
+    }
+
     return NULL;
 }
 
@@ -3015,7 +3085,7 @@ lookup_scriptitem(
     res = HASHITEM_EMPTY(hi) ? FAIL : OK;
 
     // if not script-local, then perhaps imported
-    if (res == FAIL && find_imported(p, 0, NULL) != NULL)
+    if (res == FAIL && find_imported(p, 0, FALSE, NULL) != NULL)
 	res = OK;
     if (p != buffer)
 	vim_free(p);
@@ -3037,7 +3107,7 @@ lookup_scriptitem(
 		is_global = TRUE;
 		fname = name + 2;
 	    }
-	    if (find_func(fname, is_global, NULL) != NULL)
+	    if (find_func(fname, is_global) != NULL)
 		res = OK;
 	}
     }
@@ -3318,7 +3388,7 @@ set_var(
 }
 
 /*
- * Set variable "name" to value in "tv".
+ * Set variable "name" to value in "tv_arg".
  * When "sid" is non-zero "name" is in the script with this ID.
  * If the variable already exists and "is_const" is FALSE the value is updated.
  * Otherwise the variable is created.
@@ -3339,10 +3409,12 @@ set_var_const(
     dictitem_T	*di;
     typval_T	*dest_tv = NULL;
     char_u	*varname;
+    char_u	*name_tofree = NULL;
     hashtab_T	*ht = NULL;
     int		is_script_local;
     int		vim9script = in_vim9script();
     int		var_in_vim9script;
+    int		var_in_autoload = FALSE;
     int		flags = flags_arg;
     int		free_tv_arg = !copy;  // free tv_arg if not used
 
@@ -3353,13 +3425,32 @@ set_var_const(
 	varname = name;
     }
     else
-	ht = find_var_ht(name, &varname);
+    {
+	scriptitem_T *si;
+
+	if (in_vim9script() && is_export
+		&& SCRIPT_ID_VALID(current_sctx.sc_sid)
+		&& (si = SCRIPT_ITEM(current_sctx.sc_sid))
+						   ->sn_autoload_prefix != NULL)
+	{
+	    // In a vim9 autoload script an exported variable is put in the
+	    // global namespace with the autoload prefix.
+	    var_in_autoload = TRUE;
+	    varname = concat_str(si->sn_autoload_prefix, name);
+	    if (varname == NULL)
+		goto failed;
+	    name_tofree = varname;
+	    ht = &globvarht;
+	}
+	else
+	    ht = find_var_ht(name, &varname);
+    }
     if (ht == NULL || *varname == NUL)
     {
 	semsg(_(e_illegal_variable_name_str), name);
 	goto failed;
     }
-    is_script_local = ht == get_script_local_ht() || sid != 0;
+    is_script_local = ht == get_script_local_ht() || sid != 0 || var_in_autoload;
 
     if (vim9script
 	    && !is_script_local
@@ -3388,7 +3479,7 @@ set_var_const(
 
     if (di == NULL && var_in_vim9script)
     {
-	imported_T  *import = find_imported(varname, 0, NULL);
+	imported_T  *import = find_imported(varname, 0, FALSE, NULL);
 
 	if (import != NULL)
 	{
@@ -3470,9 +3561,10 @@ set_var_const(
 
 		// A Vim9 script-local variable is also present in sn_all_vars
 		// and sn_var_vals.  It may set "type" from "tv".
-		if (var_in_vim9script)
-		    update_vim9_script_var(FALSE, di, flags, tv, &type,
-					 (flags & ASSIGN_NO_MEMBER_TYPE) == 0);
+		if (var_in_vim9script || var_in_autoload)
+		    update_vim9_script_var(FALSE, di,
+			    var_in_autoload ? name : di->di_key, flags,
+			    tv, &type, (flags & ASSIGN_NO_MEMBER_TYPE) == 0);
 	    }
 
 	    // existing variable, need to clear the value
@@ -3550,10 +3642,11 @@ set_var_const(
 		goto failed;
 	    }
 
-	    // Make sure the variable name is valid.  In Vim9 script an autoload
-	    // variable must be prefixed with "g:".
+	    // Make sure the variable name is valid.  In Vim9 script an
+	    // autoload variable must be prefixed with "g:" unless in an
+	    // autoload script.
 	    if (!valid_varname(varname, -1, !vim9script
-					       || STRNCMP(name, "g:", 2) == 0))
+			    || STRNCMP(name, "g:", 2) == 0 || var_in_autoload))
 		goto failed;
 
 	    di = alloc(sizeof(dictitem_T) + STRLEN(varname));
@@ -3571,9 +3664,10 @@ set_var_const(
 
 	    // A Vim9 script-local variable is also added to sn_all_vars and
 	    // sn_var_vals. It may set "type" from "tv".
-	    if (var_in_vim9script)
-		update_vim9_script_var(TRUE, di, flags, tv, &type,
-					 (flags & ASSIGN_NO_MEMBER_TYPE) == 0);
+	    if (var_in_vim9script || var_in_autoload)
+		update_vim9_script_var(TRUE, di,
+			var_in_autoload ? name : di->di_key, flags,
+			      tv, &type, (flags & ASSIGN_NO_MEMBER_TYPE) == 0);
 	}
 
 	dest_tv = &di->di_tv;
@@ -3618,6 +3712,7 @@ set_var_const(
 	item_lock(dest_tv, DICT_MAXNEST, TRUE, TRUE);
 
 failed:
+    vim_free(name_tofree);
     if (free_tv_arg)
 	clear_tv(tv_arg);
 }
@@ -4574,6 +4669,57 @@ copy_callback(callback_T *dest, callback_T *src)
 	dest->cb_name = vim_strsave(src->cb_name);
 	dest->cb_free_name = TRUE;
 	func_ref(src->cb_name);
+    }
+}
+
+/*
+ * When a callback refers to an autoload import, change the function name to
+ * the "path#name" form.  Uses the current script context.
+ * Only works when the name is allocated.
+ */
+    void
+expand_autload_callback(callback_T *cb)
+{
+    char_u	*name;
+    char_u	*p;
+    imported_T	*import;
+
+    if (!in_vim9script() || cb->cb_name == NULL
+	    || (!cb->cb_free_name
+	       && (cb->cb_partial == NULL || cb->cb_partial->pt_name == NULL)))
+	return;
+    if (cb->cb_partial != NULL)
+	name = cb->cb_partial->pt_name;
+    else
+	name = cb->cb_name;
+    p = vim_strchr(name, '.');
+    if (p == NULL)
+	return;
+    import = find_imported(name, p - name, FALSE, NULL);
+    if (import != NULL && SCRIPT_ID_VALID(import->imp_sid))
+    {
+	scriptitem_T *si = SCRIPT_ITEM(import->imp_sid);
+
+	if (si->sn_autoload_prefix != NULL)
+	{
+	    char_u *newname = concat_str(si->sn_autoload_prefix, p + 1);
+
+	    if (newname != NULL)
+	    {
+		if (cb->cb_partial != NULL)
+		{
+		    if (cb->cb_name == cb->cb_partial->pt_name)
+			cb->cb_name = newname;
+		    vim_free(cb->cb_partial->pt_name);
+		    cb->cb_partial->pt_name = newname;
+		}
+		else
+		{
+		    vim_free(cb->cb_name);
+		    cb->cb_name = newname;
+		}
+	    }
+	}
     }
 }
 

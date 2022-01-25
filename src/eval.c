@@ -555,14 +555,16 @@ eval_to_string(
     char_u *
 eval_to_string_safe(
     char_u	*arg,
-    int		use_sandbox)
+    int		use_sandbox,
+    int		keep_script_version)
 {
     char_u	*retval;
     funccal_entry_T funccal_entry;
     int		save_sc_version = current_sctx.sc_version;
     int		save_garbage = may_garbage_collect;
 
-    current_sctx.sc_version = 1;
+    if (!keep_script_version)
+	current_sctx.sc_version = 1;
     save_funccal(&funccal_entry);
     if (use_sandbox)
 	++sandbox;
@@ -626,6 +628,63 @@ eval_expr(char_u *arg, exarg_T *eap)
 }
 
 /*
+ * "*arg" points to what can be a function name in the form of "import.Name" or
+ * "Funcref".  Return the name of the function.  Set "tofree" to something that
+ * was allocated.
+ * If "verbose" is FALSE no errors are given.
+ * Return NULL for any failure.
+ */
+    static char_u *
+deref_function_name(
+	    char_u **arg,
+	    char_u **tofree,
+	    evalarg_T *evalarg,
+	    int verbose)
+{
+    typval_T	ref;
+    char_u	*name = *arg;
+
+    ref.v_type = VAR_UNKNOWN;
+    if (eval7(arg, &ref, evalarg, FALSE) == FAIL)
+	return NULL;
+    if (*skipwhite(*arg) != NUL)
+    {
+	if (verbose)
+	    semsg(_(e_trailing_characters_str), *arg);
+	name = NULL;
+    }
+    else if (ref.v_type == VAR_FUNC && ref.vval.v_string != NULL)
+    {
+	name = ref.vval.v_string;
+	ref.vval.v_string = NULL;
+	*tofree = name;
+    }
+    else if (ref.v_type == VAR_PARTIAL && ref.vval.v_partial != NULL)
+    {
+	if (ref.vval.v_partial->pt_argc > 0
+		|| ref.vval.v_partial->pt_dict != NULL)
+	{
+	    if (verbose)
+		emsg(_(e_cannot_use_partial_here));
+	    name = NULL;
+	}
+	else
+	{
+	    name = vim_strsave(partial_name(ref.vval.v_partial));
+	    *tofree = name;
+	}
+    }
+    else
+    {
+	if (verbose)
+	    semsg(_(e_not_callable_type_str), name);
+	name = NULL;
+    }
+    clear_tv(&ref);
+    return name;
+}
+
+/*
  * Call some Vim script function and return the result in "*rettv".
  * Uses argv[0] to argv[argc - 1] for the function arguments.  argv[argc]
  * should have type VAR_UNKNOWN.
@@ -640,15 +699,29 @@ call_vim_function(
 {
     int		ret;
     funcexe_T	funcexe;
+    char_u	*arg;
+    char_u	*name;
+    char_u	*tofree = NULL;
 
     rettv->v_type = VAR_UNKNOWN;		// clear_tv() uses this
     CLEAR_FIELD(funcexe);
     funcexe.fe_firstline = curwin->w_cursor.lnum;
     funcexe.fe_lastline = curwin->w_cursor.lnum;
     funcexe.fe_evaluate = TRUE;
-    ret = call_func(func, -1, rettv, argc, argv, &funcexe);
+
+    // The name might be "import.Func" or "Funcref".
+    arg = func;
+    ++emsg_off;
+    name = deref_function_name(&arg, &tofree, &EVALARG_EVALUATE, FALSE);
+    --emsg_off;
+    if (name == NULL)
+	name = func;
+
+    ret = call_func(name, -1, rettv, argc, argv, &funcexe);
+
     if (ret == FAIL)
 	clear_tv(rettv);
+    vim_free(tofree);
 
     return ret;
 }
@@ -701,7 +774,7 @@ call_func_retlist(
     return rettv.vval.v_list;
 }
 
-#ifdef FEAT_FOLDING
+#if defined(FEAT_FOLDING) || defined(PROTO)
 /*
  * Evaluate "arg", which is 'foldexpr'.
  * Note: caller must set "curwin" to match "arg".
@@ -709,13 +782,18 @@ call_func_retlist(
  * give error messages.
  */
     int
-eval_foldexpr(char_u *arg, int *cp)
+eval_foldexpr(win_T *wp, int *cp)
 {
+    char_u	*arg;
     typval_T	tv;
     varnumber_T	retval;
     char_u	*s;
+    sctx_T	saved_sctx = current_sctx;
     int		use_sandbox = was_set_insecurely((char_u *)"foldexpr",
 								   OPT_LOCAL);
+
+    arg = wp->w_p_fde;
+    current_sctx = wp->w_p_script_ctx[WV_FDE];
 
     ++emsg_off;
     if (use_sandbox)
@@ -747,6 +825,7 @@ eval_foldexpr(char_u *arg, int *cp)
 	--sandbox;
     --textwinlock;
     clear_evalarg(&EVALARG_EVALUATE, NULL);
+    current_sctx = saved_sctx;
 
     return (int)retval;
 }
@@ -886,7 +965,9 @@ get_lval(
 
     if (*p == '.' && in_vim9script())
     {
-	imported_T *import = find_imported(lp->ll_name, p - lp->ll_name, NULL);
+	imported_T *import = find_imported(lp->ll_name, p - lp->ll_name,
+								   TRUE, NULL);
+
 	if (import != NULL)
 	{
 	    ufunc_T *ufunc;
@@ -904,7 +985,7 @@ get_lval(
 							     NULL, TRUE) == -1)
 	    {
 		*p = cc;
-		return FAIL;
+		return NULL;
 	    }
 	    *p = cc;
 	}
@@ -1999,7 +2080,7 @@ eval_func(
     // If "s" is the name of a variable of type VAR_FUNC
     // use its contents.
     s = deref_func_name(s, &len, &partial,
-			in_vim9script() ? &type : NULL, !evaluate, &found_var);
+		 in_vim9script() ? &type : NULL, !evaluate, FALSE, &found_var);
 
     // Need to make a copy, in case evaluating the arguments makes
     // the name invalid.
@@ -3445,6 +3526,7 @@ eval7(
     char_u	*start_leader, *end_leader;
     int		ret = OK;
     char_u	*alias;
+    static	int recurse = 0;
 
     /*
      * Initialise variable so that clear_tv() can't mistake this for a
@@ -3470,6 +3552,21 @@ eval7(
 	++*arg;
 	return FAIL;
     }
+
+    // Limit recursion to 1000 levels.  At least at 10000 we run out of stack
+    // and crash.  With MSVC the stack is smaller.
+    if (recurse ==
+#ifdef _MSC_VER
+		    300
+#else
+		    1000
+#endif
+		    )
+    {
+	semsg(_(e_expression_too_recursive_str), *arg);
+	return FAIL;
+    }
+    ++recurse;
 
     switch (**arg)
     {
@@ -3700,6 +3797,8 @@ eval7(
      */
     if (ret == OK && evaluate && end_leader > start_leader)
 	ret = eval7_leader(rettv, FALSE, start_leader, &end_leader);
+
+    --recurse;
     return ret;
 }
 
@@ -3946,8 +4045,9 @@ eval_method(
     char_u	*name;
     long	len;
     char_u	*alias;
+    char_u	*tofree = NULL;
     typval_T	base = *rettv;
-    int		ret;
+    int		ret = OK;
     int		evaluate = evalarg != NULL
 				      && (evalarg->eval_flags & EVAL_EVALUATE);
 
@@ -3966,28 +4066,61 @@ eval_method(
     }
     else
     {
+	char_u *paren;
+
+	// If there is no "(" immediately following, but there is further on,
+	// it can be "import.Func()", "dict.Func()", "list[nr]", etc.
+	// Does not handle anything where "(" is part of the expression.
 	*arg = skipwhite(*arg);
-	if (**arg != '(')
+
+	if (**arg != '(' && alias == NULL
+				    && (paren = vim_strchr(*arg, '(')) != NULL)
 	{
-	    if (verbose)
-		semsg(_(e_missing_parenthesis_str), name);
-	    ret = FAIL;
+	    char_u *deref;
+
+	    *arg = name;
+	    *paren = NUL;
+	    deref = deref_function_name(arg, &tofree, evalarg, verbose);
+	    if (deref == NULL)
+	    {
+		*arg = name + len;
+		ret = FAIL;
+	    }
+	    else
+	    {
+		name = deref;
+		len = STRLEN(name);
+	    }
+	    *paren = '(';
 	}
-	else if (VIM_ISWHITE((*arg)[-1]))
+
+	if (ret == OK)
 	{
-	    if (verbose)
-		emsg(_(e_no_white_space_allowed_before_parenthesis));
-	    ret = FAIL;
-	}
-	else
-	    ret = eval_func(arg, evalarg, name, len, rettv,
+	    *arg = skipwhite(*arg);
+
+	    if (**arg != '(')
+	    {
+		if (verbose)
+		    semsg(_(e_missing_parenthesis_str), name);
+		ret = FAIL;
+	    }
+	    else if (VIM_ISWHITE((*arg)[-1]))
+	    {
+		if (verbose)
+		    emsg(_(e_no_white_space_allowed_before_parenthesis));
+		ret = FAIL;
+	    }
+	    else
+		ret = eval_func(arg, evalarg, name, len, rettv,
 					  evaluate ? EVAL_EVALUATE : 0, &base);
+	}
     }
 
     // Clear the funcref afterwards, so that deleting it while
     // evaluating the arguments is possible (see test55).
     if (evaluate)
 	clear_tv(&base);
+    vim_free(tofree);
 
     return ret;
 }
@@ -5901,7 +6034,7 @@ handle_subscript(
 	    type_T	*type;
 
 	    // Found script from "import {name} as name", script item name must
-	    // follow.
+	    // follow.  "rettv->vval.v_number" has the script ID.
 	    if (**arg != '.')
 	    {
 		if (verbose)
@@ -5929,7 +6062,6 @@ handle_subscript(
 	    idx = find_exported(rettv->vval.v_number, exp_name, &ufunc, &type,
 						  evalarg->eval_cctx, verbose);
 	    **arg = cc;
-	    *arg = skipwhite(*arg);
 
 	    if (idx < 0 && ufunc == NULL)
 	    {

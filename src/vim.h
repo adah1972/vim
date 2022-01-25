@@ -356,7 +356,7 @@ typedef		 __int64	long_i;
   // that change size between 32-bit and 64-bit platforms.  For any such type,
   // __w64 should appear only on the 32-bit definition of the typedef.
   // Define __w64 as an empty token for everything but MSVC 7.x or later.
-# if !defined(_MSC_VER)	|| (_MSC_VER < 1300)
+# ifndef _MSC_VER
 #  define __w64
 # endif
 typedef unsigned long __w64	long_u;
@@ -383,7 +383,7 @@ typedef		 long __w64     long_i;
  * We assume that when fseeko() is available then ftello() is too.
  * Note that Windows has different function names.
  */
-#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__MINGW32__)
+#ifdef MSWIN
 typedef __int64 off_T;
 # ifdef __MINGW32__
 #  define vim_lseek lseek64
@@ -1074,7 +1074,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define DOCMD_KEYTYPED	0x08	// don't reset KeyTyped
 #define DOCMD_EXCRESET	0x10	// reset exception environment (for debugging)
 #define DOCMD_KEEPLINE  0x20	// keep typed line for repeating with "."
-#define DOCMD_RANGEOK	0240	// can use a range without ":" in Vim9 script
+#define DOCMD_RANGEOK	0x40	// can use a range without ":" in Vim9 script
 
 // flags for beginline()
 #define BL_WHITE	1	// cursor on first non-white in the line
@@ -2162,9 +2162,8 @@ typedef struct
 typedef int Clipboard_T;	// This is required for the prototypes.
 #endif
 
-// Use 64-bit stat structure if available.
-#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__MINGW32__)
-# define HAVE_STAT64
+// Use 64-bit stat structure on MS-Windows.
+#ifdef MSWIN
 typedef struct _stat64 stat_T;
 #else
 typedef struct stat stat_T;
@@ -2252,17 +2251,15 @@ typedef enum {
 #endif
 
 # if defined(FEAT_EVAL) \
-	&& (!defined(FEAT_GUI_MSWIN) \
-	     || !(defined(FEAT_MBYTE_IME) || defined(GLOBAL_IME)))
+	&& (!defined(FEAT_GUI_MSWIN) || !defined(FEAT_MBYTE_IME))
 // Whether IME is supported by im_get_status() defined in mbyte.c.
-// For Win32 GUI it's in gui_w32.c when FEAT_MBYTE_IME or GLOBAL_IME is defined.
+// For Win32 GUI it's in gui_w32.c when FEAT_MBYTE_IME is defined.
 # define IME_WITHOUT_XIM
 #endif
 
 #if defined(FEAT_XIM) \
 	|| defined(IME_WITHOUT_XIM) \
-	|| (defined(FEAT_GUI_MSWIN) \
-	    && (defined(FEAT_MBYTE_IME) || defined(GLOBAL_IME)))
+	|| (defined(FEAT_GUI_MSWIN) && defined(FEAT_MBYTE_IME))
 // im_set_active() is available
 # define HAVE_INPUT_METHOD
 #endif
@@ -2632,6 +2629,7 @@ typedef enum {
 #define TFN_READ_ONLY	0x10	// will not change the var
 #define TFN_NO_DECL	0x20	// only used for GLV_NO_DECL
 #define TFN_COMPILING	0x40	// only used for GLV_COMPILING
+#define TFN_NEW_FUNC	0x80	// defining a new function
 
 // Values for get_lval() flags argument:
 #define GLV_QUIET	TFN_QUIET	// no error messages
@@ -2799,5 +2797,9 @@ long elapsed(DWORD start_tick);
 #define VSE_NONE	0
 #define VSE_SHELL	1	// escape for a shell command
 #define VSE_BUFFER	2	// escape for a ":buffer" command
+
+// Flags used by find_func_even_dead()
+#define FFED_IS_GLOBAL	1	// "g:" was used
+#define FFED_NO_GLOBAL	2	// only check for script-local functions
 
 #endif // VIM__H

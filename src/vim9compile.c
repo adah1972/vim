@@ -268,7 +268,7 @@ variable_exists(char_u *name, size_t len, cctx_T *cctx)
 		&& (lookup_local(name, len, NULL, cctx) == OK
 		    || arg_exists(name, len, NULL, NULL, NULL, cctx) == OK))
 	    || script_var_exists(name, len, cctx) == OK
-	    || find_imported(name, len, cctx) != NULL;
+	    || find_imported(name, len, FALSE, cctx) != NULL;
 }
 
 /*
@@ -296,7 +296,7 @@ item_exists(char_u *name, size_t len, int cmd UNUSED, cctx_T *cctx)
 	// valid command, such as ":split" versus "split()".
 	// Skip "g:" before a function name.
 	is_global = (name[0] == 'g' && name[1] == ':');
-	return find_func(is_global ? name + 2 : name, is_global, cctx) != NULL;
+	return find_func(is_global ? name + 2 : name, is_global) != NULL;
     }
     return FALSE;
 }
@@ -331,8 +331,8 @@ check_defined(char_u *p, size_t len, cctx_T *cctx, int is_arg)
     if ((cctx != NULL
 		&& (lookup_local(p, len, NULL, cctx) == OK
 		    || arg_exists(p, len, NULL, NULL, NULL, cctx) == OK))
-	    || find_imported(p, len, cctx) != NULL
-	    || (ufunc = find_func_even_dead(p, FALSE, cctx)) != NULL)
+	    || find_imported(p, len, FALSE, cctx) != NULL
+	    || (ufunc = find_func_even_dead(p, 0)) != NULL)
     {
 	// A local or script-local function can shadow a global function.
 	if (ufunc == NULL || ((ufunc->uf_flags & FC_DEAD) == 0
@@ -541,7 +541,19 @@ get_script_item_idx(int sid, char_u *name, int check_writable, cctx_T *cctx)
     ht = &SCRIPT_VARS(sid);
     di = find_var_in_ht(ht, 0, name, TRUE);
     if (di == NULL)
+    {
+	if (si->sn_autoload_prefix != NULL)
+	{
+	    hashitem_T *hi;
+
+	    // A variable exported from an autoload script is in the global
+	    // variables, we can find it in the all_vars table.
+	    hi = hash_find(&si->sn_all_vars.dv_hashtab, name);
+	    if (!HASHITEM_EMPTY(hi))
+		return HI2SAV(hi)->sav_var_vals_idx;
+	}
 	return -2;
+    }
 
     // Now find the svar_T index in sn_var_vals.
     for (idx = 0; idx < si->sn_var_vals.ga_len; ++idx)
@@ -581,11 +593,13 @@ find_imported_in_script(char_u *name, size_t len, int sid)
 /*
  * Find "name" in imported items of the current script or in "cctx" if not
  * NULL.
+ * If "load" is TRUE and the script was not loaded yet, load it now.
  */
     imported_T *
-find_imported(char_u *name, size_t len, cctx_T *cctx)
+find_imported(char_u *name, size_t len, int load, cctx_T *cctx)
 {
     int		    idx;
+    imported_T	    *ret = NULL;
 
     if (!SCRIPT_ID_VALID(current_sctx.sc_sid))
 	return NULL;
@@ -598,10 +612,25 @@ find_imported(char_u *name, size_t len, cctx_T *cctx)
 	    if (len == 0 ? STRCMP(name, import->imp_name) == 0
 			 : STRLEN(import->imp_name) == len
 				  && STRNCMP(name, import->imp_name, len) == 0)
-		return import;
+	    {
+		ret = import;
+		break;
+	    }
 	}
 
-    return find_imported_in_script(name, len, current_sctx.sc_sid);
+    if (ret == NULL)
+	ret = find_imported_in_script(name, len, current_sctx.sc_sid);
+
+    if (ret != NULL && load && (ret->imp_flags & IMP_FLAGS_AUTOLOAD))
+    {
+	scid_T dummy;
+
+	// script found before but not loaded yet
+	ret->imp_flags &= ~IMP_FLAGS_AUTOLOAD;
+	(void)do_source(SCRIPT_ITEM(ret->imp_sid)->sn_name, FALSE,
+							    DOSO_NONE, &dummy);
+    }
+    return ret;
 }
 
 /*
@@ -1326,7 +1355,7 @@ compile_lhs(
 			  : script_var_exists(var_start, lhs->lhs_varlen,
 								  cctx)) == OK;
 		imported_T  *import =
-			       find_imported(var_start, lhs->lhs_varlen, cctx);
+			find_imported(var_start, lhs->lhs_varlen, FALSE, cctx);
 
 		if (script_namespace || script_var || import != NULL)
 		{
@@ -1979,7 +2008,7 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
 			    : isn->isn_arg.number != needed_list_len)
 		    {
 			semsg(_(e_expected_nr_items_but_got_nr),
-					 needed_list_len, isn->isn_arg.number);
+				    needed_list_len, (int)isn->isn_arg.number);
 			goto theend;
 		    }
 		}
@@ -2227,12 +2256,17 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
 		    case VAR_VOID:
 		    case VAR_INSTR:
 		    case VAR_SPECIAL:  // cannot happen
-			// This is skipped for local variables, they are
-			// always initialized to zero.
-			if (lhs.lhs_dest == dest_local)
+			// This is skipped for local variables, they are always
+			// initialized to zero.  But in a "for" or "while" loop
+			// the value may have been changed.
+			if (lhs.lhs_dest == dest_local
+						   && !inside_loop_scope(cctx))
 			    skip_store = TRUE;
 			else
+			{
+			    instr_count = instr->ga_len;
 			    generate_PUSHNR(cctx, 0);
+			}
 			break;
 		}
 	    }
@@ -2844,7 +2878,7 @@ compile_def_function(
 	if (p == NULL)
 	{
 	    if (cctx.ctx_skip != SKIP_YES)
-		emsg(_(e_ambiguous_use_of_user_defined_command));
+		semsg(_(e_ambiguous_use_of_user_defined_command_str), ea.cmd);
 	    goto erret;
 	}
 
@@ -3012,7 +3046,6 @@ compile_def_function(
 		    break;
 	    case CMD_endtry:
 		    line = compile_endtry(p, &cctx);
-		    cctx.ctx_had_return = FALSE;
 		    break;
 	    case CMD_throw:
 		    line = compile_throw(p, &cctx);
