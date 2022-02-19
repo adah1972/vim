@@ -1,8 +1,9 @@
 /* os_win32.c */
-HINSTANCE vimLoadLib(char *name);
+HINSTANCE vimLoadLib(const char *name);
 int mch_is_gui_executable(void);
 HINSTANCE find_imported_module_by_funcname(HINSTANCE hInst, const char *funcname);
 void *get_dll_import_func(HINSTANCE hInst, const char *funcname);
+void *hook_dll_import_func(HINSTANCE hInst, const char *funcname, const void *hook);
 int dyn_libintl_init(void);
 void dyn_libintl_end(void);
 void PlatformId(void);

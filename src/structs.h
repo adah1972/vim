@@ -136,9 +136,6 @@ typedef struct {
  * (a normal mark is a lnum/col pair, the same as a file position)
  */
 
-// (Note: for EBCDIC there are more than 26, because there are gaps in the
-// alphabet coding.  To minimize changes to the code, I decided to just
-// increase the number of possible marks.
 #define NMARKS		('z' - 'a' + 1)	// max. # of named marks
 #define EXTRA_MARKS	10		// marks 0-9
 #define JUMPLISTSIZE	100		// max. # of marks in jump list
@@ -1464,8 +1461,9 @@ typedef struct
 			// allowed to mask existing functions
 
 // Values for "v_lock".
-#define VAR_LOCKED	1	// locked with lock(), can use unlock()
-#define VAR_FIXED	2	// locked forever
+#define VAR_LOCKED	    1	// locked with lock(), can use unlock()
+#define VAR_FIXED	    2	// locked forever
+#define VAR_ITEMS_LOCKED    4	// items of non-materialized list locked
 
 /*
  * Structure to hold an item of a list: an internal variable without a name.
@@ -1497,7 +1495,8 @@ struct listwatch_S
  */
 struct listvar_S
 {
-    listitem_T	*lv_first;	// first item, NULL if none
+    listitem_T	*lv_first;	// first item, NULL if none, &range_list_item
+				// for a non-materialized list
     listwatch_T	*lv_watch;	// first watcher, NULL if none
     union {
 	struct {	// used for non-materialized range list:
@@ -2051,6 +2050,9 @@ struct partial_S
 
     // For a compiled closure: the arguments and local variables scope
     outer_T	pt_outer;
+
+    // For a partial of a partial: use pt_outer values of this partial.
+    partial_T	*pt_outer_partial;
 
     funcstack_T	*pt_funcstack;	// copy of stack, used after context
 				// function returns

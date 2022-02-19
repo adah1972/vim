@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 8.2.  Last change: 2022 Jan 22
+*todo.txt*      For Vim version 8.2.  Last change: 2022 Feb 11
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -38,15 +38,18 @@ browser use: https://github.com/vim/vim/issues/1234
 							*known-bugs*
 -------------------- Known bugs and current work -----------------------
 
-Also set the script context for other "expr" options, like for 'foldexpr'?
-    'printexpr'     eval_printexpr()
-    "expr:" part of 'spellsuggest   eval_spell_expr()
+Disallow using "s:" in Vim9 script at the script level.
+Disallow a legacy function creating an s: variable in Vim9 script.
 
 Once Vim9 is stable:
-- Add all the error numbers in a good place in documentation.
-    done until E1083
-- Check code coverage, add more tests if needed.
 - Use Vim9 for runtime files.
+- Check code coverage, add more tests if needed.
+	vim9compile.c
+	vim9execute.c
+	vim9expr.c
+	vim9instr.c
+	vim9script.c
+	vim9type.c
 
 Further Vim9 improvements, possibly after launch:
 - Check performance with callgrind and kcachegrind.
@@ -62,6 +65,8 @@ Further Vim9 improvements, possibly after launch:
   evaluation.
   Use the location where the option was set for deciding whether it's to be
   evaluated in Vim9 script context.
+- Implement "import lazy" - like autoload but with a relative or absolute
+  path. #9595
 - implement :type
 - implement :enum
 - implement :class and :interface: See |vim9-classes|
@@ -78,6 +83,7 @@ Further Vim9 improvements, possibly after launch:
 Update list of features to vote on:
 - multiple cursors
 - built-in LSP support
+- start first line halfway
 
 Popup windows:
 - Preview popup not properly updated when it overlaps with completion menu.
@@ -234,6 +240,8 @@ TODO: be able to run all parts of test_alot with valgrind separately
 Memory leak in test_alot with pyeval() (allocating partial)
 Memory leak in test_alot with expand()
 Memory leaks in test_channel? (or is it because of fork())
+
+PR to support %e and %k in 'errorformat'. #9624
 
 Idea: when typing ":e /some/dir/" and "dir" does not exist, highlight in red.
 
@@ -4835,9 +4843,6 @@ Autocommands:
     CursorHoldC     - CursorHold while command-line editing
     WinMoved	    - when windows have been moved around, e.g, ":wincmd J"
     SearchPost	    - After doing a search command (e.g. to do "M")
-    PreDirChanged/PostDirChanged
-		    - Before/after ":cd" has been used (for changing the
-		      window title)
     ShutDown	    - when the system is about to shut down
     InsertCharPost  - user typed a character in Insert mode, after inserting
 		      the char.

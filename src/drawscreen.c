@@ -538,7 +538,7 @@ win_redr_status(win_T *wp, int ignore_pum UNUSED)
 			this_ru_col + wp->w_wincol, fillchar, fillchar, attr);
 
 	if (get_keymap_str(wp, (char_u *)"<%s>", NameBuff, MAXPATHL)
-		&& (int)(this_ru_col - len) > (int)(STRLEN(NameBuff) + 1))
+		&& (this_ru_col - len) > (int)(STRLEN(NameBuff) + 1))
 	    screen_puts(NameBuff, row, (int)(this_ru_col - STRLEN(NameBuff)
 						   - 1 + wp->w_wincol), attr);
 
@@ -797,7 +797,7 @@ win_redr_ruler(win_T *wp, int always, int ignore_pum)
 	i = redraw_cmdline;
 	screen_fill(row, row + 1,
 		this_ru_col + off + (int)STRLEN(buffer),
-		(int)(off + width),
+		(off + width),
 		fillchar, fillchar, attr);
 	// don't redraw the cmdline because of showing the ruler
 	redraw_cmdline = i;
@@ -1038,8 +1038,7 @@ redraw_win_toolbar(win_T *wp)
     }
     wp->w_winbar_items[item_idx].wb_menu = NULL; // end marker
 
-    screen_line(wp->w_winrow, wp->w_wincol, (int)wp->w_width,
-							  (int)wp->w_width, 0);
+    screen_line(wp->w_winrow, wp->w_wincol, wp->w_width, wp->w_width, 0);
 }
 #endif
 
@@ -1113,10 +1112,10 @@ fold_line(
 # define RL_MEMSET(p, v, l) \
     do { \
 	if (wp->w_p_rl) \
-	    for (ri = 0; ri < l; ++ri) \
+	    for (ri = 0; ri < (l); ++ri) \
 	       ScreenAttrs[off + (wp->w_width - (p) - (l)) + ri] = v; \
 	 else \
-	    for (ri = 0; ri < l; ++ri) \
+	    for (ri = 0; ri < (l); ++ri) \
 	       ScreenAttrs[off + (p) + ri] = v; \
     } while (0)
 #else
@@ -1372,8 +1371,7 @@ fold_line(
     }
 #endif
 
-    screen_line(row + W_WINROW(wp), wp->w_wincol, (int)wp->w_width,
-						     (int)wp->w_width, 0);
+    screen_line(row + W_WINROW(wp), wp->w_wincol, wp->w_width, wp->w_width, 0);
 
     // Update w_cline_height and w_cline_folded if the cursor line was
     // updated (saves a call to plines() later).
@@ -2556,17 +2554,17 @@ win_update(win_T *wp)
     // See the version that was fixed.
     if (use_vtp() && get_conpty_fix_type() < 1)
     {
-	int i;
+	int k;
 
-	for (i = 0; i < Rows; ++i)
+	for (k = 0; k < Rows; ++k)
 	    if (enc_utf8)
-		if ((*mb_off2cells)(LineOffset[i] + Columns - 2,
-					   LineOffset[i] + screen_Columns) > 1)
-		    screen_draw_rectangle(i, Columns - 2, 1, 2, FALSE);
+		if ((*mb_off2cells)(LineOffset[k] + Columns - 2,
+					   LineOffset[k] + screen_Columns) > 1)
+		    screen_draw_rectangle(k, Columns - 2, 1, 2, FALSE);
 		else
-		    screen_draw_rectangle(i, Columns - 1, 1, 1, FALSE);
+		    screen_draw_rectangle(k, Columns - 1, 1, 1, FALSE);
 	    else
-		screen_char(LineOffset[i] + Columns - 1, i, Columns - 1);
+		screen_char(LineOffset[k] + Columns - 1, k, Columns - 1);
     }
 #endif
 
@@ -3050,6 +3048,10 @@ redraw_after_callback(int call_update_screen, int do_message)
     }
     else if (State & CMDLINE)
     {
+#ifdef FEAT_WILDMENU
+	if (pum_visible())
+	    cmdline_pum_display();
+#endif
 	// Don't redraw when in prompt_for_number().
 	if (cmdline_row > 0)
 	{

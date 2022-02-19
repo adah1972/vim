@@ -372,12 +372,12 @@ repeat:
 	    {
 		if (GetLongPathNameW(wfname, buf, _MAX_PATH))
 		{
-		    char_u *p = utf16_to_enc(buf, NULL);
+		    char_u *q = utf16_to_enc(buf, NULL);
 
-		    if (p != NULL)
+		    if (q != NULL)
 		    {
 			vim_free(*bufp);    // free any allocated file name
-			*bufp = *fnamep = p;
+			*bufp = *fnamep = q;
 		    }
 		}
 		vim_free(wfname);
@@ -416,7 +416,7 @@ repeat:
 	// Need full path first (use expand_env() to remove a "~/")
 	if (!has_fullname && !has_homerelative)
 	{
-	    if ((c == '.' || c == '~') && **fnamep == '~')
+	    if (**fnamep == '~')
 		p = pbuf = expand_env_save(*fnamep);
 	    else
 		p = pbuf = FullName_save(*fnamep, FALSE);
@@ -2208,16 +2208,7 @@ f_tempname(typval_T *argvars UNUSED, typval_T *rettv)
 	else if (x == '9')
 	    x = 'A';
 	else
-	{
-#ifdef EBCDIC
-	    if (x == 'I')
-		x = 'J';
-	    else if (x == 'R')
-		x = 'S';
-	    else
-#endif
-		++x;
-	}
+	    ++x;
     } while (x == 'I' || x == 'O');
 }
 
@@ -3635,7 +3626,7 @@ unix_expandpath(
 	else if (path_end >= path + wildoff
 			 && (vim_strchr((char_u *)"*?[{~$", *path_end) != NULL
 			     || (!p_fic && (flags & EW_ICASE)
-					     && isalpha(PTR2CHAR(path_end)))))
+					  && vim_isalpha(PTR2CHAR(path_end)))))
 	    e = p;
 	if (has_mbyte)
 	{

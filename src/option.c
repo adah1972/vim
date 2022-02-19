@@ -266,7 +266,7 @@ set_init_1(int clean_arg)
     }
 #endif
 
-#if defined(FEAT_POSTSCRIPT) && (defined(MSWIN) || defined(VMS) || defined(EBCDIC) || defined(MAC) || defined(hpux))
+#if defined(FEAT_POSTSCRIPT) && (defined(MSWIN) || defined(VMS) || defined(MAC) || defined(hpux))
     // Set print encoding on platforms that don't default to latin1
     set_string_default("penc",
 # if defined(MSWIN)
@@ -275,14 +275,10 @@ set_init_1(int clean_arg)
 #  ifdef VMS
 		       (char_u *)"dec-mcs"
 #  else
-#   ifdef EBCDIC
-		       (char_u *)"ebcdic-uk"
-#   else
-#    ifdef MAC
+#   ifdef MAC
 		       (char_u *)"mac-roman"
-#    else // HPUX
+#   else // HPUX
 		       (char_u *)"hp-roman8"
-#    endif
 #   endif
 #  endif
 # endif
@@ -310,6 +306,17 @@ set_init_1(int clean_arg)
      * value.  Also set the global value for local options.
      */
     set_options_default(0);
+
+#ifdef UNIX
+    // Force restricted-mode on for "nologin" or "false" $SHELL
+    p = get_isolated_shell_name();
+    if (p != NULL)
+    {
+	if (fnamecmp(p, "nologin") == 0 || fnamecmp(p, "false") == 0)
+	    restricted = TRUE;
+	vim_free(p);
+    }
+#endif
 
 #ifdef CLEAN_RUNTIMEPATH
     if (clean_arg)
@@ -3702,7 +3709,7 @@ set_num_option(
     {
 	if (errbuf != NULL)
 	{
-	    vim_snprintf((char *)errbuf, errbuflen,
+	    vim_snprintf(errbuf, errbuflen,
 			       _(e_need_at_least_nr_lines), min_rows());
 	    errmsg = errbuf;
 	}
@@ -3712,7 +3719,7 @@ set_num_option(
     {
 	if (errbuf != NULL)
 	{
-	    vim_snprintf((char *)errbuf, errbuflen,
+	    vim_snprintf(errbuf, errbuflen,
 			    _(e_need_at_least_nr_columns), MIN_COLUMNS);
 	    errmsg = errbuf;
 	}
@@ -3750,6 +3757,11 @@ set_num_option(
     if (curbuf->b_p_ts <= 0)
     {
 	errmsg = e_argument_must_be_positive;
+	curbuf->b_p_ts = 8;
+    }
+    else if (curbuf->b_p_ts > TABSTOP_MAX)
+    {
+	errmsg = e_invalid_argument;
 	curbuf->b_p_ts = 8;
     }
     if (p_tm < 0)
@@ -3915,11 +3927,7 @@ findoption(char_u *arg)
     /*
      * Check for name starting with an illegal character.
      */
-#ifdef EBCDIC
-    if (!islower(arg[0]))
-#else
     if (arg[0] < 'a' || arg[0] > 'z')
-#endif
 	return -1;
 
     is_term_opt = (arg[0] == 't' && arg[1] == '_');
@@ -5596,7 +5604,7 @@ win_copy_options(win_T *wp_from, win_T *wp_to)
  * After copying window options: update variables depending on options.
  */
     void
-after_copy_winopt(win_T *wp UNUSED)
+after_copy_winopt(win_T *wp)
 {
 #ifdef FEAT_LINEBREAK
     briopt_check(wp);
@@ -5983,7 +5991,7 @@ buf_copy_options(buf_T *buf, int flags)
 	    if (p_vsts && p_vsts != empty_option)
 		(void)tabstop_set(p_vsts, &buf->b_p_vsts_array);
 	    else
-		buf->b_p_vsts_array = 0;
+		buf->b_p_vsts_array = NULL;
 	    buf->b_p_vsts_nopaste = p_vsts_nopaste
 				 ? vim_strsave(p_vsts_nopaste) : NULL;
 #endif
@@ -6803,9 +6811,7 @@ paste_option_changed(void)
 	    if (buf->b_p_vsts)
 		free_string_option(buf->b_p_vsts);
 	    buf->b_p_vsts = empty_option;
-	    if (buf->b_p_vsts_array)
-		vim_free(buf->b_p_vsts_array);
-	    buf->b_p_vsts_array = 0;
+	    VIM_CLEAR(buf->b_p_vsts_array);
 #endif
 	}
 
@@ -6851,12 +6857,11 @@ paste_option_changed(void)
 		free_string_option(buf->b_p_vsts);
 	    buf->b_p_vsts = buf->b_p_vsts_nopaste
 			 ? vim_strsave(buf->b_p_vsts_nopaste) : empty_option;
-	    if (buf->b_p_vsts_array)
-		vim_free(buf->b_p_vsts_array);
+	    vim_free(buf->b_p_vsts_array);
 	    if (buf->b_p_vsts && buf->b_p_vsts != empty_option)
 		(void)tabstop_set(buf->b_p_vsts, &buf->b_p_vsts_array);
 	    else
-		buf->b_p_vsts_array = 0;
+		buf->b_p_vsts_array = NULL;
 #endif
 	}
 

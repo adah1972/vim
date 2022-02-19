@@ -325,6 +325,8 @@ static spat_T	    saved_last_search_spat;
 static int	    did_save_last_search_spat = 0;
 static int	    saved_last_idx = 0;
 static int	    saved_no_hlsearch = 0;
+static int	    saved_search_match_endcol;
+static int	    saved_search_match_lines;
 
 /*
  * Save and restore the search pattern for incremental highlight search
@@ -368,6 +370,25 @@ restore_last_search_pattern(void)
 # endif
     last_idx = saved_last_idx;
     set_no_hlsearch(saved_no_hlsearch);
+}
+
+/*
+ * Save and restore the incsearch highlighting variables.
+ * This is required so that calling searchcount() at does not invalidate the
+ * incsearch highlighting.
+ */
+    static void
+save_incsearch_state(void)
+{
+    saved_search_match_endcol = search_match_endcol;
+    saved_search_match_lines  = search_match_lines;
+}
+
+    static void
+restore_incsearch_state(void)
+{
+    search_match_endcol = saved_search_match_endcol;
+    search_match_lines  = saved_search_match_lines;
 }
 
     char_u *
@@ -4182,6 +4203,9 @@ f_searchcount(typval_T *argvars, typval_T *rettv)
     }
 
     save_last_search_pattern();
+#ifdef FEAT_SEARCH_EXTRA
+    save_incsearch_state();
+#endif
     if (pattern != NULL)
     {
 	if (*pattern == NUL)
@@ -4202,6 +4226,9 @@ f_searchcount(typval_T *argvars, typval_T *rettv)
 
 the_end:
     restore_last_search_pattern();
+#ifdef FEAT_SEARCH_EXTRA
+    restore_incsearch_state();
+#endif
 }
 
 /*
@@ -4273,15 +4300,15 @@ typedef struct
 // bonus if the first letter is matched
 #define FIRST_LETTER_BONUS 15
 // penalty applied for every letter in str before the first match
-#define LEADING_LETTER_PENALTY -5
+#define LEADING_LETTER_PENALTY (-5)
 // maximum penalty for leading letters
-#define MAX_LEADING_LETTER_PENALTY -15
+#define MAX_LEADING_LETTER_PENALTY (-15)
 // penalty for every letter that doesn't match
-#define UNMATCHED_LETTER_PENALTY -1
+#define UNMATCHED_LETTER_PENALTY (-1)
 // penalty for gap in matching positions (-2 * k)
-#define GAP_PENALTY	-2
+#define GAP_PENALTY	(-2)
 // Score for a string that doesn't fuzzy match the pattern
-#define SCORE_NONE	-9999
+#define SCORE_NONE	(-9999)
 
 #define FUZZY_MATCH_RECURSION_LIMIT	10
 

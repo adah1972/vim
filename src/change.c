@@ -155,9 +155,8 @@ static long next_listener_id = 0;
 /*
  * Check if the change at "lnum" is above or overlaps with an existing
  * change. If above then flush changes and invoke listeners.
- * Returns TRUE if the change was merged.
  */
-    static int
+    static void
 check_recorded_changes(
 	buf_T		*buf,
 	linenr_T	lnum,
@@ -185,7 +184,6 @@ check_recorded_changes(
 	    }
 	}
     }
-    return FALSE;
 }
 
 /*
@@ -206,8 +204,7 @@ may_record_change(
 
     // If the new change is going to change the line numbers in already listed
     // changes, then flush.
-    if (check_recorded_changes(curbuf, lnum, lnume, xtra))
-	return;
+    check_recorded_changes(curbuf, lnum, lnume, xtra);
 
     if (curbuf->b_recorded_changes == NULL)
     {
@@ -555,6 +552,9 @@ changed_common(
     {
 	if (wp->w_buffer == curbuf)
 	{
+#ifdef FEAT_FOLDING
+	    linenr_T last = lnume + xtra - 1;  // last line after the change
+#endif
 	    // Mark this window to be redrawn later.
 	    if (wp->w_redr_type < VALID)
 		wp->w_redr_type = VALID;
@@ -564,7 +564,7 @@ changed_common(
 #ifdef FEAT_FOLDING
 	    // Update the folds for this window.  Can't postpone this, because
 	    // a following operator might work on the whole fold: ">>dd".
-	    foldUpdate(wp, lnum, lnume + xtra - 1);
+	    foldUpdate(wp, lnum, last);
 
 	    // The change may cause lines above or below the change to become
 	    // included in a fold.  Set lnum/lnume to the first/last line that
@@ -574,8 +574,8 @@ changed_common(
 	    i = hasFoldingWin(wp, lnum, &lnum, NULL, FALSE, NULL);
 	    if (wp->w_cursor.lnum == lnum)
 		wp->w_cline_folded = i;
-	    i = hasFoldingWin(wp, lnume, NULL, &lnume, FALSE, NULL);
-	    if (wp->w_cursor.lnum == lnume)
+	    i = hasFoldingWin(wp, last, NULL, &last, FALSE, NULL);
+	    if (wp->w_cursor.lnum == last)
 		wp->w_cline_folded = i;
 
 	    // If the changed line is in a range of previously folded lines,
@@ -1638,9 +1638,9 @@ open_line(
 #ifdef FEAT_CINDENT
     // May do indenting after opening a new line.
     do_cindent = !p_paste && (curbuf->b_p_cin
-#  ifdef FEAT_EVAL
+# ifdef FEAT_EVAL
 		    || *curbuf->b_p_inde != NUL
-#  endif
+# endif
 		)
 	    && in_cinkeys(dir == FORWARD
 		? KEY_OPEN_FORW

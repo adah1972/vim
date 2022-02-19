@@ -1107,7 +1107,8 @@ skip_var_list(
 	    {
 		if (*semicolon == 1)
 		{
-		    emsg(_(e_double_semicolon_in_list_of_variables));
+		    if (!silent)
+			emsg(_(e_double_semicolon_in_list_of_variables));
 		    return NULL;
 		}
 		*semicolon = 1;
@@ -2060,10 +2061,18 @@ item_lock(typval_T *tv, int deep, int lock, int check_refcount)
 		    l->lv_lock |= VAR_LOCKED;
 		else
 		    l->lv_lock &= ~VAR_LOCKED;
-		if ((deep < 0 || deep > 1) && l->lv_first != &range_list_item)
-		    // recursive: lock/unlock the items the List contains
-		    FOR_ALL_LIST_ITEMS(l, li)
-			item_lock(&li->li_tv, deep - 1, lock, check_refcount);
+		if (deep < 0 || deep > 1)
+		{
+		    if (l->lv_first == &range_list_item)
+			l->lv_lock |= VAR_ITEMS_LOCKED;
+		    else
+		    {
+			// recursive: lock/unlock the items the List contains
+			CHECK_LIST_MATERIALIZE(l);
+			FOR_ALL_LIST_ITEMS(l, li) item_lock(&li->li_tv,
+					       deep - 1, lock, check_refcount);
+		    }
+		}
 	    }
 	    break;
 	case VAR_DICT:
@@ -2727,7 +2736,7 @@ eval_variable(
 	char_u	    *p = STRNCMP(name, "s:", 2) == 0 ? name + 2 : name;
 
 	if (sid == 0)
-	    import = find_imported(p, 0, TRUE, NULL);
+	    import = find_imported(p, 0, TRUE);
 
 	// imported variable from another script
 	if (import != NULL || sid != 0)
@@ -2771,17 +2780,20 @@ eval_variable(
 	}
 	else if (in_vim9script() && (flags & EVAL_VAR_NO_FUNC) == 0)
 	{
+	    int	    has_g_prefix = STRNCMP(name, "g:", 2) == 0;
 	    ufunc_T *ufunc = find_func(name, FALSE);
 
 	    // In Vim9 script we can get a function reference by using the
-	    // function name.
-	    if (ufunc != NULL)
+	    // function name.  For a global non-autoload function "g:" is
+	    // required.
+	    if (ufunc != NULL && (has_g_prefix
+					    || !func_requires_g_prefix(ufunc)))
 	    {
 		found = TRUE;
 		if (rettv != NULL)
 		{
 		    rettv->v_type = VAR_FUNC;
-		    if (STRNCMP(name, "g:", 2) == 0)
+		    if (has_g_prefix)
 			// Keep the "g:", otherwise script-local may be
 			// assumed.
 			rettv->vval.v_string = vim_strsave(name);
@@ -3085,7 +3097,7 @@ lookup_scriptitem(
     res = HASHITEM_EMPTY(hi) ? FAIL : OK;
 
     // if not script-local, then perhaps imported
-    if (res == FAIL && find_imported(p, 0, FALSE, NULL) != NULL)
+    if (res == FAIL && find_imported(p, 0, FALSE) != NULL)
 	res = OK;
     if (p != buffer)
 	vim_free(p);
@@ -3450,7 +3462,8 @@ set_var_const(
 	semsg(_(e_illegal_variable_name_str), name);
 	goto failed;
     }
-    is_script_local = ht == get_script_local_ht() || sid != 0 || var_in_autoload;
+    is_script_local = ht == get_script_local_ht() || sid != 0
+							    || var_in_autoload;
 
     if (vim9script
 	    && !is_script_local
@@ -3479,7 +3492,7 @@ set_var_const(
 
     if (di == NULL && var_in_vim9script)
     {
-	imported_T  *import = find_imported(varname, 0, FALSE, NULL);
+	imported_T  *import = find_imported(varname, 0, FALSE);
 
 	if (import != NULL)
 	{
@@ -3490,6 +3503,12 @@ set_var_const(
 		goto failed;
 	    }
 	    semsg(_(e_cannot_use_str_itself_it_is_imported), name);
+	    goto failed;
+	}
+	if (!in_vim9script())
+	{
+	    semsg(_(e_cannot_create_vim9_script_variable_in_function_str),
+									 name);
 	    goto failed;
 	}
     }
@@ -3684,24 +3703,7 @@ set_var_const(
     free_tv_arg = FALSE;
 
     if (vim9script && type != NULL)
-    {
-	if (type->tt_type == VAR_DICT && dest_tv->vval.v_dict != NULL)
-	{
-	    if (dest_tv->vval.v_dict->dv_type != type)
-	    {
-		free_type(dest_tv->vval.v_dict->dv_type);
-		dest_tv->vval.v_dict->dv_type = alloc_type(type);
-	    }
-	}
-	else if (type->tt_type == VAR_LIST && dest_tv->vval.v_list != NULL)
-	{
-	    if (dest_tv->vval.v_list->lv_type != type)
-	    {
-		free_type(dest_tv->vval.v_list->lv_type);
-		dest_tv->vval.v_list->lv_type = alloc_type(type);
-	    }
-	}
-    }
+	set_tv_type(dest_tv, type);
 
     // ":const var = value" locks the value
     // ":final var = value" locks "var"
@@ -4695,7 +4697,7 @@ expand_autload_callback(callback_T *cb)
     p = vim_strchr(name, '.');
     if (p == NULL)
 	return;
-    import = find_imported(name, p - name, FALSE, NULL);
+    import = find_imported(name, p - name, FALSE);
     if (import != NULL && SCRIPT_ID_VALID(import->imp_sid))
     {
 	scriptitem_T *si = SCRIPT_ITEM(import->imp_sid);

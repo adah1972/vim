@@ -64,7 +64,7 @@ static int frame_check_width(frame_T *topfrp, int width);
 
 static win_T *win_alloc(win_T *after, int hidden);
 
-#define NOWIN		(win_T *)-1	// non-existing window
+#define NOWIN		((win_T *)-1)	// non-existing window
 
 #define ROWS_AVAIL (Rows - p_ch - tabline_height())
 
@@ -766,7 +766,7 @@ cmd_with_count(
 }
 
 /*
- * If "split_disallowed" is set given an error and return FAIL.
+ * If "split_disallowed" is set give an error and return FAIL.
  * Otherwise return OK.
  */
     static int
@@ -1414,10 +1414,6 @@ win_init(win_T *newp, win_T *oldp, int flags UNUSED)
 #endif
 
     win_init_some(newp, oldp);
-
-#ifdef FEAT_SYN_HL
-    check_colorcolumn(newp);
-#endif
 #ifdef FEAT_TERMINAL
     term_update_wincolor(newp);
 #endif
@@ -6187,7 +6183,9 @@ win_drag_vsep_line(win_T *dragwin, int offset)
     if (offset <= 0)		// No room at all, quit.
 	return;
     if (fr == NULL)
-	return;			// Safety check, should not happen.
+	// This can happen when calling win_move_separator() on the rightmost
+	// window.  Just don't do anything.
+	return;			
 
     // grow frame fr by offset lines
     frame_new_width(fr, fr->fr_width + offset, left, FALSE);
@@ -6493,7 +6491,7 @@ command_height(void)
 
 	    // clear the lines added to cmdline
 	    if (full_screen)
-		screen_fill((int)(cmdline_row), (int)Rows, 0,
+		screen_fill(cmdline_row, (int)Rows, 0,
 						   (int)Columns, ' ', ' ', 0);
 	    msg_row = cmdline_row;
 	    redraw_cmdline = TRUE;

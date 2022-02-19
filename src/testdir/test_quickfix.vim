@@ -1,7 +1,7 @@
 " Test for the quickfix feature.
 
 source check.vim
-source vim9.vim
+import './vim9.vim' as v9
 CheckFeature quickfix
 
 source screendump.vim
@@ -979,6 +979,7 @@ func Test_locationlist_curwin_was_closed()
   call assert_fails('lrewind', 'E924:')
 
   augroup! testgroup
+  delfunc R
 endfunc
 
 func Test_locationlist_cross_tab_jump()
@@ -1465,6 +1466,29 @@ func Test_efm_error_type()
         \ ' 3 Xfile1:30 info   6: msg3',
         \ ' 4 Xfile1:40 note   8: msg4',
         \ ' 5 Xfile1:50 R   3: msg5'], output)
+  let &efm = save_efm
+endfunc
+
+" Test for end_lnum ('%e') and end_col ('%k') fields in 'efm'
+func Test_efm_end_lnum_col()
+  let save_efm = &efm
+
+  " single line
+  set efm=%f:%l-%e:%c-%k:%t:%m
+  cexpr ["Xfile1:10-20:1-2:E:msg1", "Xfile1:20-30:2-3:W:msg2",]
+  let output = split(execute('clist'), "\n")
+  call assert_equal([
+        \ ' 1 Xfile1:10-20 col 1-2 error: msg1',
+        \ ' 2 Xfile1:20-30 col 2-3 warning: msg2'], output)
+
+  " multiple lines
+  set efm=%A%n)%m,%Z%f:%l-%e:%c-%k
+  cexpr ["1)msg1", "Xfile1:14-24:1-2",
+        \ "2)msg2", "Xfile1:24-34:3-4"]
+  let output = split(execute('clist'), "\n")
+  call assert_equal([
+        \ ' 1 Xfile1:14-24 col 1-2 error   1: msg1',
+        \ ' 2 Xfile1:24-34 col 3-4 error   2: msg2'], output)
   let &efm = save_efm
 endfunc
 
@@ -5347,7 +5371,7 @@ func Test_qftextfunc_callback()
     cclose
 
     #" Test for using a lambda function with set
-    VAR optval = "LSTART a LMIDDLE Tqfexpr(a) LEND"
+    VAR optval = "LSTART a LMIDDLE g:Tqfexpr(a) LEND"
     LET optval = substitute(optval, ' ', '\\ ', 'g')
     exe "set qftf=" .. optval
     cexpr "F6:6:6:L6"
@@ -5356,21 +5380,21 @@ func Test_qftextfunc_callback()
     cclose
 
     #" Set 'quickfixtextfunc' to a lambda expression
-    LET &qftf = LSTART a LMIDDLE Tqfexpr(a) LEND
+    LET &qftf = LSTART a LMIDDLE g:Tqfexpr(a) LEND
     cexpr "F7:7:7:L7"
     copen
     call assert_equal('F7-L7C7-L7', getline(1))
     cclose
 
     #" Set 'quickfixtextfunc' to string(lambda_expression)
-    LET &qftf = "LSTART a LMIDDLE Tqfexpr(a) LEND"
+    LET &qftf = "LSTART a LMIDDLE g:Tqfexpr(a) LEND"
     cexpr "F8:8:8:L8"
     copen
     call assert_equal('F8-L8C8-L8', getline(1))
     cclose
 
     #" Set 'quickfixtextfunc' to a variable with a lambda expression
-    VAR Lambda = LSTART a LMIDDLE Tqfexpr(a) LEND
+    VAR Lambda = LSTART a LMIDDLE g:Tqfexpr(a) LEND
     LET &qftf = Lambda
     cexpr "F9:9:9:L9"
     copen
@@ -5378,14 +5402,14 @@ func Test_qftextfunc_callback()
     cclose
 
     #" Set 'quickfixtextfunc' to a string(variable with a lambda expression)
-    LET Lambda = LSTART a LMIDDLE Tqfexpr(a) LEND
+    LET Lambda = LSTART a LMIDDLE g:Tqfexpr(a) LEND
     LET &qftf = string(Lambda)
     cexpr "F9:9:9:L9"
     copen
     call assert_equal('F9-L9C9-L9', getline(1))
     cclose
   END
-  call CheckLegacyAndVim9Success(lines)
+  call v9.CheckLegacyAndVim9Success(lines)
 
   " Test for using a script-local function name
   func s:TqfFunc2(info)
@@ -5834,5 +5858,46 @@ func Test_two_qf_windows()
   call assert_false(buflisted(bnum))
   %bw!
 endfunc
+
+" Weird sequence of commands that caused entering a wiped-out buffer
+func Test_lopen_bwipe()
+  func R()
+    silent! tab lopen
+    e x
+    silent! lfile
+  endfunc
+
+  cal R()
+  cal R()
+  cal R()
+  bw!
+  delfunc R
+endfunc
+
+" Another sequence of commands that caused all buffers to be wiped out
+func Test_lopen_bwipe_all()
+  let lines =<< trim END
+    func R()
+      silent! tab lopen
+      e foo
+      silent! lfile
+    endfunc
+    cal R()
+    exe "norm \<C-W>\<C-V>0"
+    cal R()
+    bwipe
+
+    call writefile(['done'], 'Xresult')
+    qall!
+  END
+  call writefile(lines, 'Xscript')
+  if RunVim([], [], '-u NONE -n -X -Z -e -m -s -S Xscript')
+    call assert_equal(['done'], readfile('Xresult'))
+  endif
+
+  call delete('Xscript')
+  call delete('Xresult')
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

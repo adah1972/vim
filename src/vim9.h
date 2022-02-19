@@ -92,6 +92,8 @@ typedef enum {
     ISN_NEWLIST,	// push list from stack items, size is isn_arg.number
     ISN_NEWDICT,	// push dict from stack items, size is isn_arg.number
 
+    ISN_AUTOLOAD,	// get item from autoload import, function or variable
+
     // function call
     ISN_BCALL,	    // call builtin function isn_arg.bfunc
     ISN_DCALL,	    // call def function isn_arg.dfunc
@@ -689,7 +691,7 @@ typedef struct {
 } lhs_T;
 
 /*
- * Context for compiling lines of Vim script.
+ * Context for compiling lines of a :def function.
  * Stores info about the local variables and condition stack.
  */
 struct cctx_S {
@@ -707,8 +709,6 @@ struct cctx_S {
 
     int		ctx_has_closure;    // set to one if a closure was created in
 				    // the function
-
-    garray_T	ctx_imports;	    // imported items
 
     skip_T	ctx_skip;
     scope_T	*ctx_scope;	    // current scope, NULL at toplevel

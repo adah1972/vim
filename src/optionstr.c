@@ -57,7 +57,7 @@ static char *(p_tbis_values[]) = {"tiny", "small", "medium", "large", "huge", "g
 static char *(p_ttym_values[]) = {"xterm", "xterm2", "dec", "netterm", "jsbterm", "pterm", "urxvt", "sgr", NULL};
 #endif
 static char *(p_ve_values[]) = {"block", "insert", "all", "onemore", "none", "NONE", NULL};
-static char *(p_wop_values[]) = {"tagfile", NULL};
+static char *(p_wop_values[]) = {"tagfile", "pum", NULL};
 #ifdef FEAT_WAK
 static char *(p_wak_values[]) = {"yes", "menu", "no", NULL};
 #endif
@@ -181,7 +181,7 @@ trigger_optionsset_string(
 	    set_vim_var_string(VV_OPTION_OLDLOCAL, oldval, -1);
 	}
 	apply_autocmds(EVENT_OPTIONSET,
-		       (char_u *)get_option_fullname(opt_idx), NULL, FALSE,
+		       get_option_fullname(opt_idx), NULL, FALSE,
 		       NULL);
 	reset_v_option_vars();
     }

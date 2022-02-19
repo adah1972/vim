@@ -1,4 +1,4 @@
-*usr_41.txt*	For Vim version 8.2.  Last change: 2022 Jan 01
+*usr_41.txt*	For Vim version 8.2.  Last change: 2022 Feb 11
 
 		     VIM USER MANUAL - by Bram Moolenaar
 
@@ -1116,8 +1116,7 @@ Testing:				    *test-functions*
 	test_garbagecollect_now()   free memory right now
 	test_garbagecollect_soon()  set a flag to free memory soon
 	test_getvalue()		get value of an internal variable
-	test_gui_drop_files()	drop file(s) in a window
-	test_gui_mouse_event()	add a GUI mouse event to the input buffer
+	test_gui_event()	generate a GUI event for testing
 	test_ignore_error()	ignore a specific error message
 	test_null_blob()	return a null Blob
 	test_null_channel()	return a null Channel
@@ -1131,7 +1130,6 @@ Testing:				    *test-functions*
 	test_setmouse()		set the mouse position
 	test_feedinput()	add key sequence to input buffer
 	test_option_not_set()	reset flag indicating option was set
-	test_scrollbar()	simulate scrollbar movement in the GUI
 	test_refcount()		return an expression's reference count
 	test_srand_seed()	set the seed value for srand()
 	test_unknown()		return a value with unknown type
@@ -2502,7 +2500,7 @@ When the user does ":setfiletype xyz" the effect of the previous filetype
 should be undone.  Set the b:undo_ftplugin variable to the commands that will
 undo the settings in your filetype plugin.  Example: >
 
-	b:undo_ftplugin = "setlocal fo< com< tw< commentstring<"
+	let b:undo_ftplugin = "setlocal fo< com< tw< commentstring<"
 		\ .. "| unlet b:match_ignorecase b:match_words b:match_skip"
 
 Using ":setlocal" with "<" after the option name resets the option to its
@@ -2513,6 +2511,8 @@ continuation, as mentioned above |use-cpo-save|.
 
 For undoing the effect of an indent script, the b:undo_indent variable should
 be set accordingly.
+
+Both these variables use legacy script syntax, not |Vim9| syntax.
 
 
 FILE NAME

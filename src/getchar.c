@@ -110,6 +110,7 @@ free_buff(buffheader_T *buf)
 	vim_free(p);
     }
     buf->bh_first.b_next = NULL;
+    buf->bh_curr = NULL;
 }
 
 /*
@@ -252,8 +253,11 @@ add_buff(
     static void
 delete_buff_tail(buffheader_T *buf, int slen)
 {
-    int len = (int)STRLEN(buf->bh_curr->b_str);
+    int len;
 
+    if (buf->bh_curr == NULL)
+	return;  // nothing to delete
+    len = (int)STRLEN(buf->bh_curr->b_str);
     if (len >= slen)
     {
 	buf->bh_curr->b_str[len - slen] = NUL;
@@ -567,11 +571,7 @@ AppendToRedobuffLit(
 	// Put a string of normal characters in the redo buffer (that's
 	// faster).
 	start = s;
-	while (*s >= ' '
-#ifndef EBCDIC
-		&& *s < DEL	// EBCDIC: all chars above space are normal
-#endif
-		&& (len < 0 || s - str < len))
+	while (*s >= ' ' && *s < DEL && (len < 0 || s - str < len))
 	    ++s;
 
 	// Don't put '0' or '^' as last character, just in case a CTRL-D is
@@ -593,13 +593,9 @@ AppendToRedobuffLit(
 	if (c < ' ' || c == DEL || (*s == NUL && (c == '0' || c == '^')))
 	    add_char_buff(&redobuff, Ctrl_V);
 
-	// CTRL-V '0' must be inserted as CTRL-V 048 (EBCDIC: xf0)
+	// CTRL-V '0' must be inserted as CTRL-V 048
 	if (*s == NUL && c == '0')
-#ifdef EBCDIC
-	    add_buff(&redobuff, (char_u *)"xf0", 3L);
-#else
 	    add_buff(&redobuff, (char_u *)"048", 3L);
-#endif
 	else
 	    add_char_buff(&redobuff, c);
     }
@@ -717,11 +713,7 @@ stuffescaped(char_u *arg, int literally)
 	// stuff K_SPECIAL to get the effect of a special key when "literally"
 	// is TRUE.
 	start = arg;
-	while ((*arg >= ' '
-#ifndef EBCDIC
-		    && *arg < DEL // EBCDIC: chars above space are normal
-#endif
-		    )
+	while ((*arg >= ' ' && *arg < DEL)
 		|| (*arg == K_SPECIAL && !literally))
 	    ++arg;
 	if (arg > start)
@@ -1146,18 +1138,9 @@ ins_char_typebuf(int c, int modifier)
     }
     else
     {
-	char_u	*p = buf + len;
-	int	char_len = (*mb_char2bytes)(c, p);
-#ifdef FEAT_GUI
-	int	save_gui_in_use = gui.in_use;
-
-	gui.in_use = FALSE;
-#endif
-	// if the character contains CSI or K_SPECIAL bytes they need escaping
-	len += fix_input_buffer(p, char_len);
-#ifdef FEAT_GUI
-	gui.in_use = save_gui_in_use;
-#endif
+	char_u *end = add_char2buf(c, buf + len);
+	*end = NUL;
+	len = end - buf;
     }
     (void)ins_typebuf(buf, KeyNoremap, 0, !KeyTyped, cmd_silent);
     return len;
@@ -1776,16 +1759,16 @@ vgetc(void)
 		    c == K_TEAROFF)
 		{
 		    char_u	name[200];
-		    int		i;
+		    int		j;
 
 		    // get menu path, it ends with a <CR>
-		    for (i = 0; (c = vgetorpeek(TRUE)) != '\r'; )
+		    for (j = 0; (c = vgetorpeek(TRUE)) != '\r'; )
 		    {
-			name[i] = c;
-			if (i < 199)
-			    ++i;
+			name[j] = c;
+			if (j < 199)
+			    ++j;
 		    }
-		    name[i] = NUL;
+		    name[j] = NUL;
 		    gui_make_tearoff(name);
 		    continue;
 		}
@@ -2848,6 +2831,7 @@ handle_mapping(
 	    int save_may_garbage_collect = may_garbage_collect;
 	    int was_screen_col = screen_cur_col;
 	    int was_screen_row = screen_cur_row;
+	    int prev_did_emsg = did_emsg;
 
 	    vgetc_busy = 0;
 	    may_garbage_collect = FALSE;
@@ -2859,6 +2843,29 @@ handle_mapping(
 	    // redrawing.  Do put the cursor back where it was.
 	    windgoto(was_screen_row, was_screen_col);
 	    out_flush();
+
+	    // If an error was displayed and the expression returns an empty
+	    // string, generate a <Nop> to allow for a redraw.
+	    if (prev_did_emsg != did_emsg
+				       && (map_str == NULL || *map_str == NUL))
+	    {
+		char_u	buf[4];
+
+		vim_free(map_str);
+		buf[0] = K_SPECIAL;
+		buf[1] = KS_EXTRA;
+		buf[2] = KE_IGNORE;
+		buf[3] = NUL;
+		map_str = vim_strsave(buf);
+		if (State & CMDLINE)
+		{
+		    // redraw the command below the error
+		    msg_didout = TRUE;
+		    if (msg_row < cmdline_row)
+			msg_row = cmdline_row;
+		    redrawcmd();
+		}
+	    }
 
 	    vgetc_busy = save_vgetc_busy;
 	    may_garbage_collect = save_may_garbage_collect;
@@ -3587,7 +3594,7 @@ inchar(
 	 */
 	if (got_int)
 	{
-#define DUM_LEN MAXMAPLEN * 3 + 3
+#define DUM_LEN (MAXMAPLEN * 3 + 3)
 	    char_u	dum[DUM_LEN + 1];
 
 	    for (;;)
@@ -3655,7 +3662,9 @@ fix_input_buffer(char_u *buf, int len)
 	    p += 2;
 	    i -= 2;
 	}
-	// When the GUI is not used CSI needs to be escaped.
+# ifndef MSWIN
+	// When not on MS-Windows and the GUI is not used CSI needs to be
+	// escaped.
 	else if (!gui.in_use && p[0] == CSI)
 	{
 	    mch_memmove(p + 3, p + 1, (size_t)i);
@@ -3664,6 +3673,7 @@ fix_input_buffer(char_u *buf, int len)
 	    *p = (int)KE_CSI;
 	    len += 2;
 	}
+# endif
 	else
 #endif
 	if (p[0] == NUL || (p[0] == K_SPECIAL

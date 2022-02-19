@@ -54,37 +54,29 @@ get_y_register(int reg)
 }
 #endif
 
-#if defined(FEAT_CLIPBOARD) || defined(FEAT_VIMINFO) || defined(FEAT_EVAL) || defined(PROTO)
     yankreg_T *
 get_y_current(void)
 {
     return y_current;
 }
-#endif
 
-#if defined(FEAT_CLIPBOARD) || defined(FEAT_VIMINFO) || defined(PROTO)
     yankreg_T *
 get_y_previous(void)
 {
     return y_previous;
 }
-#endif
 
-#if defined(FEAT_CLIPBOARD) || defined(PROTO)
     void
 set_y_current(yankreg_T *yreg)
 {
     y_current = yreg;
 }
-#endif
 
-#if defined(FEAT_CLIPBOARD) || defined(FEAT_VIMINFO) || defined(PROTO)
     void
 set_y_previous(yankreg_T *yreg)
 {
     y_previous = yreg;
 }
-#endif
 
     void
 reset_y_append(void)
@@ -1474,7 +1466,7 @@ yank_copy_line(struct block_def *bd, long y_idx, int exclude_trailing_space)
     {
 	int s = bd->textlen + bd->endspaces;
 
-	while (VIM_ISWHITE(*(bd->textstart + s - 1)) && s > 0)
+	while (s > 0 && VIM_ISWHITE(*(bd->textstart + s - 1)))
 	{
 	    s = s - (*mb_head_off)(bd->textstart, bd->textstart + s - 1) - 1;
 	    pnew--;
@@ -1842,7 +1834,7 @@ do_put(
 	    for (ptr = oldp; vcol < col && *ptr; )
 	    {
 		// Count a tab for what it's worth (if list mode not on)
-		incr = lbr_chartabsize_adv(oldp, &ptr, (colnr_T)vcol);
+		incr = lbr_chartabsize_adv(oldp, &ptr, vcol);
 		vcol += incr;
 	    }
 	    bd.textcol = (colnr_T)(ptr - oldp);
@@ -2305,21 +2297,7 @@ get_register_name(int num)
 	return '+';
 #endif
     else
-    {
-#ifdef EBCDIC
-	int i;
-
-	// EBCDIC is really braindead ...
-	i = 'a' + (num - 10);
-	if (i > 'i')
-	    i += 7;
-	if (i > 'r')
-	    i += 8;
-	return i;
-#else
 	return num + 'a' - 10;
-#endif
-    }
 }
 
 #if defined(FEAT_EVAL) || defined(PROTO)

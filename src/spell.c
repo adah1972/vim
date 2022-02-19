@@ -67,7 +67,7 @@
 #define REGION_ALL 0xff		// word valid in all regions
 
 // Result values.  Lower number is accepted over higher one.
-#define SP_BANNED	-1
+#define SP_BANNED	(-1)
 #define SP_OK		0
 #define SP_RARE		1
 #define SP_LOCAL	2
@@ -2534,7 +2534,6 @@ close_spellbuf(buf_T *buf)
 
 /*
  * Init the chartab used for spelling for ASCII.
- * EBCDIC is not supported!
  */
     void
 clear_spell_chartab(spelltab_T *sp)

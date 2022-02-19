@@ -2053,9 +2053,6 @@ PRO_AUTO = \
 	$(ALL_GUI_PRO) \
 	$(TCL_PRO)
 
-# Resources used for the Mac are in one directory.
-RSRC_DIR = os_mac_rsrc
-
 PRO_MANUAL = os_amiga.pro os_win32.pro \
 	os_mswin.pro winclip.pro os_vms.pro $(PERL_PRO)
 
@@ -2141,9 +2138,21 @@ autoconf:
 # This only needs to be run when a command name has been added or changed.
 # If this fails because you don't have Vim yet, first build and install Vim
 # without changes.
+# This requires a "vim" executable with the +eval feature.
 cmdidxs: ex_cmds.h
-	vim --clean -X --not-a-term -u create_cmdidxs.vim
+	vim --clean -N -X --not-a-term -u create_cmdidxs.vim -c quit
 
+# Run vim script to generate the normal/visual mode command lookup table.
+# This only needs to be run when a new normal/visual mode command has been
+# added.
+# This requires a "vim" executable with the +eval feature.
+# If this fails because you don't have Vim yet:
+#   - change nv_cmds[] in nv_cmds.h to add the new normal/visual mode command.
+#   - run "make nvcmdidxs" to generate nv_cmdidxs.h
+nvcmdidxs: auto/config.mk nv_cmds.h
+	$(CC) -I$(srcdir) $(ALL_CFLAGS) create_nvcmdidxs.c -o create_nvcmdidxs
+	vim --clean -N -X --not-a-term -u create_nvcmdidxs.vim -c quit
+	-rm -f create_nvcmdidxs
 
 # The normal command to compile a .c file to its .o file.
 # Without or with ALL_CFLAGS.
@@ -2987,11 +2996,6 @@ shadow:	runtime pixmaps
 	cd $(SHADOWDIR)/xxd; ln -s ../../xxd/*.[ch] ../../xxd/Make* .
 	$(MKDIR_P) $(SHADOWDIR)/xdiff
 	cd $(SHADOWDIR)/xdiff; ln -s ../../xdiff/*.[ch] .
-	if test -d $(RSRC_DIR); then \
-		cd $(SHADOWDIR); \
-		ln -s ../infplist.xml .; \
-		ln -s ../$(RSRC_DIR) ../os_mac.rsr.hqx ../dehqx.py .; \
-	fi
 	$(MKDIR_P) $(SHADOWDIR)/testdir
 	cd $(SHADOWDIR)/testdir; ln -s ../../testdir/Makefile \
 				 ../../testdir/Make_all.mak \
@@ -4002,7 +4006,7 @@ objects/move.o: move.c vim.h protodef.h auto/config.h feature.h os_unix.h \
 objects/normal.o: normal.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
- proto.h globals.h errors.h
+ proto.h globals.h errors.h nv_cmdidxs.h nv_cmds.h
 objects/ops.o: ops.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
@@ -4183,7 +4187,7 @@ objects/vim9script.o: vim9script.c vim.h protodef.h auto/config.h feature.h \
 objects/vim9type.o: vim9type.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \
- proto.h globals.h errors.h
+ proto.h globals.h errors.h vim9.h
 objects/viminfo.o: viminfo.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h alloc.h ex_cmds.h spell.h \

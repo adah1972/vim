@@ -2018,7 +2018,7 @@ static void init_spellfile(void);
 // In the postponed prefixes tree wn_flags is used to store the WFP_ flags,
 // but it must be negative to indicate the prefix tree to tree_add_word().
 // Use a negative number with the lower 8 bits zero.
-#define PFX_FLAGS	-256
+#define PFX_FLAGS	(-256)
 
 // flags for "condit" argument of store_aff_word()
 #define CONDIT_COMB	1	// affix must combine
@@ -3618,7 +3618,7 @@ spell_read_dic(spellinfo_T *spin, char_u *fname, afffile_T *affile)
 	}
 
 	// Store the word in the hashtable to be able to find duplicates.
-	dw = (char_u *)getroom_save(spin, w);
+	dw = getroom_save(spin, w);
 	if (dw == NULL)
 	{
 	    retval = FAIL;
@@ -6336,7 +6336,7 @@ spell_add_word(
 
 	// If the .add file is edited somewhere, reload it.
 	if (buf != NULL)
-	    buf_reload(buf, buf->b_orig_mode);
+	    buf_reload(buf, buf->b_orig_mode, FALSE);
 
 	redraw_all_later(SOME_VALID);
     }

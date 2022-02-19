@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.2.  Last change: 2022 Jan 22
+*options.txt*	For Vim version 8.2.  Last change: 2022 Feb 08
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -383,12 +383,22 @@ lambda it will be converted to the name, e.g. "<lambda>123".  Examples:
 	set opfunc=function('MyOpFunc')
 	set opfunc=funcref('MyOpFunc')
 	set opfunc={a\ ->\ MyOpFunc(a)}
-	" set using a funcref variable
+
+Set to a script-local function: >
+	set opfunc=s:MyLocalFunc
+	set opfunc=<SID>MyLocalFunc
+In |Vim9| script the "s:" and "<SID>" can be omitted if the function exists in
+the script: >
+	set opfunc=MyLocalFunc
+
+Set using a funcref variable: >
 	let Fn = function('MyTagFunc')
 	let &tagfunc = Fn
-	" set using a lambda expression
+
+Set using a lambda expression: >
 	let &tagfunc = {t -> MyTagFunc(t)}
-	" set using a variable with lambda expression
+
+Set using a variable with lambda expression: >
 	let L = {a, b, c -> MyTagFunc(a, b , c)}
 	let &tagfunc = L
 
@@ -800,6 +810,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	need proper setting-up, so whenever the shell's pwd changes an OSC 7
 	escape sequence will be emitted. For example, on Linux, you can source
 	/etc/profile.d/vte.sh in your shell profile if you use bash or zsh.
+	When the parsing of the OSC sequence fails you get *E1179* .
 
 				*'arabic'* *'arab'* *'noarabic'* *'noarab'*
 'arabic' 'arab'		boolean (default off)
@@ -1558,8 +1569,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	preferred, because it is much faster.
 	'charconvert' is not used when reading stdin |--|, because there is no
 	file to convert from.  You will have to save the text in a file first.
-	The expression must return zero or an empty string for success,
-	non-zero for failure.
+	The expression must return zero, false or an empty string for success,
+	non-zero or true for failure.
 	The possible encoding names encountered are in 'encoding'.
 	Additionally, names given in 'fileencodings' and 'fileencoding' are
 	used.
@@ -1583,9 +1594,18 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Note that v:fname_in and v:fname_out will never be the same.
 	Note that v:charconvert_from and v:charconvert_to may be different
 	from 'encoding'.  Vim internally uses UTF-8 instead of UCS-2 or UCS-4.
+
 	Encryption is not done by Vim when using 'charconvert'.  If you want
 	to encrypt the file after conversion, 'charconvert' should take care
 	of this.
+
+	If the 'charconvert' expression starts with s: or |<SID>|, then it is
+	replaced with the script ID (|local-function|). Example: >
+		set charconvert=s:MyConvert()
+		set charconvert=<SID>SomeConvert()
+<	Otherwise the expression is evaluated in the context of the script
+	where the option was set, thus script-local items are available.
+
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
@@ -2467,7 +2487,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			you write the file the encrypted bytes will be
 			different.  The whole undo file is encrypted, not just
 			the pieces of text.
-					*E1193* *E1194* *E1195* *E1196*
+					*E1193* *E1194* *E1195* *E1196* *E1230*
 					*E1197* *E1198* *E1199* *E1200* *E1201*
 	   xchacha20	XChaCha20 Cipher with Poly1305 Message Authentication
 			Code.  Medium strong till strong encryption.
@@ -6714,6 +6734,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	See |option-backslash| about including spaces and backslashes.
 	Environment variables are expanded |:set_env|.
 
+	In |restricted-mode| shell commands will not be possible.  This mode
+	is used if the value of $SHELL ends in "false" or "nologin".
+
 	If the name of the shell contains a space, you need to enclose it in
 	quotes and escape the space.  Example with quotes: >
 		:set shell=\"c:\program\ files\unix\sh.exe\"\ -f
@@ -7363,6 +7386,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 			suggestions is never more than the value of 'lines'
 			minus two.
 
+	timeout:{millisec}   Limit the time searching for suggestions to
+			{millisec} milli seconds.  Applies to the following
+			methods.  When omitted the limit is 5000. When
+			negative there is no limit.  {only works when built
+			with the +reltime feature}
+
 	file:{filename} Read file {filename}, which must have two columns,
 			separated by a slash.  The first column contains the
 			bad word, the second column the suggested good word.
@@ -7771,10 +7800,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 'tabstop' 'ts'		number	(default 8)
 			local to buffer
 	Number of spaces that a <Tab> in the file counts for.  Also see
-	|:retab| command, and 'softtabstop' option.
+	the |:retab| command, and the 'softtabstop' option.
 
 	Note: Setting 'tabstop' to any other value than 8 can make your file
-	appear wrong in many places (e.g., when printing it).
+	appear wrong in many places, e.g., when printing it.
+	The value must be more than 0 and less than 10000.
 
 	There are four main ways to use tabs in Vim:
 	1. Always keep 'tabstop' at 8, set 'softtabstop' and 'shiftwidth' to 4
@@ -8954,7 +8984,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	mode.  On pressing 'wildchar' (usually <Tab>) to invoke completion,
 	the possible matches are shown just above the command line, with the
 	first match highlighted (overwriting the status line, if there is
-	one).  Keys that show the previous/next match, such as <Tab> or
+	one).  This is the behavior without "pum" in 'wildoptions.
+	Keys that show the previous/next match, such as <Tab> or
 	CTRL-P/CTRL-N, cause the highlight to move to the appropriate match.
 	When 'wildmode' is used, "wildmenu" mode is used where "full" is
 	specified.  "longest" and "list" do not start "wildmenu" mode.
@@ -8962,10 +8993,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 	If there are more matches than can fit in the line, a ">" is shown on
 	the right and/or a "<" is shown on the left.  The status line scrolls
 	as needed.
+	When 'wildoptions' contains "pum", then the completion matches are
+	shown in a popup menu.
 	The "wildmenu" mode is abandoned when a key is hit that is not used
 	for selecting a completion.
-	While the "wildmenu" is active the following keys have special
-	meanings:
+	While the "wildmenu" is active, not using the popup menu, the
+	following keys have special meanings:
 
 	<Left> <Right>	- select previous/next match (like CTRL-P/CTRL-N)
 	<Down>		- in filename/menu name completion: move into a
@@ -8974,6 +9007,21 @@ A jump table for the options with a short description can be found at |Q_op|.
 			  dot: move into a submenu.
 	<Up>		- in filename/menu name completion: move up into
 			  parent directory or parent menu.
+
+	When using the popup menu for command line completion, the following
+	keys have special meanings:
+	<Down>		- select next match (like CTRL-N)
+	<Left>		- in filename/menu name completion: move up into
+			  parent directory or parent menu.
+	<Right>		- in filename/menu name completion: move into a
+			  subdirectory or submenu.
+	<Up>		- select previous match (like CTRL-P)
+	CTRL-E		- end completion, go back to what was there before
+			  selecting a match.
+	CTRL-N		- go to the next entry
+	CTRL-P		- go to the previous entry
+	CTRL-Y		- accept the currently selected match and stop
+			  completion.
 
 	This makes the menus accessible from the console |console-menus|.
 
@@ -9037,14 +9085,15 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 			{not available when compiled without the |+wildignore|
 			feature}
-	A list of words that change how command line completion is done.
-	Currently only one word is allowed:
+	A list of words that change how |cmdline-completion| is done.
+	The following values are supported:
+	  pum		Display the completion matches using the popupmenu
+			in the same style as the |ins-completion-menu|.
 	  tagfile	When using CTRL-D to list matching tags, the kind of
 			tag and the file of the tag is listed.	Only one match
 			is displayed per line.  Often used tag kinds are:
 				d	#define
 				f	function
-	Also see |cmdline-completion|.
 
 						*'winaltkeys'* *'wak'*
 'winaltkeys' 'wak'	string	(default "menu")

@@ -227,7 +227,7 @@ static linenr_T	lowest_marked = 0;
 #define ML_INSERT	0x12	    // insert line
 #define ML_FIND		0x13	    // just find the line
 #define ML_FLUSH	0x02	    // flush locked block
-#define ML_SIMPLE(x)	(x & 0x10)  // DEL, INS or FIND
+#define ML_SIMPLE(x)	((x) & 0x10)  // DEL, INS or FIND
 
 // argument for ml_upd_block0()
 typedef enum {
@@ -551,7 +551,7 @@ ml_set_crypt_key(
 		mf_put(mfp, hp, FALSE, FALSE);	// release previous block
 
 	    // get the block (pointer or data)
-	    if ((hp = mf_get(mfp, (blocknr_T)bnum, page_count)) == NULL)
+	    if ((hp = mf_get(mfp, bnum, page_count)) == NULL)
 	    {
 		if (bnum == 1)
 		    break;
@@ -1511,7 +1511,7 @@ ml_recover(int checkext)
 	/*
 	 * get block
 	 */
-	if ((hp = mf_get(mfp, (blocknr_T)bnum, page_count)) == NULL)
+	if ((hp = mf_get(mfp, bnum, page_count)) == NULL)
 	{
 	    if (bnum == 1)
 	    {
@@ -2619,9 +2619,12 @@ ml_get_buf(
 	    siemsg(_(e_ml_get_invalid_lnum_nr), lnum);
 	    --recursive;
 	}
+	ml_flush_line(buf);
+	buf->b_ml.ml_flags &= ~ML_LINE_DIRTY;
 errorret:
 	STRCPY(questions, "???");
 	buf->b_ml.ml_line_len = 4;
+	buf->b_ml.ml_line_lnum = lnum;
 	return questions;
     }
     if (lnum <= 0)			// pretend line 0 is line 1
@@ -3672,7 +3675,7 @@ ml_delete_int(buf_T *buf, linenr_T lnum, int flags)
 
 #ifdef FEAT_NETBEANS_INTG
     if (netbeans_active())
-	netbeans_removed(buf, lnum, 0, (long)line_size);
+	netbeans_removed(buf, lnum, 0, line_size);
 #endif
 #ifdef FEAT_PROP_POPUP
     // If there are text properties, make a copy, so that we can update
@@ -5778,7 +5781,7 @@ ml_find_line_or_offset(buf_T *buf, linenr_T lnum, long *offp)
 	     && lnum >= curline + buf->b_ml.ml_chunksize[curix].mlcs_numlines)
 		|| (offset != 0
 	       && offset > size + buf->b_ml.ml_chunksize[curix].mlcs_totalsize
-		      + ffdos * buf->b_ml.ml_chunksize[curix].mlcs_numlines)))
+		 + (long)ffdos * buf->b_ml.ml_chunksize[curix].mlcs_numlines)))
     {
 	curline += buf->b_ml.ml_chunksize[curix].mlcs_numlines;
 	size += buf->b_ml.ml_chunksize[curix].mlcs_totalsize;

@@ -119,6 +119,7 @@ static struct event_name
     {"CursorMovedI",	EVENT_CURSORMOVEDI},
     {"DiffUpdated",	EVENT_DIFFUPDATED},
     {"DirChanged",	EVENT_DIRCHANGED},
+    {"DirChangedPre",	EVENT_DIRCHANGEDPRE},
     {"EncodingChanged",	EVENT_ENCODINGCHANGED},
     {"ExitPre",		EVENT_EXITPRE},
     {"FileEncoding",	EVENT_ENCODINGCHANGED},
@@ -216,9 +217,9 @@ static AutoPat *last_autopat[NUM_EVENTS] =
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AUGROUP_DEFAULT    -1	    // default autocmd group
-#define AUGROUP_ERROR	   -2	    // erroneous autocmd group
-#define AUGROUP_ALL	   -3	    // all autocmd groups
+#define AUGROUP_DEFAULT    (-1)	    // default autocmd group
+#define AUGROUP_ERROR	   (-2)	    // erroneous autocmd group
+#define AUGROUP_ALL	   (-3)	    // all autocmd groups
 
 /*
  * struct used to keep status while executing autocommands for an event.
@@ -2042,7 +2043,7 @@ apply_autocmds_group(
     {
 	sfname = vim_strsave(fname);
 	// Don't try expanding FileType, Syntax, FuncUndefined, WindowID,
-	// ColorScheme, QuickFixCmd* or DirChanged
+	// ColorScheme, QuickFixCmd*, DirChanged and similar.
 	if (event == EVENT_FILETYPE
 		|| event == EVENT_SYNTAX
 		|| event == EVENT_CMDLINECHANGED
@@ -2060,7 +2061,9 @@ apply_autocmds_group(
 		|| event == EVENT_OPTIONSET
 		|| event == EVENT_QUICKFIXCMDPOST
 		|| event == EVENT_DIRCHANGED
+		|| event == EVENT_DIRCHANGEDPRE
 		|| event == EVENT_MODECHANGED
+		|| event == EVENT_USER
 		|| event == EVENT_WINCLOSED)
 	{
 	    fname = vim_strsave(fname);

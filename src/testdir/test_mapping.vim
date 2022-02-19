@@ -4,7 +4,7 @@ source shared.vim
 source check.vim
 source screendump.vim
 source term_util.vim
-source vim9.vim
+import './vim9.vim' as v9
 
 func Test_abbreviation()
   " abbreviation with 0x80 should work
@@ -540,9 +540,55 @@ func Test_expr_map_restore_cursor()
   END
   call writefile(lines, 'XtestExprMap')
   let buf = RunVimInTerminal('-S XtestExprMap', #{rows: 10})
-  call TermWait(buf)
   call term_sendkeys(buf, "\<C-B>")
   call VerifyScreenDump(buf, 'Test_map_expr_1', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XtestExprMap')
+endfunc
+
+func Test_map_listing()
+  CheckScreendump
+
+  let lines =<< trim END
+      nmap a b
+  END
+  call writefile(lines, 'XtestMapList')
+  let buf = RunVimInTerminal('-S XtestMapList', #{rows: 6})
+  call term_sendkeys(buf, ":                      nmap a\<CR>")
+  call VerifyScreenDump(buf, 'Test_map_list_1', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XtestMapList')
+endfunc
+
+func Test_expr_map_error()
+  CheckScreendump
+
+  let lines =<< trim END
+      func Func()
+        throw 'test'
+        return ''
+      endfunc
+
+      nnoremap <expr> <F2> Func()
+      cnoremap <expr> <F2> Func()
+
+      call test_override('ui_delay', 10)
+  END
+  call writefile(lines, 'XtestExprMap')
+  let buf = RunVimInTerminal('-S XtestExprMap', #{rows: 10})
+  call term_sendkeys(buf, "\<F2>")
+  call TermWait(buf)
+  call term_sendkeys(buf, "\<CR>")
+  call VerifyScreenDump(buf, 'Test_map_expr_2', {})
+
+  call term_sendkeys(buf, ":abc\<F2>")
+  call VerifyScreenDump(buf, 'Test_map_expr_3', {})
+  call term_sendkeys(buf, "\<Esc>0")
+  call VerifyScreenDump(buf, 'Test_map_expr_4', {})
 
   " clean up
   call StopVimInTerminal(buf)
@@ -1415,7 +1461,7 @@ func Test_map_script_cmd_restore()
       vim9script
       nnoremap <F3> <ScriptCmd>eval 1 + 2<CR>
   END
-  call CheckScriptSuccess(lines)
+  call v9.CheckScriptSuccess(lines)
   call feedkeys("\<F3>:let g:result = 3+4\<CR>", 'xtc')
   call assert_equal(7, g:result)
 
@@ -1431,7 +1477,7 @@ func Test_map_script_cmd_finds_func()
         g:func_called = 'yes'
       enddef
   END
-  call CheckScriptSuccess(lines)
+  call v9.CheckScriptSuccess(lines)
   call feedkeys("y\<F3>\<Esc>", 'xtc')
   call assert_equal('yes', g:func_called)
 
@@ -1449,7 +1495,7 @@ func Test_map_script_cmd_survives_unmap()
       feedkeys("\<F3>\<CR>", 'xct')
       assert_equal(123, b:result)
   END
-  call CheckScriptSuccess(lines)
+  call v9.CheckScriptSuccess(lines)
 
   nunmap <F3>
   unlet b:result

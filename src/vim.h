@@ -120,7 +120,6 @@
     || defined(FEAT_GUI_HAIKU) \
     || defined(FEAT_GUI_MSWIN) \
     || defined(FEAT_GUI_PHOTON)
-# define FEAT_GUI_ENABLED  // also defined with NO_X11_INCLUDES
 # if !defined(FEAT_GUI) && !defined(NO_X11_INCLUDES)
 #  define FEAT_GUI
 # endif
@@ -245,12 +244,19 @@
 
 // Mark unused function arguments with UNUSED, so that gcc -Wunused-parameter
 // can be used to check for mistakes.
-#if defined(HAVE_ATTRIBUTE_UNUSED) || defined(__MINGW32__)
-# if !defined(UNUSED)
+#ifndef UNUSED
+# if defined(HAVE_ATTRIBUTE_UNUSED) || defined(__MINGW32__)
 #  define UNUSED __attribute__((unused))
+# else
+#  if defined __has_attribute
+#   if __has_attribute(unused)
+#    define UNUSED __attribute__((unused))
+#   endif
+#  endif
 # endif
-#else
-# define UNUSED
+# ifndef UNUSED
+#  define UNUSED
+# endif
 #endif
 
 // Used to check for "sun", "__sun" is used by newer compilers.
@@ -352,15 +358,8 @@ typedef		 __int64	long_i;
 # define SCANF_DECIMAL_LONG_U   "%llu"
 # define PRINTF_HEX_LONG_U      "0x%llx"
 #else
-  // Microsoft-specific. The __w64 keyword should be specified on any typedefs
-  // that change size between 32-bit and 64-bit platforms.  For any such type,
-  // __w64 should appear only on the 32-bit definition of the typedef.
-  // Define __w64 as an empty token for everything but MSVC 7.x or later.
-# ifndef _MSC_VER
-#  define __w64
-# endif
-typedef unsigned long __w64	long_u;
-typedef		 long __w64     long_i;
+typedef unsigned long		long_u;
+typedef		 long		long_i;
 # define SCANF_HEX_LONG_U       "%lx"
 # define SCANF_DECIMAL_LONG_U   "%lu"
 # define PRINTF_HEX_LONG_U      "0x%lx"
@@ -816,6 +815,8 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define WILD_ALL		6
 #define WILD_LONGEST		7
 #define WILD_ALL_KEEP		8
+#define WILD_CANCEL		9
+#define WILD_APPLY		10
 
 #define WILD_LIST_NOTFOUND	    0x01
 #define WILD_HOME_REPLACE	    0x02
@@ -1309,6 +1310,7 @@ enum auto_event
     EVENT_CURSORMOVEDI,		// cursor was moved in Insert mode
     EVENT_DIFFUPDATED,		// after diffs were updated
     EVENT_DIRCHANGED,		// after user changed directory
+    EVENT_DIRCHANGEDPRE,	// before directory changes
     EVENT_ENCODINGCHANGED,	// after changing the 'encoding' option
     EVENT_EXITPRE,		// before exiting
     EVENT_FILEAPPENDCMD,	// append to a file using command
@@ -1583,10 +1585,10 @@ typedef UINT32_TYPEDEF UINT32_T;
 #endif
 
 /*
- * EMX doesn't have a global way of making open() use binary I/O.
+ * Cygwin doesn't have a global way of making open() use binary I/O.
  * Use O_BINARY for all open() calls.
  */
-#if defined(__CYGWIN32__)
+#ifdef __CYGWIN__
 # define O_EXTRA    O_BINARY
 #else
 # define O_EXTRA    0
@@ -1737,7 +1739,9 @@ typedef unsigned short disptick_T;	// display tick type
 # define MAXCOL (0x3fffffffL)		// maximum column number, 30 bits
 # define MAXLNUM (0x3fffffffL)		// maximum (invalid) line number
 #else
-# define MAXCOL  INT_MAX		// maximum column number
+  // MAXCOL used to be INT_MAX, but with 64 bit ints that results in running
+  // out of memory when trying to allocate a very long line.
+# define MAXCOL  0x7fffffffL		// maximum column number
 # define MAXLNUM LONG_MAX		// maximum (invalid) line number
 #endif
 
@@ -2091,6 +2095,8 @@ typedef int sock_T;
 #define VAR_TYPE_INSTR	    11
 
 #define DICT_MAXNEST 100	// maximum nesting of lists and dicts
+
+#define TABSTOP_MAX 9999
 
 #ifdef FEAT_CLIPBOARD
 

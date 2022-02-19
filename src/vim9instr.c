@@ -744,6 +744,23 @@ generate_PUSHFUNC(cctx_T *cctx, char_u *name, type_T *type)
 }
 
 /*
+ * Generate an ISN_AUTOLOAD instruction.
+ */
+    int
+generate_AUTOLOAD(cctx_T *cctx, char_u *name, type_T *type)
+{
+    isn_T	*isn;
+
+    RETURN_OK_IF_SKIP(cctx);
+    if ((isn = generate_instr_type(cctx, ISN_AUTOLOAD, type)) == NULL)
+	return FAIL;
+    isn->isn_arg.string = vim_strsave(name);
+    if (isn->isn_arg.string == NULL)
+	return FAIL;
+    return OK;
+}
+
+/*
  * Generate an ISN_GETITEM instruction with "index".
  * "with_op" is TRUE for "+=" and other operators, the stack has the current
  * value below the list with values.
@@ -1023,7 +1040,7 @@ generate_VIM9SCRIPT(
 
     RETURN_OK_IF_SKIP(cctx);
     if (isn_type == ISN_LOADSCRIPT)
-	isn = generate_instr_type(cctx, isn_type, type);
+	isn = generate_instr_type2(cctx, isn_type, type, type);
     else
 	isn = generate_instr_drop(cctx, isn_type, 1);
     if (isn == NULL)
@@ -1050,7 +1067,6 @@ generate_NEWLIST(cctx_T *cctx, int count)
 {
     isn_T	*isn;
     type_T	*member_type;
-    type_T	*decl_member_type;
     type_T	*type;
     type_T	*decl_type;
 
@@ -1061,9 +1077,9 @@ generate_NEWLIST(cctx_T *cctx, int count)
 
     // Get the member type and the declared member type from all the items on
     // the stack.
-    member_type = get_member_type_from_stack(count, 1, &decl_member_type, cctx);
+    member_type = get_member_type_from_stack(count, 1, cctx);
     type = get_list_type(member_type, cctx->ctx_type_list);
-    decl_type = get_list_type(decl_member_type, cctx->ctx_type_list);
+    decl_type = get_list_type(&t_any, cctx->ctx_type_list);
 
     // drop the value types
     cctx->ctx_type_stack.ga_len -= count;
@@ -1080,7 +1096,6 @@ generate_NEWDICT(cctx_T *cctx, int count)
 {
     isn_T	*isn;
     type_T	*member_type;
-    type_T	*decl_member_type;
     type_T	*type;
     type_T	*decl_type;
 
@@ -1089,10 +1104,9 @@ generate_NEWDICT(cctx_T *cctx, int count)
 	return FAIL;
     isn->isn_arg.number = count;
 
-    member_type = get_member_type_from_stack(count, 2,
-						      &decl_member_type, cctx);
+    member_type = get_member_type_from_stack(count, 2, cctx);
     type = get_dict_type(member_type, cctx->ctx_type_list);
-    decl_type = get_dict_type(decl_member_type, cctx->ctx_type_list);
+    decl_type = get_dict_type(&t_any, cctx->ctx_type_list);
 
     // drop the key and value types
     cctx->ctx_type_stack.ga_len -= 2 * count;
@@ -1260,6 +1274,7 @@ generate_BCALL(cctx_T *cctx, int func_idx, int argcount, int method_call)
     type2_T	shuffled_argtypes[MAX_FUNC_ARGS];
     type2_T	*maptype = NULL;
     type_T	*type;
+    type_T	*decl_type;
 
     RETURN_OK_IF_SKIP(cctx);
     argoff = check_internal_func(func_idx, argcount);
@@ -1310,14 +1325,14 @@ generate_BCALL(cctx_T *cctx, int func_idx, int argcount, int method_call)
 
     // Drop the argument types and push the return type.
     stack->ga_len -= argcount;
-    type = internal_func_ret_type(func_idx, argcount, argtypes);
-    if (push_type_stack(cctx, type) == FAIL)
+    type = internal_func_ret_type(func_idx, argcount, argtypes, &decl_type);
+    if (push_type_stack2(cctx, type, decl_type) == FAIL)
 	return FAIL;
 
-    if (maptype != NULL && maptype[0].type_curr->tt_member != NULL
-				  && maptype[0].type_curr->tt_member != &t_any)
+    if (maptype != NULL && maptype[0].type_decl->tt_member != NULL
+				  && maptype[0].type_decl->tt_member != &t_any)
 	// Check that map() didn't change the item types.
-	generate_TYPECHECK(cctx, maptype[0].type_curr, -1, 1);
+	generate_TYPECHECK(cctx, maptype[0].type_decl, -1, 1);
 
     return OK;
 }
@@ -1334,7 +1349,9 @@ generate_LISTAPPEND(cctx_T *cctx)
     type_T	*expected;
 
     // Caller already checked that list_type is a list.
-    list_type = get_type_on_stack(cctx, 1);
+    // For checking the item type we use the declared type of the list and the
+    // current type of the added item, adding a string to [1, 2] is OK.
+    list_type = get_decl_type_on_stack(cctx, 1);
     item_type = get_type_on_stack(cctx, 0);
     expected = list_type->tt_member;
     if (need_type(item_type, expected, -1, 0, cctx, FALSE, FALSE) == FAIL)
@@ -1929,6 +1946,7 @@ delete_instr(isn_T *isn)
 {
     switch (isn->isn_type)
     {
+	case ISN_AUTOLOAD:
 	case ISN_DEF:
 	case ISN_EXEC:
 	case ISN_EXECRANGE:

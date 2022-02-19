@@ -1,4 +1,4 @@
-*builtin.txt*	For Vim version 8.2.  Last change: 2022 Jan 22
+*builtin.txt*	For Vim version 8.2.  Last change: 2022 Feb 08
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -641,10 +641,7 @@ test_feedinput({string})	none	add key sequence to input buffer
 test_garbagecollect_now()	none	free memory right now for testing
 test_garbagecollect_soon()	none	free memory soon for testing
 test_getvalue({string})		any	get value of an internal variable
-test_gui_drop_files({list}, {row}, {col}, {mods})
-				none	drop a list of files in a window
-test_gui_mouse_event({button}, {row}, {col}, {repeated}, {mods})
-				none	add a mouse event to the input buffer
+test_gui_event({event}, {args})	bool	generate a GUI event for testing
 test_ignore_error({expr})	none	ignore a specific error
 test_null_blob()		Blob	null value for testing
 test_null_channel()		Channel	null value for testing
@@ -657,8 +654,6 @@ test_null_string()		String	null value for testing
 test_option_not_set({name})	none	reset flag indicating option was set
 test_override({expr}, {val})	none	test with Vim internal overrides
 test_refcount({expr})		Number	get the reference count of {expr}
-test_scrollbar({which}, {value}, {dragging})
-				none	scroll in the GUI for testing
 test_setmouse({row}, {col})	none	set the mouse position for testing
 test_settime({expr})		none	set current time for testing
 test_srand_seed([seed])		none	set seed for testing srand()
@@ -1890,12 +1885,13 @@ digraph_getlist([{listall}])				*digraph_getlist()*
 		display an error message.
 
 
-digraph_set({chars}, {digraph})				*digraph_set()* *E1205*
+digraph_set({chars}, {digraph})				*digraph_set()*
 		Add digraph {chars} to the list.  {chars} must be a string
 		with two characters.  {digraph} is a string with one UTF-8
-		encoded character. Be careful, composing characters are NOT
-		ignored.  This function is similar to |:digraphs| command, but
-		useful to add digraphs start with a white space.
+		encoded character.  *E1215*
+		Be careful, composing characters are NOT ignored.  This
+		function is similar to |:digraphs| command, but useful to add
+		digraphs start with a white space.
 
 		The function result is v:true if |digraph| is registered.  If
 		this fails an error message is given and v:false is returned.
@@ -1918,7 +1914,7 @@ digraph_setlist({digraphlist})				*digraph_setlist()*
 		Similar to |digraph_set()| but this function can add multiple
 		digraphs at once.  {digraphlist} is a list composed of lists,
 		where each list contains two strings with {chars} and
-		{digraph} as in |digraph_set()|.
+		{digraph} as in |digraph_set()|. *E1216*
 		Example: >
 		    call digraph_setlist([['aa', 'あ'], ['ii', 'い']])
 <
@@ -2082,6 +2078,22 @@ exists({expr})	The result is a Number, which is |TRUE| if {expr} is defined,
 		For checking if a file exists use |filereadable()|.
 
 		The {expr} argument is a string, which contains one of these:
+			varname		internal variable (see
+			dict.key	|internal-variables|).  Also works
+			list[i]		for |curly-braces-names|, |Dictionary|
+			import.Func	entries, |List| items, imported
+					items,etc.
+					Does not work for local variables in a
+					compiled `:def` function.
+					Beware that evaluating an index may
+					cause an error message for an invalid
+					expression.  E.g.: >
+					   :let l = [1, 2, 3]
+					   :echo exists("l[5]")
+<					   0 >
+					   :echo exists("l[xx]")
+<					   E121: Undefined variable: xx
+					   0
 			&option-name	Vim option (only checks if it exists,
 					not if it really works)
 			+option-name	Vim option that works.
@@ -2096,21 +2108,6 @@ exists({expr})	The result is a Number, which is |TRUE| if {expr} is defined,
 			?funcname	built-in function that could be
 					implemented; to be used to check if
 					"funcname" is valid
-			varname		internal variable (see
-					|internal-variables|).  Also works
-					for |curly-braces-names|, |Dictionary|
-					entries, |List| items, etc.
-					Does not work for local variables in a
-					compiled `:def` function.
-					Beware that evaluating an index may
-					cause an error message for an invalid
-					expression.  E.g.: >
-					   :let l = [1, 2, 3]
-					   :echo exists("l[5]")
-<					   0 >
-					   :echo exists("l[xx]")
-<					   E121: Undefined variable: xx
-					   0
 			:cmdname	Ex command: built-in command, user
 					command or command modifier |:command|.
 					Returns:
@@ -3755,7 +3752,7 @@ getreg([{regname} [, 1 [, {list}]]])			*getreg()*
 			:let cliptext = getreg('*')
 <		When register {regname} was not set the result is an empty
 		string.
-		The {regname} argument must be a string.
+		The {regname} argument must be a string.  *E1162*
 
 		getreg('=') returns the last evaluated value of the expression
 		register.  (For use in maps.)
@@ -4673,9 +4670,11 @@ islocked({expr})					*islocked()* *E786*
 			:echo islocked('alist')		" 1
 			:echo islocked('alist[1]')	" 0
 
-<		When {expr} is a variable that does not exist you get an error
-		message.  Use |exists()| to check for existence.
-		In Vim9 script it does not work for local variables.
+<		When {expr} is a variable that does not exist -1 is returned.
+		If {expr} uses a range, list or dict index that is out of
+		range or does not exist you get an error message.  Use
+		|exists()| to check for existence.
+		In Vim9 script it does not work for local function variables.
 
 		Can also be used as a |method|: >
 			GetName()->islocked()
@@ -4787,7 +4786,7 @@ json_encode({expr})					*json_encode()*
 		Encode {expr} as JSON and return this as a string.
 		The encoding is specified in:
 		https://tools.ietf.org/html/rfc7159.html
-		Vim values are converted as follows:
+		Vim values are converted as follows:   *E1161*
 		   |Number|		decimal number
 		   |Float|		floating point number
 		   Float nan		"NaN"
@@ -4901,7 +4900,7 @@ libcallnr({libname}, {funcname}, {argument})
 line({expr} [, {winid}])				*line()*
 		The result is a Number, which is the line number of the file
 		position given with {expr}.  The {expr} argument is a string.
-		The accepted positions are:
+		The accepted positions are:			 *E1209*
 		    .	    the cursor position
 		    $	    the last line in the current buffer
 		    'x	    position of mark x (if the mark is not set, 0 is
@@ -6531,7 +6530,7 @@ reduce({object}, {func} [, {initial}])			*reduce()* *E998*
 		{func} is called for every item in {object}, which can be a
 		|String|, |List| or a |Blob|.  {func} is called with two
 		arguments: the result so far and current item.  After
-		processing all items the result is returned.
+		processing all items the result is returned. *E1132*
 
 		{initial} is the initial result.  When omitted, the first item
 		in {object} is used and {func} is first called for the second
@@ -7390,7 +7389,7 @@ setcellwidths({list})					*setcellwidths()*
 		   setcellwidths([[0xad, 0xad, 1],
 				\ [0x2194, 0x2199, 2]])
 
-<					*E1109* *E1110* *E1111* *E1112* *E1113*
+<				*E1109* *E1110* *E1111* *E1112* *E1113* *E1114*
 		The {list} argument is a list of lists with each three
 		numbers. These three numbers are [low, high, width].  "low"
 		and "high" can be the same, in which case this refers to one
@@ -7648,10 +7647,12 @@ setqflist({list} [, {action} [, {what}]])		*setqflist()*
 		    module	name of a module; if given it will be used in
 				quickfix error window instead of the filename.
 		    lnum	line number in the file
+		    end_lnum	end of lines, if the item spans multiple lines
 		    pattern	search pattern used to locate the error
 		    col		column number
 		    vcol	when non-zero: "col" is visual column
 				when zero: "col" is byte index
+		    end_col	end column, if the item spans multiple columns
 		    nr		error number
 		    text	description of the error
 		    type	single-character error type, 'E', 'W', etc.

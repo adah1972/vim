@@ -231,21 +231,11 @@ init_class_tab(void)
 	    class_tab[i] = RI_DIGIT + RI_HEX + RI_WORD;
 	else if (i >= 'a' && i <= 'f')
 	    class_tab[i] = RI_HEX + RI_WORD + RI_HEAD + RI_ALPHA + RI_LOWER;
-#ifdef EBCDIC
-	else if ((i >= 'g' && i <= 'i') || (i >= 'j' && i <= 'r')
-						    || (i >= 's' && i <= 'z'))
-#else
 	else if (i >= 'g' && i <= 'z')
-#endif
 	    class_tab[i] = RI_WORD + RI_HEAD + RI_ALPHA + RI_LOWER;
 	else if (i >= 'A' && i <= 'F')
 	    class_tab[i] = RI_HEX + RI_WORD + RI_HEAD + RI_ALPHA + RI_UPPER;
-#ifdef EBCDIC
-	else if ((i >= 'G' && i <= 'I') || ( i >= 'J' && i <= 'R')
-						    || (i >= 'S' && i <= 'Z'))
-#else
 	else if (i >= 'G' && i <= 'Z')
-#endif
 	    class_tab[i] = RI_WORD + RI_HEAD + RI_ALPHA + RI_UPPER;
 	else if (i == '_')
 	    class_tab[i] = RI_WORD + RI_HEAD;
@@ -257,15 +247,15 @@ init_class_tab(void)
     done = TRUE;
 }
 
-#define ri_digit(c)	(c < 0x100 && (class_tab[c] & RI_DIGIT))
-#define ri_hex(c)	(c < 0x100 && (class_tab[c] & RI_HEX))
-#define ri_octal(c)	(c < 0x100 && (class_tab[c] & RI_OCTAL))
-#define ri_word(c)	(c < 0x100 && (class_tab[c] & RI_WORD))
-#define ri_head(c)	(c < 0x100 && (class_tab[c] & RI_HEAD))
-#define ri_alpha(c)	(c < 0x100 && (class_tab[c] & RI_ALPHA))
-#define ri_lower(c)	(c < 0x100 && (class_tab[c] & RI_LOWER))
-#define ri_upper(c)	(c < 0x100 && (class_tab[c] & RI_UPPER))
-#define ri_white(c)	(c < 0x100 && (class_tab[c] & RI_WHITE))
+#define ri_digit(c)	((c) < 0x100 && (class_tab[c] & RI_DIGIT))
+#define ri_hex(c)	((c) < 0x100 && (class_tab[c] & RI_HEX))
+#define ri_octal(c)	((c) < 0x100 && (class_tab[c] & RI_OCTAL))
+#define ri_word(c)	((c) < 0x100 && (class_tab[c] & RI_WORD))
+#define ri_head(c)	((c) < 0x100 && (class_tab[c] & RI_HEAD))
+#define ri_alpha(c)	((c) < 0x100 && (class_tab[c] & RI_ALPHA))
+#define ri_lower(c)	((c) < 0x100 && (class_tab[c] & RI_LOWER))
+#define ri_upper(c)	((c) < 0x100 && (class_tab[c] & RI_UPPER))
+#define ri_white(c)	((c) < 0x100 && (class_tab[c] & RI_WHITE))
 
 // flags for regflags
 #define RF_ICASE    1	// ignore case
@@ -300,9 +290,6 @@ static int	reg_strict;	// "[abc" is illegal
  * META contains all characters that may be magic, except '^' and '$'.
  */
 
-#ifdef EBCDIC
-static char_u META[] = "%&()*+.123456789<=>?@ACDFHIKLMOPSUVWX[_acdfhiklmnopsuvwxz{|~";
-#else
 // META[] is used often enough to justify turning it into a table.
 static char_u META_flags[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -320,7 +307,6 @@ static char_u META_flags[] = {
 //  p	     s	   u  v  w  x	  z  {	|     ~
     1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1
 };
-#endif
 
 static int	curchr;		// currently parsed character
 // Previous character.  Note: prevchr is sometimes -1 when we are not at the
@@ -408,30 +394,6 @@ get_equi_class(char_u **pp)
     }
     return 0;
 }
-
-#ifdef EBCDIC
-/*
- * Table for equivalence class "c". (IBM-1047)
- */
-static char *EQUIVAL_CLASS_C[16] = {
-    "A\x62\x63\x64\x65\x66\x67",
-    "C\x68",
-    "E\x71\x72\x73\x74",
-    "I\x75\x76\x77\x78",
-    "N\x69",
-    "O\xEB\xEC\xED\xEE\xEF\x80",
-    "U\xFB\xFC\xFD\xFE",
-    "Y\xBA",
-    "a\x42\x43\x44\x45\x46\x47",
-    "c\x48",
-    "e\x51\x52\x53\x54",
-    "i\x55\x56\x57\x58",
-    "n\x49",
-    "o\xCB\xCC\xCD\xCE\xCF\x70",
-    "u\xDB\xDC\xDD\xDE",
-    "y\x8D\xDF",
-};
-#endif
 
 /*
  * Check for a collating element "[.a.]".  "pp" points to the '['.
@@ -788,13 +750,7 @@ peekchr(void)
 
 		if (c == NUL)
 		    curchr = '\\';	// trailing '\'
-		else if (
-#ifdef EBCDIC
-			vim_strchr(META, c)
-#else
-			c <= '~' && META_flags[c]
-#endif
-			)
+		else if (c <= '~' && META_flags[c])
 		{
 		    /*
 		     * META contains everything that may be magic sometimes,
@@ -1267,8 +1223,8 @@ reg_match_visual(void)
     colnr_T	cols;
     colnr_T	curswant;
 
-    // Check if the buffer is the current buffer.
-    if (rex.reg_buf != curbuf || VIsual.lnum == 0)
+    // Check if the buffer is the current buffer and not using a string.
+    if (rex.reg_buf != curbuf || VIsual.lnum == 0 || !REG_MULTI)
 	return FALSE;
 
     if (VIsual_active)

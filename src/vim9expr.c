@@ -182,6 +182,9 @@ compile_member(int is_slice, int *keeping_dict, cctx_T *cctx)
 		     vartype == VAR_LIST ?  ISN_LISTSLICE : ISN_ANYSLICE,
 							    2) == FAIL)
 		return FAIL;
+	    // a copy is made so the member type is no longer declared
+	    if (typep->type_decl->tt_type == VAR_LIST)
+		typep->type_decl = &t_list_any;
 	}
 	else
 	{
@@ -253,13 +256,7 @@ compile_load_scriptvar(
     if (!SCRIPT_ID_VALID(current_sctx.sc_sid))
 	return FAIL;
     si = SCRIPT_ITEM(current_sctx.sc_sid);
-    idx = get_script_item_idx(current_sctx.sc_sid, name, 0, cctx);
-    if (idx == -1 || si->sn_version != SCRIPT_VERSION_VIM9)
-    {
-	// variable is not in sn_var_vals: old style script.
-	return generate_OLDSCRIPT(cctx, ISN_LOADS, name, current_sctx.sc_sid,
-								       &t_any);
-    }
+    idx = get_script_item_idx(current_sctx.sc_sid, name, 0, cctx, NULL);
     if (idx >= 0)
     {
 	svar_T		*sv = ((svar_T *)si->sn_var_vals.ga_data) + idx;
@@ -269,7 +266,7 @@ compile_load_scriptvar(
 	return OK;
     }
 
-    import = end == NULL ? NULL : find_imported(name, 0, FALSE, cctx);
+    import = end == NULL ? NULL : find_imported(name, 0, FALSE);
     if (import != NULL)
     {
 	char_u	*p = skipwhite(*end);
@@ -307,18 +304,19 @@ compile_load_scriptvar(
 	    char_u  *auto_name = concat_str(si->sn_autoload_prefix, exp_name);
 
 	    // autoload script must be loaded later, access by the autoload
-	    // name.
+	    // name.  If a '(' follows it must be a function.  Otherwise we
+	    // don't know, it can be "script.Func".
 	    if (cc == '(' || paren_follows_after_expr)
 		res = generate_PUSHFUNC(cctx, auto_name, &t_func_any);
 	    else
-		res = generate_LOAD(cctx, ISN_LOADG, 0, auto_name, &t_any);
+		res = generate_AUTOLOAD(cctx, auto_name, &t_any);
 	    vim_free(auto_name);
 	    done = TRUE;
 	}
 	else
 	{
 	    idx = find_exported(import->imp_sid, exp_name, &ufunc, &type,
-								   cctx, TRUE);
+							    cctx, NULL, TRUE);
 	}
 	*p = cc;
 	*end = p;
@@ -343,17 +341,23 @@ compile_load_scriptvar(
 	return OK;
     }
 
+    if (idx == -1 || si->sn_version != SCRIPT_VERSION_VIM9)
+	// variable is not in sn_var_vals: old style script.
+	return generate_OLDSCRIPT(cctx, ISN_LOADS, name, current_sctx.sc_sid,
+								       &t_any);
+
     if (error)
 	semsg(_(e_item_not_found_str), name);
     return FAIL;
 }
 
     static int
-generate_funcref(cctx_T *cctx, char_u *name)
+generate_funcref(cctx_T *cctx, char_u *name, int has_g_prefix)
 {
     ufunc_T *ufunc = find_func(name, FALSE);
 
-    if (ufunc == NULL)
+    // Reject a global non-autoload function found without the "g:" prefix.
+    if (ufunc == NULL || (!has_g_prefix && func_requires_g_prefix(ufunc)))
 	return FAIL;
 
     // Need to compile any default values to get the argument types.
@@ -420,7 +424,7 @@ compile_load(
 			  break;
 		case 's': if (is_expr && ASCII_ISUPPER(*name)
 				       && find_func(name, FALSE) != NULL)
-			      res = generate_funcref(cctx, name);
+			      res = generate_funcref(cctx, name, FALSE);
 			  else
 			      res = compile_load_scriptvar(cctx, name,
 							    NULL, &end, error);
@@ -429,7 +433,7 @@ compile_load(
 			  {
 			      if (is_expr && ASCII_ISUPPER(*name)
 				       && find_func(name, FALSE) != NULL)
-				  res = generate_funcref(cctx, name);
+				  res = generate_funcref(cctx, name, TRUE);
 			      else
 				  isn_type = ISN_LOADG;
 			  }
@@ -497,15 +501,15 @@ compile_load(
 	    {
 		// "var" can be script-local even without using "s:" if it
 		// already exists in a Vim9 script or when it's imported.
-		if (script_var_exists(*arg, len, cctx) == OK
-			|| find_imported(name, 0, FALSE, cctx) != NULL)
+		if (script_var_exists(*arg, len, cctx, NULL) == OK
+				      || find_imported(name, 0, FALSE) != NULL)
 		   res = compile_load_scriptvar(cctx, name, *arg, &end, FALSE);
 
 		// When evaluating an expression and the name starts with an
 		// uppercase letter it can be a user defined function.
 		// generate_funcref() will fail if the function can't be found.
 		if (res == FAIL && is_expr && ASCII_ISUPPER(*name))
-		    res = generate_funcref(cctx, name);
+		    res = generate_funcref(cctx, name, FALSE);
 	    }
 	}
 	if (gen_load)
@@ -666,6 +670,7 @@ compile_call(
     ufunc_T	*ufunc = NULL;
     int		res = FAIL;
     int		is_autoload;
+    int		has_g_namespace;
     int		is_searchpair;
     imported_T	*import;
 
@@ -676,7 +681,7 @@ compile_call(
     }
     vim_strncpy(namebuf, *arg, varlen);
 
-    import = find_imported(name, varlen, FALSE, cctx);
+    import = find_imported(name, varlen, FALSE);
     if (import != NULL)
     {
 	semsg(_(e_cannot_use_str_itself_it_is_imported), namebuf);
@@ -757,7 +762,7 @@ compile_call(
 
 	    if (STRCMP(name, "add") == 0 && argcount == 2)
 	    {
-		type_T	    *type = get_type_on_stack(cctx, 1);
+		type_T	    *type = get_decl_type_on_stack(cctx, 1);
 
 		// add() can be compiled to instructions if we know the type
 		if (type->tt_type == VAR_LIST)
@@ -782,6 +787,8 @@ compile_call(
 	goto theend;
     }
 
+    has_g_namespace = STRNCMP(namebuf, "g:", 2) == 0;
+
     // An argument or local variable can be a function reference, this
     // overrules a function name.
     if (lookup_local(namebuf, varlen, NULL, cctx) == FAIL
@@ -790,18 +797,28 @@ compile_call(
 	// If we can find the function by name generate the right call.
 	// Skip global functions here, a local funcref takes precedence.
 	ufunc = find_func(name, FALSE);
-	if (ufunc != NULL && !func_is_global(ufunc))
+	if (ufunc != NULL)
 	{
-	    res = generate_CALL(cctx, ufunc, argcount);
-	    goto theend;
+	    if (!func_is_global(ufunc))
+	    {
+		res = generate_CALL(cctx, ufunc, argcount);
+		goto theend;
+	    }
+	    if (!has_g_namespace
+			  && vim_strchr(ufunc->uf_name, AUTOLOAD_CHAR) == NULL)
+	    {
+		// A function name without g: prefix must be found locally.
+		semsg(_(e_unknown_function_str), namebuf);
+		goto theend;
+	    }
 	}
     }
 
     // If the name is a variable, load it and use PCALL.
     // Not for g:Func(), we don't know if it is a variable or not.
-    // Not for eome#Func(), it will be loaded later.
+    // Not for some#Func(), it will be loaded later.
     p = namebuf;
-    if (STRNCMP(namebuf, "g:", 2) != 0 && !is_autoload
+    if (!has_g_namespace && !is_autoload
 	    && compile_load(&p, namebuf + varlen, cctx, FALSE, FALSE) == OK)
     {
 	type_T	    *type = get_type_on_stack(cctx, 0);
@@ -819,7 +836,7 @@ compile_call(
 
     // A global function may be defined only later.  Need to figure out at
     // runtime.  Also handles a FuncRef at runtime.
-    if (STRNCMP(namebuf, "g:", 2) == 0 || is_autoload)
+    if (has_g_namespace || is_autoload)
 	res = generate_UCALL(cctx, name, argcount);
     else
 	semsg(_(e_unknown_function_str), namebuf);
@@ -2810,8 +2827,10 @@ compile_expr1(char_u **arg, cctx_T *cctx, ppconst_T *ppconst)
     // Ignore all kinds of errors when not producing code.
     if (cctx->ctx_skip == SKIP_YES)
     {
+	int		prev_did_emsg = did_emsg;
+
 	skip_expr_cctx(arg, cctx);
-	return OK;
+	return did_emsg == prev_did_emsg ? OK : FAIL;
     }
 
     // Evaluate the first expression.

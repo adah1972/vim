@@ -747,7 +747,10 @@ EXTERN char e_didnt_get_block_nr_one[]
 	INIT(= N_("E298: Didn't get block nr 1?"));
 EXTERN char e_didnt_get_block_nr_two[]
 	INIT(= N_("E298: Didn't get block nr 2?"));
-// E299 unused
+#ifdef FEAT_PERL
+EXTERN char e_perl_evaluation_forbidden_in_sandbox_without_safe_module[]
+	INIT(= N_("E299: Perl evaluation forbidden in sandbox without the Safe module"));
+#endif
 EXTERN char e_swap_file_already_exists_symlink_attack[]
 	INIT(= N_("E300: Swap file already exists (symlink attack?)"));
 EXTERN char e_oops_lost_the_swap_file[]
@@ -2785,10 +2788,14 @@ EXTERN char e_missing_argument_type_for_str[]
 	INIT(= N_("E1077: Missing argument type for %s"));
 // E1078 unused
 // E1079 unused
-// E1080 unused
+EXTERN char e_invalid_assignment[]
+	INIT(= N_("E1080: Invalid assignment"));
 EXTERN char e_cannot_unlet_str[]
 	INIT(= N_("E1081: Cannot unlet %s"));
-// E1082 unused
+#endif
+EXTERN char e_command_modifier_without_command[]
+	INIT(= N_("E1082: Command modifier without command"));
+#ifdef FEAT_EVAL
 EXTERN char e_missing_backtick[]
 	INIT(= N_("E1083: Missing backtick"));
 EXTERN char e_cannot_delete_vim9_script_function_str[]
@@ -2799,14 +2806,16 @@ EXTERN char e_function_reference_invalid[]
 	INIT(= N_("E1086: Function reference invalid"));
 EXTERN char e_cannot_use_index_when_declaring_variable[]
 	INIT(= N_("E1087: Cannot use an index when declaring a variable"));
-// E1088 unused
+EXTERN char e_script_cannot_import_itself[]
+	INIT(= N_("E1088: Script cannot import itself"));
 EXTERN char e_unknown_variable_str[]
 	INIT(= N_("E1089: Unknown variable: %s"));
 EXTERN char e_cannot_assign_to_argument[]
 	INIT(= N_("E1090: Cannot assign to argument %s"));
 EXTERN char e_function_is_not_compiled_str[]
 	INIT(= N_("E1091: Function is not compiled: %s"));
-// E1092 unused
+EXTERN char e_cannot_nest_redir[]
+	INIT(= N_("E1092: Cannot nest :redir"));
 EXTERN char e_expected_nr_items_but_got_nr[]
 	INIT(= N_("E1093: Expected %d items but got %d"));
 EXTERN char e_import_can_only_be_used_in_script[]
@@ -2823,7 +2832,7 @@ EXTERN char e_unknown_error_while_executing_str[]
 	INIT(= N_("E1099: Unknown error while executing %s"));
 EXTERN char e_command_not_supported_in_vim9_script_missing_var_str[]
 	INIT(= N_("E1100: Command not supported in Vim9 script (missing :var?): %s"));
-EXTERN char e_cannot_declare_script_variable_in_function[]
+EXTERN char e_cannot_declare_script_variable_in_function_str[]
 	INIT(= N_("E1101: Cannot declare a script variable in a function: %s"));
 EXTERN char e_lambda_function_not_found_str[]
 	INIT(= N_("E1102: Lambda function not found: %s"));
@@ -2859,10 +2868,10 @@ EXTERN char e_assert_fails_fifth_argument[]
 	INIT(= N_("E1116: \"assert_fails()\" fifth argument must be a string"));
 EXTERN char e_cannot_use_bang_with_nested_def[]
 	INIT(= N_("E1117: Cannot use ! with nested :def"));
-EXTERN char e_cannot_change_list[]
-	INIT(= N_("E1118: Cannot change list"));
-EXTERN char e_cannot_change_list_item[]
-	INIT(= N_("E1119: Cannot change list item"));
+EXTERN char e_cannot_change_locked_list[]
+	INIT(= N_("E1118: Cannot change locked list"));
+EXTERN char e_cannot_change_locked_list_item[]
+	INIT(= N_("E1119: Cannot change locked list item"));
 EXTERN char e_cannot_change_dict[]
 	INIT(= N_("E1120: Cannot change dict"));
 EXTERN char e_cannot_change_dict_item[]
@@ -2909,7 +2918,8 @@ EXTERN char e_for_argument_must_be_sequence_of_lists[]
 	INIT(= N_("E1140: :for argument must be a sequence of lists"));
 EXTERN char e_indexable_type_required[]
 	INIT(= N_("E1141: Indexable type required"));
-// E1142 unused
+EXTERN char e_calling_test_garbagecollect_now_while_v_testing_is_not_set[]
+	INIT(= N_("E1142: Calling test_garbagecollect_now() while v:testing is not set"));
 EXTERN char e_empty_expression_str[]
 	INIT(= N_("E1143: Empty expression: \"%s\""));
 EXTERN char e_command_str_not_followed_by_white_space_str[]
@@ -2943,7 +2953,7 @@ EXTERN char e_cannot_change_arglist_recursively[]
 EXTERN char e_missing_return_type[]
 	INIT(= N_("E1157: Missing return type"));
 EXTERN char e_cannot_use_flatten_in_vim9_script[]
-	INIT(= N_("E1158: Cannot use flatten() in Vim9 script"));
+	INIT(= N_("E1158: Cannot use flatten() in Vim9 script, use flattennew()"));
 #endif
 EXTERN char e_cannot_split_window_when_closing_buffer[]
 	INIT(= N_("E1159: Cannot split a window when closing the buffer"));
@@ -3000,16 +3010,13 @@ EXTERN char e_variable_arguments_type_must_be_list_str[]
 	INIT(= N_("E1180: Variable arguments type must be a list: %s"));
 EXTERN char e_cannot_use_underscore_here[]
 	INIT(= N_("E1181: Cannot use an underscore here"));
-EXTERN char e_blob_required[]
-	INIT(= N_("E1182: Blob required"));
+// E1182 unused
 EXTERN char e_cannot_use_range_with_assignment_operator_str[]
 	INIT(= N_("E1183: Cannot use a range with an assignment operator: %s"));
 #endif
 #ifdef FEAT_EVAL
 EXTERN char e_blob_not_set[]
 	INIT(= N_("E1184: Blob not set"));
-EXTERN char e_cannot_nest_redir[]
-	INIT(= N_("E1185: Cannot nest :redir"));
 EXTERN char e_missing_redir_end[]
 	INIT(= N_("E1185: Missing :redir END"));
 EXTERN char e_expression_does_not_result_in_value_str[]
@@ -3214,10 +3221,22 @@ EXTERN char e_cannot_import_dot_vim_without_using_as[]
 	INIT(= N_("E1261: Cannot import .vim without using \"as\""));
 EXTERN char e_cannot_import_same_script_twice_str[]
 	INIT(= N_("E1262: Cannot import the same script twice: %s"));
-EXTERN char e_using_autoload_name_in_non_autoload_script_str[]
-	INIT(= N_("E1263: Using autoload name in a non-autoload script: %s"));
+EXTERN char e_cannot_use_name_with_hash_in_vim9_script_use_export_instead[]
+	INIT(= N_("E1263: cannot use name with # in Vim9 script, use export instead"));
 EXTERN char e_autoload_import_cannot_use_absolute_or_relative_path[]
 	INIT(= N_("E1264: Autoload import cannot use absolute or relative path: %s"));
 EXTERN char e_cannot_use_partial_here[]
 	INIT(= N_("E1265: Cannot use a partial here"));
+#endif
+#if defined(FEAT_PYTHON3) && defined(MSWIN)
+EXTERN char e_critical_error_in_python3_initialization_check_your_installation[]
+	INIT(= N_("E1266: Critical error in python3 initialization, check your python3 installation"));
+#endif
+#ifdef FEAT_EVAL
+EXTERN char e_function_name_must_start_with_capital_str[]
+	INIT(= N_("E1267: Function name must start with a capital: %s"));
+EXTERN char e_cannot_use_s_colon_in_vim9_script_str[]
+	INIT(= N_("E1268: Cannot use s: in Vim9 script: %s"));
+EXTERN char e_cannot_create_vim9_script_variable_in_function_str[]
+	INIT(= N_("E1269: Cannot create a Vim9 script variable in a function: %s"));
 #endif

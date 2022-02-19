@@ -580,15 +580,14 @@ list_append(list_T *l, listitem_T *item)
     {
 	// empty list
 	l->lv_first = item;
-	l->lv_u.mat.lv_last = item;
 	item->li_prev = NULL;
     }
     else
     {
 	l->lv_u.mat.lv_last->li_next = item;
 	item->li_prev = l->lv_u.mat.lv_last;
-	l->lv_u.mat.lv_last = item;
     }
+    l->lv_u.mat.lv_last = item;
     ++l->lv_len;
     item->li_next = NULL;
 }
@@ -1016,7 +1015,7 @@ flatten_common(typval_T *argvars, typval_T *rettv, int make_copy)
 
     if (make_copy)
     {
-	l = list_copy(l, TRUE, get_copyID());
+	l = list_copy(l, TRUE, TRUE, get_copyID());
 	rettv->vval.v_list = l;
 	if (l == NULL)
 	    return;
@@ -1103,7 +1102,7 @@ list_concat(list_T *l1, list_T *l2, typval_T *tv)
     if (l1 == NULL)
 	l = list_alloc();
     else
-	l = list_copy(l1, FALSE, 0);
+	l = list_copy(l1, FALSE, TRUE, 0);
     if (l == NULL)
 	return FAIL;
     tv->v_type = VAR_LIST;
@@ -1201,11 +1200,11 @@ list_slice_or_index(
 /*
  * Make a copy of list "orig".  Shallow if "deep" is FALSE.
  * The refcount of the new list is set to 1.
- * See item_copy() for "copyID".
+ * See item_copy() for "top" and "copyID".
  * Returns NULL when out of memory.
  */
     list_T *
-list_copy(list_T *orig, int deep, int copyID)
+list_copy(list_T *orig, int deep, int top, int copyID)
 {
     list_T	*copy;
     listitem_T	*item;
@@ -1217,7 +1216,10 @@ list_copy(list_T *orig, int deep, int copyID)
     copy = list_alloc();
     if (copy != NULL)
     {
-	copy->lv_type = alloc_type(orig->lv_type);
+	if (orig->lv_type == NULL || top || deep)
+	    copy->lv_type = NULL;
+	else
+	    copy->lv_type = alloc_type(orig->lv_type);
 	if (copyID != 0)
 	{
 	    // Do this before adding the items, because one of the items may
@@ -1234,7 +1236,8 @@ list_copy(list_T *orig, int deep, int copyID)
 		break;
 	    if (deep)
 	    {
-		if (item_copy(&item->li_tv, &ni->li_tv, deep, copyID) == FAIL)
+		if (item_copy(&item->li_tv, &ni->li_tv,
+						  deep, FALSE, copyID) == FAIL)
 		{
 		    vim_free(ni);
 		    break;
@@ -2362,8 +2365,7 @@ list_filter_map(
 	    tv.v_lock = 0;
 	    tv.vval.v_number = val;
 	    set_vim_var_nr(VV_KEY, idx);
-	    if (filter_map_one(&tv, expr, filtermap, &newtv, &rem)
-		    == FAIL)
+	    if (filter_map_one(&tv, expr, filtermap, &newtv, &rem) == FAIL)
 		break;
 	    if (did_emsg)
 	    {
@@ -2461,7 +2463,6 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 						    : N_("filter() argument"));
     int		save_did_emsg;
     type_T	*type = NULL;
-    garray_T	type_list;
 
     // map() and filter() return the first argument, also on failure.
     if (filtermap != FILTERMAP_MAPNEW && argvars[0].v_type != VAR_STRING)
@@ -2474,9 +2475,13 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 
     if (filtermap == FILTERMAP_MAP && in_vim9script())
     {
-	// Check that map() does not change the type of the dict.
-	ga_init2(&type_list, sizeof(type_T *), 10);
-	type = typval2type(argvars, get_copyID(), &type_list, TVTT_DO_MEMBER);
+	// Check that map() does not change the declared type of the list or
+	// dict.
+	if (argvars[0].v_type == VAR_DICT && argvars[0].vval.v_dict != NULL)
+	    type = argvars[0].vval.v_dict->dv_type;
+	else if (argvars[0].v_type == VAR_LIST
+					     && argvars[0].vval.v_list != NULL)
+	    type = argvars[0].vval.v_list->lv_type;
     }
 
     if (argvars[0].v_type != VAR_BLOB
@@ -2486,13 +2491,13 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
     {
 	semsg(_(e_argument_of_str_must_be_list_string_dictionary_or_blob),
 								    func_name);
-	goto theend;
+	return;
     }
 
-    expr = &argvars[1];
     // On type errors, the preceding call has already displayed an error
     // message.  Avoid a misleading error message for an empty string that
     // was not passed as argument.
+    expr = &argvars[1];
     if (expr->v_type != VAR_UNKNOWN)
     {
 	typval_T	save_val;
@@ -2523,10 +2528,6 @@ filter_map(typval_T *argvars, typval_T *rettv, filtermap_T filtermap)
 
 	did_emsg |= save_did_emsg;
     }
-
-theend:
-    if (type != NULL)
-	clear_type_list(&type_list);
 }
 
 /*
@@ -2704,11 +2705,11 @@ list_extend_func(
     }
     l2 = argvars[1].vval.v_list;
     if ((is_new || !value_check_lock(l1->lv_lock, arg_errmsg, TRUE))
-	    && l2 != NULL)
+								 && l2 != NULL)
     {
 	if (is_new)
 	{
-	    l1 = list_copy(l1, FALSE, get_copyID());
+	    l1 = list_copy(l1, FALSE, TRUE, get_copyID());
 	    if (l1 == NULL)
 		return;
 	}
@@ -2905,7 +2906,7 @@ list_reverse(list_T *l, typval_T *rettv)
 	if (l->lv_first == &range_list_item)
 	{
 	    varnumber_T new_start = l->lv_u.nonmat.lv_start
-		+ (l->lv_len - 1) * l->lv_u.nonmat.lv_stride;
+		+ ((varnumber_T)l->lv_len - 1) * l->lv_u.nonmat.lv_stride;
 	    l->lv_u.nonmat.lv_end = new_start
 		- (l->lv_u.nonmat.lv_end - l->lv_u.nonmat.lv_start);
 	    l->lv_u.nonmat.lv_start = new_start;

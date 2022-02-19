@@ -178,7 +178,7 @@ compile_lock_unlock(
     lval_T  *lvp,
     char_u  *name_end,
     exarg_T *eap,
-    int	    deep UNUSED,
+    int	    deep,
     void    *coookie)
 {
     cctx_T	*cctx = coookie;
@@ -223,9 +223,12 @@ compile_lock_unlock(
 	ret = FAIL;
     else
     {
-	vim_snprintf((char *)buf, len, "%s %s",
-		eap->cmdidx == CMD_lockvar ? "lockvar" : "unlockvar",
-		p);
+	char *cmd = eap->cmdidx == CMD_lockvar ? "lockvar" : "unlockvar";
+
+	if (deep < 0)
+	    vim_snprintf((char *)buf, len, "%s! %s", cmd, p);
+	else
+	    vim_snprintf((char *)buf, len, "%s %d %s", cmd, deep, p);
 	ret = generate_EXEC_copy(cctx, isn, buf);
 
 	vim_free(buf);
@@ -241,7 +244,23 @@ compile_lock_unlock(
     char_u *
 compile_unletlock(char_u *arg, exarg_T *eap, cctx_T *cctx)
 {
-    ex_unletlock(eap, arg, 0, GLV_NO_AUTOLOAD | GLV_COMPILING,
+    int	    deep = 0;
+    char_u  *p = arg;
+
+    if (eap->cmdidx != CMD_unlet)
+    {
+	if (eap->forceit)
+	    deep = -1;
+	else if (vim_isdigit(*p))
+	{
+	    deep = getdigits(&p);
+	    p = skipwhite(p);
+	}
+	else
+	    deep = 2;
+    }
+
+    ex_unletlock(eap, p, deep, GLV_NO_AUTOLOAD | GLV_COMPILING,
 	    eap->cmdidx == CMD_unlet ? compile_unlet : compile_lock_unlock,
 	    cctx);
     return eap->nextcmd == NULL ? (char_u *)"" : eap->nextcmd;
@@ -971,11 +990,8 @@ compile_for(char_u *arg_start, cctx_T *cctx)
 		if (lhs_type == &t_any)
 		    lhs_type = item_type;
 		else if (item_type != &t_unknown
-			    && (item_type == &t_any
-			      ? need_type(item_type, lhs_type,
-						     -1, 0, cctx, FALSE, FALSE)
-			      : check_type(lhs_type, item_type, TRUE, where))
-			    == FAIL)
+			&& need_type_where(item_type, lhs_type, -1,
+					    where, cctx, FALSE, FALSE) == FAIL)
 		    goto failed;
 		var_lvar = reserve_local(cctx, arg, varlen, TRUE, lhs_type);
 		if (var_lvar == NULL)
@@ -984,8 +1000,6 @@ compile_for(char_u *arg_start, cctx_T *cctx)
 
 		if (semicolon && idx == var_count - 1)
 		    var_lvar->lv_type = vartype;
-		else
-		    var_lvar->lv_type = item_type;
 		generate_STORE(cctx, ISN_STORE, var_lvar->lv_idx, NULL);
 	    }
 
@@ -1406,7 +1420,7 @@ compile_catch(char_u *arg, cctx_T *cctx UNUSED)
 	{
 	    semsg(_(e_separator_mismatch_str), p);
 	    vim_free(tofree);
-	    return FAIL;
+	    return NULL;
 	}
 	if (tofree == NULL)
 	    len = (int)(end - (p + 1));
@@ -1416,9 +1430,9 @@ compile_catch(char_u *arg, cctx_T *cctx UNUSED)
 	vim_free(tofree);
 	p += len + 2 + dropped;
 	if (pat == NULL)
-	    return FAIL;
+	    return NULL;
 	if (generate_PUSHS(cctx, &pat) == FAIL)
-	    return FAIL;
+	    return NULL;
 
 	if (generate_COMPARE(cctx, EXPR_MATCH, FALSE) == FAIL)
 	    return NULL;

@@ -81,7 +81,7 @@ typedef struct syn_pattern
 
 #define SYN_ITEMS(buf)	((synpat_T *)((buf)->b_syn_patterns.ga_data))
 
-#define NONE_IDX	-2	// value of sp_sync_idx for "NONE"
+#define NONE_IDX	(-2)	// value of sp_sync_idx for "NONE"
 
 /*
  * Flags for b_syn_sync_flags:
@@ -207,8 +207,8 @@ typedef struct state_item
 					// pattern
 } stateitem_T;
 
-#define KEYWORD_IDX	-1	    // value of si_idx for keywords
-#define ID_LIST_ALL	(short *)-1 // valid of si_cont_list for containing all
+#define KEYWORD_IDX	(-1)	    // value of si_idx for keywords
+#define ID_LIST_ALL	((short *)-1) // valid of si_cont_list for containing all
 				    // but contained groups
 
 #ifdef FEAT_CONCEAL
@@ -3329,9 +3329,9 @@ syn_cmd_conceal(exarg_T *eap UNUSED, int syncing UNUSED)
     if (*arg == NUL)
     {
 	if (curwin->w_s->b_syn_conceal)
-	    msg(_("syntax conceal on"));
+	    msg("syntax conceal on");
 	else
-	    msg(_("syntax conceal off"));
+	    msg("syntax conceal off");
     }
     else if (STRNICMP(arg, "on", 2) == 0 && next - arg == 2)
 	curwin->w_s->b_syn_conceal = TRUE;
@@ -3359,9 +3359,9 @@ syn_cmd_case(exarg_T *eap, int syncing UNUSED)
     if (*arg == NUL)
     {
 	if (curwin->w_s->b_syn_ic)
-	    msg(_("syntax case ignore"));
+	    msg("syntax case ignore");
 	else
-	    msg(_("syntax case match"));
+	    msg("syntax case match");
     }
     else if (STRNICMP(arg, "match", 5) == 0 && next - arg == 5)
 	curwin->w_s->b_syn_ic = FALSE;
@@ -3388,8 +3388,8 @@ syn_cmd_foldlevel(exarg_T *eap, int syncing UNUSED)
     {
 	switch (curwin->w_s->b_syn_foldlevel)
 	{
-	    case SYNFLD_START:   msg(_("syntax foldlevel start"));   break;
-	    case SYNFLD_MINIMUM: msg(_("syntax foldlevel minimum")); break;
+	    case SYNFLD_START:   msg("syntax foldlevel start");   break;
+	    case SYNFLD_MINIMUM: msg("syntax foldlevel minimum"); break;
 	    default: break;
 	}
 	return;
@@ -3430,11 +3430,11 @@ syn_cmd_spell(exarg_T *eap, int syncing UNUSED)
     if (*arg == NUL)
     {
 	if (curwin->w_s->b_syn_spell == SYNSPL_TOP)
-	    msg(_("syntax spell toplevel"));
+	    msg("syntax spell toplevel");
 	else if (curwin->w_s->b_syn_spell == SYNSPL_NOTOP)
-	    msg(_("syntax spell notoplevel"));
+	    msg("syntax spell notoplevel");
 	else
-	    msg(_("syntax spell default"));
+	    msg("syntax spell default");
     }
     else if (STRNICMP(arg, "toplevel", 8) == 0 && next - arg == 8)
 	curwin->w_s->b_syn_spell = SYNSPL_TOP;
@@ -3471,7 +3471,7 @@ syn_cmd_iskeyword(exarg_T *eap, int syncing UNUSED)
 	msg_puts("\n");
 	if (curwin->w_s->b_syn_isk != empty_option)
 	{
-	    msg_puts(_("syntax iskeyword "));
+	    msg_puts("syntax iskeyword ");
 	    msg_outtrans(curwin->w_s->b_syn_isk);
 	}
 	else

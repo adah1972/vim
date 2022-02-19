@@ -11,11 +11,9 @@
 #include "vim.h"
 
 #ifdef __CYGWIN__
-# ifndef MSWIN
-#  include <cygwin/version.h>
-#  include <sys/cygwin.h>	// for cygwin_conv_to_posix_path() and/or
+# include <cygwin/version.h>
+# include <sys/cygwin.h>	// for cygwin_conv_to_posix_path() and/or
 				// cygwin_conv_path()
-# endif
 # include <limits.h>
 #endif
 
@@ -901,9 +899,6 @@ common_init(mparm_T *paramp)
     qnx_init();		// PhAttach() for clipboard, (and gui)
 #endif
 
-    // Init the table of Normal mode commands.
-    init_normal_cmds();
-
     /*
      * Allocate space for the generic buffers (needed for set_init_1() and
      * emsg()).
@@ -1052,6 +1047,9 @@ is_safe_now(void)
     return stuff_empty()
 	&& typebuf.tb_len == 0
 	&& scriptin[curscript] == NULL
+#ifdef FEAT_EVAL
+	&& !debug_mode
+#endif
 	&& !global_busy;
 }
 
@@ -2573,7 +2571,7 @@ scripterror:
 		}
 	    }
 #endif
-#if defined(__CYGWIN32__) && !defined(MSWIN)
+#ifdef __CYGWIN__
 	    /*
 	     * If vim is invoked by non-Cygwin tools, convert away any
 	     * DOS paths, so things like .swp files are created correctly.

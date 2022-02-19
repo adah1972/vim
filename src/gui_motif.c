@@ -1259,10 +1259,6 @@ gui_mch_add_menu_item(vimmenu_T *menu, int idx)
     XmString	label;
     vimmenu_T	*parent = menu->parent;
 
-# ifdef EBCDIC
-    menu->mnemonic = 0;
-# endif
-
 # if (XmVersion <= 1002)
     // Don't add Popup menu items when the popup menu isn't used.
     if (menu_is_child_of_popup(menu) && !mouse_model_popup())
@@ -1749,17 +1745,27 @@ gui_mch_set_scrollbar_pos(
     int
 gui_mch_get_scrollbar_xpadding(void)
 {
-    // TODO: Calculate the padding for adjust scrollbar position when the
-    // Window is maximized.
-    return 0;
+    int xpad;
+    Dimension tw, ww;
+    Position  tx;
+
+    XtVaGetValues(textArea, XtNwidth, &tw, XtNx, &tx, NULL);
+    XtVaGetValues(vimShell, XtNwidth, &ww, NULL);
+    xpad = ww - tw - tx - gui.scrollbar_width;
+    return (xpad < 0) ? 0 : xpad;
 }
 
     int
 gui_mch_get_scrollbar_ypadding(void)
 {
-    // TODO: Calculate the padding for adjust scrollbar position when the
-    // Window is maximized.
-    return 0;
+    int ypad;
+    Dimension th, wh;
+    Position  ty;
+
+    XtVaGetValues(textArea, XtNheight, &th, XtNy, &ty, NULL);
+    XtVaGetValues(vimShell, XtNheight, &wh, NULL);
+    ypad = wh - th - ty - gui.scrollbar_height;
+    return (ypad < 0) ? 0 : ypad;
 }
 
     void

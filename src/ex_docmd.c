@@ -2709,7 +2709,7 @@ ex_range_without_command(exarg_T *eap)
 /*
  * Check for an Ex command with optional tail.
  * If there is a match advance "pp" to the argument and return TRUE.
- * If "noparen" is TRUE do not recognize the command followed by "(".
+ * If "noparen" is TRUE do not recognize the command followed by "(" or ".".
  */
     static int
 checkforcmd_opt(
@@ -2723,8 +2723,8 @@ checkforcmd_opt(
     for (i = 0; cmd[i] != NUL; ++i)
 	if (((char_u *)cmd)[i] != (*pp)[i])
 	    break;
-    if (i >= len && !isalpha((*pp)[i])
-			   && (*pp)[i] != '_' && (!noparen || (*pp)[i] != '('))
+    if (i >= len && !isalpha((*pp)[i]) && (*pp)[i] != '_'
+			 && (!noparen || ((*pp)[i] != '(' && (*pp)[i] != '.')))
     {
 	*pp = skipwhite(*pp + i);
 	return TRUE;
@@ -2746,7 +2746,7 @@ checkforcmd(
 }
 
 /*
- * Check for an Ex command with optional tail, not followed by "(".
+ * Check for an Ex command with optional tail, not followed by "(" or ".".
  * If there is a match advance "pp" to the argument and return TRUE.
  */
     int
@@ -2784,8 +2784,10 @@ parse_command_modifiers(
 {
     char_u  *p;
     int	    starts_with_colon = FALSE;
+    int	    vim9script = in_vim9script();
 
     CLEAR_POINTER(cmod);
+    cmod->cmod_flags = sticky_cmdmod_flags;
 
     // Repeat until no more command modifiers are found.
     for (;;)
@@ -2818,12 +2820,18 @@ parse_command_modifiers(
 		if (eap->nextcmd != NULL)
 		    ++eap->nextcmd;
 	    }
+	    if (vim9script && has_cmdmod(cmod, FALSE))
+		*errormsg = _(e_command_modifier_without_command);
 	    return FAIL;
 	}
 	if (*eap->cmd == NUL)
 	{
 	    if (!skip_only)
+	    {
 		ex_pressedreturn = TRUE;
+		if (vim9script && has_cmdmod(cmod, FALSE))
+		    *errormsg = _(e_command_modifier_without_command);
+	    }
 	    return FAIL;
 	}
 
@@ -2837,7 +2845,7 @@ parse_command_modifiers(
 	//   verbose[expr] = 2
 	// But not:
 	//   verbose [a, b] = list
-	if (in_vim9script())
+	if (vim9script)
 	{
 	    char_u *s, *n;
 
@@ -2914,7 +2922,7 @@ parse_command_modifiers(
 #ifdef FEAT_EVAL
 					// in ":filter #pat# cmd" # does not
 					// start a comment
-				     && (!in_vim9script() || VIM_ISWHITE(p[1]))
+				     && (!vim9script || VIM_ISWHITE(p[1]))
 #endif
 				     ))
 				break;
@@ -2927,7 +2935,7 @@ parse_command_modifiers(
 			    }
 #ifdef FEAT_EVAL
 			    // Avoid that "filter(arg)" is recognized.
-			    if (in_vim9script() && !VIM_ISWHITE(p[-1]))
+			    if (vim9script && !VIM_ISWHITE(p[-1]))
 				break;
 #endif
 			    if (skip_only)
@@ -3076,7 +3084,6 @@ parse_command_modifiers(
     return OK;
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
 /*
  * Return TRUE if "cmod" has anything set.
  */
@@ -3092,6 +3099,7 @@ has_cmdmod(cmdmod_T *cmod, int ignore_silent)
 	    || cmod->cmod_filter_regmatch.regprog != NULL;
 }
 
+#if defined(FEAT_EVAL) || defined(PROTO)
 /*
  * If Vim9 script and "cmdmod" has anything set give an error and return TRUE.
  */
@@ -4738,7 +4746,7 @@ replace_makeprg(exarg_T *eap, char_u *p, char_u **cmdlinep)
 	    while ((pos = (char_u *)strstr((char *)pos + 2, "$*")) != NULL)
 		++i;
 	    len = (int)STRLEN(p);
-	    new_cmdline = alloc(STRLEN(program) + i * (len - 2) + 1);
+	    new_cmdline = alloc(STRLEN(program) + (size_t)i * (len - 2) + 1);
 	    if (new_cmdline == NULL)
 		return NULL;			// out of memory
 	    ptr = new_cmdline;
@@ -6800,7 +6808,7 @@ ex_resize(exarg_T *eap)
 	    n += wp->w_width;
 	else if (n == 0 && eap->arg[0] == NUL)	// default is very wide
 	    n = 9999;
-	win_setwidth_win((int)n, wp);
+	win_setwidth_win(n, wp);
     }
     else
     {
@@ -6808,7 +6816,7 @@ ex_resize(exarg_T *eap)
 	    n += wp->w_height;
 	else if (n == 0 && eap->arg[0] == NUL)	// default is very high
 	    n = 9999;
-	win_setheight_win((int)n, wp);
+	win_setheight_win(n, wp);
     }
 }
 
@@ -7343,6 +7351,26 @@ post_chdir(cdscope_T scope)
 }
 
 /*
+ * Trigger DirChangedPre for "acmd_fname" with directory "new_dir".
+ */
+    void
+trigger_DirChangedPre(char_u *acmd_fname, char_u *new_dir)
+{
+#ifdef FEAT_EVAL
+    dict_T	    *v_event;
+    save_v_event_T  save_v_event;
+
+    v_event = get_v_event(&save_v_event);
+    (void)dict_add_string(v_event, "directory", new_dir);
+    dict_set_items_ro(v_event);
+#endif
+    apply_autocmds(EVENT_DIRCHANGEDPRE, acmd_fname, new_dir, FALSE, curbuf);
+#ifdef FEAT_EVAL
+    restore_v_event(v_event, &save_v_event);
+#endif
+}
+
+/*
  * Change directory function used by :cd/:tcd/:lcd Ex commands and the
  * chdir() function.
  * scope == CDSCOPE_WINDOW: changes the window-local directory
@@ -7358,7 +7386,8 @@ changedir_func(
 {
     char_u	*pdir = NULL;
     int		dir_differs;
-    int		retval = FALSE;
+    char_u	*acmd_fname = NULL;
+    char_u	**pp;
 
     if (new_dir == NULL || allbuf_locked())
 	return FALSE;
@@ -7410,43 +7439,39 @@ changedir_func(
 	new_dir = NameBuff;
     }
     dir_differs = pdir == NULL
-	|| pathcmp((char *)pdir, (char *)new_dir, -1) != 0;
-    if (dir_differs && vim_chdir(new_dir))
+			    || pathcmp((char *)pdir, (char *)new_dir, -1) != 0;
+    if (dir_differs)
     {
-	emsg(_(e_command_failed));
-	vim_free(pdir);
-    }
-    else
-    {
-	char_u  *acmd_fname;
-	char_u	**pp;
-
 	if (scope == CDSCOPE_WINDOW)
-	    pp = &curwin->w_prevdir;
+	    acmd_fname = (char_u *)"window";
 	else if (scope == CDSCOPE_TABPAGE)
-	    pp = &curtab->tp_prevdir;
+	    acmd_fname = (char_u *)"tabpage";
 	else
-	    pp = &prev_dir;
-	vim_free(*pp);
-	*pp = pdir;
+	    acmd_fname = (char_u *)"global";
+	trigger_DirChangedPre(acmd_fname, new_dir);
 
-	post_chdir(scope);
-
-	if (dir_differs)
+	if (vim_chdir(new_dir))
 	{
-	    if (scope == CDSCOPE_WINDOW)
-		acmd_fname = (char_u *)"window";
-	    else if (scope == CDSCOPE_TABPAGE)
-		acmd_fname = (char_u *)"tabpage";
-	    else
-		acmd_fname = (char_u *)"global";
-	    apply_autocmds(EVENT_DIRCHANGED, acmd_fname, new_dir, FALSE,
-								curbuf);
+	    emsg(_(e_command_failed));
+	    vim_free(pdir);
+	    return FALSE;
 	}
-	retval = TRUE;
     }
 
-    return retval;
+    if (scope == CDSCOPE_WINDOW)
+	pp = &curwin->w_prevdir;
+    else if (scope == CDSCOPE_TABPAGE)
+	pp = &curtab->tp_prevdir;
+    else
+	pp = &prev_dir;
+    vim_free(*pp);
+    *pp = pdir;
+
+    post_chdir(scope);
+
+    if (dir_differs)
+	apply_autocmds(EVENT_DIRCHANGED, acmd_fname, new_dir, FALSE, curbuf);
+    return TRUE;
 }
 
 /*
@@ -7531,7 +7556,7 @@ ex_sleep(exarg_T *eap)
     {
 	n = W_WINROW(curwin) + curwin->w_wrow - msg_scrolled;
 	if (n >= 0)
-	    windgoto((int)n, curwin->w_wincol + curwin->w_wcol);
+	    windgoto(n, curwin->w_wincol + curwin->w_wcol);
     }
 
     len = eap->line2;

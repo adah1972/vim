@@ -1142,7 +1142,7 @@ undo_read(bufinfo_T *bi, char_u *buffer, size_t size)
     }
     else
 #endif
-    if (fread(buffer, (size_t)size, 1, bi->bi_fp) != 1)
+    if (fread(buffer, size, 1, bi->bi_fp) != 1)
 	retval = FAIL;
 
     if (retval == FAIL)
@@ -2828,8 +2828,8 @@ u_undoredo(int undo)
 	    if (curbuf->b_op_end.lnum > top + oldsize)
 		curbuf->b_op_end.lnum += newsize - oldsize;
 	}
-
-	changed_lines(top + 1, 0, bot, newsize - oldsize);
+	if (oldsize > 0 || newsize > 0)
+	    changed_lines(top + 1, 0, bot, newsize - oldsize);
 
 	// set '[ and '] mark
 	if (top + 1 < curbuf->b_op_start.lnum)
@@ -3029,6 +3029,8 @@ u_undo_end(
 	}
     }
 #endif
+    if (VIsual_active)
+	check_pos(curbuf, &VIsual);
 
     smsg_attr_keep(0, _("%ld %s; %s #%ld  %s"),
 	    u_oldcount < 0 ? -u_oldcount : u_oldcount,
@@ -3708,10 +3710,10 @@ f_undotree(typval_T *argvars UNUSED, typval_T *rettv)
 
 	dict_add_number(dict, "synced", (long)curbuf->b_u_synced);
 	dict_add_number(dict, "seq_last", curbuf->b_u_seq_last);
-	dict_add_number(dict, "save_last", (long)curbuf->b_u_save_nr_last);
+	dict_add_number(dict, "save_last", curbuf->b_u_save_nr_last);
 	dict_add_number(dict, "seq_cur", curbuf->b_u_seq_cur);
 	dict_add_number(dict, "time_cur", (long)curbuf->b_u_time_cur);
-	dict_add_number(dict, "save_cur", (long)curbuf->b_u_save_nr_cur);
+	dict_add_number(dict, "save_cur", curbuf->b_u_save_nr_cur);
 
 	list = list_alloc();
 	if (list != NULL)

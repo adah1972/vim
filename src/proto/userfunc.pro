@@ -11,6 +11,7 @@ char_u *fname_trans_sid(char_u *name, char_u *fname_buf, char_u **tofree, int *e
 ufunc_T *find_func_even_dead(char_u *name, int flags);
 ufunc_T *find_func(char_u *name, int is_global);
 int func_is_global(ufunc_T *ufunc);
+int func_requires_g_prefix(ufunc_T *ufunc);
 int func_name_refcount(char_u *name);
 void func_clear_free(ufunc_T *fp, int force);
 int copy_func(char_u *lambda, char_u *global, ectx_T *ectx);
@@ -23,6 +24,7 @@ int call_user_func_check(ufunc_T *fp, int argcount, typval_T *argvars, typval_T 
 void save_funccal(funccal_entry_T *entry);
 void restore_funccal(void);
 funccall_T *get_current_funccal(void);
+int at_script_level(void);
 void delete_script_functions(int sid);
 void free_all_functions(void);
 int builtin_function(char_u *name, int len);

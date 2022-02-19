@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2022 Jan 23
+" Last Change:	2022 Jan 31
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -44,7 +44,7 @@ endif
 " file name matches ft_ignore_pat.
 " When using this, the entry should probably be further down below with the
 " other StarSetf() calls.
-func! s:StarSetf(ft)
+func s:StarSetf(ft)
   if expand("<amatch>") !~ g:ft_ignore_pat
     exe 'setf ' . a:ft
   endif
@@ -228,6 +228,9 @@ au BufNewFile,BufRead *.bib			setf bib
 
 " BibTeX Bibliography Style
 au BufNewFile,BufRead *.bst			setf bst
+
+" Bicep
+au BufNewFile,BufRead *.bicep			setf bicep
 
 " BIND configuration
 " sudoedit uses namedXXXX.conf
@@ -1547,6 +1550,9 @@ au BufNewFile,BufRead *.r,*.R				call dist#ft#FTr()
 " Remind
 au BufNewFile,BufRead .reminders,*.remind,*.rem		setf remind
 
+" ReScript
+au BufNewFile,BufRead *.res,*.resi			setf rescript
+
 " Resolv.conf
 au BufNewFile,BufRead resolv.conf		setf resolv
 
@@ -1789,6 +1795,9 @@ au BufNewFile,BufRead *.mib,*.my		setf mib
 au BufNewFile,BufRead *.hog,snort.conf,vision.conf	setf hog
 au BufNewFile,BufRead *.rules			call dist#ft#FTRules()
 
+" Solidity
+au BufRead,BufNewFile *.sol			setf solidity
+
 " SPARQL queries
 au BufNewFile,BufRead *.rq,*.sparql		setf sparql
 
@@ -1946,10 +1955,13 @@ au BufNewFile,BufRead texmf.cnf			setf texmf
 au BufNewFile,BufRead .tidyrc,tidyrc,tidy.conf	setf tidy
 
 " TF mud client
-au BufNewFile,BufRead *.tf,.tfrc,tfrc		setf tf
+au BufNewFile,BufRead .tfrc,tfrc		setf tf
+
+" TF mud client or terraform
+au BufNewFile,BufRead *.tf			call dist#ft#FTtf()
 
 " TLA+
-au BufRead,BufNewFile *.tla			setf tla
+au BufNewFile,BufRead *.tla			setf tla
 
 " tmux configuration
 au BufNewFile,BufRead {.,}tmux*.conf		setf tmux
@@ -1958,7 +1970,7 @@ au BufNewFile,BufRead {.,}tmux*.conf		setf tmux
 au BufNewFile,BufRead *.toml			setf toml
 
 " TPP - Text Presentation Program
-au BufNewFile,BufReadPost *.tpp			setf tpp
+au BufNewFile,BufRead *.tpp			setf tpp
 
 " Treetop
 au BufRead,BufNewFile *.treetop			setf treetop
@@ -2015,6 +2027,9 @@ au BufNewFile,BufRead */.init/*.conf,*/.init/*.override	       setf upstart
 au BufNewFile,BufRead */.config/upstart/*.conf		       setf upstart
 au BufNewFile,BufRead */.config/upstart/*.override	       setf upstart
 
+" Vala
+au BufNewFile,BufRead *.vala			setf vala
+
 " Vera
 au BufNewFile,BufRead *.vr,*.vri,*.vrh		setf vera
 
@@ -2045,7 +2060,7 @@ au BufRead,BufNewFile *.hw,*.module,*.pkg
 	\ endif
 
 " Visual Basic (also uses *.bas) or FORM
-au BufNewFile,BufRead *.frm			call dist#ft#FTVB("form")
+au BufNewFile,BufRead *.frm			call dist#ft#FTfrm()
 
 " SaxBasic is close to Visual Basic
 au BufNewFile,BufRead *.sba			setf vb
@@ -2507,7 +2522,7 @@ endif
 " Function called for testing all functions defined here.  These are
 " script-local, thus need to be executed here.
 " Returns a string with error messages (hopefully empty).
-func! TestFiletypeFuncs(testlist)
+func TestFiletypeFuncs(testlist)
   let output = ''
   for f in a:testlist
     try
