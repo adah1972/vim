@@ -3457,7 +3457,8 @@ find_ex_command(
 	char_u *pskip = skip_option_env_lead(eap->cmd);
 
 	if (vim_strchr((char_u *)"{('[\"@&$", *p) != NULL
-	       || ((p = to_name_const_end(pskip)) > eap->cmd && *p != NUL))
+	       || ((p = to_name_const_end(pskip)) > eap->cmd && *p != NUL)
+	       || (p[0] == '0' && p[1] == 'z'))
 	{
 	    int	    oplen;
 	    int	    heredoc;
@@ -3502,6 +3503,8 @@ find_ex_command(
 			    *eap->cmd == '{'
 			    // "'string'->func()" is an expression.
 			 || *eap->cmd == '\''
+			    // '"string"->func()' is an expression.
+			 || (eap->cmd[0] == '0' && eap->cmd[1] == 'z')
 			    // '"string"->func()' is an expression.
 			 || *eap->cmd == '"'
 			    // "g:varname" is an expression.
@@ -3742,12 +3745,25 @@ find_ex_command(
 							    (size_t)len) == 0)
 	    {
 #ifdef FEAT_EVAL
-		if (full != NULL
-			   && cmdnames[(int)eap->cmdidx].cmd_name[len] == NUL)
+		if (full != NULL && cmdnames[eap->cmdidx].cmd_name[len] == NUL)
 		    *full = TRUE;
 #endif
 		break;
 	    }
+
+	// :Print and :mode are not supported in Vim9 script.
+	// Some commands cannot be shortened in Vim9 script.
+	if (vim9 && eap->cmdidx != CMD_SIZE)
+	{
+	    if (eap->cmdidx == CMD_mode || eap->cmdidx == CMD_Print)
+		eap->cmdidx = CMD_SIZE;
+	    else if ((cmdnames[eap->cmdidx].cmd_argt & EX_WHOLE)
+			  && len < (int)STRLEN(cmdnames[eap->cmdidx].cmd_name))
+	    {
+		semsg(_(e_command_cannot_be_shortened_str), eap->cmd);
+		eap->cmdidx = CMD_SIZE;
+	    }
+	}
 
 	// Do not recognize ":*" as the star command unless '*' is in
 	// 'cpoptions'.
@@ -3768,8 +3784,8 @@ find_ex_command(
 	    eap->cmdidx = CMD_SIZE;
     }
 
-    // ":fina" means ":finally" for backwards compatibility.
-    if (eap->cmdidx == CMD_final && p - eap->cmd == 4)
+    // ":fina" means ":finally" in legacy script, for backwards compatibility.
+    if (eap->cmdidx == CMD_final && p - eap->cmd == 4 && !vim9)
 	eap->cmdidx = CMD_finally;
 
 #ifdef FEAT_EVAL

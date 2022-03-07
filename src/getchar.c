@@ -2103,7 +2103,7 @@ getchar_common(typval_T *argvars, typval_T *rettv)
     set_vim_var_nr(VV_MOUSE_COL, 0);
 
     rettv->vval.v_number = n;
-    if (IS_SPECIAL(n) || mod_mask != 0)
+    if (n != 0 && (IS_SPECIAL(n) || mod_mask != 0))
     {
 	char_u		temp[10];   // modifier: 3, mbyte-char: 6, NUL: 1
 	int		i = 0;
@@ -2331,7 +2331,7 @@ at_ctrl_x_key(void)
     int	    c = *p;
 
     if (typebuf.tb_len > 3
-	    && c == K_SPECIAL
+	    && (c == K_SPECIAL || c == CSI)  // CSI is used by the GUI
 	    && p[1] == KS_MODIFIER
 	    && (p[2] & MOD_MASK_CTRL))
 	c = p[3] & 0x1f;
@@ -2424,6 +2424,13 @@ handle_mapping(
     int		keylen = *keylenp;
     int		i;
     int		local_State = get_real_state();
+    int		is_plug_map = FALSE;
+
+    // If typehead starts with <Plug> then remap, even for a "noremap" mapping.
+    if (typebuf.tb_buf[typebuf.tb_off] == K_SPECIAL
+	    && typebuf.tb_buf[typebuf.tb_off + 1] == KS_EXTRA
+	    && typebuf.tb_buf[typebuf.tb_off + 2] == KE_PLUG)
+	is_plug_map = TRUE;
 
     /*
      * Check for a mappable key sequence.
@@ -2441,7 +2448,7 @@ handle_mapping(
     tb_c1 = typebuf.tb_buf[typebuf.tb_off];
     if (no_mapping == 0 && is_maphash_valid()
 	    && (no_zero_mapping == 0 || tb_c1 != '0')
-	    && (typebuf.tb_maplen == 0
+	    && (typebuf.tb_maplen == 0 || is_plug_map
 		|| (p_remap
 		    && (typebuf.tb_noremap[typebuf.tb_off]
 				    & (RM_NONE|RM_ABBR)) == 0))
@@ -2562,7 +2569,7 @@ handle_mapping(
 		    for (n = mlen; --n >= 0; )
 			if (*s++ & (RM_NONE|RM_ABBR))
 			    break;
-		    if (n >= 0)
+		    if (!is_plug_map && n >= 0)
 			continue;
 
 		    if (keylen > typebuf.tb_len)
@@ -2591,7 +2598,7 @@ handle_mapping(
 	}
 
 	// If no partly match found, use the longest full match.
-	if (keylen != KEYLEN_PART_MAP)
+	if (keylen != KEYLEN_PART_MAP && mp_match != NULL)
 	{
 	    mp = mp_match;
 	    keylen = mp_match_len;
@@ -2636,7 +2643,7 @@ handle_mapping(
 	    max_mlen = mlen + 1;
     }
 
-    if ((mp == NULL || max_mlen >= mp_match_len) && keylen != KEYLEN_PART_MAP)
+    if ((mp == NULL || max_mlen > mp_match_len) && keylen != KEYLEN_PART_MAP)
     {
 	int	save_keylen = keylen;
 

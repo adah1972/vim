@@ -220,7 +220,7 @@ def Test_assignment()
     enddef
     defcompile
   END
-  v9.CheckScriptFailure(lines, 'E1089:')
+  v9.CheckScriptFailure(lines, 'E1268:')
 
   g:inc_counter += 1
   assert_equal(2, g:inc_counter)
@@ -549,6 +549,13 @@ def Test_assign_index()
   assert_equal(0z77223344, bl)
   bl[-2] = 0x66
   assert_equal(0z77226644, bl)
+
+  lines =<< trim END
+      g:val = '22'
+      var bl = 0z11
+      bl[1] = g:val
+  END
+  v9.CheckDefExecAndScriptFailure(lines, 'E1030: Using a String as a Number: "22"')
 
   # should not read the next line when generating "a.b"
   var a = {}
@@ -1233,12 +1240,18 @@ def Test_script_var_default()
   var lines =<< trim END
       vim9script
       var l: list<number>
+      var li = [1, 2]
       var bl: blob
+      var bli = 0z12
       var d: dict<number>
+      var di = {'a': 1, 'b': 2}
       def Echo()
         assert_equal([], l)
+        assert_equal([1, 2], li)
         assert_equal(0z, bl)
+        assert_equal(0z12, bli)
         assert_equal({}, d)
+        assert_equal({'a': 1, 'b': 2}, di)
       enddef
       Echo()
   END
@@ -1501,6 +1514,30 @@ def Test_assign_list()
       assert_equal([1, 2, 3], ul)
   END
   v9.CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      var l = [1, 2]
+      g:idx = 'x'
+      l[g:idx : 1] = [0]
+      echo l
+  END
+  v9.CheckDefExecAndScriptFailure(lines, 'E1030: Using a String as a Number: "x"')
+
+  lines =<< trim END
+      var l = [1, 2]
+      g:idx = 3
+      l[g:idx : 1] = [0]
+      echo l
+  END
+  v9.CheckDefExecAndScriptFailure(lines, 'E684: list index out of range: 3')
+
+  lines =<< trim END
+      var l = [1, 2]
+      g:idx = 'y'
+      l[1 : g:idx] = [0]
+      echo l
+  END
+  v9.CheckDefExecAndScriptFailure(lines, ['E1012: Type mismatch; expected number but got string', 'E1030: Using a String as a Number: "y"'])
 
   v9.CheckDefFailure(["var l: list<number> = ['', true]"], 'E1012: Type mismatch; expected list<number> but got list<any>', 1)
   v9.CheckDefFailure(["var l: list<list<number>> = [['', true]]"], 'E1012: Type mismatch; expected list<list<number>> but got list<list<any>>', 1)
@@ -1928,6 +1965,11 @@ def Test_var_declaration_fails()
   v9.CheckDefFailure(['var foo.bar = 2'], 'E1087:')
   v9.CheckDefFailure(['var foo[3] = 2'], 'E1087:')
   v9.CheckDefFailure(['const foo: number'], 'E1021:')
+
+  lines =<< trim END
+      va foo = 123
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1065:', 1)
 enddef
 
 def Test_var_declaration_inferred()
@@ -2443,21 +2485,47 @@ def Test_abort_after_error()
   delete('Xtestscript')
 enddef
 
-func Test_declare_command_line()
-  CheckRunVimInTerminal
-  call Run_Test_declare_command_line()
-endfunc
+def Test_using_s_var_in_function()
+  var lines =<< trim END
+      vim9script
+      var scriptlevel = 123
+      def SomeFunc()
+        echo s:scriptlevel
+      enddef
+      SomeFunc()
+  END
+  v9.CheckScriptFailure(lines, 'E1268:')
 
-def Run_Test_declare_command_line()
-  # On the command line the type is parsed but not used.
-  # To get rid of the script context have to run this in another Vim instance.
-  var buf = g:RunVimInTerminal('', {'rows': 6})
-  term_sendkeys(buf, ":vim9 var abc: list<list<number>> = [ [1, 2, 3], [4, 5, 6] ]\<CR>")
-  g:TermWait(buf)
-  term_sendkeys(buf, ":echo abc\<CR>")
-  g:TermWait(buf)
-  g:WaitForAssert(() => assert_match('\[\[1, 2, 3\], \[4, 5, 6\]\]', term_getline(buf, 6)))
-  g:StopVimInTerminal(buf)
+  # OK in legacy script
+  lines =<< trim END
+      let s:scriptlevel = 123
+      def s:SomeFunc()
+        echo s:scriptlevel
+      enddef
+      call s:SomeFunc()
+  END
+  v9.CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      var scriptlevel = 123
+      def SomeFunc()
+        s:scriptlevel = 456
+      enddef
+      SomeFunc()
+  END
+  v9.CheckScriptFailure(lines, 'E1268:')
+
+  # OK in legacy script
+  lines =<< trim END
+      let s:scriptlevel = 123
+      def s:SomeFunc()
+        s:scriptlevel = 456
+      enddef
+      call s:SomeFunc()
+      call assert_equal(456, s:scriptlevel)
+  END
+  v9.CheckScriptSuccess(lines)
 enddef
 
 

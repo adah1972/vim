@@ -486,6 +486,82 @@ arg_list_or_dict_or_blob_or_string(type_T *type, type_T *decl_type UNUSED, argco
 }
 
 /*
+ * Check second argument of map() or filter().
+ */
+    static int
+check_map_filter_arg2(type_T *type, argcontext_T *context, int is_map)
+{
+    type_T *expected_member = NULL;
+    type_T *(args[2]);
+    type_T t_func_exp = {VAR_FUNC, 2, 0, 0, NULL, args};
+
+    if (context->arg_types[0].type_curr->tt_type == VAR_LIST
+	    || context->arg_types[0].type_curr->tt_type == VAR_DICT)
+    {
+	// Use the declared type if possible, so that an error is given if
+	// a declared list changes type, but not if a constant list changes
+	// type.
+	if (context->arg_types[0].type_decl->tt_type == VAR_LIST
+		|| context->arg_types[0].type_decl->tt_type == VAR_DICT)
+	    expected_member = context->arg_types[0].type_decl->tt_member;
+	else
+	    expected_member = context->arg_types[0].type_curr->tt_member;
+    }
+    else if (context->arg_types[0].type_curr->tt_type == VAR_STRING)
+	expected_member = &t_string;
+    else if (context->arg_types[0].type_curr->tt_type == VAR_BLOB)
+	expected_member = &t_number;
+
+    args[0] = NULL;
+    args[1] = &t_unknown;
+    if (type->tt_argcount != -1)
+    {
+	if (!(type->tt_argcount == 2 || (type->tt_argcount == 1
+				    && (type->tt_flags & TTFLAG_VARARGS))))
+	{
+	    emsg(_(e_invalid_number_of_arguments));
+	    return FAIL;
+	}
+	if (type->tt_flags & TTFLAG_VARARGS)
+	    // check the argument types at runtime
+	    t_func_exp.tt_argcount = -1;
+	else
+	{
+	    if (context->arg_types[0].type_curr->tt_type == VAR_STRING
+		    || context->arg_types[0].type_curr->tt_type == VAR_BLOB
+		    || context->arg_types[0].type_curr->tt_type == VAR_LIST)
+		args[0] = &t_number;
+	    else if (context->arg_types[0].type_decl->tt_type == VAR_DICT)
+		args[0] = &t_string;
+	    if (args[0] != NULL)
+		args[1] = expected_member;
+	}
+    }
+
+    if ((type->tt_member != &t_any && type->tt_member != &t_unknown)
+	    || args[0] != NULL)
+    {
+	where_T where = WHERE_INIT;
+
+	if (is_map)
+	    t_func_exp.tt_member = expected_member == NULL
+				    || type->tt_member == &t_any
+				    || type->tt_member == &t_unknown
+				? &t_any : expected_member;
+	else
+	    t_func_exp.tt_member = &t_bool;
+	if (args[0] == NULL)
+	    args[0] = &t_unknown;
+	if (type->tt_argcount == -1)
+	    t_func_exp.tt_argcount = -1;
+
+	where.wt_index = 2;
+	return check_type(&t_func_exp, type, TRUE, where);
+    }
+    return OK;
+}
+
+/*
  * Check second argument of filter(): func must return a bool.
  */
     static int
@@ -498,26 +574,13 @@ arg_filter_func(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
 	return OK;
 
     if (type->tt_type == VAR_FUNC)
-    {
-	if (!(type->tt_member->tt_type == VAR_BOOL
-		|| type->tt_member->tt_type == VAR_NUMBER
-		|| type->tt_member->tt_type == VAR_UNKNOWN
-		|| type->tt_member->tt_type == VAR_ANY))
-	{
-	    arg_type_mismatch(&t_func_bool, type, context->arg_idx + 1);
-	    return FAIL;
-	}
-    }
-    else
-    {
-	semsg(_(e_string_or_function_required_for_argument_nr), 2);
-	return FAIL;
-    }
-    return OK;
+	return check_map_filter_arg2(type, context, FALSE);
+    semsg(_(e_string_or_function_required_for_argument_nr), 2);
+    return FAIL;
 }
 
 /*
- * Check second argument of map().
+ * Check second argument of map(), the function.
  */
     static int
 arg_map_func(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
@@ -529,43 +592,48 @@ arg_map_func(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
 	return OK;
 
     if (type->tt_type == VAR_FUNC)
+	return check_map_filter_arg2(type, context, TRUE);
+    semsg(_(e_string_or_function_required_for_argument_nr), 2);
+    return FAIL;
+}
+
+/*
+ * Check second argument of sort() and uniq(), the "how" argument.
+ */
+    static int
+arg_sort_how(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
+{
+    if (type->tt_type == VAR_STRING
+	    || type->tt_type == VAR_PARTIAL
+	    || type == &t_unknown
+	    || type == &t_any)
+	return OK;
+
+    if (type->tt_type == VAR_FUNC)
     {
-	if (type->tt_member != &t_any && type->tt_member != &t_unknown)
+	type_T *(args[2]);
+	type_T t_func_exp = {VAR_FUNC, 2, 0, 0, &t_number, args};
+
+	if (context->arg_types[0].type_curr->tt_type == VAR_LIST)
+	    args[0] = context->arg_types[0].type_curr->tt_member;
+	else
+	    args[0] = &t_unknown;
+	if ((type->tt_member != &t_any && type->tt_member != &t_unknown)
+		|| args[0] != &t_unknown)
 	{
-	    type_T *expected = NULL;
+	    where_T where = WHERE_INIT;
 
-	    if (context->arg_types[0].type_curr->tt_type == VAR_LIST
-		    || context->arg_types[0].type_curr->tt_type == VAR_DICT)
-	    {
-		// Use the declared type, so that an error is given if a
-		// declared list changes type, but not if a constant list
-		// changes type.
-		if (context->arg_types[0].type_decl->tt_type == VAR_LIST
-			|| context->arg_types[0].type_decl->tt_type == VAR_DICT)
-		    expected = context->arg_types[0].type_decl->tt_member;
-		else
-		    expected = context->arg_types[0].type_curr->tt_member;
-	    }
-	    else if (context->arg_types[0].type_curr->tt_type == VAR_STRING)
-		expected = &t_string;
-	    else if (context->arg_types[0].type_curr->tt_type == VAR_BLOB)
-		expected = &t_number;
-	    if (expected != NULL)
-	    {
-		type_T t_func_exp = {VAR_FUNC, -1, 0, TTFLAG_STATIC,
-								   NULL, NULL};
-
-		t_func_exp.tt_member = expected;
-		return check_arg_type(&t_func_exp, type, context);
-	    }
+	    args[1] = args[0];
+	    if (type->tt_argcount == -1)
+		t_func_exp.tt_argcount = -1;
+	    where.wt_index = 2;
+	    return check_type(&t_func_exp, type, TRUE, where);
 	}
+
+	return OK;
     }
-    else
-    {
-	semsg(_(e_string_or_function_required_for_argument_nr), 2);
-	return FAIL;
-    }
-    return OK;
+    semsg(_(e_string_or_function_required_for_argument_nr), 2);
+    return FAIL;
 }
 
 /*
@@ -979,7 +1047,7 @@ static argcheck_T arg23_settagstack[] = {arg_number, arg_dict_any, arg_string};
 static argcheck_T arg02_sign_getplaced[] = {arg_buffer, arg_dict_any};
 static argcheck_T arg45_sign_place[] = {arg_number, arg_string, arg_string, arg_buffer, arg_dict_any};
 static argcheck_T arg23_slice[] = {arg_slice1, arg_number, arg_number};
-static argcheck_T arg13_sortuniq[] = {arg_list_any, NULL, arg_dict_any};
+static argcheck_T arg13_sortuniq[] = {arg_list_any, arg_sort_how, arg_dict_any};
 static argcheck_T arg24_strpart[] = {arg_string, arg_number, arg_number, arg_bool};
 static argcheck_T arg12_system[] = {arg_string, arg_str_or_nr_or_list};
 static argcheck_T arg23_win_execute[] = {arg_number, arg_string_or_list_string, arg_string};
@@ -4314,7 +4382,8 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 
     if (s == NULL || *s == NUL || (use_string && VIM_ISDIGIT(*s))
 					 || (is_funcref && trans_name == NULL))
-	semsg(_(e_invalid_argument_str), use_string ? tv_get_string(&argvars[0]) : s);
+	semsg(_(e_invalid_argument_str),
+				  use_string ? tv_get_string(&argvars[0]) : s);
     // Don't check an autoload name for existence here.
     else if (trans_name != NULL && (is_funcref
 			 ? find_func(trans_name, is_global) == NULL
@@ -4332,6 +4401,8 @@ common_function(typval_T *argvars, typval_T *rettv, int is_funcref)
 	    // would also work, but some plugins depend on the name being
 	    // printable text.
 	    name = get_scriptlocal_funcname(s);
+	else if (trans_name != NULL && *trans_name == K_SPECIAL)
+	    name = alloc_printable_func_name(trans_name);
 	else
 	    name = vim_strsave(s);
 
@@ -5720,7 +5791,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 #endif
 		},
 	{"mouse_gpm",
-#if (defined(UNIX) || defined(VMS)) && defined(FEAT_MOUSE_GPM)
+#if (defined(UNIX) || defined(VMS)) && defined(FEAT_MOUSE_GPM) && !defined(DYNAMIC_GPM)
 		1
 #else
 		0
@@ -6031,13 +6102,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 		0
 #endif
 		},
-	{"tag_binary",
-#ifdef FEAT_TAG_BINS
-		1
-#else
-		0
-#endif
-		},
+	{"tag_binary", 1},	// graduated feature
 	{"tcl",
 #if defined(FEAT_TCL) && !defined(DYNAMIC_TCL)
 		1
@@ -6325,6 +6390,10 @@ f_has(typval_T *argvars, typval_T *rettv)
 #if defined(FEAT_TERMINAL) && defined(MSWIN)
 	else if (STRICMP(name, "terminal") == 0)
 	    n = terminal_enabled();
+#endif
+#ifdef DYNAMIC_GPM
+	else if (STRICMP(name, "mouse_gpm") == 0)
+	    n = gpm_available();
 #endif
     }
 

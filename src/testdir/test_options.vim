@@ -369,6 +369,7 @@ func Test_set_errors()
   call assert_fails('set sidescroll=-1', 'E487:')
   call assert_fails('set tabstop=-1', 'E487:')
   call assert_fails('set tabstop=10000', 'E474:')
+  call assert_fails('let &tabstop = 10000', 'E474:')
   call assert_fails('set tabstop=5500000000', 'E474:')
   call assert_fails('set textwidth=-1', 'E487:')
   call assert_fails('set timeoutlen=-1', 'E487:')
@@ -384,6 +385,7 @@ func Test_set_errors()
   call assert_fails('set comments=a', 'E525:')
   call assert_fails('set foldmarker=x', 'E536:')
   call assert_fails('set commentstring=x', 'E537:')
+  call assert_fails('let &commentstring = "x"', 'E537:')
   call assert_fails('set complete=x', 'E539:')
   call assert_fails('set rulerformat=%-', 'E539:')
   call assert_fails('set rulerformat=%(', 'E542:')
@@ -443,6 +445,31 @@ func Test_set_errors()
   call assert_fails('set fileencoding=latin1', 'E21:')
   set modifiable&
   call assert_fails('set t_#-&', 'E522:')
+endfunc
+
+func Test_set_encoding()
+  let save_encoding = &encoding
+
+  set enc=iso8859-1
+  call assert_equal('latin1', &enc)
+  set enc=iso8859_1
+  call assert_equal('latin1', &enc)
+  set enc=iso-8859-1
+  call assert_equal('latin1', &enc)
+  set enc=iso_8859_1
+  call assert_equal('latin1', &enc)
+  set enc=iso88591
+  call assert_equal('latin1', &enc)
+  set enc=iso8859
+  call assert_equal('latin1', &enc)
+  set enc=iso-8859
+  call assert_equal('latin1', &enc)
+  set enc=iso_8859
+  call assert_equal('latin1', &enc)
+  call assert_fails('set enc=iso8858', 'E474:')
+  call assert_equal('latin1', &enc)
+
+  let &encoding = save_encoding
 endfunc
 
 func CheckWasSet(name)

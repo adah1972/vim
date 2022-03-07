@@ -821,6 +821,7 @@ get_function_body(
 	{
 	    int	    c;
 	    char_u  *end;
+	    char_u  *cmd;
 
 	    // skip ':' and blanks
 	    for (p = theline; VIM_ISWHITE(*p) || *p == ':'; ++p)
@@ -828,12 +829,16 @@ get_function_body(
 
 	    // Check for "endfunction", "enddef" or "}".
 	    // When a ":" follows it must be a dict key; "enddef: value,"
+	    cmd = p;
 	    if (nesting_inline[nesting]
 		    ? *p == '}'
 		    : (checkforcmd(&p, nesting_def[nesting]
 						? "enddef" : "endfunction", 4)
 			&& *p != ':'))
 	    {
+		if (!nesting_inline[nesting] && nesting_def[nesting]
+								&& p < cmd + 6)
+		    semsg(_(e_command_cannot_be_shortened_str), "enddef");
 		if (nesting-- == 0)
 		{
 		    char_u *nextcmd = NULL;
@@ -1958,16 +1963,28 @@ find_func_even_dead(char_u *name, int flags)
 
     if ((flags & FFED_IS_GLOBAL) == 0)
     {
-	int	find_script_local = in_vim9script() && eval_isnamec1(*name)
-					   && (name[1] != ':' || *name == 's');
-
-	if (find_script_local)
+	// Find script-local function before global one.
+	if (in_vim9script() && eval_isnamec1(*name)
+					   && (name[1] != ':' || *name == 's'))
 	{
-	    // Find script-local function before global one.
 	    func = find_func_with_sid(name[0] == 's' && name[1] == ':'
 				       ? name + 2 : name, current_sctx.sc_sid);
 	    if (func != NULL)
 		return func;
+	}
+	if (in_vim9script() && STRNCMP(name, "<SNR>", 5) == 0)
+	{
+	    char_u  *p = name + 5;
+	    long    sid;
+
+	    // printable "<SNR>123_Name" form
+	    sid = getdigits(&p);
+	    if (*p == '_')
+	    {
+		func = find_func_with_sid(p + 1, (int)sid);
+		if (func != NULL)
+		    return func;
+	    }
 	}
     }
 
@@ -4068,6 +4085,23 @@ get_scriptlocal_funcname(char_u *funcname)
 }
 
 /*
+ * Return script-local "fname" with the 3-byte sequence replaced by
+ * printable <SNR> in allocated memory.
+ */
+    char_u *
+alloc_printable_func_name(char_u *fname)
+{
+    char_u *n = alloc(STRLEN(fname + 3) + 6);
+
+    if (n != NULL)
+    {
+	STRCPY(n, "<SNR>");
+	STRCPY(n + 5, fname + 3);
+    }
+    return n;
+}
+
+/*
  * Call trans_function_name(), except that a lambda is returned as-is.
  * Returns the name in allocated memory.
  */
@@ -4239,10 +4273,21 @@ define_function(exarg_T *eap, char_u *name_arg, garray_T *lines_to_free)
     }
     else
     {
-	if (vim9script && p[0] == 's' && p[1] == ':')
+	if (vim9script)
 	{
-	    semsg(_(e_cannot_use_s_colon_in_vim9_script_str), p);
-	    return NULL;
+	    if (p[0] == 's' && p[1] == ':')
+	    {
+		semsg(_(e_cannot_use_s_colon_in_vim9_script_str), p);
+		return NULL;
+	    }
+	    p = to_name_end(p, TRUE);
+	    if (*skipwhite(p) == '.' && vim_strchr(p, '(') != NULL)
+	    {
+		semsg(_(e_cannot_define_dict_func_in_vim9_script_str),
+								     eap->arg);
+		return NULL;
+	    }
+	    p = eap->arg;
 	}
 
 	name = save_function_name(&p, &is_global, eap->skip,
@@ -4584,7 +4629,7 @@ define_function(exarg_T *eap, char_u *name_arg, garray_T *lines_to_free)
 		{
 		    char_u *prefixed = may_prefix_autoload(name);
 
-		    if (prefixed != NULL)
+		    if (prefixed != NULL && prefixed != name)
 		    {
 			v = find_var(prefixed, &ht, TRUE);
 			if (v != NULL)

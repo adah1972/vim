@@ -1027,7 +1027,7 @@ call_by_name(
     {
 	int func_idx = find_internal_func(name);
 
-	if (func_idx < 0)
+	if (func_idx < 0)  // Impossible?
 	    return FAIL;
 	if (check_internal_func(func_idx, argcount) < 0)
 	    return FAIL;
@@ -1452,8 +1452,6 @@ get_split_sourceline(
     char_u		*p;
     char_u		*line;
 
-    if (*sp->nextline == NUL)
-	return NULL;
     p = vim_strchr(sp->nextline, '\n');
     if (p == NULL)
     {
@@ -1911,11 +1909,11 @@ execute_storerange(isn_T *iptr, ectx_T *ectx)
 	    else
 		n2 = (long)tv_get_number_chk(tv_idx2, &error);
 	    if (error)
-		status = FAIL;
+		status = FAIL; // cannot happen?
 	    else
 	    {
 		listitem_T *li1 = check_range_index_one(
-			tv_dest->vval.v_list, &n1, FALSE);
+					     tv_dest->vval.v_list, &n1, FALSE);
 
 		if (li1 == NULL)
 		    status = FAIL;
@@ -2333,16 +2331,33 @@ load_namespace_var(ectx_T *ectx, isntype_T isn_type, isn_T *iptr)
 
     if (di == NULL)
     {
+	if (isn_type == ISN_LOADG)
+	{
+	    ufunc_T *ufunc = find_func(iptr->isn_arg.string, TRUE);
+
+	    // g:Something could be a function
+	    if (ufunc != NULL)
+	    {
+		typval_T    *tv = STACK_TV_BOT(0);
+
+		++ectx->ec_stack.ga_len;
+		tv->v_type = VAR_FUNC;
+		tv->vval.v_string = alloc(STRLEN(iptr->isn_arg.string) + 3);
+		if (tv->vval.v_string == NULL)
+		    return FAIL;
+		STRCPY(tv->vval.v_string, "g:");
+		STRCPY(tv->vval.v_string + 2, iptr->isn_arg.string);
+		return OK;
+	    }
+	}
 	SOURCING_LNUM = iptr->isn_lnum;
-	if (vim_strchr(iptr->isn_arg.string,
-					AUTOLOAD_CHAR) != NULL)
+	if (vim_strchr(iptr->isn_arg.string, AUTOLOAD_CHAR) != NULL)
 	    // no check if the item exists in the script but
 	    // isn't exported, it is too complicated
-	    semsg(_(e_item_not_found_in_script_str),
-					 iptr->isn_arg.string);
+	    semsg(_(e_item_not_found_in_script_str), iptr->isn_arg.string);
 	else
 	    semsg(_(e_undefined_variable_char_str),
-			     namespace, iptr->isn_arg.string);
+					      namespace, iptr->isn_arg.string);
 	return FAIL;
     }
     else
@@ -3859,6 +3874,25 @@ exec_instructions(ectx_T *ectx)
 			default: res = 0; break;
 		    }
 
+		    --ectx->ec_stack.ga_len;
+		    tv1->v_type = VAR_BOOL;
+		    tv1->vval.v_number = res ? VVAL_TRUE : VVAL_FALSE;
+		}
+		break;
+
+	    case ISN_COMPARENULL:
+		{
+		    typval_T	*tv1 = STACK_TV_BOT(-2);
+		    typval_T	*tv2 = STACK_TV_BOT(-1);
+		    int		res;
+
+		    res = typval_compare_null(tv1, tv2);
+		    if (res == MAYBE)
+			goto on_error;
+		    if (iptr->isn_arg.op.op_type == EXPR_NEQUAL)
+			res = !res;
+		    clear_tv(tv1);
+		    clear_tv(tv2);
 		    --ectx->ec_stack.ga_len;
 		    tv1->v_type = VAR_BOOL;
 		    tv1->vval.v_number = res ? VVAL_TRUE : VVAL_FALSE;
@@ -5886,6 +5920,7 @@ list_instructions(char *pfx, isn_T *instr, int instr_count, ufunc_T *ufunc)
 
 	    case ISN_COMPAREBOOL:
 	    case ISN_COMPARESPECIAL:
+	    case ISN_COMPARENULL:
 	    case ISN_COMPARENR:
 	    case ISN_COMPAREFLOAT:
 	    case ISN_COMPARESTRING:
@@ -5921,6 +5956,7 @@ list_instructions(char *pfx, isn_T *instr, int instr_count, ufunc_T *ufunc)
 			   case ISN_COMPAREBOOL: type = "COMPAREBOOL"; break;
 			   case ISN_COMPARESPECIAL:
 						 type = "COMPARESPECIAL"; break;
+			   case ISN_COMPARENULL: type = "COMPARENULL"; break;
 			   case ISN_COMPARENR: type = "COMPARENR"; break;
 			   case ISN_COMPAREFLOAT: type = "COMPAREFLOAT"; break;
 			   case ISN_COMPARESTRING:

@@ -249,11 +249,6 @@
 #endif
 
 /*
- * +tag_binary		Can use a binary search for the tags file.
- */
-#define FEAT_TAG_BINS
-
-/*
  * +cscope		Unix only: Cscope support.
  */
 #if defined(UNIX) && defined(FEAT_BIG) && !defined(FEAT_CSCOPE) && !defined(MACOS_X)
@@ -952,6 +947,12 @@
  */
 #if defined(FEAT_NORMAL) && defined(HAVE_GPM)
 # define FEAT_MOUSE_GPM
+/*
+ * +mouse_gpm/dyn   Load libgpm dynamically.
+ */
+# ifndef DYNAMIC_GPM
+// #  define DYNAMIC_GPM
+# endif
 #endif
 
 #if defined(FEAT_NORMAL) && defined(HAVE_SYSMOUSE)

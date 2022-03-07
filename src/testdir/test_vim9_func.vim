@@ -106,6 +106,63 @@ def Test_wrong_function_name()
       enddef
   END
   v9.CheckScriptFailure(lines, 'E1267:')
+
+  lines =<< trim END
+      vim9script
+      var Object = {}
+      function Object.Method()
+      endfunction
+  END
+  v9.CheckScriptFailure(lines, 'E1182:')
+
+  lines =<< trim END
+      vim9script
+      var Object = {}
+      def Object.Method()
+      enddef
+  END
+  v9.CheckScriptFailure(lines, 'E1182:')
+
+  lines =<< trim END
+      vim9script
+      g:Object = {}
+      function g:Object.Method()
+      endfunction
+  END
+  v9.CheckScriptFailure(lines, 'E1182:')
+
+  lines =<< trim END
+      let s:Object = {}
+      def Define()
+        function s:Object.Method()
+        endfunction
+      enddef
+      defcompile
+  END
+  v9.CheckScriptFailure(lines, 'E1182:')
+  delfunc g:Define
+
+  lines =<< trim END
+      let s:Object = {}
+      def Define()
+        def Object.Method()
+        enddef
+      enddef
+      defcompile
+  END
+  v9.CheckScriptFailure(lines, 'E1182:')
+  delfunc g:Define
+
+  lines =<< trim END
+      let g:Object = {}
+      def Define()
+        function g:Object.Method()
+        endfunction
+      enddef
+      defcompile
+  END
+  v9.CheckScriptFailure(lines, 'E1182:')
+  delfunc g:Define
 enddef
 
 def Test_autoload_name_mismatch()
@@ -491,6 +548,44 @@ def Test_call_ufunc_count()
   g:counter->assert_equal(4)
   eval g:counter->assert_equal(4)
   unlet g:counter
+enddef
+
+def Test_call_ufunc_failure()
+  var lines =<< trim END
+      vim9script
+      def Tryit()
+        g:Global(1, 2, 3)
+      enddef
+
+      func g:Global(a, b, c)
+        echo a:a a:b a:c
+      endfunc
+
+      defcompile
+
+      func! g:Global(a, b)
+        echo a:a a:b 
+      endfunc
+      Tryit()
+  END
+  v9.CheckScriptFailure(lines, 'E118: Too many arguments for function: Global')
+  delfunc g:Global
+
+  lines =<< trim END
+      vim9script
+
+      g:Ref = function('len')
+      def Tryit()
+        g:Ref('x')
+      enddef
+
+      defcompile
+
+      g:Ref = function('add')
+      Tryit()
+  END
+  v9.CheckScriptFailure(lines, 'E119: Not enough arguments for function: add')
+  unlet g:Ref
 enddef
 
 def s:MyVarargs(arg: string, ...rest: list<string>): string
@@ -3732,12 +3827,12 @@ def Test_too_many_arguments()
   var lines =<< trim END
     echo [0, 1, 2]->map(() => 123)
   END
-  v9.CheckDefExecAndScriptFailure(lines, 'E1106: 2 arguments too many', 1)
+  v9.CheckDefAndScriptFailure(lines, ['E176:', 'E1106: 2 arguments too many'], 1)
 
   lines =<< trim END
     echo [0, 1, 2]->map((_) => 123)
   END
-  v9.CheckDefExecAndScriptFailure(lines, 'E1106: One argument too many', 1)
+  v9.CheckDefAndScriptFailure(lines, ['E176', 'E1106: One argument too many'], 1)
 enddef
 
 def Test_closing_brace_at_start_of_line()

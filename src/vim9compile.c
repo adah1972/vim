@@ -831,7 +831,11 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
     {
 	if (!ends_excmd2(name_start, name_end))
 	{
-	    semsg(_(e_invalid_command_str), eap->cmd);
+	    if (*skipwhite(name_end) == '.')
+		semsg(_(e_cannot_define_dict_func_in_vim9_script_str),
+								     eap->cmd);
+	    else
+		semsg(_(e_invalid_command_str), eap->cmd);
 	    return NULL;
 	}
 
@@ -1331,6 +1335,12 @@ compile_lhs(
 		    char_u	*rawname = lhs->lhs_name
 					   + (lhs->lhs_name[1] == ':' ? 2 : 0);
 
+		    if (script_namespace && current_script_is_vim9())
+		    {
+			semsg(_(e_cannot_use_s_colon_in_vim9_script_str),
+								    var_start);
+			return FAIL;
+		    }
 		    if (is_decl)
 		    {
 			if (script_namespace)
@@ -1873,7 +1883,7 @@ compile_assignment(char_u *arg, exarg_T *eap, cmdidx_T cmdidx, cctx_T *cctx)
     lhs_T	lhs;
     long	start_lnum = SOURCING_LNUM;
 
-    // Skip over the "var" or "[var, var]" to get to any "=".
+    // Skip over the "varname" or "[varname, varname]" to get to any "=".
     p = skip_var_list(arg, TRUE, &var_count, &semicolon, TRUE);
     if (p == NULL)
 	return *arg == '[' ? arg : NULL;
@@ -2818,13 +2828,16 @@ compile_def_function(
 	/*
 	 * COMMAND after range
 	 * 'text'->func() should not be confused with 'a mark
+	 * 0z1234->func() should not be confused with a zero line number
 	 * "++nr" and "--nr" are eval commands
 	 * in "$ENV->func()" the "$" is not a range
 	 */
 	cmd = ea.cmd;
 	if ((*cmd != '$' || starts_with_colon)
-		&& (starts_with_colon || !(*cmd == '\''
-		       || (cmd[0] != NUL && cmd[0] == cmd[1]
+		&& (starts_with_colon
+		    || !(*cmd == '\''
+			|| (cmd[0] == '0' && cmd[1] == 'z')
+			|| (cmd[0] != NUL && cmd[0] == cmd[1]
 					    && (*cmd == '+' || *cmd == '-')))))
 	{
 	    ea.cmd = skip_range(ea.cmd, TRUE, NULL);

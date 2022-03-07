@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2022 Jan 31
+" Last Change:	2022 Feb 13
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -484,6 +484,7 @@ au BufNewFile,BufRead */etc/dnsmasq.conf	setf dnsmasq
 au BufNewFile,BufRead *.desc			setf desc
 
 " the D language or dtrace
+au BufNewFile,BufRead */dtrace/*.d		setf dtrace
 au BufNewFile,BufRead *.d			call dist#ft#DtraceCheck()
 
 " Desktop files
@@ -729,6 +730,10 @@ au BufNewFile,BufRead gnashrc,.gnashrc,gnashpluginrc,.gnashpluginrc setf gnash
 " Gitolite
 au BufNewFile,BufRead gitolite.conf		setf gitolite
 au BufNewFile,BufRead {,.}gitolite.rc,example.gitolite.rc	setf perl
+
+" Glimmer-flavored TypeScript and JavaScript
+au BufNewFile,BufRead *.gts	setf typescript.glimmer
+au BufNewFile,BufRead *.gjs	setf javascript.glimmer
 
 " Gnuplot scripts
 au BufNewFile,BufRead *.gpi,.gnuplot		setf gnuplot

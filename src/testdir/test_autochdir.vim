@@ -86,22 +86,27 @@ func Test_verbose_pwd()
   set acd
   wincmd w
   call assert_match('\[autochdir\].*testdir$', execute('verbose pwd'))
-  execute 'lcd' cwd
-  call assert_match('\[window\].*testdir$', execute('verbose pwd'))
   execute 'tcd' cwd
   call assert_match('\[tabpage\].*testdir$', execute('verbose pwd'))
   execute 'cd' cwd
   call assert_match('\[global\].*testdir$', execute('verbose pwd'))
+  execute 'lcd' cwd
+  call assert_match('\[window\].*testdir$', execute('verbose pwd'))
   edit
   call assert_match('\[autochdir\].*testdir$', execute('verbose pwd'))
+  enew
+  wincmd w
+  call assert_match('\[autochdir\].*testdir[/\\]Xautodir', execute('verbose pwd'))
+  wincmd w
+  call assert_match('\[window\].*testdir$', execute('verbose pwd'))
   wincmd w
   call assert_match('\[autochdir\].*testdir[/\\]Xautodir', execute('verbose pwd'))
   set noacd
   call assert_match('\[autochdir\].*testdir[/\\]Xautodir', execute('verbose pwd'))
   wincmd w
-  call assert_match('\[autochdir\].*testdir[/\\]Xautodir', execute('verbose pwd'))
+  call assert_match('\[window\].*testdir$', execute('verbose pwd'))
   execute 'cd' cwd
-  call assert_match('\[global\].*testdir', execute('verbose pwd'))
+  call assert_match('\[global\].*testdir$', execute('verbose pwd'))
   wincmd w
   call assert_match('\[window\].*testdir[/\\]Xautodir', execute('verbose pwd'))
 
@@ -113,7 +118,7 @@ endfunc
 func Test_multibyte()
   " using an invalid character should not cause a crash
   set wic
-  call assert_fails('tc û¦*', 'E344:')
+  call assert_fails('tc û¦*', has('win32') ? 'E480:' : 'E344:')
   set nowic
 endfunc
 
