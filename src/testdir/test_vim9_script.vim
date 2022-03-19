@@ -907,6 +907,28 @@ def Test_continue_in_try_in_while()
   unlet g:sequence
 enddef
 
+def Test_break_in_try_in_for()
+  var lines =<< trim END
+      vim9script
+      def Ls(): list<string>
+        var ls: list<string>
+        for s in ['abc', 'def']
+          for _ in [123, 456]
+            try
+              eval [][0]
+            catch
+              break
+            endtry
+          endfor
+          ls += [s]
+        endfor
+        return ls
+      enddef
+      assert_equal(['abc', 'def'], Ls())
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
 def Test_nocatch_return_in_try()
   # return in try block returns normally
   def ReturnInTry(): string
@@ -2231,6 +2253,13 @@ def Test_for_loop_unpack()
         res->add(n)
       endfor
       assert_equal([2, 5], res)
+
+      var text: list<string> = ["hello there", "goodbye now"]
+      var splitted = ''
+      for [first; next] in mapnew(text, (i, v) => split(v))
+          splitted ..= string(first) .. string(next) .. '/'
+      endfor
+      assert_equal("'hello'['there']/'goodbye'['now']/", splitted)
   END
   v9.CheckDefAndScriptSuccess(lines)
 
@@ -3860,27 +3889,6 @@ def Run_Test_debug_running_out_of_lines()
   delete('XdebugFunc')
 enddef
 
-def s:ProfiledWithLambda()
-  var n = 3
-  echo [[1, 2], [3, 4]]->filter((_, l) => l[0] == n)
-enddef
-
-def s:ProfiledNested()
-  var x = 0
-  def Nested(): any
-      return x
-  enddef
-  Nested()
-enddef
-
-def ProfiledNestedProfiled()
-  var x = 0
-  def Nested(): any
-      return x
-  enddef
-  Nested()
-enddef
-
 def Test_ambigous_command_error()
   var lines =<< trim END
       vim9script
@@ -3913,23 +3921,87 @@ enddef
 
 " Execute this near the end, profiling doesn't stop until Vim exits.
 " This only tests that it works, not the profiling output.
-def Test_xx_profile_with_lambda()
+def Test_profile_with_lambda()
   CheckFeature profile
 
-  profile start Xprofile.log
-  profile func ProfiledWithLambda
-  ProfiledWithLambda()
+  var lines =<< trim END
+      vim9script
 
-  profile func ProfiledNested
-  ProfiledNested()
+      def ProfiledWithLambda()
+        var n = 3
+        echo [[1, 2], [3, 4]]->filter((_, l) => l[0] == n)
+      enddef
 
-  # Also profile the nested function.  Use a different function, although the
-  # contents is the same, to make sure it was not already compiled.
-  profile func *
-  g:ProfiledNestedProfiled()
+      def ProfiledNested()
+        var x = 0
+        def Nested(): any
+            return x
+        enddef
+        Nested()
+      enddef
 
-  profdel func *
-  profile pause
+      def g:ProfiledNestedProfiled()
+        var x = 0
+        def Nested(): any
+            return x
+        enddef
+        Nested()
+      enddef
+
+      def Profile()
+        ProfiledWithLambda()
+        ProfiledNested()
+
+        # Also profile the nested function.  Use a different function, although
+        # the contents is the same, to make sure it was not already compiled.
+        profile func *
+        g:ProfiledNestedProfiled()
+
+        profdel func *
+        profile pause
+      enddef
+
+      var result = 'done'
+      try
+        # mark functions for profiling now to avoid E1271
+        profile start Xprofile.log
+        profile func ProfiledWithLambda
+        profile func ProfiledNested
+
+        Profile()
+      catch
+        result = 'failed: ' .. v:exception
+      finally
+        writefile([result], 'Xdidprofile')
+      endtry
+  END
+  writefile(lines, 'Xprofile.vim')
+  call system(g:GetVimCommand()
+        .. ' --clean'
+        .. ' -c "so Xprofile.vim"'
+        .. ' -c "qall!"')
+  call assert_equal(0, v:shell_error)
+
+  assert_equal(['done'], readfile('Xdidprofile'))
+  assert_true(filereadable('Xprofile.log'))
+  delete('Xdidprofile')
+  delete('Xprofile.log')
+  delete('Xprofile.vim')
+enddef
+
+func Test_misplaced_type()
+  CheckRunVimInTerminal
+  call Run_Test_misplaced_type()
+endfunc
+
+def Run_Test_misplaced_type()
+  writefile(['let g:somevar = "asdf"'], 'XTest_misplaced_type')
+  var buf = g:RunVimInTerminal('-S XTest_misplaced_type', {'rows': 6})
+  term_sendkeys(buf, ":vim9cmd echo islocked('g:somevar: string')\<CR>")
+  g:VerifyScreenDump(buf, 'Test_misplaced_type', {})
+
+  g:StopVimInTerminal(buf)
+  delete('XTest_misplaced_type')
 enddef
 
 " Keep this last, it messes up highlighting.

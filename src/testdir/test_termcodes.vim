@@ -2111,6 +2111,15 @@ func Test_modifyOtherKeys_ambiguous_mapping()
 
   unmap <C-J>
   unmap <C-J>x
+
+  " if a special character is following there should be a check for a termcode
+  nnoremap s aX<Esc>
+  nnoremap s<BS> aY<Esc>
+  set t_kb=
+  call setline(1, 'x')
+  call feedkeys("s\x08", 'Lx!')
+  call assert_equal('xY', getline(1))
+
   set timeoutlen&
   bwipe!
 endfunc
@@ -2328,6 +2337,22 @@ func Test_cmdline_literal()
   call feedkeys(':' .. GetEscCodeCSI27('V', '6') .. GetEscCodeCSI27('Y', '5') .. "\<C-B>\"\<CR>", 'Lx!')
   call assert_equal("\"\<Esc>[27;5;89~", @:)
 
+  set timeoutlen&
+endfunc
+
+func Test_mapping_esc()
+  set timeoutlen=10
+
+  new
+  nnoremap <Up> iHello<Esc>
+  nnoremap <Esc> <Nop>
+
+  call feedkeys(substitute(&t_ku, '\*', '', 'g'), 'Lx!')
+  call assert_equal("Hello", getline(1))
+
+  bwipe!
+  nunmap <Up>
+  nunmap <Esc>
   set timeoutlen&
 endfunc
 

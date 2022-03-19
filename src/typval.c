@@ -1381,7 +1381,7 @@ typval_compare_list(
 }
 
 /*
- * Compare v:null/v:none with another type.  Return TRUE if the value is NULL.
+ * Compare v:null with another type.  Return TRUE if the value is NULL.
  */
     int
 typval_compare_null(typval_T *tv1, typval_T *tv2)
@@ -1417,9 +1417,9 @@ typval_compare_null(typval_T *tv1, typval_T *tv2)
 	    default: break;
 	}
     }
-    semsg(_(e_cannot_compare_str_with_str),
-			 vartype_name(tv1->v_type), vartype_name(tv2->v_type));
-    return MAYBE;
+    // although comparing null with number, float or bool is not very usefule
+    // we won't give an error
+    return FALSE;
 }
 
 /*
@@ -1580,9 +1580,23 @@ typval_compare_string(
 	i = ic ? MB_STRICMP(s1, s2) : STRCMP(s1, s2);
     switch (type)
     {
-	case EXPR_IS:
+	case EXPR_IS:	    if (in_vim9script())
+			    {
+				// Really check it is the same string, not just
+				// the same value.
+				val = tv1->vval.v_string == tv2->vval.v_string;
+				break;
+			    }
+			    // FALLTHROUGH
 	case EXPR_EQUAL:    val = (i == 0); break;
-	case EXPR_ISNOT:
+	case EXPR_ISNOT:    if (in_vim9script())
+			    {
+				// Really check it is not the same string, not
+				// just a different value.
+				val = tv1->vval.v_string != tv2->vval.v_string;
+				break;
+			    }
+			    // FALLTHROUGH
 	case EXPR_NEQUAL:   val = (i != 0); break;
 	case EXPR_GREATER:  val = (i > 0); break;
 	case EXPR_GEQUAL:   val = (i >= 0); break;

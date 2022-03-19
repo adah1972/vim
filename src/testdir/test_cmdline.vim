@@ -4,6 +4,7 @@ source check.vim
 source screendump.vim
 source view_util.vim
 source shared.vim
+import './vim9.vim' as v9
 
 func SetUp()
   func SaveLastScreenLine()
@@ -150,6 +151,14 @@ func Test_complete_wildmenu()
   call feedkeys(":e Xdir1/\<Tab>\<F2>\<C-B>\"\<CR>", 'tx')
   call assert_equal('"e Xdir1/Xdir2/1', @:)
   cunmap <F2>
+
+  " Test for canceling the wild menu by pressing <PageDown> or <PageUp>.
+  " After this pressing <Left> or <Right> should not change the selection.
+  call feedkeys(":sign \<Tab>\<PageDown>\<Left>\<Right>\<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal('"sign define', @:)
+  call histadd('cmd', 'TestWildMenu')
+  call feedkeys(":sign \<Tab>\<PageUp>\<Left>\<Right>\<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal('"TestWildMenu', @:)
 
   " cleanup
   %bwipe
@@ -541,6 +550,32 @@ func Test_getcompletion()
   call assert_fails("call getcompletion('\\\\@!\\\\@=', 'buffer')", 'E871:')
   call assert_fails('call getcompletion("", "burp")', 'E475:')
   call assert_fails('call getcompletion("abc", [])', 'E475:')
+endfunc
+
+func Test_complete_autoload_error()
+  let save_rtp = &rtp
+  let lines =<< trim END
+      vim9script
+      export def Complete(..._): string
+        return 'match'
+      enddef
+      echo this will cause an error
+  END
+  call mkdir('Xdir/autoload', 'p')
+  call writefile(lines, 'Xdir/autoload/script.vim')
+  exe 'set rtp+=' .. getcwd() .. '/Xdir'
+
+  let lines =<< trim END
+      vim9script
+      import autoload 'script.vim'
+      command -nargs=* -complete=custom,script.Complete Cmd eval 0 + 0
+      &wildcharm = char2nr("\<Tab>")
+      feedkeys(":Cmd \<Tab>", 'xt')
+  END
+  call v9.CheckScriptFailure(lines, 'E121: Undefined variable: this')
+
+  let &rtp = save_rtp
+  call delete('Xdir', 'rf')
 endfunc
 
 func Test_fullcommand()
@@ -1794,6 +1829,29 @@ func Test_wildmode()
   let &encoding = save_encoding
 endfunc
 
+func Test_custom_complete_autoload()
+  call mkdir('Xdir/autoload', 'p')
+  let save_rtp = &rtp
+  exe 'set rtp=' .. getcwd() .. '/Xdir'
+  let lines =<< trim END
+      func vim8#Complete(a, c, p)
+        return "oneA\noneB\noneC"
+      endfunc
+  END
+  call writefile(lines, 'Xdir/autoload/vim8.vim')
+
+  command -nargs=1 -complete=custom,vim8#Complete MyCmd
+  set nowildmenu
+  set wildmode=full,list
+  call feedkeys(":MyCmd \<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneA oneB oneC', @:)
+
+  let &rtp = save_rtp
+  set wildmode& wildmenu&
+  delcommand MyCmd
+  call delete('Xdir', 'rf')
+endfunc
+
 " Test for interrupting the command-line completion
 func Test_interrupt_compl()
   func F(lead, cmdl, p)
@@ -2048,7 +2106,8 @@ func Test_wildmenu_dirstack()
 endfunc
 
 " Test for recalling newer or older cmdline from history with <Up>, <Down>,
-" <S-Up>, <S-Down>, <PageUp>, <PageDown>, <C-p>, or <C-n>.
+" <S-Up>, <S-Down>, <PageUp>, <PageDown>, <kPageUp>, <kPageDown>, <C-p>, or
+" <C-n>.
 func Test_recalling_cmdline()
   CheckFeature cmdline_hist
 
@@ -2056,17 +2115,18 @@ func Test_recalling_cmdline()
   cnoremap <Plug>(save-cmdline) <Cmd>let g:cmdlines += [getcmdline()]<CR>
 
   let histories = [
-  \  {'name': 'cmd',    'enter': ':',                    'exit': "\<Esc>"},
-  \  {'name': 'search', 'enter': '/',                    'exit': "\<Esc>"},
-  \  {'name': 'expr',   'enter': ":\<C-r>=",             'exit': "\<Esc>\<Esc>"},
-  \  {'name': 'input',  'enter': ":call input('')\<CR>", 'exit': "\<CR>"},
+  \  #{name: 'cmd',    enter: ':',                    exit: "\<Esc>"},
+  \  #{name: 'search', enter: '/',                    exit: "\<Esc>"},
+  \  #{name: 'expr',   enter: ":\<C-r>=",             exit: "\<Esc>\<Esc>"},
+  \  #{name: 'input',  enter: ":call input('')\<CR>", exit: "\<CR>"},
   "\ TODO: {'name': 'debug', ...}
   \]
   let keypairs = [
-  \  {'older': "\<Up>",     'newer': "\<Down>",     'prefixmatch': v:true},
-  \  {'older': "\<S-Up>",   'newer': "\<S-Down>",   'prefixmatch': v:false},
-  \  {'older': "\<PageUp>", 'newer': "\<PageDown>", 'prefixmatch': v:false},
-  \  {'older': "\<C-p>",    'newer': "\<C-n>",      'prefixmatch': v:false},
+  \  #{older: "\<Up>",     newer: "\<Down>",     prefixmatch: v:true},
+  \  #{older: "\<S-Up>",   newer: "\<S-Down>",   prefixmatch: v:false},
+  \  #{older: "\<PageUp>", newer: "\<PageDown>", prefixmatch: v:false},
+  \  #{older: "\<kPageUp>", newer: "\<kPageDown>", prefixmatch: v:false},
+  \  #{older: "\<C-p>",    newer: "\<C-n>",      prefixmatch: v:false},
   \]
   let prefix = 'vi'
   for h in histories
@@ -2389,6 +2449,28 @@ func Test_wildmenu_pum()
   call VerifyScreenDump(buf, 'Test_wildmenu_pum_41', {})
   call term_sendkeys(buf, "\<Esc>")
 
+  " Pressing <PageDown> should scroll the menu downward
+  call term_sendkeys(buf, ":sign \<Tab>\<PageDown>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_42', {})
+  call term_sendkeys(buf, "\<PageDown>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_43', {})
+  call term_sendkeys(buf, "\<PageDown>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_44', {})
+  call term_sendkeys(buf, "\<PageDown>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_45', {})
+  call term_sendkeys(buf, "\<C-U>sign \<Tab>\<Down>\<Down>\<PageDown>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_46', {})
+
+  " Pressing <PageUp> should scroll the menu upward
+  call term_sendkeys(buf, "\<C-U>sign \<Tab>\<PageUp>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_47', {})
+  call term_sendkeys(buf, "\<PageUp>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_48', {})
+  call term_sendkeys(buf, "\<PageUp>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_49', {})
+  call term_sendkeys(buf, "\<PageUp>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_50', {})
+
   call term_sendkeys(buf, "\<C-U>\<CR>")
   call StopVimInTerminal(buf)
   call delete('Xtest')
@@ -2671,8 +2753,7 @@ func Test_fuzzy_completion_userdefined_snr_func()
   endfunc
   set wildoptions=fuzzy
   call feedkeys(":call sendmail\<C-A>\<C-B>\"\<CR>", 'tx')
-  call assert_equal('"call SendSomemail() S1e2n3dmail() '
-        \ .. expand("<SID>") .. 'Sendmail()', @:)
+  call assert_match('"call SendSomemail() S1e2n3dmail() <SNR>\d\+_Sendmail()', @:)
   set wildoptions&
   delfunc s:Sendmail
   delfunc SendSomemail
@@ -3005,6 +3086,159 @@ func Test_fuzzy_completion_custom_func()
   call assert_equal("\"Fuzzy TestFOrmat", @:)
   delcom Fuzzy
   set wildoptions&
+endfunc
+
+" Test for :breakadd argument completion
+func Test_cmdline_complete_breakadd()
+  call feedkeys(":breakadd \<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd expr file func here", @:)
+  call feedkeys(":breakadd \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd expr", @:)
+  call feedkeys(":breakadd    \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd    expr", @:)
+  call feedkeys(":breakadd he\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd here", @:)
+  call feedkeys(":breakadd    he\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd    here", @:)
+  call feedkeys(":breakadd abc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd abc", @:)
+  call assert_equal(['expr', 'file', 'func', 'here'], getcompletion('', 'breakpoint'))
+  let l = getcompletion('not', 'breakpoint')
+  call assert_equal([], l)
+
+  " Test for :breakadd file [lnum] <file>
+  call writefile([], 'Xscript')
+  call feedkeys(":breakadd file Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd file Xscript", @:)
+  call feedkeys(":breakadd   file   Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd   file   Xscript", @:)
+  call feedkeys(":breakadd file 20 Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd file 20 Xscript", @:)
+  call feedkeys(":breakadd   file   20   Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd   file   20   Xscript", @:)
+  call feedkeys(":breakadd file 20x Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd file 20x Xsc\t", @:)
+  call feedkeys(":breakadd file 20\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd file 20\t", @:)
+  call feedkeys(":breakadd file 20x\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd file 20x\t", @:)
+  call feedkeys(":breakadd file Xscript  \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd file Xscript  ", @:)
+  call feedkeys(":breakadd file X1B2C3\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd file X1B2C3", @:)
+  call delete('Xscript')
+
+  " Test for :breakadd func [lnum] <function>
+  func Xbreak_func()
+  endfunc
+  call feedkeys(":breakadd func Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd func Xbreak_func", @:)
+  call feedkeys(":breakadd    func    Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd    func    Xbreak_func", @:)
+  call feedkeys(":breakadd func 20 Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd func 20 Xbreak_func", @:)
+  call feedkeys(":breakadd   func   20   Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd   func   20   Xbreak_func", @:)
+  call feedkeys(":breakadd func 20x Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd func 20x Xbr\t", @:)
+  call feedkeys(":breakadd func 20\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd func 20\t", @:)
+  call feedkeys(":breakadd func 20x\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd func 20x\t", @:)
+  call feedkeys(":breakadd func Xbreak_func  \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd func Xbreak_func  ", @:)
+  call feedkeys(":breakadd func X1B2C3\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd func X1B2C3", @:)
+  delfunc Xbreak_func
+
+  " Test for :breakadd expr <expression>
+  let g:Xtest_var = 10
+  call feedkeys(":breakadd expr Xtest\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd expr Xtest_var", @:)
+  call feedkeys(":breakadd    expr    Xtest\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd    expr    Xtest_var", @:)
+  call feedkeys(":breakadd expr Xtest_var  \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd expr Xtest_var  ", @:)
+  call feedkeys(":breakadd expr X1B2C3\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd expr X1B2C3", @:)
+  unlet g:Xtest_var
+
+  " Test for :breakadd here
+  call feedkeys(":breakadd here Xtest\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd here Xtest", @:)
+  call feedkeys(":breakadd   here   Xtest\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd   here   Xtest", @:)
+  call feedkeys(":breakadd here \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakadd here ", @:)
+endfunc
+
+" Test for :breakdel argument completion
+func Test_cmdline_complete_breakdel()
+  call feedkeys(":breakdel \<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file func here", @:)
+  call feedkeys(":breakdel \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file", @:)
+  call feedkeys(":breakdel    \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel    file", @:)
+  call feedkeys(":breakdel he\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel here", @:)
+  call feedkeys(":breakdel    he\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel    here", @:)
+  call feedkeys(":breakdel abc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel abc", @:)
+
+  " Test for :breakdel file [lnum] <file>
+  call writefile([], 'Xscript')
+  call feedkeys(":breakdel file Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file Xscript", @:)
+  call feedkeys(":breakdel   file   Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel   file   Xscript", @:)
+  call feedkeys(":breakdel file 20 Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file 20 Xscript", @:)
+  call feedkeys(":breakdel   file   20   Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel   file   20   Xscript", @:)
+  call feedkeys(":breakdel file 20x Xsc\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file 20x Xsc\t", @:)
+  call feedkeys(":breakdel file 20\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file 20\t", @:)
+  call feedkeys(":breakdel file 20x\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file 20x\t", @:)
+  call feedkeys(":breakdel file Xscript  \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file Xscript  ", @:)
+  call feedkeys(":breakdel file X1B2C3\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel file X1B2C3", @:)
+  call delete('Xscript')
+
+  " Test for :breakdel func [lnum] <function>
+  func Xbreak_func()
+  endfunc
+  call feedkeys(":breakdel func Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel func Xbreak_func", @:)
+  call feedkeys(":breakdel   func   Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel   func   Xbreak_func", @:)
+  call feedkeys(":breakdel func 20 Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel func 20 Xbreak_func", @:)
+  call feedkeys(":breakdel   func   20   Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel   func   20   Xbreak_func", @:)
+  call feedkeys(":breakdel func 20x Xbr\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel func 20x Xbr\t", @:)
+  call feedkeys(":breakdel func 20\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel func 20\t", @:)
+  call feedkeys(":breakdel func 20x\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel func 20x\t", @:)
+  call feedkeys(":breakdel func Xbreak_func  \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel func Xbreak_func  ", @:)
+  call feedkeys(":breakdel func X1B2C3\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel func X1B2C3", @:)
+  delfunc Xbreak_func
+
+  " Test for :breakdel here
+  call feedkeys(":breakdel here Xtest\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel here Xtest", @:)
+  call feedkeys(":breakdel   here   Xtest\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel   here   Xtest", @:)
+  call feedkeys(":breakdel here \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"breakdel here ", @:)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

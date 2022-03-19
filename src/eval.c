@@ -695,6 +695,7 @@ call_vim_function(
     char_u	*arg;
     char_u	*name;
     char_u	*tofree = NULL;
+    int		ignore_errors;
 
     rettv->v_type = VAR_UNKNOWN;		// clear_tv() uses this
     CLEAR_FIELD(funcexe);
@@ -702,11 +703,17 @@ call_vim_function(
     funcexe.fe_lastline = curwin->w_cursor.lnum;
     funcexe.fe_evaluate = TRUE;
 
-    // The name might be "import.Func" or "Funcref".
+    // The name might be "import.Func" or "Funcref".  We don't know, we need to
+    // ignore errors for an undefined name.  But we do want errors when an
+    // autoload script has errors.  Guess that when there is a dot in the name
+    // showing errors is the right choice.
+    ignore_errors = vim_strchr(func, '.') == NULL;
     arg = func;
-    ++emsg_off;
+    if (ignore_errors)
+	++emsg_off;
     name = deref_function_name(&arg, &tofree, &EVALARG_EVALUATE, FALSE);
-    --emsg_off;
+    if (ignore_errors)
+	--emsg_off;
     if (name == NULL)
 	name = func;
 
@@ -922,15 +929,14 @@ get_lval(
 	if (vim9script)
 	{
 	    // "a: type" is declaring variable "a" with a type, not "a:".
-	    if (p == name + 2 && p[-1] == ':')
+	    // However, "g:[key]" is indexing a dictionary.
+	    if (p == name + 2 && p[-1] == ':' && *p != '[')
 	    {
 		--p;
 		lp->ll_name_end = p;
 	    }
 	    if (*p == ':')
 	    {
-		garray_T    tmp_type_list;
-		garray_T    *type_list;
 		char_u	    *tp = skipwhite(p + 1);
 
 		if (tp == p + 1 && !quiet)
@@ -939,26 +945,19 @@ get_lval(
 		    return NULL;
 		}
 
-		if (SCRIPT_ID_VALID(current_sctx.sc_sid))
-		    type_list = &SCRIPT_ITEM(current_sctx.sc_sid)->sn_type_list;
-		else
+		if (!SCRIPT_ID_VALID(current_sctx.sc_sid))
 		{
-		    type_list = &tmp_type_list;
-		    ga_init2(type_list, sizeof(type_T), 10);
+		    semsg(_(e_using_type_not_in_script_context_str), p);
+		    return NULL;
 		}
 
 		// parse the type after the name
-		lp->ll_type = parse_type(&tp, type_list, !quiet);
+		lp->ll_type = parse_type(&tp,
+			       &SCRIPT_ITEM(current_sctx.sc_sid)->sn_type_list,
+			       !quiet);
 		if (lp->ll_type == NULL && !quiet)
 		    return NULL;
 		lp->ll_name_end = tp;
-
-		// drop the type when not in a script
-		if (type_list == &tmp_type_list)
-		{
-		    lp->ll_type = NULL;
-		    clear_type_list(type_list);
-		}
 	    }
 	}
     }
@@ -2848,6 +2847,7 @@ eval4(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	int	    vim9script = in_vim9script();
 	int	    evaluate = evalarg == NULL
 				   ? 0 : (evalarg->eval_flags & EVAL_EVALUATE);
+	long	    comp_lnum = SOURCING_LNUM;
 
 	if (getnext)
 	{
@@ -2903,6 +2903,8 @@ eval4(char_u **arg, typval_T *rettv, evalarg_T *evalarg)
 	{
 	    int ret;
 
+	    // use the line of the comparison for messages
+	    SOURCING_LNUM = comp_lnum;
 	    if (vim9script && check_compare_types(type, rettv, &var2) == FAIL)
 	    {
 		ret = FAIL;
@@ -3483,6 +3485,106 @@ eval_leader(char_u **arg, int vim9)
 }
 
 /*
+ * Check for a predefined value "true", "false" and "null.*".
+ * Return OK when recognized.
+ */
+    int
+handle_predefined(char_u *s, int len, typval_T *rettv)
+{
+    switch (len)
+    {
+	case 4: if (STRNCMP(s, "true", 4) == 0)
+		{
+		    rettv->v_type = VAR_BOOL;
+		    rettv->vval.v_number = VVAL_TRUE;
+		    return OK;
+		}
+		if (STRNCMP(s, "null", 4) == 0)
+		{
+		    rettv->v_type = VAR_SPECIAL;
+		    rettv->vval.v_number = VVAL_NULL;
+		    return OK;
+		}
+		break;
+	case 5: if (STRNCMP(s, "false", 5) == 0)
+		{
+		    rettv->v_type = VAR_BOOL;
+		    rettv->vval.v_number = VVAL_FALSE;
+		    return OK;
+		}
+		break;
+	case 8: if (STRNCMP(s, "null_job", 8) == 0)
+		{
+#ifdef FEAT_JOB_CHANNEL
+		    rettv->v_type = VAR_JOB;
+		    rettv->vval.v_job = NULL;
+#else
+		    rettv->v_type = VAR_SPECIAL;
+		    rettv->vval.v_number = VVAL_NULL;
+#endif
+		    return OK;
+		}
+		break;
+	case 9:
+		if (STRNCMP(s, "null_", 5) != 0)
+		    break;
+		if (STRNCMP(s + 5, "list", 4) == 0)
+		{
+		    rettv->v_type = VAR_LIST;
+		    rettv->vval.v_list = NULL;
+		    return OK;
+		}
+		if (STRNCMP(s + 5, "dict", 4) == 0)
+		{
+		    rettv->v_type = VAR_DICT;
+		    rettv->vval.v_dict = NULL;
+		    return OK;
+		}
+		if (STRNCMP(s + 5, "blob", 4) == 0)
+		{
+		    rettv->v_type = VAR_BLOB;
+		    rettv->vval.v_blob = NULL;
+		    return OK;
+		}
+		break;
+	case 11: if (STRNCMP(s, "null_string", 11) == 0)
+		{
+		    rettv->v_type = VAR_STRING;
+		    rettv->vval.v_string = NULL;
+		    return OK;
+		}
+		break;
+	case 12:
+		if (STRNCMP(s, "null_channel", 12) == 0)
+		{
+#ifdef FEAT_JOB_CHANNEL
+		    rettv->v_type = VAR_CHANNEL;
+		    rettv->vval.v_channel = NULL;
+#else
+		    rettv->v_type = VAR_SPECIAL;
+		    rettv->vval.v_number = VVAL_NULL;
+#endif
+		    return OK;
+		}
+		if (STRNCMP(s, "null_partial", 12) == 0)
+		{
+		    rettv->v_type = VAR_PARTIAL;
+		    rettv->vval.v_partial = NULL;
+		    return OK;
+		}
+		break;
+	case 13: if (STRNCMP(s, "null_function", 13) == 0)
+		{
+		    rettv->v_type = VAR_FUNC;
+		    rettv->vval.v_string = NULL;
+		    return OK;
+		}
+		break;
+    }
+    return FAIL;
+}
+
+/*
  * Handle sixth level expression:
  *  number		number constant
  *  0zFFFFFFFF		Blob constant
@@ -3690,8 +3792,8 @@ eval7(
 			// This is recognized in compile_return().
 			if (ufunc->uf_ret_type->tt_type == VAR_VOID)
 			    ufunc->uf_ret_type = &t_unknown;
-			if (compile_def_function(ufunc,
-				     FALSE, COMPILE_TYPE(ufunc), NULL) == FAIL)
+			if (compile_def_function(ufunc, FALSE,
+					get_compile_type(ufunc), NULL) == FAIL)
 			{
 			    clear_tv(rettv);
 			    ret = FAIL;
@@ -3757,26 +3859,11 @@ eval7(
 		ret = FAIL;
 	    else if (evaluate)
 	    {
-		// get the value of "true", "false" or a variable
-		if (len == 4 && vim9script && STRNCMP(s, "true", 4) == 0)
-		{
-		    rettv->v_type = VAR_BOOL;
-		    rettv->vval.v_number = VVAL_TRUE;
-		    ret = OK;
-		}
-		else if (len == 5 && vim9script && STRNCMP(s, "false", 5) == 0)
-		{
-		    rettv->v_type = VAR_BOOL;
-		    rettv->vval.v_number = VVAL_FALSE;
-		    ret = OK;
-		}
-		else if (len == 4 && vim9script && STRNCMP(s, "null", 4) == 0)
-		{
-		    rettv->v_type = VAR_SPECIAL;
-		    rettv->vval.v_number = VVAL_NULL;
-		    ret = OK;
-		}
-		else
+		// get the value of "true", "false", etc. or a variable
+		ret = FAIL;
+		if (vim9script)
+		    ret = handle_predefined(s, len, rettv);
+		if (ret == FAIL)
 		{
 		    name_start = s;
 		    ret = eval_variable(s, len, 0, rettv, NULL,

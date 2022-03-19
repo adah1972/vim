@@ -306,10 +306,83 @@ def Test_assign_register()
 enddef
 
 def Test_reserved_name()
-  for name in ['true', 'false', 'null']
+  var more_names = ['null_job', 'null_channel']
+  if !has('job')
+    more_names = []
+  endif
+
+  for name in ['true',
+               'false',
+               'null',
+               'null_blob',
+               'null_dict',
+               'null_function',
+               'null_list',
+               'null_partial',
+               'null_string',
+               ] + more_names
     v9.CheckDefExecAndScriptFailure(['var ' .. name .. ' =  0'], 'E1034:')
     v9.CheckDefExecAndScriptFailure(['var ' .. name .. ': bool'], 'E1034:')
   endfor
+enddef
+
+def Test_null_values()
+  var lines =<< trim END
+      var b: blob = null_blob
+      var dn: dict<number> = null_dict
+      var ds: dict<string> = null_dict
+      var ln: list<number> = null_list
+      var ls: list<string> = null_list
+      var Ff: func(string): string = null_function
+      var Fp: func(number): number = null_partial
+      var s: string = null_string
+      if has('job')
+        var j: job = null_job
+        var c: channel = null_channel
+      endif
+
+      var d: dict<func> = {a: function('tr'), b: null_function}
+
+      var bl: list<blob> = [0z12, null_blob]
+      var dnl: list<dict<number>> = [{a: 1}, null_dict]
+      var dsl: list<dict<string>> = [{a: 'x'}, null_dict]
+      var lnl: list<list<number>> = [[1], null_list]
+      var lsl: list<list<string>> = [['x'], null_list]
+      def Len(v: string): number
+        return len(v)
+      enddef
+      var Ffl: list<func(string): number> = [Len, null_function]
+      var Fpl: list<func(string): number> = [Len, null_partial]
+      var sl: list<string> = ['x', null_string]
+      if has('job')
+        var jl: list<job> = [null_job]
+        var cl: list<channel> = [null_channel]
+      endif
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_keep_type_after_assigning_null()
+  var lines =<< trim END
+      var b: blob
+      b = null_blob
+      b = 'text'
+  END
+  v9.CheckDefExecAndScriptFailure(lines, 'E1012: Type mismatch; expected blob but got string')
+
+  lines =<< trim END
+      var l: list<number>
+      l = null_list
+      l = ['text']
+  END
+  v9.CheckDefExecAndScriptFailure(lines, 'E1012: Type mismatch; expected list<number> but got list<string>')
+
+  lines =<< trim END
+      var d: dict<string>
+      d = null_dict
+      d = {a: 1, b: 2}
+  END
+  v9.CheckDefExecAndScriptFailure(lines, 'E1012: Type mismatch; expected dict<string> but got dict<number>')
 enddef
 
 def Test_skipped_assignment()
@@ -1044,6 +1117,14 @@ def Test_assignment_dict()
   v9.CheckDefAndScriptSuccess(lines)
 
   lines =<< trim END
+    var key = 'foo'
+    g:[key] = 'value'
+    assert_equal('value', g:foo)
+    unlet g:foo
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
     var dd = {one: 1}
     dd.one) = 2
   END
@@ -1521,7 +1602,7 @@ def Test_assign_list()
       l[g:idx : 1] = [0]
       echo l
   END
-  v9.CheckDefExecAndScriptFailure(lines, 'E1030: Using a String as a Number: "x"')
+  v9.CheckDefExecAndScriptFailure(lines, ['E1012: Type mismatch; expected number but got string', 'E1030: Using a String as a Number: "x"'])
 
   lines =<< trim END
       var l = [1, 2]

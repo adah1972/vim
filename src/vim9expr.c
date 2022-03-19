@@ -355,15 +355,16 @@ compile_load_scriptvar(
 generate_funcref(cctx_T *cctx, char_u *name, int has_g_prefix)
 {
     ufunc_T *ufunc = find_func(name, FALSE);
+    compiletype_T compile_type;
 
     // Reject a global non-autoload function found without the "g:" prefix.
     if (ufunc == NULL || (!has_g_prefix && func_requires_g_prefix(ufunc)))
 	return FAIL;
 
     // Need to compile any default values to get the argument types.
-    if (func_needs_compiling(ufunc, COMPILE_TYPE(ufunc))
-	    && compile_def_function(ufunc, TRUE, COMPILE_TYPE(ufunc), NULL)
-								       == FAIL)
+    compile_type = get_compile_type(ufunc);
+    if (func_needs_compiling(ufunc, compile_type)
+	      && compile_def_function(ufunc, TRUE, compile_type, NULL) == FAIL)
 	return FAIL;
     return generate_PUSHFUNC(cctx, ufunc->uf_name, ufunc->uf_func_type);
 }
@@ -1006,6 +1007,16 @@ compile_lambda(char_u **arg, cctx_T *cctx)
 #endif
        )
 	compile_def_function(ufunc, FALSE, CT_NONE, cctx);
+
+    // if the outer function is not compiled for debugging or profiling, this
+    // one might be
+    if (cctx->ctx_compile_type == CT_NONE)
+    {
+	compiletype_T compile_type = get_compile_type(ufunc);
+
+	if (compile_type != CT_NONE)
+	    compile_def_function(ufunc, FALSE, compile_type, cctx);
+    }
 
     // The last entry in evalarg.eval_tofree_ga is a copy of the last line and
     // "*arg" may point into it.  Point into the original line to avoid a
@@ -2107,14 +2118,20 @@ compile_expr8(
 		    break;
 
 	/*
-	 * "null" constant
+	 * "null" or "null_*" constant
 	 */
-	case 'n':   if (STRNCMP(*arg, "null", 4) == 0
-						   && !eval_isnamec((*arg)[4]))
+	case 'n':   if (STRNCMP(*arg, "null", 4) == 0)
 		    {
-			*arg += 4;
-			rettv->v_type = VAR_SPECIAL;
-			rettv->vval.v_number = VVAL_NULL;
+			char_u  *p = *arg + 4;
+			int	len;
+
+			for (len = 0; eval_isnamec(p[len]); ++len)
+			    ;
+			ret = handle_predefined(*arg, len + 4, rettv);
+			if (ret == FAIL)
+			    ret = NOTDONE;
+			else
+			    *arg += len + 4;
 		    }
 		    else
 			ret = NOTDONE;

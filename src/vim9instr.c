@@ -339,22 +339,30 @@ generate_two_op(cctx_T *cctx, char_u *op)
 }
 
 /*
- * Get the instruction to use for comparing "type1" with "type2"
+ * Get the instruction to use for comparing two values with specified types.
+ * Either "tv1" and "tv2" are passed or "type1" and "type2".
  * Return ISN_DROP when failed.
  */
     static isntype_T
-get_compare_isn(exprtype_T exprtype, vartype_T type1, vartype_T type2)
+get_compare_isn(
+	exprtype_T exprtype,
+	typval_T    *tv1,
+	typval_T    *tv2,
+	type_T	    *type1,
+	type_T	    *type2)
 {
     isntype_T	isntype = ISN_DROP;
+    vartype_T	vartype1 = tv1 != NULL ? tv1->v_type : type1->tt_type;
+    vartype_T	vartype2 = tv2 != NULL ? tv2->v_type : type2->tt_type;
 
-    if (type1 == VAR_UNKNOWN)
-	type1 = VAR_ANY;
-    if (type2 == VAR_UNKNOWN)
-	type2 = VAR_ANY;
+    if (vartype1 == VAR_UNKNOWN)
+	vartype1 = VAR_ANY;
+    if (vartype2 == VAR_UNKNOWN)
+	vartype2 = VAR_ANY;
 
-    if (type1 == type2)
+    if (vartype1 == vartype2)
     {
-	switch (type1)
+	switch (vartype1)
 	{
 	    case VAR_BOOL: isntype = ISN_COMPAREBOOL; break;
 	    case VAR_SPECIAL: isntype = ISN_COMPARESPECIAL; break;
@@ -368,26 +376,29 @@ get_compare_isn(exprtype_T exprtype, vartype_T type1, vartype_T type2)
 	    default: isntype = ISN_COMPAREANY; break;
 	}
     }
-    else if (type1 == VAR_ANY || type2 == VAR_ANY
-	    || ((type1 == VAR_NUMBER || type1 == VAR_FLOAT)
-	      && (type2 == VAR_NUMBER || type2 == VAR_FLOAT)))
+    else if (vartype1 == VAR_ANY || vartype2 == VAR_ANY
+	    || ((vartype1 == VAR_NUMBER || vartype1 == VAR_FLOAT)
+			  && (vartype2 == VAR_NUMBER || vartype2 == VAR_FLOAT))
+	    || (vartype1 == VAR_FUNC && vartype2 == VAR_PARTIAL)
+	    || (vartype1 == VAR_PARTIAL && vartype2 == VAR_FUNC))
 	isntype = ISN_COMPAREANY;
-    else if (type1 == VAR_SPECIAL || type2 == VAR_SPECIAL)
+    else if (vartype1 == VAR_SPECIAL || vartype2 == VAR_SPECIAL)
     {
-	switch (type1 == VAR_SPECIAL ? type2 : type1)
+	if ((vartype1 == VAR_SPECIAL
+		&& (tv1 != NULL ? tv1->vval.v_number == VVAL_NONE
+							    : type1 == &t_none)
+		&& vartype2 != VAR_STRING)
+	    || (vartype2 == VAR_SPECIAL
+		&& (tv2 != NULL ? tv2->vval.v_number == VVAL_NONE
+							    : type2 == &t_none)
+		&& vartype1 != VAR_STRING))
 	{
-	    case VAR_BLOB: break;
-	    case VAR_CHANNEL: break;
-	    case VAR_DICT: break;
-	    case VAR_FUNC: break;
-	    case VAR_JOB: break;
-	    case VAR_LIST: break;
-	    case VAR_PARTIAL: break;
-	    case VAR_STRING: break;
-	    default: semsg(_(e_cannot_compare_str_with_str),
-				   vartype_name(type1), vartype_name(type2));
-		     return ISN_DROP;
+	    semsg(_(e_cannot_compare_str_with_str),
+			       vartype_name(vartype1), vartype_name(vartype2));
+	    return ISN_DROP;
 	}
+	// although comparing null with number, float or bool is not useful, we
+	// allow it
 	isntype = ISN_COMPARENULL;
     }
 
@@ -398,20 +409,20 @@ get_compare_isn(exprtype_T exprtype, vartype_T type1, vartype_T type2)
 	    || isntype == ISN_COMPAREFLOAT))
     {
 	semsg(_(e_cannot_use_str_with_str),
-		exprtype == EXPR_IS ? "is" : "isnot" , vartype_name(type1));
+		exprtype == EXPR_IS ? "is" : "isnot" , vartype_name(vartype1));
 	return ISN_DROP;
     }
     if (isntype == ISN_DROP
 	    || ((exprtype != EXPR_EQUAL && exprtype != EXPR_NEQUAL
-		    && (type1 == VAR_BOOL || type1 == VAR_SPECIAL
-		       || type2 == VAR_BOOL || type2 == VAR_SPECIAL)))
+		    && (vartype1 == VAR_BOOL || vartype1 == VAR_SPECIAL
+		       || vartype2 == VAR_BOOL || vartype2 == VAR_SPECIAL)))
 	    || ((exprtype != EXPR_EQUAL && exprtype != EXPR_NEQUAL
 			       && exprtype != EXPR_IS && exprtype != EXPR_ISNOT
-		    && (type1 == VAR_BLOB || type2 == VAR_BLOB
-			|| type1 == VAR_LIST || type2 == VAR_LIST))))
+		    && (vartype1 == VAR_BLOB || vartype2 == VAR_BLOB
+			|| vartype1 == VAR_LIST || vartype2 == VAR_LIST))))
     {
 	semsg(_(e_cannot_compare_str_with_str),
-		vartype_name(type1), vartype_name(type2));
+		vartype_name(vartype1), vartype_name(vartype2));
 	return ISN_DROP;
     }
     return isntype;
@@ -420,7 +431,7 @@ get_compare_isn(exprtype_T exprtype, vartype_T type1, vartype_T type2)
     int
 check_compare_types(exprtype_T type, typval_T *tv1, typval_T *tv2)
 {
-    if (get_compare_isn(type, tv1->v_type, tv2->v_type) == ISN_DROP)
+    if (get_compare_isn(type, tv1, tv2, NULL, NULL) == ISN_DROP)
 	return FAIL;
     return OK;
 }
@@ -434,17 +445,14 @@ generate_COMPARE(cctx_T *cctx, exprtype_T exprtype, int ic)
     isntype_T	isntype;
     isn_T	*isn;
     garray_T	*stack = &cctx->ctx_type_stack;
-    vartype_T	type1;
-    vartype_T	type2;
 
     RETURN_OK_IF_SKIP(cctx);
 
     // Get the known type of the two items on the stack.  If they are matching
     // use a type-specific instruction. Otherwise fall back to runtime type
     // checking.
-    type1 = get_type_on_stack(cctx, 1)->tt_type;
-    type2 = get_type_on_stack(cctx, 0)->tt_type;
-    isntype = get_compare_isn(exprtype, type1, type2);
+    isntype = get_compare_isn(exprtype, NULL, NULL,
+		       get_type_on_stack(cctx, 1), get_type_on_stack(cctx, 0));
     if (isntype == ISN_DROP)
 	return FAIL;
 
@@ -570,6 +578,40 @@ generate_tv_PUSH(cctx_T *cctx, typval_T *tv)
 		generate_PUSHBLOB(cctx, tv->vval.v_blob);
 		tv->vval.v_blob = NULL;
 		break;
+	    case VAR_LIST:
+		if (tv->vval.v_list != NULL)
+		    iemsg("non-empty list constant not supported");
+		generate_NEWLIST(cctx, 0);
+		break;
+	    case VAR_DICT:
+		if (tv->vval.v_dict != NULL)
+		    iemsg("non-empty dict constant not supported");
+		generate_NEWDICT(cctx, 0);
+		break;
+#ifdef FEAT_JOB_CHANNEL
+	    case VAR_JOB:
+		if (tv->vval.v_job != NULL)
+		    iemsg("non-null job constant not supported");
+		generate_PUSHJOB(cctx, NULL);
+		break;
+	    case VAR_CHANNEL:
+		if (tv->vval.v_channel != NULL)
+		    iemsg("non-null channel constant not supported");
+		generate_PUSHCHANNEL(cctx, NULL);
+		break;
+#endif
+	    case VAR_FUNC:
+		if (tv->vval.v_string != NULL)
+		    iemsg("non-null function constant not supported");
+		generate_PUSHFUNC(cctx, NULL, &t_func_unknown);
+		break;
+	    case VAR_PARTIAL:
+		if (tv->vval.v_partial != NULL)
+		    iemsg("non-null partial constant not supported");
+		if (generate_instr_type(cctx, ISN_NEWPARTIAL, &t_func_unknown)
+								       == NULL)
+		    return FAIL;
+		break;
 	    case VAR_STRING:
 		generate_PUSHS(cctx, &tv->vval.v_string);
 		tv->vval.v_string = NULL;
@@ -628,7 +670,8 @@ generate_PUSHSPEC(cctx_T *cctx, varnumber_T number)
     isn_T	*isn;
 
     RETURN_OK_IF_SKIP(cctx);
-    if ((isn = generate_instr_type(cctx, ISN_PUSHSPEC, &t_special)) == NULL)
+    if ((isn = generate_instr_type(cctx, ISN_PUSHSPEC,
+			     number == VVAL_NULL ? &t_null : &t_none)) == NULL)
 	return FAIL;
     isn->isn_arg.number = number;
 
@@ -706,7 +749,7 @@ generate_PUSHJOB(cctx_T *cctx, job_T *job)
     isn_T	*isn;
 
     RETURN_OK_IF_SKIP(cctx);
-    if ((isn = generate_instr_type(cctx, ISN_PUSHJOB, &t_channel)) == NULL)
+    if ((isn = generate_instr_type(cctx, ISN_PUSHJOB, &t_job)) == NULL)
 	return FAIL;
     isn->isn_arg.job = job;
 
@@ -1152,8 +1195,10 @@ generate_FUNCREF(cctx_T *cctx, ufunc_T *ufunc)
     cctx->ctx_has_closure = 1;
 
     // If the referenced function is a closure, it may use items further up in
-    // the nested context, including this one.
-    if (ufunc->uf_flags & FC_CLOSURE)
+    // the nested context, including this one.  But not a function defined at
+    // the script level.
+    if ((ufunc->uf_flags & FC_CLOSURE)
+			       && func_name_refcount(cctx->ctx_ufunc->uf_name))
 	cctx->ctx_ufunc->uf_flags |= FC_CLOSURE;
 
     type = ufunc->uf_func_type == NULL ? &t_func_any : ufunc->uf_func_type;
@@ -1432,6 +1477,7 @@ generate_CALL(cctx_T *cctx, ufunc_T *ufunc, int pushed_argcount)
 	    && ufunc->uf_def_status != UF_COMPILE_ERROR)
     {
 	int		i;
+	compiletype_T	compile_type;
 
 	for (i = 0; i < argcount; ++i)
 	{
@@ -1439,7 +1485,7 @@ generate_CALL(cctx_T *cctx, ufunc_T *ufunc, int pushed_argcount)
 	    type_T *actual;
 
 	    actual = get_type_on_stack(cctx, argcount - i - 1);
-	    if (actual == &t_special
+	    if (actual->tt_type == VAR_SPECIAL
 			      && i >= regular_args - ufunc->uf_def_args.ga_len)
 	    {
 		// assume v:none used for default argument value
@@ -1464,9 +1510,10 @@ generate_CALL(cctx_T *cctx, ufunc_T *ufunc, int pushed_argcount)
 		return FAIL;
 	    }
 	}
-	if (func_needs_compiling(ufunc, COMPILE_TYPE(ufunc))
+	compile_type = get_compile_type(ufunc);
+	if (func_needs_compiling(ufunc, compile_type)
 		&& compile_def_function(ufunc, ufunc->uf_ret_type == NULL,
-					    COMPILE_TYPE(ufunc), NULL) == FAIL)
+						   compile_type, NULL) == FAIL)
 	    return FAIL;
     }
     if (ufunc->uf_def_status == UF_COMPILE_ERROR)
@@ -1570,7 +1617,7 @@ generate_PCALL(
 			expected = type->tt_args[
 					     type->tt_argcount - 1]->tt_member;
 		    else if (i >= type->tt_min_argcount
-						       && actual == &t_special)
+					     && actual->tt_type == VAR_SPECIAL)
 			expected = &t_any;
 		    else
 			expected = type->tt_args[i];
@@ -2185,6 +2232,7 @@ delete_instr(isn_T *isn)
 	case ISN_NEGATENR:
 	case ISN_NEWDICT:
 	case ISN_NEWLIST:
+	case ISN_NEWPARTIAL:
 	case ISN_OPANY:
 	case ISN_OPFLOAT:
 	case ISN_OPNR:

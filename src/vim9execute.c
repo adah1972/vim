@@ -152,7 +152,7 @@ exe_newlist(int count, ectx_T *ectx)
  * If debug_tick changed check if "ufunc" has a breakpoint and update
  * "uf_has_breakpoint".
  */
-    static void
+    void
 update_has_breakpoint(ufunc_T *ufunc)
 {
     if (ufunc->uf_debug_tick != debug_tick)
@@ -284,6 +284,7 @@ call_dfunc(
     estack_T	*entry;
     funclocal_T	*floc = NULL;
     int		res = OK;
+    compiletype_T compile_type;
 
     if (dfunc->df_deleted)
     {
@@ -309,14 +310,12 @@ call_dfunc(
     }
 #endif
 
-    // Update uf_has_breakpoint if needed.
-    update_has_breakpoint(ufunc);
-
     // When debugging and using "cont" switches to the not-debugged
     // instructions, may need to still compile them.
-    if (func_needs_compiling(ufunc, COMPILE_TYPE(ufunc)))
+    compile_type = get_compile_type(ufunc);
+    if (func_needs_compiling(ufunc, compile_type))
     {
-	res = compile_def_function(ufunc, FALSE, COMPILE_TYPE(ufunc), NULL);
+	res = compile_def_function(ufunc, FALSE, compile_type, NULL);
 
 	// compile_def_function() may cause def_functions.ga_data to change
 	dfunc = ((dfunc_T *)def_functions.ga_data) + cdf_idx;
@@ -926,7 +925,7 @@ call_ufunc(
     int		error;
     int		idx;
     int		did_emsg_before = did_emsg;
-    compiletype_T compile_type = COMPILE_TYPE(ufunc);
+    compiletype_T compile_type = get_compile_type(ufunc);
 
     if (func_needs_compiling(ufunc, compile_type)
 		&& compile_def_function(ufunc, FALSE, compile_type, NULL)
@@ -1622,7 +1621,10 @@ lookup_debug_var(char_u *name)
     // Go through the local variable names, from last to first.
     for (idx = debug_var_count - 1; idx >= 0; --idx)
     {
-	if (STRCMP(((char_u **)dfunc->df_var_names.ga_data)[idx], name) == 0)
+	char_u *varname = ((char_u **)dfunc->df_var_names.ga_data)[idx];
+
+	// the variable name may be NULL when not available in this block
+	if (varname != NULL && STRCMP(varname, name) == 0)
 	    return STACK_TV_VAR(idx);
     }
 
@@ -1894,79 +1896,54 @@ execute_storerange(isn_T *iptr, ectx_T *ectx)
     SOURCING_LNUM = iptr->isn_lnum;
     if (tv_dest->v_type == VAR_LIST)
     {
-	long	n1;
-	long	n2;
-	int	error = FALSE;
+	long	    n1;
+	long	    n2;
+	listitem_T  *li1;
 
-	n1 = (long)tv_get_number_chk(tv_idx1, &error);
-	if (error)
+	n1 = (long)tv_get_number_chk(tv_idx1, NULL);
+	if (tv_idx2->v_type == VAR_SPECIAL
+		    && tv_idx2->vval.v_number == VVAL_NONE)
+	    n2 = list_len(tv_dest->vval.v_list) - 1;
+	else
+	    n2 = (long)tv_get_number_chk(tv_idx2, NULL);
+
+	li1 = check_range_index_one(tv_dest->vval.v_list, &n1, FALSE);
+	if (li1 == NULL)
 	    status = FAIL;
 	else
 	{
-	    if (tv_idx2->v_type == VAR_SPECIAL
-			&& tv_idx2->vval.v_number == VVAL_NONE)
-		n2 = list_len(tv_dest->vval.v_list) - 1;
-	    else
-		n2 = (long)tv_get_number_chk(tv_idx2, &error);
-	    if (error)
-		status = FAIL; // cannot happen?
-	    else
-	    {
-		listitem_T *li1 = check_range_index_one(
-					     tv_dest->vval.v_list, &n1, FALSE);
-
-		if (li1 == NULL)
-		    status = FAIL;
-		else
-		{
-		    status = check_range_index_two(
-			    tv_dest->vval.v_list,
-			    &n1, li1, &n2, FALSE);
-		    if (status != FAIL)
-			status = list_assign_range(
-				tv_dest->vval.v_list,
-				tv->vval.v_list,
-				n1,
-				n2,
-				tv_idx2->v_type == VAR_SPECIAL,
-				(char_u *)"=",
-				(char_u *)"[unknown]");
-		}
-	    }
+	    status = check_range_index_two(tv_dest->vval.v_list,
+							 &n1, li1, &n2, FALSE);
+	    if (status != FAIL)
+		status = list_assign_range(
+			tv_dest->vval.v_list,
+			tv->vval.v_list,
+			n1,
+			n2,
+			tv_idx2->v_type == VAR_SPECIAL,
+			(char_u *)"=",
+			(char_u *)"[unknown]");
 	}
     }
     else if (tv_dest->v_type == VAR_BLOB)
     {
 	varnumber_T n1;
 	varnumber_T n2;
-	int	    error = FALSE;
+	long	    bloblen;
 
-	n1 = tv_get_number_chk(tv_idx1, &error);
-	if (error)
+	n1 = tv_get_number_chk(tv_idx1, NULL);
+	if (tv_idx2->v_type == VAR_SPECIAL
+					&& tv_idx2->vval.v_number == VVAL_NONE)
+	    n2 = blob_len(tv_dest->vval.v_blob) - 1;
+	else
+	    n2 = tv_get_number_chk(tv_idx2, NULL);
+	bloblen = blob_len(tv_dest->vval.v_blob);
+
+	if (check_blob_index(bloblen, n1, FALSE) == FAIL
+		|| check_blob_range(bloblen, n1, n2, FALSE) == FAIL)
 	    status = FAIL;
 	else
-	{
-	    if (tv_idx2->v_type == VAR_SPECIAL
-			&& tv_idx2->vval.v_number == VVAL_NONE)
-		n2 = blob_len(tv_dest->vval.v_blob) - 1;
-	    else
-		n2 = tv_get_number_chk(tv_idx2, &error);
-	    if (error)
-		status = FAIL;
-	    else
-	    {
-		long  bloblen = blob_len(tv_dest->vval.v_blob);
-
-		if (check_blob_index(bloblen,
-					     n1, FALSE) == FAIL
-			|| check_blob_range(bloblen,
-					n1, n2, FALSE) == FAIL)
-		    status = FAIL;
-		else
-		    status = blob_set_range(
-			     tv_dest->vval.v_blob, n1, n2, tv);
-	    }
-	}
+	    status = blob_set_range(tv_dest->vval.v_blob, n1, n2, tv);
     }
     else
     {
@@ -3313,9 +3290,8 @@ exec_instructions(ectx_T *ectx)
 			break;
 		    default:
 			tv->v_type = VAR_STRING;
-			tv->vval.v_string = vim_strsave(
-				iptr->isn_arg.string == NULL
-					? (char_u *)"" : iptr->isn_arg.string);
+			tv->vval.v_string = iptr->isn_arg.string == NULL
+				    ? NULL : vim_strsave(iptr->isn_arg.string);
 		}
 		break;
 
@@ -3438,6 +3414,17 @@ exec_instructions(ectx_T *ectx)
 		    tv->vval.v_dict = dict;
 		    ++dict->dv_refcount;
 		}
+		break;
+
+	    // create a partial with NULL value
+	    case ISN_NEWPARTIAL:
+		if (GA_GROW_FAILS(&ectx->ec_stack, 1))
+		    goto theend;
+		++ectx->ec_stack.ga_len;
+		tv = STACK_TV_BOT(-1);
+		tv->v_type = VAR_PARTIAL;
+		tv->v_lock = 0;
+		tv->vval.v_partial = NULL;
 		break;
 
 	    // call a :def function
@@ -4761,7 +4748,10 @@ exec_instructions(ectx_T *ectx)
 			    li = li->li_next;
 			for (i = 0; li != NULL; ++i)
 			{
-			    list_set_item(rem_list, i, &li->li_tv);
+			    typval_T tvcopy;
+
+			    copy_tv(&li->li_tv, &tvcopy);
+			    list_set_item(rem_list, i, &tvcopy);
 			    li = li->li_next;
 			}
 			--count;
@@ -4980,14 +4970,11 @@ call_def_function(
 #undef STACK_TV_VAR
 #define STACK_TV_VAR(idx) (((typval_T *)ectx.ec_stack.ga_data) + ectx.ec_frame_idx + STACK_FRAME_SIZE + idx)
 
-    // Update uf_has_breakpoint if needed.
-    update_has_breakpoint(ufunc);
-
     if (ufunc->uf_def_status == UF_NOT_COMPILED
 	    || ufunc->uf_def_status == UF_COMPILE_ERROR
-	    || (func_needs_compiling(ufunc, COMPILE_TYPE(ufunc))
-		&& compile_def_function(ufunc, FALSE, COMPILE_TYPE(ufunc), NULL)
-								      == FAIL))
+	    || (func_needs_compiling(ufunc, get_compile_type(ufunc))
+		&& compile_def_function(ufunc, FALSE,
+				       get_compile_type(ufunc), NULL) == FAIL))
     {
 	if (did_emsg_cumul + did_emsg == did_emsg_before)
 	    semsg(_(e_function_is_not_compiled_str),
@@ -5719,6 +5706,9 @@ list_instructions(char *pfx, isn_T *instr, int instr_count, ufunc_T *ufunc)
 	    case ISN_NEWDICT:
 		smsg("%s%4d NEWDICT size %lld", pfx, current,
 					    (varnumber_T)(iptr->isn_arg.number));
+		break;
+	    case ISN_NEWPARTIAL:
+		smsg("%s%4d NEWPARTIAL", pfx, current);
 		break;
 
 	    // function call

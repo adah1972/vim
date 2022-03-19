@@ -1206,6 +1206,7 @@ compile_continue(char_u *arg, cctx_T *cctx)
 compile_break(char_u *arg, cctx_T *cctx)
 {
     scope_T	*scope = cctx->ctx_scope;
+    int		try_scopes = 0;
     endlabel_T	**el;
 
     for (;;)
@@ -1215,16 +1216,29 @@ compile_break(char_u *arg, cctx_T *cctx)
 	    emsg(_(e_break_without_while_or_for));
 	    return NULL;
 	}
-	if (scope->se_type == FOR_SCOPE || scope->se_type == WHILE_SCOPE)
+	if (scope->se_type == FOR_SCOPE)
+	{
+	    el = &scope->se_u.se_for.fs_end_label;
 	    break;
+	}
+	if (scope->se_type == WHILE_SCOPE)
+	{
+	    el = &scope->se_u.se_while.ws_end_label;
+	    break;
+	}
+	if (scope->se_type == TRY_SCOPE)
+	    ++try_scopes;
 	scope = scope->se_outer;
     }
 
-    // Jump to the end of the FOR or WHILE loop.
-    if (scope->se_type == FOR_SCOPE)
-	el = &scope->se_u.se_for.fs_end_label;
-    else
-	el = &scope->se_u.se_while.ws_end_label;
+    if (try_scopes > 0)
+	// Inside one or more try/catch blocks we first need to jump to the
+	// "finally" or "endtry" to cleanup.  Then come to the next JUMP
+	// intruction, which we don't know the index of yet.
+	generate_TRYCONT(cctx, try_scopes, cctx->ctx_instr.ga_len + 1);
+
+    // Jump to the end of the FOR or WHILE loop.  The instruction index will be
+    // filled in later.
     if (compile_jump_to_end(el, JUMP_ALWAYS, cctx) == FAIL)
 	return FAIL;
 
@@ -1753,7 +1767,7 @@ compile_put(char_u *arg, exarg_T *eap, cctx_T *cctx)
 
     if (eap->regname == '=')
     {
-	char_u *p = line + 1;
+	char_u *p = skipwhite(line + 1);
 
 	if (compile_expr0(&p, cctx) == FAIL)
 	    return NULL;
@@ -2244,8 +2258,7 @@ compile_return(char_u *arg, int check_return_type, int legacy, cctx_T *cctx)
 	    // return type here.
 	    stack_type = get_type_on_stack(cctx, 0);
 	    if ((check_return_type && (cctx->ctx_ufunc->uf_ret_type == NULL
-				|| cctx->ctx_ufunc->uf_ret_type == &t_unknown
-				|| cctx->ctx_ufunc->uf_ret_type == &t_any))
+				|| cctx->ctx_ufunc->uf_ret_type == &t_unknown))
 		    || (!check_return_type
 				&& cctx->ctx_ufunc->uf_ret_type == &t_unknown))
 	    {

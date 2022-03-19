@@ -91,6 +91,7 @@ typedef enum {
     ISN_PUSHJOB,	// push channel isn_arg.job
     ISN_NEWLIST,	// push list from stack items, size is isn_arg.number
     ISN_NEWDICT,	// push dict from stack items, size is isn_arg.number
+    ISN_NEWPARTIAL,	// push NULL partial
 
     ISN_AUTOLOAD,	// get item from autoload import, function or variable
 
@@ -120,7 +121,7 @@ typedef enum {
     ISN_CATCH,	    // drop v:exception
     ISN_FINALLY,    // start of :finally block
     ISN_ENDTRY,	    // take entry off from ec_trystack
-    ISN_TRYCONT,    // handle :continue inside a :try statement
+    ISN_TRYCONT,    // handle :continue or :break inside a :try statement
 
     // more expression operations
     ISN_ADDLIST,    // add two lists
@@ -517,7 +518,7 @@ extern garray_T def_functions;
 // Used for "lnum" when a range is to be taken from the stack and "!" is used.
 #define LNUM_VARIABLE_RANGE_ABOVE -888
 
-// Keep in sync with COMPILE_TYPE()
+// Keep in sync with get_compile_type()
 #ifdef FEAT_PROFILE
 # define INSTRUCTIONS(dfunc) \
 	(debug_break_level > 0 || may_break_in_function(dfunc->df_ufunc) \

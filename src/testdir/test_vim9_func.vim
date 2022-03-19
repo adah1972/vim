@@ -535,6 +535,30 @@ def Test_return_list_any()
   v9.CheckScriptSuccess(lines)
 enddef
 
+def Test_return_any_two_types()
+  var lines =<< trim END
+      vim9script
+
+      def G(Fn: func(string): any)
+        g:result = Fn("hello")
+      enddef
+
+      def F(a: number, b: string): any
+        echo b
+        if a > 0
+          return 1
+        else
+          return []
+        endif
+      enddef
+
+      G(function(F, [1]))
+  END
+  v9.CheckScriptSuccess(lines)
+  assert_equal(1, g:result)
+  unlet g:result
+enddef
+
 func s:Increment()
   let g:counter += 1
 endfunc
@@ -1455,12 +1479,12 @@ def Test_pass_legacy_lambda_to_def_func()
 
   lines =<< trim END
       vim9script
-      def g:TestFunc(f: func)
+      def g:TestFunc(F: func)
       enddef
       legacy call g:TestFunc({-> 0})
       delfunc g:TestFunc
 
-      def g:TestFunc(f: func(number))
+      def g:TestFunc(F: func(number))
       enddef
       legacy call g:TestFunc({nr -> 0})
       delfunc g:TestFunc
@@ -2975,6 +2999,24 @@ def Test_lambda_arg_shadows_func()
   assert_equal([42], g:Shadowed())
 enddef
 
+def Test_compiling_referenced_func_no_shadow()
+  var lines =<< trim END
+      vim9script
+
+      def InitializeReply(lspserver: dict<any>)
+      enddef
+
+      def ProcessReply(lspserver: dict<any>)
+        var lsp_reply_handlers: dict<func> =
+          { 'initialize': InitializeReply }
+        lsp_reply_handlers['initialize'](lspserver)
+      enddef
+
+      call ProcessReply({})
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
 def s:Line_continuation_in_def(dir: string = ''): string
   var path: string = empty(dir)
           \ ? 'empty'
@@ -3326,7 +3368,7 @@ def Test_partial_call()
       var Expr: func(dict<any>): dict<any>
       const Call = Foo(Expr)
   END
-  v9.CheckScriptFailure(lines, 'E1235:')
+  v9.CheckScriptFailure(lines, 'E1031:')
 enddef
 
 def Test_partial_double_nested()
@@ -3335,6 +3377,15 @@ def Test_partial_double_nested()
   var Ref = function(Get, [])
   var RefRef = function(Ref, [])
   assert_equal(123, RefRef())
+enddef
+
+def Test_partial_null_function()
+  var lines =<< trim END
+      var d: dict<func> = {f: null_function}
+      var Ref = d.f
+      assert_equal('func(...): unknown', typename(Ref))
+  END
+  v9.CheckDefAndScriptSuccess(lines)
 enddef
 
 " Using "idx" from a legacy global function does not work.
@@ -3708,6 +3759,24 @@ def Test_nested_closure_in_dict()
   v9.CheckScriptSuccess(lines)
 enddef
 
+def Test_script_local_other_script()
+  var lines =<< trim END
+      function LegacyJob()
+        let FuncRef = function('s:close_cb')
+      endfunction
+      function s:close_cb(...)
+      endfunction
+  END
+  lines->writefile('Xlegacy.vim')
+  source Xlegacy.vim
+  g:LegacyJob()
+  g:LegacyJob()
+  g:LegacyJob()
+
+  delfunc g:LegacyJob
+  delete('Xlegacy.vim')
+enddef
+
 def Test_check_func_arg_types()
   var lines =<< trim END
       vim9script
@@ -3719,8 +3788,8 @@ def Test_check_func_arg_types()
         return x + 1
       enddef
 
-      def G(g: func): dict<func>
-        return {f: g}
+      def G(Fg: func): dict<func>
+        return {f: Fg}
       enddef
 
       def H(d: dict<func>): string
@@ -3730,6 +3799,116 @@ def Test_check_func_arg_types()
 
   v9.CheckScriptSuccess(lines + ['echo H(G(F1))'])
   v9.CheckScriptFailure(lines + ['echo H(G(F2))'], 'E1013:')
+
+  v9.CheckScriptFailure(lines + ['def SomeFunc(ff: func)', 'enddef'], 'E704:')
+enddef
+
+def Test_call_func_with_null()
+  var lines =<< trim END
+      def Fstring(v: string)
+        assert_equal(null_string, v)
+      enddef
+      Fstring(null_string)
+      def Fblob(v: blob)
+        assert_equal(null_blob, v)
+      enddef
+      Fblob(null_blob)
+      def Flist(v: list<number>)
+        assert_equal(null_list, v)
+      enddef
+      Flist(null_list)
+      def Fdict(v: dict<number>)
+        assert_equal(null_dict, v)
+      enddef
+      Fdict(null_dict)
+      def Ffunc(Fv: func(number): number)
+        assert_equal(null_function, Fv)
+      enddef
+      Ffunc(null_function)
+      if has('channel')
+        def Fchannel(v: channel)
+          assert_equal(null_channel, v)
+        enddef
+        Fchannel(null_channel)
+        def Fjob(v: job)
+          assert_equal(null_job, v)
+        enddef
+        Fjob(null_job)
+      endif
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_null_default_argument()
+  var lines =<< trim END
+      def Fstring(v: string = null_string)
+        assert_equal(null_string, v)
+      enddef
+      Fstring()
+      def Fblob(v: blob = null_blob)
+        assert_equal(null_blob, v)
+      enddef
+      Fblob()
+      def Flist(v: list<number> = null_list)
+        assert_equal(null_list, v)
+      enddef
+      Flist()
+      def Fdict(v: dict<number> = null_dict)
+        assert_equal(null_dict, v)
+      enddef
+      Fdict()
+      def Ffunc(Fv: func(number): number = null_function)
+        assert_equal(null_function, Fv)
+      enddef
+      Ffunc()
+      if has('channel')
+        def Fchannel(v: channel = null_channel)
+          assert_equal(null_channel, v)
+        enddef
+        Fchannel()
+        def Fjob(v: job = null_job)
+          assert_equal(null_job, v)
+        enddef
+        Fjob()
+      endif
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_null_return()
+  var lines =<< trim END
+      def Fstring(): string
+        return null_string
+      enddef
+      assert_equal(null_string, Fstring())
+      def Fblob(): blob
+        return null_blob
+      enddef
+      assert_equal(null_blob, Fblob())
+      def Flist(): list<number>
+        return null_list
+      enddef
+      assert_equal(null_list, Flist())
+      def Fdict(): dict<number>
+        return null_dict
+      enddef
+      assert_equal(null_dict, Fdict())
+      def Ffunc(): func(number): number
+        return null_function
+      enddef
+      assert_equal(null_function, Ffunc())
+      if has('channel')
+        def Fchannel(): channel
+          return null_channel
+        enddef
+        assert_equal(null_channel, Fchannel())
+        def Fjob(): job
+          return null_job
+        enddef
+        assert_equal(null_job, Fjob())
+      endif
+  END
+  v9.CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_list_any_type_checked()

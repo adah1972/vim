@@ -716,22 +716,63 @@ def Test_expr4_compare_null()
   g:null_dict = test_null_dict()
   g:not_null_list = []
   var lines =<< trim END
+      assert_false(true == null)
+      assert_false(false == null)
+      assert_false(null == true)
+      assert_false(null == false)
+      assert_true(true != null)
+      assert_true(false != null)
+      assert_true(null != true)
+      assert_true(null != false)
+
+      assert_false(123 == null)
+      assert_false(0 == null)
+      assert_false(null == 123)
+      assert_false(null == 0)
+      assert_true(123 != null)
+      assert_true(0 != null)
+      assert_true(null != 123)
+      assert_true(null != 0)
+
+      if has('float')
+        assert_false(12.3 == null)
+        assert_false(0.0 == null)
+        assert_false(null == 12.3)
+        assert_false(null == 0.0)
+        assert_true(12.3 != null)
+        assert_true(0.0 != null)
+        assert_true(null != 12.3)
+        assert_true(null != 0.0)
+      endif
+
       assert_true(test_null_blob() == v:null)
+      assert_true(null_blob == null)
       assert_true(v:null == test_null_blob())
+      assert_true(null == null_blob)
       assert_false(test_null_blob() != v:null)
+      assert_false(null_blob != null)
       assert_false(v:null != test_null_blob())
+      assert_false(null != null_blob)
 
       if has('channel')
         assert_true(test_null_channel() == v:null)
+        assert_true(null_channel == null)
         assert_true(v:null == test_null_channel())
+        assert_true(null == null_channel)
         assert_false(test_null_channel() != v:null)
+        assert_false(null_channel != null)
         assert_false(v:null != test_null_channel())
+        assert_false(null != null_channel)
       endif
 
       assert_true(test_null_dict() == v:null)
+      assert_true(null_dict == null)
       assert_true(v:null == test_null_dict())
+      assert_true(null == null_dict)
       assert_false(test_null_dict() != v:null)
+      assert_false(null_dict != null)
       assert_false(v:null != test_null_dict())
+      assert_false(null != null_dict)
 
       assert_true(g:null_dict == v:null)
       assert_true(v:null == g:null_dict)
@@ -739,21 +780,33 @@ def Test_expr4_compare_null()
       assert_false(v:null != g:null_dict)
 
       assert_true(test_null_function() == v:null)
+      assert_true(null_function == null)
       assert_true(v:null == test_null_function())
+      assert_true(null == null_function)
       assert_false(test_null_function() != v:null)
+      assert_false(null_function != null)
       assert_false(v:null != test_null_function())
+      assert_false(null != null_function)
 
       if has('job')
         assert_true(test_null_job() == v:null)
+        assert_true(null_job == null)
         assert_true(v:null == test_null_job())
+        assert_true(null == null_job)
         assert_false(test_null_job() != v:null)
+        assert_false(null_job != null)
         assert_false(v:null != test_null_job())
+        assert_false(null != null_job)
       endif
 
       assert_true(test_null_list() == v:null)
+      assert_true(null_list == null)
       assert_true(v:null == test_null_list())
+      assert_true(null == null_list)
       assert_false(test_null_list() != v:null)
+      assert_false(null_list != null)
       assert_false(v:null != test_null_list())
+      assert_false(null != null_list)
 
       assert_false(g:not_null_list == v:null)
       assert_false(v:null == g:not_null_list)
@@ -761,30 +814,62 @@ def Test_expr4_compare_null()
       assert_true(v:null != g:not_null_list)
 
       assert_true(test_null_partial() == v:null)
+      assert_true(null_partial == null)
       assert_true(v:null == test_null_partial())
+      assert_true(null == null_partial)
       assert_false(test_null_partial() != v:null)
+      assert_false(null_partial != null)
       assert_false(v:null != test_null_partial())
+      assert_false(null != null_partial)
 
       assert_true(test_null_string() == v:null)
+      assert_true(null_string == null)
       assert_true(v:null == test_null_string())
+      assert_true(null == null_string)
       assert_false(test_null_string() != v:null)
+      assert_false(null_string != null)
       assert_false(v:null != test_null_string())
+      assert_false(null != null_string)
+
+      assert_true(null_string is test_null_string())
+      assert_false(null_string is '')
+      assert_false('' is null_string)
+      assert_false(null_string isnot test_null_string())
+      assert_true(null_string isnot '')
+      assert_true('' isnot null_string)
   END
   v9.CheckDefAndScriptSuccess(lines)
   unlet g:null_dict
   unlet g:not_null_list
 
-  v9.CheckDefAndScriptFailure(['echo 123 == v:null'], 'E1072: Cannot compare number with special')
-  v9.CheckDefAndScriptFailure(['echo v:null == 123'], 'E1072: Cannot compare special with number')
-  v9.CheckDefAndScriptFailure(['echo 123 != v:null'], 'E1072: Cannot compare number with special')
-  v9.CheckDefAndScriptFailure(['echo v:null != 123'], 'E1072: Cannot compare special with number')
-  v9.CheckDefAndScriptFailure(['echo true == v:null'], 'E1072: Cannot compare bool with special')
-  v9.CheckDefAndScriptFailure(['echo v:null == true'], 'E1072: Cannot compare special with bool')
-  v9.CheckDefAndScriptFailure(['echo true != v:null'], 'E1072: Cannot compare bool with special')
-  v9.CheckDefAndScriptFailure(['echo v:null != true'], 'E1072: Cannot compare special with bool')
-  v9.CheckDefAndScriptFailure(['echo false == v:null'], 'E1072: Cannot compare bool with special')
+  lines =<< trim END
+      var d: dict<func> = {f: null_function}
+      assert_equal(null_function, d.f)
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+enddef
 
-  v9.CheckDefExecAndScriptFailure(['echo [] == v:none'], ['E1072: Cannot compare list with special', 'E691: Can only compare List with List'])
+def Test_expr4_compare_none()
+  var lines =<< trim END
+      assert_false('' == v:none)
+      assert_false('text' == v:none)
+      assert_true(v:none == v:none)
+      assert_false(v:none == '')
+      assert_false(v:none == 'text')
+      assert_true(v:none == v:none)
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+
+  v9.CheckDefAndScriptFailure(['echo [] == v:none'], 'E1072: Cannot compare list with special')
+  v9.CheckDefAndScriptFailure(['echo 123 == v:none'], 'E1072: Cannot compare number with special')
+  v9.CheckDefAndScriptFailure(['echo 0z00 == v:none'], 'E1072: Cannot compare blob with special')
+
+  lines =<< trim END
+      echo [] == v:none
+
+      eval 0 + 0
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1072:', 1)
 enddef
 
 def Test_expr4_wrong_type()
@@ -2006,6 +2091,11 @@ def Test_expr8_list()
       var llstring: list<list<string>> = [['text'], []]
       llstring = [[], ['text']]
       llstring = [[], []]
+
+      var ls = [null_string]
+      assert_equal('list<string>', typename(ls))
+      var lb = [null_blob]
+      assert_equal('list<blob>', typename(lb))
   END
   v9.CheckDefAndScriptSuccess(lines)
 
@@ -2523,6 +2613,11 @@ def Test_expr8_dict()
       # comment to start fold is OK
       var x1: number #{{ fold
       var x2 = 9 #{{ fold
+
+      var ds = {k: null_string}
+      assert_equal('dict<string>', typename(ds))
+      var dl = {a: null_list}
+      assert_equal('dict<list<unknown>>', typename(dl))
   END
   v9.CheckDefAndScriptSuccess(lines)
  

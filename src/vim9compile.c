@@ -403,8 +403,12 @@ need_type_where(
     if (ret == OK)
 	return OK;
 
+    // If actual a constant a runtime check makes no sense.  If it's
+    // null_function it is OK.
+    if (actual_is_const && ret == MAYBE && actual == &t_func_unknown)
+	return OK;
+
     // If the actual type can be the expected type add a runtime check.
-    // If it's a constant a runtime check makes no sense.
     if (!actual_is_const && ret == MAYBE && use_typecheck(actual, expected))
     {
 	generate_TYPECHECK(cctx, expected, offset, where.wt_index);
@@ -758,6 +762,7 @@ fill_exarg_from_cctx(exarg_T *eap, cctx_T *cctx)
 {
     eap->getline = exarg_getline;
     eap->cookie = cctx;
+    eap->skip = cctx->ctx_skip == SKIP_YES;
 }
 
 /*
@@ -851,7 +856,8 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
 	semsg(_(e_namespace_not_supported_str), name_start);
 	return NULL;
     }
-    if (check_defined(name_start, name_end - name_start, cctx,
+    if (cctx->ctx_skip != SKIP_YES
+	    && check_defined(name_start, name_end - name_start, cctx,
 							  NULL, FALSE) == FAIL)
 	return NULL;
     if (!ASCII_ISUPPER(is_global ? name_start[2] : name_start[0]))
@@ -907,7 +913,7 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
 	}
     }
 
-    compile_type = COMPILE_TYPE(ufunc);
+    compile_type = get_compile_type(ufunc);
 #ifdef FEAT_PROFILE
     // If the outer function is profiled, also compile the nested function for
     // profiling.
@@ -994,7 +1000,12 @@ generate_loadvar(
 	    break;
 	case dest_global:
 	    if (vim_strchr(name, AUTOLOAD_CHAR) == NULL)
-		generate_LOAD(cctx, ISN_LOADG, 0, name + 2, type);
+	    {
+		if (name[2] == NUL)
+		    generate_instr_type(cctx, ISN_LOADGDICT, &t_dict_any);
+		else
+		    generate_LOAD(cctx, ISN_LOADG, 0, name + 2, type);
+	    }
 	    else
 		generate_LOAD(cctx, ISN_LOADAUTO, 0, name, type);
 	    break;
@@ -1791,11 +1802,11 @@ compile_assign_unlet(
 	    {
 		type = get_type_on_stack(cctx, 1);
 		if (need_type(type, &t_number,
-					    -1, 0, cctx, FALSE, FALSE) == FAIL)
+					    -2, 0, cctx, FALSE, FALSE) == FAIL)
 		return FAIL;
 	    }
 	    type = get_type_on_stack(cctx, 0);
-	    if ((dest_type != VAR_BLOB && type != &t_special)
+	    if ((dest_type != VAR_BLOB && type->tt_type != VAR_SPECIAL)
 		    && need_type(type, &t_number,
 					    -1, 0, cctx, FALSE, FALSE) == FAIL)
 		return FAIL;
@@ -2407,17 +2418,19 @@ may_compile_assignment(exarg_T *eap, char_u **line, cctx_T *cctx)
 
 	    // Recognize an assignment if we recognize the variable
 	    // name:
-	    // "g:var = expr"
-	    // "local = expr"  where "local" is a local var.
-	    // "script = expr"  where "script" is a script-local var.
-	    // "import = expr"  where "import" is an imported var
 	    // "&opt = expr"
 	    // "$ENV = expr"
 	    // "@r = expr"
+	    // "g:var = expr"
+	    // "g:[key] = expr"
+	    // "local = expr"  where "local" is a local var.
+	    // "script = expr"  where "script" is a script-local var.
+	    // "import = expr"  where "import" is an imported var
 	    if (*eap->cmd == '&'
 		    || *eap->cmd == '$'
 		    || *eap->cmd == '@'
 		    || ((len) > 2 && eap->cmd[1] == ':')
+		    || STRNCMP(eap->cmd, "g:[", 3) == 0
 		    || variable_exists(eap->cmd, len, cctx))
 	    {
 		*line = compile_assignment(eap->cmd, eap, CMD_SIZE, cctx);
@@ -2466,6 +2479,30 @@ check_args_shadowing(ufunc_T *ufunc, cctx_T *cctx)
     }
     ufunc->uf_args_visible = ufunc->uf_args.ga_len;
     return r;
+}
+
+/*
+ * Get the compilation type that should be used for "ufunc".
+ * Keep in sync with INSTRUCTIONS().
+ */
+    compiletype_T
+get_compile_type(ufunc_T *ufunc)
+{
+    // Update uf_has_breakpoint if needed.
+    update_has_breakpoint(ufunc);
+
+    if (debug_break_level > 0 || may_break_in_function(ufunc))
+	return CT_DEBUG;
+#ifdef FEAT_PROFILE
+    if (do_profiling == PROF_YES)
+    {
+	if (!ufunc->uf_profiling && has_profiling(FALSE, ufunc->uf_name, NULL))
+	    func_do_profile(ufunc);
+	if (ufunc->uf_profiling)
+	    return CT_PROFILE;
+    }
+#endif
+    return CT_NONE;
 }
 
 
@@ -2571,6 +2608,13 @@ compile_def_function(
 	if (add_def_function(ufunc) == FAIL)
 	    return FAIL;
 	new_def_function = TRUE;
+    }
+
+    if ((ufunc->uf_flags & FC_CLOSURE) && outer_cctx == NULL)
+    {
+	semsg(_(e_compiling_closure_without_context_str),
+						   printable_func_name(ufunc));
+	return FAIL;
     }
 
     ufunc->uf_def_status = UF_COMPILING;
