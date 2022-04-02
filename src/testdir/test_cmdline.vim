@@ -552,6 +552,22 @@ func Test_getcompletion()
   call assert_fails('call getcompletion("abc", [])', 'E475:')
 endfunc
 
+" Test for getcompletion() with "fuzzy" in 'wildoptions'
+func Test_getcompletion_wildoptions()
+  let save_wildoptions = &wildoptions
+  set wildoptions&
+  let l = getcompletion('space', 'option')
+  call assert_equal([], l)
+  let l = getcompletion('ier', 'command')
+  call assert_equal([], l)
+  set wildoptions=fuzzy
+  let l = getcompletion('space', 'option')
+  call assert_true(index(l, 'backspace') >= 0)
+  let l = getcompletion('ier', 'command')
+  call assert_true(index(l, 'compiler') >= 0)
+  let &wildoptions = save_wildoptions
+endfunc
+
 func Test_complete_autoload_error()
   let save_rtp = &rtp
   let lines =<< trim END
@@ -2494,6 +2510,30 @@ func Test_wildmenumode_with_pum()
   cunmap <F2>
 endfunc
 
+" Test for opening the cmdline completion popup menu from the terminal window.
+" The popup menu should be positioned correctly over the status line of the
+" bottom-most window.
+func Test_wildmenu_pum_from_terminal()
+  CheckRunVimInTerminal
+  let python = PythonProg()
+  call CheckPython(python)
+
+  %bw!
+  let cmds = ['set wildmenu wildoptions=pum']
+  let pcmd = python .. ' -c "import sys; sys.stdout.write(sys.stdin.read())"'
+  call add(cmds, "call term_start('" .. pcmd .. "')")
+  call writefile(cmds, 'Xtest')
+  let buf = RunVimInTerminal('-S Xtest', #{rows: 10})
+  call term_sendkeys(buf, "\r\r\r")
+  call term_wait(buf)
+  call term_sendkeys(buf, "\<C-W>:sign \<Tab>")
+  call term_wait(buf)
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_term_01', {})
+  call term_wait(buf)
+  call StopVimInTerminal(buf)
+  call delete('Xtest')
+endfunc
+
 " Test for completion after a :substitute command followed by a pipe (|)
 " character
 func Test_cmdline_complete_substitute()
@@ -3239,6 +3279,46 @@ func Test_cmdline_complete_breakdel()
   call assert_equal("\"breakdel   here   Xtest", @:)
   call feedkeys(":breakdel here \<Tab>\<C-B>\"\<CR>", 'tx')
   call assert_equal("\"breakdel here ", @:)
+endfunc
+
+" Test for :scriptnames argument completion
+func Test_cmdline_complete_scriptnames()
+  set wildmenu
+  call writefile(['let a = 1'], 'Xa1b2c3.vim')
+  source Xa1b2c3.vim
+  call feedkeys(":script \<Tab>\<Left>\<Left>\<C-B>\"\<CR>", 'tx')
+  call assert_match("\"script .*Xa1b2c3.vim$", @:)
+  call feedkeys(":script    \<Tab>\<Left>\<Left>\<C-B>\"\<CR>", 'tx')
+  call assert_match("\"script .*Xa1b2c3.vim$", @:)
+  call feedkeys(":script b2c3\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"script b2c3", @:)
+  call feedkeys(":script 2\<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_match("\"script 2\<Tab>$", @:)
+  call feedkeys(":script \<Tab>\<Left>\<Left> \<Tab>\<C-B>\"\<CR>", 'tx')
+  call assert_match("\"script .*Xa1b2c3.vim $", @:)
+  call feedkeys(":script \<Tab>\<Left>\<C-B>\"\<CR>", 'tx')
+  call assert_equal("\"script ", @:)
+  call assert_match('Xa1b2c3.vim$', getcompletion('.*Xa1b2.*', 'scriptnames')[0])
+  call assert_equal([], getcompletion('Xa1b2', 'scriptnames'))
+  new
+  call feedkeys(":script \<Tab>\<Left>\<Left>\<CR>", 'tx')
+  call assert_equal('Xa1b2c3.vim', fnamemodify(@%, ':t'))
+  bw!
+  call delete('Xa1b2c3.vim')
+  set wildmenu&
+endfunc
+
+" Test for expanding 2-letter and 3-letter :substitute command arguments.
+" These commands don't accept an argument.
+func Test_cmdline_complete_substitute_short()
+  for cmd in ['sc', 'sce', 'scg', 'sci', 'scI', 'scn', 'scp', 'scl',
+        \ 'sgc', 'sge', 'sg', 'sgi', 'sgI', 'sgn', 'sgp', 'sgl', 'sgr',
+        \ 'sic', 'sie', 'si', 'siI', 'sin', 'sip', 'sir',
+        \ 'sIc', 'sIe', 'sIg', 'sIi', 'sI', 'sIn', 'sIp', 'sIl', 'sIr',
+        \ 'src', 'srg', 'sri', 'srI', 'srn', 'srp', 'srl', 'sr']
+    call feedkeys(':' .. cmd .. " \<Tab>\<C-B>\"\<CR>", 'tx')
+    call assert_equal('"' .. cmd .. " \<Tab>", @:)
+  endfor
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -140,7 +140,7 @@ fill_evalarg_from_eap(evalarg_T *evalarg, exarg_T *eap, int skip)
     if (eap != NULL)
     {
 	evalarg->eval_cstack = eap->cstack;
-	if (getline_equal(eap->getline, eap->cookie, getsourceline))
+	if (sourcing_a_script(eap))
 	{
 	    evalarg->eval_getline = eap->getline;
 	    evalarg->eval_cookie = eap->cookie;
@@ -1311,7 +1311,8 @@ get_lval(
 
 	    lp->ll_dict = NULL;
 	    lp->ll_list = lp->ll_tv->vval.v_list;
-	    lp->ll_li = check_range_index_one(lp->ll_list, &lp->ll_n1, quiet);
+	    lp->ll_li = check_range_index_one(lp->ll_list, &lp->ll_n1,
+				     (flags & GLV_ASSIGN_WITH_OP) == 0, quiet);
 	    if (lp->ll_li == NULL)
 	    {
 		clear_tv(&var2);
@@ -2144,7 +2145,8 @@ getline_peek_skip_comments(evalarg_T *evalarg)
 	p = skipwhite(next);
 	if (*p != NUL && !vim9_comment_start(p))
 	    return next;
-	(void)eval_next_line(evalarg);
+	if (eval_next_line(evalarg) == NULL)
+	    break;
     }
     return NULL;
 }
@@ -2199,6 +2201,9 @@ eval_next_line(evalarg_T *evalarg)
 							   GETLINE_CONCAT_ALL);
     else
 	line = next_line_from_context(evalarg->eval_cctx, TRUE);
+    if (line == NULL)
+	return NULL;
+
     ++evalarg->eval_break_count;
     if (gap->ga_itemsize > 0 && ga_grow(gap, 1) == OK)
     {
@@ -5292,15 +5297,29 @@ echo_string_core(
 	    break;
 
 	case VAR_FUNC:
-	    if (echo_style)
 	    {
-		*tofree = NULL;
-		r = tv->vval.v_string;
-	    }
-	    else
-	    {
-		*tofree = string_quote(tv->vval.v_string, TRUE);
-		r = *tofree;
+		char_u buf[MAX_FUNC_NAME_LEN];
+
+		if (echo_style)
+		{
+		    r = make_ufunc_name_readable(tv->vval.v_string,
+						       buf, MAX_FUNC_NAME_LEN);
+		    if (r == buf)
+		    {
+			r = vim_strsave(buf);
+			*tofree = r;
+		    }
+		    else
+			*tofree = NULL;
+		}
+		else
+		{
+		    *tofree = string_quote(tv->vval.v_string == NULL ? NULL
+			    : make_ufunc_name_readable(
+				tv->vval.v_string, buf, MAX_FUNC_NAME_LEN),
+									 TRUE);
+		    r = *tofree;
+		}
 	    }
 	    break;
 

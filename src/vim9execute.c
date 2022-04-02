@@ -122,29 +122,103 @@ ufunc_argcount(ufunc_T *ufunc)
 /*
  * Create a new list from "count" items at the bottom of the stack.
  * When "count" is zero an empty list is added to the stack.
+ * When "count" is -1 a NULL list is added to the stack.
  */
     static int
 exe_newlist(int count, ectx_T *ectx)
 {
-    list_T	*list = list_alloc_with_items(count);
+    list_T	*list = NULL;
     int		idx;
     typval_T	*tv;
 
-    if (list == NULL)
-	return FAIL;
-    for (idx = 0; idx < count; ++idx)
-	list_set_item(list, idx, STACK_TV_BOT(idx - count));
+    if (count >= 0)
+    {
+	list = list_alloc_with_items(count);
+	if (list == NULL)
+	    return FAIL;
+	for (idx = 0; idx < count; ++idx)
+	    list_set_item(list, idx, STACK_TV_BOT(idx - count));
+    }
 
     if (count > 0)
 	ectx->ec_stack.ga_len -= count - 1;
     else if (GA_GROW_FAILS(&ectx->ec_stack, 1))
+    {
+	list_unref(list);
 	return FAIL;
+    }
     else
 	++ectx->ec_stack.ga_len;
     tv = STACK_TV_BOT(-1);
     tv->v_type = VAR_LIST;
     tv->vval.v_list = list;
-    ++list->lv_refcount;
+    if (list != NULL)
+	++list->lv_refcount;
+    return OK;
+}
+
+/*
+ * Implementation of ISN_NEWDICT.
+ * Returns FAIL on total failure, MAYBE on error.
+ */
+    static int
+exe_newdict(int count, ectx_T *ectx)
+{
+    dict_T	*dict = NULL;
+    dictitem_T	*item;
+    char_u	*key;
+    int		idx;
+    typval_T	*tv;
+
+    if (count >= 0)
+    {
+	dict = dict_alloc();
+	if (unlikely(dict == NULL))
+	    return FAIL;
+	for (idx = 0; idx < count; ++idx)
+	{
+	    // have already checked key type is VAR_STRING
+	    tv = STACK_TV_BOT(2 * (idx - count));
+	    // check key is unique
+	    key = tv->vval.v_string == NULL
+				? (char_u *)"" : tv->vval.v_string;
+	    item = dict_find(dict, key, -1);
+	    if (item != NULL)
+	    {
+		semsg(_(e_duplicate_key_in_dicitonary), key);
+		dict_unref(dict);
+		return MAYBE;
+	    }
+	    item = dictitem_alloc(key);
+	    clear_tv(tv);
+	    if (unlikely(item == NULL))
+	    {
+		dict_unref(dict);
+		return FAIL;
+	    }
+	    item->di_tv = *STACK_TV_BOT(2 * (idx - count) + 1);
+	    item->di_tv.v_lock = 0;
+	    if (dict_add(dict, item) == FAIL)
+	    {
+		// can this ever happen?
+		dict_unref(dict);
+		return FAIL;
+	    }
+	}
+    }
+
+    if (count > 0)
+	ectx->ec_stack.ga_len -= 2 * count - 1;
+    else if (GA_GROW_FAILS(&ectx->ec_stack, 1))
+	return FAIL;
+    else
+	++ectx->ec_stack.ga_len;
+    tv = STACK_TV_BOT(-1);
+    tv->v_type = VAR_DICT;
+    tv->v_lock = 0;
+    tv->vval.v_dict = dict;
+    if (dict != NULL)
+	++dict->dv_refcount;
     return OK;
 }
 
@@ -863,6 +937,7 @@ call_prepare(int argcount, typval_T *argvars, ectx_T *ectx)
     tv = STACK_TV_BOT(-1);
     tv->v_type = VAR_NUMBER;
     tv->vval.v_number = 0;
+    tv->v_lock = 0;
 
     return OK;
 }
@@ -937,10 +1012,11 @@ call_ufunc(
 	if (error != FCERR_UNKNOWN)
 	{
 	    if (error == FCERR_TOOMANY)
-		semsg(_(e_too_many_arguments_for_function_str), ufunc->uf_name);
+		semsg(_(e_too_many_arguments_for_function_str),
+						   printable_func_name(ufunc));
 	    else
 		semsg(_(e_not_enough_arguments_for_function_str),
-							       ufunc->uf_name);
+						   printable_func_name(ufunc));
 	    return FAIL;
 	}
 
@@ -972,7 +1048,7 @@ call_ufunc(
 
     if (error != FCERR_NONE)
     {
-	user_func_error(error, ufunc->uf_name, &funcexe);
+	user_func_error(error, printable_func_name(ufunc), &funcexe);
 	return FAIL;
     }
     if (did_emsg > did_emsg_before)
@@ -1136,7 +1212,7 @@ call_partial(
     if (res == FAIL)
     {
 	if (called_emsg == called_emsg_before)
-	    semsg(_(e_unknown_function_str),
+	    emsg_funcname(e_unknown_function_str,
 				  name == NULL ? (char_u *)"[unknown]" : name);
 	return FAIL;
     }
@@ -1262,20 +1338,22 @@ do_2string(typval_T *tv, int is_2string_any, int tolerant)
  * When the value of "sv" is a null list of dict, allocate it.
  */
     static void
-allocate_if_null(typval_T *tv)
+allocate_if_null(svar_T *sv)
 {
+    typval_T *tv = sv->sv_tv;
+
     switch (tv->v_type)
     {
 	case VAR_LIST:
-	    if (tv->vval.v_list == NULL)
+	    if (tv->vval.v_list == NULL && sv->sv_type != &t_list_empty)
 		(void)rettv_list_alloc(tv);
 	    break;
 	case VAR_DICT:
-	    if (tv->vval.v_dict == NULL)
+	    if (tv->vval.v_dict == NULL && sv->sv_type != &t_dict_empty)
 		(void)rettv_dict_alloc(tv);
 	    break;
 	case VAR_BLOB:
-	    if (tv->vval.v_blob == NULL)
+	    if (tv->vval.v_blob == NULL && sv->sv_type != &t_blob_null)
 		(void)rettv_blob_alloc(tv);
 	    break;
 	default:
@@ -1433,6 +1511,13 @@ get_script_svar(scriptref_T *sref, int dfunc_idx)
 	    emsg(_(e_script_variable_type_changed));
 	return NULL;
     }
+
+    if (!sv->sv_export && sref->sref_sid != current_sctx.sc_sid)
+    {
+	if (dfunc != NULL)
+	    semsg(_(e_item_not_exported_in_script_str), sv->sv_name);
+	return NULL;
+    }
     return sv;
 }
 
@@ -1486,14 +1571,10 @@ call_eval_func(
 	dictitem_T	*v;
 
 	v = find_var(name, NULL, FALSE);
-	if (v == NULL)
+	if (v == NULL || (v->di_tv.v_type != VAR_PARTIAL
+					       && v->di_tv.v_type != VAR_FUNC))
 	{
-	    semsg(_(e_unknown_function_str), name);
-	    return FAIL;
-	}
-	if (v->di_tv.v_type != VAR_PARTIAL && v->di_tv.v_type != VAR_FUNC)
-	{
-	    semsg(_(e_unknown_function_str), name);
+	    emsg_funcname(e_unknown_function_str, name);
 	    return FAIL;
 	}
 	return call_partial(&v->di_tv, argcount, ectx);
@@ -1907,7 +1988,7 @@ execute_storerange(isn_T *iptr, ectx_T *ectx)
 	else
 	    n2 = (long)tv_get_number_chk(tv_idx2, NULL);
 
-	li1 = check_range_index_one(tv_dest->vval.v_list, &n1, FALSE);
+	li1 = check_range_index_one(tv_dest->vval.v_list, &n1, TRUE, FALSE);
 	if (li1 == NULL)
 	    status = FAIL;
 	else
@@ -2048,9 +2129,6 @@ execute_unletindex(isn_T *iptr, ectx_T *ectx)
 		    semsg(_(e_list_index_out_of_range_nr), n);
 		    status = FAIL;
 		}
-		else if (value_check_lock(li->li_tv.v_lock,
-						  NULL, FALSE))
-		    status = FAIL;
 		else
 		    listitem_remove(l, li);
 	    }
@@ -2133,11 +2211,9 @@ execute_unletrange(isn_T *iptr, ectx_T *ectx)
 		    semsg(_(e_list_index_out_of_range_nr), n2);
 		    status = FAIL;
 		}
-		if (status != FAIL
-			&& list_unlet_range(l, li, NULL, n1,
-			    tv_idx2->v_type != VAR_SPECIAL, n2)
-						       == FAIL)
-		    status = FAIL;
+		if (status != FAIL)
+		    list_unlet_range(l, li, n1,
+					   tv_idx2->v_type != VAR_SPECIAL, n2);
 	    }
 	}
     }
@@ -2551,6 +2627,20 @@ exec_instructions(ectx_T *ectx)
 		}
 		break;
 
+	    case ISN_SOURCE:
+		{
+		    scriptitem_T *si = SCRIPT_ITEM(iptr->isn_arg.number);
+
+		    if (si->sn_state == SN_STATE_NOT_LOADED)
+		    {
+			SOURCING_LNUM = iptr->isn_lnum;
+			if (do_source(si->sn_name, FALSE, DOSO_NONE, NULL)
+								       == FAIL)
+			    goto on_error;
+		    }
+		}
+		break;
+
 	    // execute :substitute with an expression
 	    case ISN_SUBSTITUTE:
 		{
@@ -2616,8 +2706,10 @@ exec_instructions(ectx_T *ectx)
 
 	    case ISN_CEXPR_AUCMD:
 #ifdef FEAT_QUICKFIX
+		force_abort = TRUE;
 		if (trigger_cexpr_autocmd(iptr->isn_arg.number) == FAIL)
 		    goto on_error;
+		force_abort = FALSE;
 #endif
 		break;
 
@@ -2820,7 +2912,7 @@ exec_instructions(ectx_T *ectx)
 		    sv = get_script_svar(sref, ectx->ec_dfunc_idx);
 		    if (sv == NULL)
 			goto theend;
-		    allocate_if_null(sv->sv_tv);
+		    allocate_if_null(sv);
 		    if (GA_GROW_FAILS(&ectx->ec_stack, 1))
 			goto theend;
 		    copy_tv(sv->sv_tv, STACK_TV_BOT(0));
@@ -2828,11 +2920,12 @@ exec_instructions(ectx_T *ectx)
 		}
 		break;
 
-	    // load s: variable in old script
+	    // load s: variable in old script or autoload import
 	    case ISN_LOADS:
+	    case ISN_LOADEXPORT:
 		{
-		    hashtab_T	*ht = &SCRIPT_VARS(
-					       iptr->isn_arg.loadstore.ls_sid);
+		    int		sid = iptr->isn_arg.loadstore.ls_sid;
+		    hashtab_T	*ht = &SCRIPT_VARS(sid);
 		    char_u	*name = iptr->isn_arg.loadstore.ls_name;
 		    dictitem_T	*di = find_var_in_ht(ht, 0, name, TRUE);
 
@@ -2844,6 +2937,25 @@ exec_instructions(ectx_T *ectx)
 		    }
 		    else
 		    {
+			if (iptr->isn_type == ISN_LOADEXPORT)
+			{
+			    int idx = get_script_item_idx(sid, name, 0,
+								   NULL, NULL);
+			    svar_T	*sv;
+
+			    if (idx >= 0)
+			    {
+				sv = ((svar_T *)SCRIPT_ITEM(sid)
+						  ->sn_var_vals.ga_data) + idx;
+				if (!sv->sv_export)
+				{
+				    SOURCING_LNUM = iptr->isn_lnum;
+				    semsg(_(e_item_not_exported_in_script_str),
+									 name);
+				    goto on_error;
+				}
+			    }
+			}
 			if (GA_GROW_FAILS(&ectx->ec_stack, 1))
 			    goto theend;
 			copy_tv(&di->di_tv, STACK_TV_BOT(0));
@@ -2965,20 +3077,50 @@ exec_instructions(ectx_T *ectx)
 		*tv = *STACK_TV_BOT(0);
 		break;
 
-	    // store s: variable in old script
+	    // store s: variable in old script or autoload import
 	    case ISN_STORES:
+	    case ISN_STOREEXPORT:
 		{
-		    hashtab_T	*ht = &SCRIPT_VARS(
-					       iptr->isn_arg.loadstore.ls_sid);
+		    int		sid = iptr->isn_arg.loadstore.ls_sid;
+		    hashtab_T	*ht = &SCRIPT_VARS(sid);
 		    char_u	*name = iptr->isn_arg.loadstore.ls_name;
-		    dictitem_T	*di = find_var_in_ht(ht, 0, name + 2, TRUE);
+		    dictitem_T	*di = find_var_in_ht(ht, 0,
+					    iptr->isn_type == ISN_STORES
+						     ? name + 2 : name, TRUE);
 
 		    --ectx->ec_stack.ga_len;
+		    SOURCING_LNUM = iptr->isn_lnum;
 		    if (di == NULL)
+		    {
+			if (iptr->isn_type == ISN_STOREEXPORT)
+			{
+			    semsg(_(e_undefined_variable_str), name);
+			    clear_tv(STACK_TV_BOT(0));
+			    goto on_error;
+			}
 			store_var(name, STACK_TV_BOT(0));
+		    }
 		    else
 		    {
-			SOURCING_LNUM = iptr->isn_lnum;
+			if (iptr->isn_type == ISN_STOREEXPORT)
+			{
+			    int idx = get_script_item_idx(sid, name, 0,
+								   NULL, NULL);
+
+			    if (idx >= 0)
+			    {
+				svar_T	*sv = ((svar_T *)SCRIPT_ITEM(sid)
+						  ->sn_var_vals.ga_data) + idx;
+
+				if (!sv->sv_export)
+				{
+				    semsg(_(e_item_not_exported_in_script_str),
+									 name);
+				    clear_tv(STACK_TV_BOT(0));
+				    goto on_error;
+				}
+			    }
+			}
 			if (var_check_permission(di, name) == FAIL)
 			{
 			    clear_tv(STACK_TV_BOT(0));
@@ -3045,7 +3187,9 @@ exec_instructions(ectx_T *ectx)
 			s = tv2string(tv, &tofree, numbuf, 0);
 			if (s == NULL || *s == NUL)
 			{
+			    // cannot happen?
 			    clear_tv(tv);
+			    vim_free(tofree);
 			    goto on_error;
 			}
 		    }
@@ -3275,17 +3419,13 @@ exec_instructions(ectx_T *ectx)
 		    case ISN_PUSHCHANNEL:
 #ifdef FEAT_JOB_CHANNEL
 			tv->v_type = VAR_CHANNEL;
-			tv->vval.v_channel = iptr->isn_arg.channel;
-			if (tv->vval.v_channel != NULL)
-			    ++tv->vval.v_channel->ch_refcount;
+			tv->vval.v_channel = NULL;
 #endif
 			break;
 		    case ISN_PUSHJOB:
 #ifdef FEAT_JOB_CHANNEL
 			tv->v_type = VAR_JOB;
-			tv->vval.v_job = iptr->isn_arg.job;
-			if (tv->vval.v_job != NULL)
-			    ++tv->vval.v_job->jv_refcount;
+			tv->vval.v_job = NULL;
 #endif
 			break;
 		    default:
@@ -3362,57 +3502,14 @@ exec_instructions(ectx_T *ectx)
 	    // create a dict from items on the stack
 	    case ISN_NEWDICT:
 		{
-		    int		count = iptr->isn_arg.number;
-		    dict_T	*dict = dict_alloc();
-		    dictitem_T	*item;
-		    char_u	*key;
-		    int		idx;
+		    int res;
 
-		    if (unlikely(dict == NULL))
+		    SOURCING_LNUM = iptr->isn_lnum;
+		    res = exe_newdict(iptr->isn_arg.number, ectx);
+		    if (res == FAIL)
 			goto theend;
-		    for (idx = 0; idx < count; ++idx)
-		    {
-			// have already checked key type is VAR_STRING
-			tv = STACK_TV_BOT(2 * (idx - count));
-			// check key is unique
-			key = tv->vval.v_string == NULL
-					    ? (char_u *)"" : tv->vval.v_string;
-			item = dict_find(dict, key, -1);
-			if (item != NULL)
-			{
-			    SOURCING_LNUM = iptr->isn_lnum;
-			    semsg(_(e_duplicate_key_in_dicitonary), key);
-			    dict_unref(dict);
-			    goto on_error;
-			}
-			item = dictitem_alloc(key);
-			clear_tv(tv);
-			if (unlikely(item == NULL))
-			{
-			    dict_unref(dict);
-			    goto theend;
-			}
-			item->di_tv = *STACK_TV_BOT(2 * (idx - count) + 1);
-			item->di_tv.v_lock = 0;
-			if (dict_add(dict, item) == FAIL)
-			{
-			    // can this ever happen?
-			    dict_unref(dict);
-			    goto theend;
-			}
-		    }
-
-		    if (count > 0)
-			ectx->ec_stack.ga_len -= 2 * count - 1;
-		    else if (GA_GROW_FAILS(&ectx->ec_stack, 1))
-			goto theend;
-		    else
-			++ectx->ec_stack.ga_len;
-		    tv = STACK_TV_BOT(-1);
-		    tv->v_type = VAR_DICT;
-		    tv->v_lock = 0;
-		    tv->vval.v_dict = dict;
-		    ++dict->dv_refcount;
+		    if (res == MAYBE)
+			goto on_error;
 		}
 		break;
 
@@ -5380,11 +5477,15 @@ list_instructions(char *pfx, isn_T *instr, int instr_count, ufunc_T *ufunc)
 #endif
 		break;
 	    case ISN_INSTR:
+		smsg("%s%4d INSTR", pfx, current);
+		list_instructions("    ", iptr->isn_arg.instr, INT_MAX, NULL);
+		msg("     -------------");
+		break;
+	    case ISN_SOURCE:
 		{
-		    smsg("%s%4d INSTR", pfx, current);
-		    list_instructions("    ", iptr->isn_arg.instr,
-								INT_MAX, NULL);
-		    msg("     -------------");
+		    scriptitem_T    *si = SCRIPT_ITEM(iptr->isn_arg.number);
+
+		    smsg("%s%4d SOURCE %s", pfx, current, si->sn_name);
 		}
 		break;
 	    case ISN_SUBSTITUTE:
@@ -5471,12 +5572,15 @@ list_instructions(char *pfx, isn_T *instr, int instr_count, ufunc_T *ufunc)
 		}
 		break;
 	    case ISN_LOADS:
+	    case ISN_LOADEXPORT:
 		{
 		    scriptitem_T *si = SCRIPT_ITEM(
 					       iptr->isn_arg.loadstore.ls_sid);
 
-		    smsg("%s%4d LOADS s:%s from %s", pfx, current,
-				 iptr->isn_arg.loadstore.ls_name, si->sn_name);
+		    smsg("%s%4d %s s:%s from %s", pfx, current,
+			    iptr->isn_type == ISN_LOADS ? "LOADS"
+								: "LOADEXPORT",
+			    iptr->isn_arg.loadstore.ls_name, si->sn_name);
 		}
 		break;
 	    case ISN_LOADAUTO:
@@ -5557,11 +5661,14 @@ list_instructions(char *pfx, isn_T *instr, int instr_count, ufunc_T *ufunc)
 		smsg("%s%4d STORET %s", pfx, current, iptr->isn_arg.string);
 		break;
 	    case ISN_STORES:
+	    case ISN_STOREEXPORT:
 		{
 		    scriptitem_T *si = SCRIPT_ITEM(
 					       iptr->isn_arg.loadstore.ls_sid);
 
-		    smsg("%s%4d STORES %s in %s", pfx, current,
+		    smsg("%s%4d %s %s in %s", pfx, current,
+				iptr->isn_type == ISN_STORES
+						    ? "STORES" : "STOREEXPORT",
 				 iptr->isn_arg.loadstore.ls_name, si->sn_name);
 		}
 		break;
@@ -5649,26 +5756,12 @@ list_instructions(char *pfx, isn_T *instr, int instr_count, ufunc_T *ufunc)
 		break;
 	    case ISN_PUSHCHANNEL:
 #ifdef FEAT_JOB_CHANNEL
-		{
-		    channel_T *channel = iptr->isn_arg.channel;
-
-		    smsg("%s%4d PUSHCHANNEL %d", pfx, current,
-					 channel == NULL ? 0 : channel->ch_id);
-		}
+		smsg("%s%4d PUSHCHANNEL 0", pfx, current);
 #endif
 		break;
 	    case ISN_PUSHJOB:
 #ifdef FEAT_JOB_CHANNEL
-		{
-		    typval_T	tv;
-		    char_u	*name;
-		    char_u	buf[NUMBUFLEN];
-
-		    tv.v_type = VAR_JOB;
-		    tv.vval.v_job = iptr->isn_arg.job;
-		    name = job_to_string_buf(&tv, buf);
-		    smsg("%s%4d PUSHJOB \"%s\"", pfx, current, name);
-		}
+		smsg("%s%4d PUSHJOB \"no process\"", pfx, current);
 #endif
 		break;
 	    case ISN_PUSHEXC:

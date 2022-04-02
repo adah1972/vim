@@ -122,13 +122,13 @@ def Test_add_blob()
   END
   v9.CheckDefExecFailure(lines, 'E1131:', 2)
 
-  # Getting variable with NULL blob allocates a new blob at script level
+  # Getting variable with NULL blob fails
   lines =<< trim END
       vim9script
       var b: blob = test_null_blob()
       add(b, 123)
   END
-  v9.CheckScriptSuccess(lines)
+  v9.CheckScriptFailure(lines, 'E1131:', 3)
 enddef
 
 def Test_add_list()
@@ -371,9 +371,16 @@ def Test_bufname()
   assert_fails('bufname([])', 'E1220:')
 enddef
 
+let s:bufnr_res = 0
+
 def Test_bufnr()
   var buf = bufnr()
   bufnr('%')->assert_equal(buf)
+
+  # check the lock is not taken over through the stack
+  const nr = 10
+  bufnr_res = bufnr()
+  bufnr_res = 12345
 
   buf = bufnr('Xdummy', true)
   buf->assert_notequal(-1)

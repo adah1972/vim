@@ -708,6 +708,10 @@ aucmd_abort:
      */
     if (wipe_buf)
     {
+	// Do not wipe out the buffer if it is used in a window.
+	if (buf->b_nwindows > 0)
+	    return FALSE;
+
 	if (action == DOBUF_WIPE_REUSE)
 	{
 	    // we can re-use this buffer number, store it
@@ -5330,17 +5334,21 @@ ex_buffer_all(exarg_T *eap)
 	{
 	    wpnext = wp->w_next;
 	    if ((wp->w_buffer->b_nwindows > 1
-		    || ((cmdmod.cmod_split & WSP_VERT)
-			? wp->w_height + wp->w_status_height < Rows - p_ch
-							    - tabline_height()
-			: wp->w_width != Columns)
-		    || (had_tab > 0 && wp != firstwin)) && !ONE_WINDOW
-			     && !(wp->w_closing || wp->w_buffer->b_locked > 0))
+			|| ((cmdmod.cmod_split & WSP_VERT)
+			    ? wp->w_height + wp->w_status_height < Rows - p_ch
+							     - tabline_height()
+			    : wp->w_width != Columns)
+			|| (had_tab > 0 && wp != firstwin))
+		    && !ONE_WINDOW
+		    && !(wp->w_closing || wp->w_buffer->b_locked > 0)
+		    && !win_unlisted(wp))
 	    {
-		win_close(wp, FALSE);
-		wpnext = firstwin;	// just in case an autocommand does
-					// something strange with windows
-		tpnext = first_tabpage;	// start all over...
+		if (win_close(wp, FALSE) == FAIL)
+		    break;
+		// Just in case an autocommand does something strange with
+		// windows: start all over...
+		wpnext = firstwin;
+		tpnext = first_tabpage;
 		open_wins = 0;
 	    }
 	    else

@@ -2116,7 +2116,7 @@ check_overwrite(
 	    // with UNIX it is possible to open a directory
 	    if (mch_isdir(ffname))
 	    {
-		semsg(_(e_src_is_directory), ffname);
+		semsg(_(e_str_is_directory), ffname);
 		return FAIL;
 	    }
 #endif
@@ -2411,8 +2411,7 @@ getfile(
 	if (curbufIsChanged())
 #endif
 	{
-	    if (other)
-		--no_wait_return;
+	    --no_wait_return;
 	    no_write_message();
 	    retval = GETFILE_NOT_WRITTEN;	// file has been changed
 	    goto theend;

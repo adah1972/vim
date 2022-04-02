@@ -3,6 +3,7 @@
 source shared.vim
 source check.vim
 source term_util.vim
+import './vim9.vim' as v9
 
 func s:cleanup_buffers() abort
   for bnr in range(1, bufnr('$'))
@@ -2974,5 +2975,36 @@ func Test_Changed_ChangedI()
 
   bw!
 endfunc
+
+func Test_closing_autocmd_window()
+  let lines =<< trim END
+      edit Xa.txt
+      tabnew Xb.txt
+      autocmd BufEnter Xa.txt unhide 1
+      doautoall BufEnter
+  END
+  call v9.CheckScriptFailure(lines, 'E814:')
+  au! BufEnter
+  only!
+  bwipe Xa.txt
+  bwipe Xb.txt
+endfunc
+
+func Test_bufwipeout_changes_window()
+  " This should not crash, but we don't have any expectations about what
+  " happens, changing window in BufWipeout has unpredictable results.
+  tabedit
+  let g:window_id = win_getid()
+  topleft new
+  setlocal bufhidden=wipe
+  autocmd BufWipeout <buffer> call win_gotoid(g:window_id)
+  tabprevious
+  +tabclose
+
+  unlet g:window_id
+  au! BufWipeout
+  %bwipe!
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

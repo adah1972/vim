@@ -43,7 +43,6 @@ static int frame_minheight(frame_T *topfrp, win_T *next_curwin);
 static int may_open_tabpage(void);
 static int win_enter_ext(win_T *wp, int flags);
 static void win_free(win_T *wp, tabpage_T *tp);
-static int win_unlisted(win_T *wp);
 static void win_append(win_T *after, win_T *wp);
 static void frame_append(frame_T *after, frame_T *frp);
 static void frame_insert(frame_T *before, frame_T *frp);
@@ -2286,6 +2285,41 @@ entering_window(win_T *win)
 }
 #endif
 
+    static void
+win_init_empty(win_T *wp)
+{
+    redraw_win_later(wp, NOT_VALID);
+    wp->w_lines_valid = 0;
+    wp->w_cursor.lnum = 1;
+    wp->w_curswant = wp->w_cursor.col = 0;
+    wp->w_cursor.coladd = 0;
+    wp->w_pcmark.lnum = 1;	// pcmark not cleared but set to line 1
+    wp->w_pcmark.col = 0;
+    wp->w_prev_pcmark.lnum = 0;
+    wp->w_prev_pcmark.col = 0;
+    wp->w_topline = 1;
+#ifdef FEAT_DIFF
+    wp->w_topfill = 0;
+#endif
+    wp->w_botline = 2;
+#if defined(FEAT_SYN_HL) || defined(FEAT_SPELL)
+    wp->w_s = &wp->w_buffer->b_s;
+#endif
+#ifdef FEAT_TERMINAL
+    term_reset_wincolor(wp);
+#endif
+}
+
+/*
+ * Init the current window "curwin".
+ * Called when a new file is being edited.
+ */
+    void
+curwin_init(void)
+{
+    win_init_empty(curwin);
+}
+
 /*
  * Close all windows for buffer "buf".
  */
@@ -2787,7 +2821,17 @@ win_close_othertab(win_T *win, int free_buf, tabpage_T *tp)
     for (ptp = first_tabpage; ptp != NULL && ptp != tp; ptp = ptp->tp_next)
 	;
     if (ptp == NULL || tp == curtab)
+    {
+	// If the buffer was removed from the window we have to give it any
+	// buffer.
+	if (win_valid_any_tab(win) && win->w_buffer == NULL)
+	{
+	    win->w_buffer = firstbuf;
+	    ++firstbuf->b_nwindows;
+	    win_init_empty(win);
+	}
 	return;
+    }
 
     // Autocommands may have closed the window already.
     for (wp = tp->tp_firstwin; wp != NULL && wp != win; wp = wp->w_next)
@@ -3684,41 +3728,6 @@ close_others(
 
     if (message && !ONE_WINDOW)
 	emsg(_(e_other_window_contains_changes));
-}
-
-    static void
-win_init_empty(win_T *wp)
-{
-    redraw_win_later(wp, NOT_VALID);
-    wp->w_lines_valid = 0;
-    wp->w_cursor.lnum = 1;
-    wp->w_curswant = wp->w_cursor.col = 0;
-    wp->w_cursor.coladd = 0;
-    wp->w_pcmark.lnum = 1;	// pcmark not cleared but set to line 1
-    wp->w_pcmark.col = 0;
-    wp->w_prev_pcmark.lnum = 0;
-    wp->w_prev_pcmark.col = 0;
-    wp->w_topline = 1;
-#ifdef FEAT_DIFF
-    wp->w_topfill = 0;
-#endif
-    wp->w_botline = 2;
-#if defined(FEAT_SYN_HL) || defined(FEAT_SPELL)
-    wp->w_s = &wp->w_buffer->b_s;
-#endif
-#ifdef FEAT_TERMINAL
-    term_reset_wincolor(wp);
-#endif
-}
-
-/*
- * Init the current window "curwin".
- * Called when a new file is being edited.
- */
-    void
-curwin_init(void)
-{
-    win_init_empty(curwin);
 }
 
 /*
@@ -5233,7 +5242,7 @@ win_free(
  * Return TRUE if "wp" is not in the list of windows: the autocmd window or a
  * popup window.
  */
-    static int
+    int
 win_unlisted(win_T *wp)
 {
     return wp == aucmd_win || WIN_IS_POPUP(wp);
@@ -5692,8 +5701,7 @@ frame_setheight(frame_T *curfrp, int height)
 		break;
 	    if (run == 2 || curfrp->fr_width == Columns)
 	    {
-		if (height > room + room_cmdline)
-		    height = room + room_cmdline;
+		height = room + room_cmdline;
 		break;
 	    }
 	    frame_setheight(curfrp->fr_parent, height
@@ -5877,8 +5885,7 @@ frame_setwidth(frame_T *curfrp, int width)
 		break;
 	    if (run == 2 || curfrp->fr_height >= ROWS_AVAIL)
 	    {
-		if (width > room)
-		    width = room;
+		width = room;
 		break;
 	    }
 	    frame_setwidth(curfrp->fr_parent, width

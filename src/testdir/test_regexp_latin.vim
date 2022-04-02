@@ -799,7 +799,7 @@ func Test_matchstr_with_ze()
   bwipe!
 endfunc
 
-" Check a pattern with a look beind crossing a line boundary
+" Check a pattern with a look behind crossing a line boundary
 func Test_lookbehind_across_line()
   new
   call append(0, ['Behind:', 'asdfasd<yyy', 'xxstart1', 'asdfasd<yy',
@@ -1042,9 +1042,16 @@ endfunc
 
 func Test_using_mark_position()
   " this was using freed memory
+  " new engine
   new
   norm O0
   call assert_fails("s/\\%')", 'E486:')
+  bwipe!
+
+  " old engine
+  new
+  norm O0
+  call assert_fails("s/\\%#=1\\%')", 'E486:')
   bwipe!
 endfunc
 

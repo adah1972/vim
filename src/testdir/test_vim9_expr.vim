@@ -563,7 +563,7 @@ let ablob = 0z01ab
 let alist = [2, 3, 4]
 let adict = #{aaa: 2, bbb: 8}
 
-" test == comperator
+" test == comparator
 def Test_expr4_equal()
   var lines =<< trim END
       var trueVar = true
@@ -754,6 +754,12 @@ def Test_expr4_compare_null()
       assert_false(v:null != test_null_blob())
       assert_false(null != null_blob)
 
+      var nb = null_blob
+      assert_true(nb == null_blob)
+      assert_true(nb == null)
+      assert_true(null_blob == nb)
+      assert_true(null == nb)
+
       if has('channel')
         assert_true(test_null_channel() == v:null)
         assert_true(null_channel == null)
@@ -763,6 +769,12 @@ def Test_expr4_compare_null()
         assert_false(null_channel != null)
         assert_false(v:null != test_null_channel())
         assert_false(null != null_channel)
+
+        var nc = null_channel
+        assert_true(nc == null_channel)
+        assert_true(nc == null)
+        assert_true(null_channel == nc)
+        assert_true(null == nc)
       endif
 
       assert_true(test_null_dict() == v:null)
@@ -779,6 +791,12 @@ def Test_expr4_compare_null()
       assert_false(g:null_dict != v:null)
       assert_false(v:null != g:null_dict)
 
+      var nd = null_dict
+      assert_true(nd == null_dict)
+      assert_true(nd == null)
+      assert_true(null_dict == nd)
+      assert_true(null == nd)
+
       assert_true(test_null_function() == v:null)
       assert_true(null_function == null)
       assert_true(v:null == test_null_function())
@@ -787,6 +805,12 @@ def Test_expr4_compare_null()
       assert_false(null_function != null)
       assert_false(v:null != test_null_function())
       assert_false(null != null_function)
+
+      var Nf = null_function
+      assert_true(Nf == null_function)
+      assert_true(Nf == null)
+      assert_true(null_function == Nf)
+      assert_true(null == Nf)
 
       if has('job')
         assert_true(test_null_job() == v:null)
@@ -797,6 +821,12 @@ def Test_expr4_compare_null()
         assert_false(null_job != null)
         assert_false(v:null != test_null_job())
         assert_false(null != null_job)
+
+        var nj = null_job
+        assert_true(nj == null_job)
+        assert_true(nj == null)
+        assert_true(null_job == nj)
+        assert_true(null == nj)
       endif
 
       assert_true(test_null_list() == v:null)
@@ -813,6 +843,12 @@ def Test_expr4_compare_null()
       assert_true(g:not_null_list != v:null)
       assert_true(v:null != g:not_null_list)
 
+      var nl = null_list
+      assert_true(nl == null_list)
+      assert_true(nl == null)
+      assert_true(null_list == nl)
+      assert_true(null == nl)
+
       assert_true(test_null_partial() == v:null)
       assert_true(null_partial == null)
       assert_true(v:null == test_null_partial())
@@ -821,6 +857,12 @@ def Test_expr4_compare_null()
       assert_false(null_partial != null)
       assert_false(v:null != test_null_partial())
       assert_false(null != null_partial)
+
+      var Np = null_partial
+      assert_true(Np == null_partial)
+      assert_true(Np == null)
+      assert_true(null_partial == Np)
+      assert_true(null == Np)
 
       assert_true(test_null_string() == v:null)
       assert_true(null_string == null)
@@ -837,10 +879,103 @@ def Test_expr4_compare_null()
       assert_false(null_string isnot test_null_string())
       assert_true(null_string isnot '')
       assert_true('' isnot null_string)
+
+      var ns = null_string
+      assert_true(ns == null_string)
+      assert_true(ns == null)
+      assert_true(null_string == ns)
+      assert_true(null == ns)
   END
   v9.CheckDefAndScriptSuccess(lines)
   unlet g:null_dict
   unlet g:not_null_list
+
+  # variables declared at script level used in a :def function
+  lines =<< trim END
+      vim9script
+      
+      var l_decl: list<number>
+      var l_empty = []
+      var l_null = null_list
+
+      def TestList()
+        assert_false(l_decl == null)
+        assert_false(l_decl is null_list)
+        assert_false(l_empty == null)
+        assert_false(l_empty is null_list)
+        assert_true(l_null == null)
+        assert_true(l_null is null_list)
+        assert_true(l_null == null_list)
+
+        add(l_decl, 6)
+        assert_equal([6], l_decl)
+        add(l_empty, 7)
+        assert_equal([7], l_empty)
+        var caught = false
+        try
+          add(l_null, 9)
+        catch /E1130:/
+          caught = true
+        endtry
+        assert_true(caught)
+      enddef
+      TestList()
+      
+      var b_decl: blob
+      var b_empty = 0z
+      var b_null = null_blob
+
+      def TestBlob()
+        assert_false(b_decl == null)
+        assert_false(b_decl is null_blob)
+        assert_false(b_empty == null)
+        assert_false(b_empty is null_blob)
+        assert_true(b_null == null)
+        assert_true(b_null is null_blob)
+        assert_true(b_null == null_blob)
+
+        add(b_decl, 6)
+        assert_equal(0z06, b_decl)
+        add(b_empty, 7)
+        assert_equal(0z07, b_empty)
+        var caught = false
+        try
+          add(b_null, 9)
+        catch /E1131:/
+          caught = true
+        endtry
+        assert_true(caught)
+      enddef
+      TestBlob()
+      
+      var d_decl: dict<number>
+      var d_empty = {}
+      var d_null = null_dict
+
+      def TestDict()
+        assert_false(d_decl == null)
+        assert_false(d_decl is null_dict)
+        assert_false(d_empty == null)
+        assert_false(d_empty is null_dict)
+        assert_true(d_null == null)
+        assert_true(d_null is null_dict)
+        assert_true(d_null == null_dict)
+
+        d_decl['a'] = 6
+        assert_equal({a: 6}, d_decl)
+        d_empty['b'] = 7
+        assert_equal({b: 7}, d_empty)
+        var caught = false
+        try
+          d_null['c'] = 9
+        catch /E1103:/
+          caught = true
+        endtry
+        assert_true(caught)
+      enddef
+      TestDict()
+  END
+  v9.CheckScriptSuccess(lines)
 
   lines =<< trim END
       var d: dict<func> = {f: null_function}
@@ -902,7 +1037,7 @@ def Test_expr4_wrong_type()
       'echo n < true'], 'E1072:', 2)
 enddef
 
-" test != comperator
+" test != comparator
 def Test_expr4_notequal()
   var lines =<< trim END
       var trueVar = true
@@ -987,7 +1122,7 @@ def Test_expr4_notequal()
   v9.CheckDefAndScriptSuccess(lines)
 enddef
 
-" test > comperator
+" test > comparator
 def Test_expr4_greater()
   var lines =<< trim END
       assert_true(2 > 0)
@@ -1013,7 +1148,7 @@ def Test_expr4_greater()
   v9.CheckDefAndScriptSuccess(lines)
 enddef
 
-" test >= comperator
+" test >= comparator
 def Test_expr4_greaterequal()
   var lines =<< trim END
       assert_true(2 >= 0)
@@ -1034,7 +1169,7 @@ def Test_expr4_greaterequal()
   v9.CheckDefAndScriptSuccess(lines)
 enddef
 
-" test < comperator
+" test < comparator
 def Test_expr4_smaller()
   var lines =<< trim END
       assert_false(2 < 0)
@@ -1056,7 +1191,7 @@ def Test_expr4_smaller()
   v9.CheckDefAndScriptSuccess(lines)
 enddef
 
-" test <= comperator
+" test <= comparator
 def Test_expr4_smallerequal()
   var lines =<< trim END
       assert_false(2 <= 0)
@@ -1081,7 +1216,7 @@ def Test_expr4_smallerequal()
   v9.CheckDefAndScriptSuccess(lines)
 enddef
 
-" test =~ comperator
+" test =~ comparator
 def Test_expr4_match()
   var lines =<< trim END
       assert_equal(false, '2' =~ '0')
@@ -1098,7 +1233,7 @@ def Test_expr4_match()
   v9.CheckDefAndScriptSuccess(lines)
 enddef
 
-" test !~ comperator
+" test !~ comparator
 def Test_expr4_nomatch()
   var lines =<< trim END
       assert_equal(true, '2' !~ '0')
@@ -1110,7 +1245,7 @@ def Test_expr4_nomatch()
   v9.CheckDefAndScriptSuccess(lines)
 enddef
 
-" test is comperator
+" test is comparator
 def Test_expr4_is()
   var lines =<< trim END
       var mylist = [2]
@@ -1128,7 +1263,7 @@ def Test_expr4_is()
   v9.CheckDefAndScriptSuccess(lines)
 enddef
 
-" test isnot comperator
+" test isnot comparator
 def Test_expr4_isnot()
   var lines =<< trim END
       var mylist = [2]
@@ -3312,6 +3447,29 @@ def Test_expr8_call_global()
   v9.CheckDefAndScriptFailure(lines, 'E117: Unknown function: ExistingGlobal')
 enddef
 
+def Test_expr8_autoload_var()
+  var auto_lines =<< trim END
+      let autofile#var = 'found'
+  END
+  mkdir('Xruntime/autoload', 'p')
+  writefile(auto_lines, 'Xruntime/autoload/autofile.vim')
+  var save_rtp = &rtp
+  &rtp = getcwd() .. '/Xruntime,' .. &rtp
+
+  var lines =<< trim END
+      assert_equal('found', autofile#var)
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+      echo autofile#other
+  END
+  v9.CheckDefExecAndScriptFailure(lines, 'E121: Undefined variable: autofile#other')
+
+  &rtp = save_rtp
+  delete('Xruntime', 'rf')
+enddef
+
 def Test_expr8_call_autoload()
   var auto_lines =<< trim END
       def g:some#func(): string
@@ -3852,7 +4010,7 @@ func Test_expr_fails()
   call v9.CheckDefFailure(["echo len('asdf'"], 'E110:', 2)
   call v9.CheckScriptFailure(['vim9script', "echo len('asdf'"], 'E116:', 2)
 
-  call v9.CheckDefAndScriptFailure(["echo Func0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789()"], ['E1011:', 'E117:'], 1)
+  call v9.CheckDefAndScriptFailure(["echo Func01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789()"], ['E1011:', 'E117:'], 1)
   call v9.CheckDefAndScriptFailure(["echo doesnotexist()"], 'E117:', 1)
 endfunc
 

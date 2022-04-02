@@ -318,6 +318,46 @@ def Test_disassemble_push()
   &rtp = save_rtp
 enddef
 
+def Test_disassemble_import_autoload()
+  writefile(['vim9script'], 'XimportAL.vim')
+
+  var lines =<< trim END
+      vim9script
+      import autoload './XimportAL.vim'
+
+      def AutoloadFunc()
+        echo XimportAL.SomeFunc()
+        echo XimportAL.someVar
+        XimportAL.someVar = "yes"
+      enddef
+
+      var res = execute('disass AutoloadFunc')
+      assert_match('<SNR>\d*_AutoloadFunc.*' ..
+            'echo XimportAL.SomeFunc()\_s*' ..
+            '\d SOURCE .*/testdir/XimportAL.vim\_s*' ..
+            '\d PUSHFUNC "<80><fd>R\d\+_SomeFunc"\_s*' ..
+            '\d PCALL top (argc 0)\_s*' ..
+            '\d PCALL end\_s*' ..
+            '\d ECHO 1\_s*' ..
+
+            'echo XimportAL.someVar\_s*' ..
+            '\d SOURCE .*/testdir/XimportAL.vim\_s*' ..
+            '\d LOADEXPORT s:someVar from .*/testdir/XimportAL.vim\_s*' ..
+            '\d ECHO 1\_s*' ..
+
+            'XimportAL.someVar = "yes"\_s*' ..
+            '\d\+ PUSHS "yes"\_s*' ..
+            '\d\+ SOURCE .*/testdir/XimportAL.vim\_s*' ..
+            '\d\+ STOREEXPORT someVar in .*/testdir/XimportAL.vim\_s*' ..
+
+            '\d\+ RETURN void',
+            res)
+  END
+  v9.CheckScriptSuccess(lines)
+
+  delete('XimportAL.vim')
+enddef
+
 def s:ScriptFuncStore()
   var localnr = 1
   localnr = 2
@@ -439,11 +479,11 @@ if has('job')
           '\d\+ STORE $\d\_s*' ..
 
           'var dd = null_dict\_s*' ..
-          '\d\+ NEWDICT size 0\_s*' ..
+          '\d\+ NEWDICT size -1\_s*' ..
           '\d\+ STORE $\d\_s*' ..
 
           'var ll = null_list\_s*' ..
-          '\d\+ NEWLIST size 0\_s*' ..
+          '\d\+ NEWLIST size -1\_s*' ..
           '\d\+ STORE $\d\_s*' ..
 
           'var Ff = null_function\_s*' ..
@@ -2004,7 +2044,7 @@ def s:FalsyOp()
   echo "" ?? "empty string"
 enddef
 
-def Test_dsassemble_falsy_op()
+def Test_disassemble_falsy_op()
   var res = execute('disass s:FalsyOp')
   assert_match('\<SNR>\d*_FalsyOp\_s*' ..
       'echo g:flag ?? "yes"\_s*' ..

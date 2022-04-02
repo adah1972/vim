@@ -131,7 +131,7 @@ typedef enum {
 #endif
 
 // end-of-line style
-#define EOL_UNKNOWN	-1	// not defined yet
+#define EOL_UNKNOWN	(-1)	// not defined yet
 #define EOL_UNIX	0	// NL
 #define EOL_DOS		1	// CR NL
 #define EOL_MAC		2	// CR
@@ -570,7 +570,7 @@ EXTERN char_u	*p_fenc;	// 'fileencoding'
 EXTERN char_u	*p_fencs;	// 'fileencodings'
 EXTERN char_u	*p_ff;		// 'fileformat'
 EXTERN char_u	*p_ffs;		// 'fileformats'
-EXTERN long	p_fic;		// 'fileignorecase'
+EXTERN int	p_fic;		// 'fileignorecase'
 EXTERN char_u	*p_ft;		// 'filetype'
 EXTERN char_u	*p_fcs;		// 'fillchar'
 EXTERN int	p_fixeol;	// 'fixendofline'
@@ -750,7 +750,7 @@ EXTERN long	p_mis;		// 'menuitems'
 EXTERN char_u	*p_msm;		// 'mkspellmem'
 #endif
 EXTERN int	p_ml;		// 'modeline'
-EXTERN long	p_mle;		// 'modelineexpr'
+EXTERN int	p_mle;		// 'modelineexpr'
 EXTERN long	p_mls;		// 'modelines'
 EXTERN int	p_ma;		// 'modifiable'
 EXTERN int	p_mod;		// 'modified'
@@ -1078,7 +1078,7 @@ EXTERN int	p_wiv;		// 'weirdinvert'
 EXTERN char_u	*p_ww;		// 'whichwrap'
 EXTERN long	p_wc;		// 'wildchar'
 EXTERN long	p_wcm;		// 'wildcharm'
-EXTERN long	p_wic;		// 'wildignorecase'
+EXTERN int	p_wic;		// 'wildignorecase'
 EXTERN char_u	*p_wim;		// 'wildmode'
 #ifdef FEAT_WILDMENU
 EXTERN int	p_wmnu;		// 'wildmenu'
@@ -1328,6 +1328,6 @@ enum
 };
 
 // Value for b_p_ul indicating the global value must be used.
-#define NO_LOCAL_UNDOLEVEL -123456
+#define NO_LOCAL_UNDOLEVEL (-123456)
 
 #endif // _OPTION_H_

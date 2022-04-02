@@ -2275,7 +2275,7 @@ do_one_cmd(
      */
     if ((ea.argt & EX_TRLBAR) && !ea.usefilter)
     {
-	separate_nextcmd(&ea);
+	separate_nextcmd(&ea, FALSE);
     }
     else if (ea.cmdidx == CMD_bang
 	    || ea.cmdidx == CMD_terminal
@@ -2572,7 +2572,7 @@ do_one_cmd(
 #ifdef FEAT_EVAL
     // Set flag that any command was executed, used by ex_vim9script().
     // Not if this was a command that wasn't executed or :endif.
-    if (getline_equal(ea.getline, ea.cookie, getsourceline)
+    if (sourcing_a_script(&ea)
 	    && current_sctx.sc_sid > 0
 	    && ea.cmdidx != CMD_endif
 	    && (cstack->cs_idx < 0
@@ -2782,12 +2782,24 @@ parse_command_modifiers(
 	cmdmod_T    *cmod,
 	int	    skip_only)
 {
+    char_u  *cmd_start = NULL;
     char_u  *p;
     int	    starts_with_colon = FALSE;
     int	    vim9script = in_vim9script();
+    int	    has_visual_range = FALSE;
 
     CLEAR_POINTER(cmod);
     cmod->cmod_flags = sticky_cmdmod_flags;
+
+    if (STRNCMP(eap->cmd, "'<,'>", 5) == 0)
+    {
+	// The automatically inserted Visual area range is skipped, so that
+	// typing ":cmdmod cmd" in Visual mode works without having to move the
+	// range to after the modififiers.
+	eap->cmd += 5;
+	cmd_start = eap->cmd;
+	has_visual_range = TRUE;
+    }
 
     // Repeat until no more command modifiers are found.
     for (;;)
@@ -2849,12 +2861,11 @@ parse_command_modifiers(
 	{
 	    char_u *s, *n;
 
-	    for (s = p; ASCII_ISALPHA(*s); ++s)
+	    for (s = eap->cmd; ASCII_ISALPHA(*s); ++s)
 		;
 	    n = skipwhite(s);
-	    if (vim_strchr((char_u *)".=", *n) != NULL
-		    || *s == '['
-		    || (*n != NUL && n[1] == '='))
+	    if (*n == '.' || *n == '=' || (*n != NUL && n[1] == '=')
+		    || *s == '[')
 		break;
 	}
 
@@ -3079,6 +3090,23 @@ parse_command_modifiers(
 			continue;
 	}
 	break;
+    }
+
+    if (has_visual_range)
+    {
+	if (eap->cmd > cmd_start)
+	{
+	    // Move the '<,'> range to after the modifiers and insert a colon.
+	    // Since the modifiers have been parsed put the colon on top of the
+	    // space: "'<,'>mod cmd" -> "mod:'<,'>cmd
+	    // Put eap->cmd after the colon.
+	    mch_memmove(cmd_start - 5, cmd_start, eap->cmd - cmd_start);
+	    eap->cmd -= 5;
+	    mch_memmove(eap->cmd - 1, ":'<,'>", 6);
+	}
+	else
+	    // no modifiers, move the pointer back
+	    eap->cmd -= 5;
     }
 
     return OK;
@@ -3421,6 +3449,38 @@ skip_option_env_lead(char_u *start)
 #endif
 
 /*
+ * Return TRUE and set "*idx" if "p" points to a one letter command.
+ * If not in Vim9 script:
+ * - The 'k' command can directly be followed by any character.
+ * - The 's' command can be followed directly by 'c', 'g', 'i', 'I' or 'r'
+ *	    but :sre[wind] is another command, as are :scr[iptnames],
+ *	    :scs[cope], :sim[alt], :sig[ns] and :sil[ent].
+ */
+    static int
+one_letter_cmd(char_u *p, cmdidx_T *idx)
+{
+    if (in_vim9script())
+	return FALSE;
+    if (*p == 'k')
+    {
+	*idx = CMD_k;
+	return TRUE;
+    }
+    if (p[0] == 's'
+	    && ((p[1] == 'c' && (p[2] == NUL || (p[2] != 's' && p[2] != 'r'
+			&& (p[3] == NUL || (p[3] != 'i' && p[4] != 'p')))))
+		|| p[1] == 'g'
+		|| (p[1] == 'i' && p[2] != 'm' && p[2] != 'l' && p[2] != 'g')
+		|| p[1] == 'I'
+		|| (p[1] == 'r' && p[2] != 'e')))
+    {
+	*idx = CMD_substitute;
+	return TRUE;
+    }
+    return FALSE;
+}
+
+/*
  * Find an Ex command by its name, either built-in or user.
  * Start of the name can be found at eap->cmd.
  * Sets eap->cmdidx and returns a pointer to char after the command name.
@@ -3654,30 +3714,10 @@ find_ex_command(
 
     /*
      * Isolate the command and search for it in the command table.
-     * Exceptions:
-     * - The 'k' command can directly be followed by any character.
-     *   But it is not used in Vim9 script.
-     * - the 's' command can be followed directly by 'c', 'g', 'i', 'I' or 'r'
-     *	    but :sre[wind] is another command, as are :scr[iptnames],
-     *	    :scs[cope], :sim[alt], :sig[ns] and :sil[ent].
-     * - the "d" command can directly be followed by 'l' or 'p' flag.
      */
     p = eap->cmd;
-    if (!vim9 && *p == 'k')
+    if (one_letter_cmd(p, &eap->cmdidx))
     {
-	eap->cmdidx = CMD_k;
-	++p;
-    }
-    else if (!vim9
-	    && p[0] == 's'
-	    && ((p[1] == 'c' && (p[2] == NUL || (p[2] != 's' && p[2] != 'r'
-			&& (p[3] == NUL || (p[3] != 'i' && p[4] != 'p')))))
-		|| p[1] == 'g'
-		|| (p[1] == 'i' && p[2] != 'm' && p[2] != 'l' && p[2] != 'g')
-		|| p[1] == 'I'
-		|| (p[1] == 'r' && p[2] != 'e')))
-    {
-	eap->cmdidx = CMD_substitute;
 	++p;
     }
     else
@@ -3702,6 +3742,8 @@ find_ex_command(
 	if (p == eap->cmd && vim_strchr((char_u *)"@*!=><&~#}", *p) != NULL)
 	    ++p;
 	len = (int)(p - eap->cmd);
+	// The "d" command can directly be followed by 'l' or 'p' flag, when
+	// not in Vim9 script.
 	if (!vim9 && *eap->cmd == 'd' && (p[-1] == 'l' || p[-1] == 'p'))
 	{
 	    // Check for ":dl", ":dell", etc. to ":deletel": that's
@@ -3892,6 +3934,7 @@ cmd_exists(char_u *name)
     // For ":2match" and ":3match" we need to skip the number.
     ea.cmd = (*name == '2' || *name == '3') ? name + 1 : name;
     ea.cmdidx = (cmdidx_T)0;
+    ea.flags = 0;
     p = find_ex_command(&ea, &full, NULL, NULL);
     if (p == NULL)
 	return 3;
@@ -3955,10 +3998,11 @@ excmd_get_cmdidx(char_u *cmd, int len)
 {
     cmdidx_T idx;
 
-    for (idx = (cmdidx_T)0; (int)idx < (int)CMD_SIZE;
-	    idx = (cmdidx_T)((int)idx + 1))
-	if (STRNCMP(cmdnames[(int)idx].cmd_name, cmd, (size_t)len) == 0)
-	    break;
+    if (!one_letter_cmd(cmd, &idx))
+	for (idx = (cmdidx_T)0; (int)idx < (int)CMD_SIZE;
+		idx = (cmdidx_T)((int)idx + 1))
+	    if (STRNCMP(cmdnames[(int)idx].cmd_name, cmd, (size_t)len) == 0)
+		break;
 
     return idx;
 }
@@ -5081,9 +5125,10 @@ repl_cmdline(
 
 /*
  * Check for '|' to separate commands and '"' to start comments.
+ * If "keep_backslash" is TRUE do not remove any backslash.
  */
     void
-separate_nextcmd(exarg_T *eap)
+separate_nextcmd(exarg_T *eap, int keep_backslash)
 {
     char_u	*p;
 
@@ -5097,7 +5142,7 @@ separate_nextcmd(exarg_T *eap)
     {
 	if (*p == Ctrl_V)
 	{
-	    if (eap->argt & (EX_CTRLV | EX_XFILE))
+	    if ((eap->argt & (EX_CTRLV | EX_XFILE)) || keep_backslash)
 		++p;		// skip CTRL-V and next char
 	    else
 				// remove CTRL-V and skip next char
@@ -5144,8 +5189,11 @@ separate_nextcmd(exarg_T *eap)
 	    if ((vim_strchr(p_cpo, CPO_BAR) == NULL
 			      || !(eap->argt & EX_CTRLV)) && *(p - 1) == '\\')
 	    {
-		STRMOVE(p - 1, p);	// remove the '\'
-		--p;
+		if (!keep_backslash)
+		{
+		    STRMOVE(p - 1, p);	// remove the '\'
+		    --p;
+		}
 	    }
 	    else
 	    {
@@ -8338,7 +8386,7 @@ open_exfile(
     // with Unix it is possible to open a directory
     if (mch_isdir(fname))
     {
-	semsg(_(e_src_is_directory), fname);
+	semsg(_(e_str_is_directory), fname);
 	return NULL;
     }
 #endif

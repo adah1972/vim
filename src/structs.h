@@ -1833,7 +1833,7 @@ typedef struct {
  */
 typedef struct
 {
-    char_u	*sn_name;
+    char_u	*sn_name;	    // full path of script file
     int		sn_script_seq;	    // latest sctx_T sc_seq value
 
     // "sn_vars" stores the s: variables currently valid.  When leaving a block
@@ -1864,8 +1864,12 @@ typedef struct
     char_u	*sn_save_cpo;	// 'cpo' value when :vim9script found
     char	sn_is_vimrc;	// .vimrc file, do not restore 'cpo'
 
-    // for "vim9script autoload" this is "dir#scriptname#"
+    // for a Vim9 script under "rtp/autoload/" this is "dir#scriptname#"
     char_u	*sn_autoload_prefix;
+
+    // TRUE for a script used with "import autoload './dirname/script.vim'"
+    // For "../autoload/script.vim" sn_autoload_prefix is also set.
+    int		sn_import_autoload;
 
 # ifdef FEAT_PROFILE
     int		sn_prof_on;	// TRUE when script is/was profiled
@@ -2193,6 +2197,7 @@ typedef enum
     MODE_RAW,
     MODE_JSON,
     MODE_JS,
+    MODE_LSP			// Language Server Protocol (http + json)
 } ch_mode_T;
 
 typedef enum {
@@ -2830,7 +2835,7 @@ struct file_buffer
     // flags for use of ":lmap" and IM control
     long	b_p_iminsert;	// input mode for insert
     long	b_p_imsearch;	// input mode for search
-#define B_IMODE_USE_INSERT -1	//	Use b_p_iminsert value for search
+#define B_IMODE_USE_INSERT (-1)	//	Use b_p_iminsert value for search
 #define B_IMODE_NONE 0		//	Input via none
 #define B_IMODE_LMAP 1		//	Input via langmap
 #define B_IMODE_IM 2		//	Input via input method
@@ -3465,6 +3470,9 @@ struct window_S
     colnr_T	w_old_visual_col;   // last known start of visual part
     colnr_T	w_old_curswant;	    // last known value of Curswant
 
+    linenr_T    w_last_cursor_lnum_rnu;  // cursor lnum when 'rnu' was last
+					 // redrawn
+
     lcs_chars_T	w_lcs_chars;	    // 'listchars' characters
 
     /*
@@ -3698,7 +3706,7 @@ struct window_S
     winopt_T	w_onebuf_opt;
     winopt_T	w_allbuf_opt;
     // transform a pointer to a "onebuf" option into a "allbuf" option
-#define GLOBAL_WO(p)	((char *)p + sizeof(winopt_T))
+#define GLOBAL_WO(p)	((char *)(p) + sizeof(winopt_T))
 
     // A few options have local flags for P_INSECURE.
 #ifdef FEAT_STL_OPT
@@ -4426,6 +4434,9 @@ typedef struct {
     char_u	*nextline;	// if not NULL: line that was read ahead
     linenr_T	sourcing_lnum;	// line number of the source file
     int		finished;	// ":finish" used
+    int		source_from_buf;// TRUE if sourcing from current buffer
+    int		buf_lnum;	// line number in the current buffer
+    garray_T	buflines;	// lines in the current buffer
 #ifdef USE_CRNL
     int		fileformat;	// EOL_UNKNOWN, EOL_UNIX or EOL_DOS
     int		error;		// TRUE if LF found after CR-LF
@@ -4459,7 +4470,7 @@ typedef struct {
 #define FIO_ENCRYPTED	0x1000	// encrypt written bytes
 #define FIO_NOCONVERT	0x2000	// skip encoding conversion
 #define FIO_UCSBOM	0x4000	// check for BOM at start of file
-#define FIO_ALL	-1	// allow all formats
+#define FIO_ALL	(-1)	// allow all formats
 
 // When converting, a read() or write() may leave some bytes to be converted
 // for the next call.  The value is guessed...

@@ -4254,6 +4254,7 @@ E1265	eval.txt	/*E1265*
 E1266	if_pyth.txt	/*E1266*
 E127	eval.txt	/*E127*
 E1270	change.txt	/*E1270*
+E1271	vim9.txt	/*E1271*
 E128	eval.txt	/*E128*
 E129	eval.txt	/*E129*
 E13	message.txt	/*E13*
@@ -7999,6 +8000,7 @@ lace.vim	syntax.txt	/*lace.vim*
 lambda	eval.txt	/*lambda*
 lang-variable	eval.txt	/*lang-variable*
 language-mapping	map.txt	/*language-mapping*
+language-server-protocol	channel.txt	/*language-server-protocol*
 last-pattern	pattern.txt	/*last-pattern*
 last-position-jump	usr_05.txt	/*last-position-jump*
 last_buffer_nr()	builtin.txt	/*last_buffer_nr()*

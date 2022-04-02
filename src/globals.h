@@ -405,6 +405,7 @@ EXTERN type_T t_number_bool INIT6(VAR_NUMBER, 0, 0, TTFLAG_STATIC|TTFLAG_BOOL_OK
 EXTERN type_T t_float INIT6(VAR_FLOAT, 0, 0, TTFLAG_STATIC, NULL, NULL);
 EXTERN type_T t_string INIT6(VAR_STRING, 0, 0, TTFLAG_STATIC, NULL, NULL);
 EXTERN type_T t_blob INIT6(VAR_BLOB, 0, 0, TTFLAG_STATIC, NULL, NULL);
+EXTERN type_T t_blob_null INIT6(VAR_BLOB, 0, 0, TTFLAG_STATIC, &t_void, NULL);
 EXTERN type_T t_job INIT6(VAR_JOB, 0, 0, TTFLAG_STATIC, NULL, NULL);
 EXTERN type_T t_channel INIT6(VAR_CHANNEL, 0, 0, TTFLAG_STATIC, NULL, NULL);
 
@@ -702,10 +703,10 @@ EXTERN win_T	*lastwin;		// last window
 EXTERN win_T	*prevwin INIT(= NULL);	// previous window
 #define ONE_WINDOW (firstwin == lastwin)
 #define W_NEXT(wp) ((wp)->w_next)
-#define FOR_ALL_WINDOWS(wp) for (wp = firstwin; wp != NULL; wp = wp->w_next)
+#define FOR_ALL_WINDOWS(wp) for ((wp) = firstwin; (wp) != NULL; (wp) = (wp)->w_next)
 #define FOR_ALL_FRAMES(frp, first_frame) \
-    for (frp = first_frame; frp != NULL; frp = frp->fr_next)
-#define FOR_ALL_TABPAGES(tp) for (tp = first_tabpage; tp != NULL; tp = tp->tp_next)
+    for ((frp) = first_frame; (frp) != NULL; (frp) = (frp)->fr_next)
+#define FOR_ALL_TABPAGES(tp) for ((tp) = first_tabpage; (tp) != NULL; (tp) = (tp)->tp_next)
 #define FOR_ALL_WINDOWS_IN_TAB(tp, wp) \
     for ((wp) = ((tp) == NULL || (tp) == curtab) \
 	    ? firstwin : (tp)->tp_firstwin; (wp); (wp) = (wp)->w_next)
@@ -735,6 +736,9 @@ EXTERN win_T	*popup_dragwin INIT(= NULL);	// popup window being dragged
 
 // Set to TRUE if there is any visible popup window.
 EXTERN int	popup_visible INIT(= FALSE);
+
+// Set to TRUE if a visible popup window may use a MOUSE_MOVE event
+EXTERN int	popup_uses_mouse_move INIT(= FALSE);
 
 EXTERN int	text_prop_frozen INIT(= 0);
 #endif
@@ -775,7 +779,7 @@ EXTERN buf_T	*curbuf INIT(= NULL);	// currently active buffer
 
 // Iterate through all the signs placed in a buffer
 #define FOR_ALL_SIGNS_IN_BUF(buf, sign) \
-	for (sign = buf->b_signlist; sign != NULL; sign = sign->se_next)
+	for ((sign) = (buf)->b_signlist; (sign) != NULL; (sign) = (sign)->se_next)
 
 // Flag that is set when switching off 'swapfile'.  It means that all blocks
 // are to be loaded into memory.  Shouldn't be global...
@@ -997,7 +1001,7 @@ EXTERN JMP_BUF x_jump_env;
 #define DBCS_CHT	950	// taiwan
 #define DBCS_CHTU	9950	// euc-tw
 #define DBCS_2BYTE	1	// 2byte-
-#define DBCS_DEBUG	-1
+#define DBCS_DEBUG	(-1)
 
 EXTERN int	enc_dbcs INIT(= 0);		// One of DBCS_xxx values if
 						// DBCS encoding

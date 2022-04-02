@@ -1647,13 +1647,15 @@ ex_let_one(
     {
 	lval_T	lv;
 	char_u	*p;
+	int	lval_flags = (flags & (ASSIGN_NO_DECL | ASSIGN_DECL))
+							     ? GLV_NO_DECL : 0;
+	if (op != NULL && *op != '=')
+	    lval_flags |= GLV_ASSIGN_WITH_OP;
 
 	// ":let var = expr": Set internal variable.
 	// ":let var: type = expr": Set internal variable with type.
 	// ":let {expr} = expr": Idem, name made with curly braces
-	p = get_lval(arg, tv, &lv, FALSE, FALSE,
-		(flags & (ASSIGN_NO_DECL | ASSIGN_DECL))
-					   ? GLV_NO_DECL : 0, FNE_CHECK_START);
+	p = get_lval(arg, tv, &lv, FALSE, FALSE, lval_flags, FNE_CHECK_START);
 	if (p != NULL && lv.ll_name != NULL)
 	{
 	    if (endchars != NULL && vim_strchr(endchars,
@@ -1804,20 +1806,14 @@ do_unlet_var(
 		&& value_check_lock(lp->ll_dict->dv_lock, lp->ll_name, FALSE)))
 	return FAIL;
     else if (lp->ll_range)
-    {
-	if (list_unlet_range(lp->ll_list, lp->ll_li, lp->ll_name, lp->ll_n1,
-					   !lp->ll_empty2, lp->ll_n2) == FAIL)
-	    return FAIL;
-    }
+	list_unlet_range(lp->ll_list, lp->ll_li, lp->ll_n1,
+						    !lp->ll_empty2, lp->ll_n2);
+    else if (lp->ll_list != NULL)
+	// unlet a List item.
+	listitem_remove(lp->ll_list, lp->ll_li);
     else
-    {
-	if (lp->ll_list != NULL)
-	    // unlet a List item.
-	    listitem_remove(lp->ll_list, lp->ll_li);
-	else
-	    // unlet a Dictionary item.
-	    dictitem_remove(lp->ll_dict, lp->ll_di);
-    }
+	// unlet a Dictionary item.
+	dictitem_remove(lp->ll_dict, lp->ll_di);
 
     return ret;
 }
@@ -1826,25 +1822,16 @@ do_unlet_var(
  * Unlet one item or a range of items from a list.
  * Return OK or FAIL.
  */
-    int
+    void
 list_unlet_range(
 	list_T	    *l,
 	listitem_T  *li_first,
-	char_u	    *name,
 	long	    n1_arg,
 	int	    has_n2,
 	long	    n2)
 {
     listitem_T  *li = li_first;
     int		n1 = n1_arg;
-
-    while (li != NULL && (!has_n2 || n2 >= n1))
-    {
-	if (value_check_lock(li->li_tv.v_lock, name, FALSE))
-	    return FAIL;
-	li = li->li_next;
-	++n1;
-    }
 
     // Delete a range of List items.
     li = li_first;
@@ -1857,7 +1844,6 @@ list_unlet_range(
 	li = next;
 	++n1;
     }
-    return OK;
 }
 /*
  * "unlet" a variable.  Return OK if it existed, FAIL if not.
@@ -2832,11 +2818,14 @@ eval_variable(
 		    type = sv->sv_type;
 	    }
 
-	    // If a list or dict variable wasn't initialized, do it now.
-	    // Not for global variables, they are not declared.
+	    // If a list or dict variable wasn't initialized and has meaningful
+	    // type, do it now.  Not for global variables, they are not
+	    // declared.
 	    if (ht != &globvarht)
 	    {
-		if (tv->v_type == VAR_DICT && tv->vval.v_dict == NULL)
+		if (tv->v_type == VAR_DICT && tv->vval.v_dict == NULL
+			  && ((type != NULL && type != &t_dict_empty)
+							  || !in_vim9script()))
 		{
 		    tv->vval.v_dict = dict_alloc();
 		    if (tv->vval.v_dict != NULL)
@@ -2845,7 +2834,9 @@ eval_variable(
 			tv->vval.v_dict->dv_type = alloc_type(type);
 		    }
 		}
-		else if (tv->v_type == VAR_LIST && tv->vval.v_list == NULL)
+		else if (tv->v_type == VAR_LIST && tv->vval.v_list == NULL
+				    && ((type != NULL && type != &t_list_empty)
+							  || !in_vim9script()))
 		{
 		    tv->vval.v_list = list_alloc();
 		    if (tv->vval.v_list != NULL)
@@ -2854,7 +2845,9 @@ eval_variable(
 			tv->vval.v_list->lv_type = alloc_type(type);
 		    }
 		}
-		else if (tv->v_type == VAR_BLOB && tv->vval.v_blob == NULL)
+		else if (tv->v_type == VAR_BLOB && tv->vval.v_blob == NULL
+				    && ((type != NULL && type != &t_blob_null)
+							  || !in_vim9script()))
 		{
 		    tv->vval.v_blob = blob_alloc();
 		    if (tv->vval.v_blob != NULL)

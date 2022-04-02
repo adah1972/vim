@@ -288,6 +288,12 @@ def Test_assign_concat()
     s ..= {a: 2}
   END
   v9.CheckDefAndScriptFailure(lines, ['E1105: Cannot convert dict to string', 'E734: Wrong variable type for .='], 2)
+
+  lines =<< trim END
+      var ls: list<string> = []
+      ls[-1] ..= 'foo'
+  END
+  v9.CheckDefExecAndScriptFailure(lines, 'E684: list index out of range: -1', 2)
 enddef
 
 def Test_assign_register()
@@ -2208,6 +2214,11 @@ def Test_unlet()
   unlet dd.c
   unlet dd[4]
   assert_equal({b: 2}, dd)
+
+  # null key works like empty string
+  dd = {'': 1, x: 9}
+  unlet dd[null_string]
+  assert_equal({x: 9}, dd)
 
   # list unlet
   var ll = [1, 2, 3, 4]

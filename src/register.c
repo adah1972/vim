@@ -1330,8 +1330,7 @@ op_yank(oparg_T *oap, int deleting, int mess)
 	vim_free(y_current->y_array);
 	y_current = curr;
     }
-    if (curwin->w_p_rnu)
-	redraw_later(SOME_VALID);	// cursor moved to start
+
     if (mess)			// Display message about yank?
     {
 	if (yanktype == MCHAR
@@ -2400,8 +2399,8 @@ ex_display(exarg_T *eap)
 			msg_puts_attr("^J", attr);
 			n -= 2;
 		    }
-		    for (p = yb->y_array[j]; *p && (n -= ptr2cells(p)) >= 0;
-									   ++p)
+		    for (p = yb->y_array[j];
+				    *p != NUL && (n -= ptr2cells(p)) >= 0; ++p)
 		    {
 			clen = (*mb_ptr2len)(p);
 			msg_outtrans_len(p, clen);

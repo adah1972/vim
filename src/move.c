@@ -115,14 +115,6 @@ comp_botline(win_T *wp)
     set_empty_rows(wp, done);
 }
 
-#ifdef FEAT_SYN_HL
-    void
-reset_cursorline(void)
-{
-    curwin->w_last_cursorline = 0;
-}
-#endif
-
 /*
  * Redraw when w_cline_row changes and 'relativenumber' or 'cursorline' is
  * set.
@@ -138,26 +130,30 @@ redraw_for_cursorline(win_T *wp)
 	    && (wp->w_valid & VALID_CROW) == 0
 	    && !pum_visible())
     {
-	if (wp->w_p_rnu)
-	    // win_line() will redraw the number column only.
-	    redraw_win_later(wp, VALID);
-#ifdef FEAT_SYN_HL
-	if (wp->w_p_cul)
-	{
-	    if (wp->w_redr_type <= VALID && wp->w_last_cursorline != 0)
-	    {
-		// "w_last_cursorline" may be outdated, worst case we redraw
-		// too much.  This is optimized for moving the cursor around in
-		// the current window.
-		redrawWinline(wp, wp->w_last_cursorline);
-		redrawWinline(wp, wp->w_cursor.lnum);
-	    }
-	    else
-		redraw_win_later(wp, SOME_VALID);
-	}
-#endif
+	// win_line() will redraw the number column and cursorline only.
+	redraw_win_later(wp, VALID);
     }
 }
+
+#ifdef FEAT_SYN_HL
+/*
+ * Redraw when w_virtcol changes and 'cursorcolumn' is set or 'cursorlineopt'
+ * contains "screenline".
+ */
+    static void
+redraw_for_cursorcolumn(win_T *wp)
+{
+    if ((wp->w_valid & VALID_VIRTCOL) == 0 && !pum_visible())
+    {
+	// When 'cursorcolumn' is set need to redraw with SOME_VALID.
+	if (wp->w_p_cuc)
+	    redraw_win_later(wp, SOME_VALID);
+	// When 'cursorlineopt' contains "screenline" need to redraw with VALID.
+	else if (wp->w_p_cul && (wp->w_p_culopt_flags & CULOPT_SCRLINE))
+	    redraw_win_later(wp, VALID);
+    }
+}
+#endif
 
 /*
  * Update curwin->w_topline and redraw if necessary.
@@ -822,11 +818,10 @@ validate_virtcol_win(win_T *wp)
     if (!(wp->w_valid & VALID_VIRTCOL))
     {
 	getvvcol(wp, &wp->w_cursor, NULL, &(wp->w_virtcol), NULL);
-	wp->w_valid |= VALID_VIRTCOL;
 #ifdef FEAT_SYN_HL
-	if (wp->w_p_cuc && !pum_visible())
-	    redraw_win_later(wp, SOME_VALID);
+	redraw_for_cursorcolumn(wp);
 #endif
+	wp->w_valid |= VALID_VIRTCOL;
     }
 }
 
@@ -1193,10 +1188,7 @@ curs_columns(
 	redraw_later(NOT_VALID);
 
 #ifdef FEAT_SYN_HL
-    // Redraw when w_virtcol changes and 'cursorcolumn' is set
-    if (curwin->w_p_cuc && (curwin->w_valid & VALID_VIRTCOL) == 0
-	    && !pum_visible())
-	redraw_later(SOME_VALID);
+    redraw_for_cursorcolumn(curwin);
 #endif
 #if defined(FEAT_PROP_POPUP) && defined(FEAT_TERMINAL)
     if (popup_is_popup(curwin) && curbuf->b_term != NULL)
