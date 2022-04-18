@@ -2493,7 +2493,7 @@ win_close_buffer(win_T *win, int action, int abort_if_last)
 
 	set_bufref(&bufref, curbuf);
 	win->w_closing = TRUE;
-	close_buffer(win, win->w_buffer, action, abort_if_last, FALSE);
+	close_buffer(win, win->w_buffer, action, abort_if_last, TRUE);
 	if (win_valid_any_tab(win))
 	    win->w_closing = FALSE;
 	// Make sure curbuf is valid. It can become invalid if 'bufhidden' is
@@ -2779,9 +2779,44 @@ trigger_winclosed(win_T *win)
     if (recursive)
 	return;
     recursive = TRUE;
-    vim_snprintf((char *)winid, sizeof(winid), "%i", win->w_id);
+    vim_snprintf((char *)winid, sizeof(winid), "%d", win->w_id);
     apply_autocmds(EVENT_WINCLOSED, winid, winid, FALSE, win->w_buffer);
     recursive = FALSE;
+}
+
+/*
+ * Trigger WinScrolled for "curwin" if needed.
+ */
+    void
+may_trigger_winscrolled(void)
+{
+    win_T	    *wp = curwin;
+    static int	    recursive = FALSE;
+    char_u	    winid[NUMBUFLEN];
+
+    if (recursive || !has_winscrolled())
+	return;
+
+    if (wp->w_last_topline != wp->w_topline
+	    || wp->w_last_leftcol != wp->w_leftcol
+	    || wp->w_last_width != wp->w_width
+	    || wp->w_last_height != wp->w_height)
+    {
+	vim_snprintf((char *)winid, sizeof(winid), "%d", wp->w_id);
+
+	recursive = TRUE;
+	apply_autocmds(EVENT_WINSCROLLED, winid, winid, FALSE, wp->w_buffer);
+	recursive = FALSE;
+
+	// an autocmd may close the window, "wp" may be invalid now
+	if (win_valid_any_tab(wp))
+	{
+	    wp->w_last_topline = wp->w_topline;
+	    wp->w_last_leftcol = wp->w_leftcol;
+	    wp->w_last_width = wp->w_width;
+	    wp->w_last_height = wp->w_height;
+	}
+    }
 }
 
 /*
@@ -2814,7 +2849,7 @@ win_close_othertab(win_T *win, int free_buf, tabpage_T *tp)
     if (win->w_buffer != NULL)
 	// Close the link to the buffer.
 	close_buffer(win, win->w_buffer, free_buf ? DOBUF_UNLOAD : 0,
-								 FALSE, FALSE);
+								 FALSE, TRUE);
 
     // Careful: Autocommands may have closed the tab page or made it the
     // current tab page.
@@ -3801,6 +3836,8 @@ win_init_popup_win(win_T *wp, buf_T *buf)
 win_alloc_firstwin(win_T *oldwin)
 {
     curwin = win_alloc(NULL, FALSE);
+    if (curwin == NULL)
+	return FAIL;
     if (oldwin == NULL)
     {
 	// Very first window, need to create an empty buffer for it and
@@ -3882,7 +3919,7 @@ alloc_tabpage(void)
 
 # ifdef FEAT_EVAL
     // init t: variables
-    tp->tp_vars = dict_alloc();
+    tp->tp_vars = dict_alloc_id(aid_newtabpage_tvars);
     if (tp->tp_vars == NULL)
     {
 	vim_free(tp);
@@ -5020,7 +5057,7 @@ win_alloc(win_T *after UNUSED, int hidden UNUSED)
 
 #ifdef FEAT_EVAL
     // init w: variables
-    new_wp->w_vars = dict_alloc();
+    new_wp->w_vars = dict_alloc_id(aid_newwin_wvars);
     if (new_wp->w_vars == NULL)
     {
 	win_free_lsize(new_wp);
@@ -5256,10 +5293,13 @@ win_unlisted(win_T *wp)
     void
 win_free_popup(win_T *win)
 {
-    if (bt_popup(win->w_buffer))
-	win_close_buffer(win, DOBUF_WIPE_REUSE, FALSE);
-    else
-	close_buffer(win, win->w_buffer, 0, FALSE, FALSE);
+    if (win->w_buffer != NULL)
+    {
+	if (bt_popup(win->w_buffer))
+	    win_close_buffer(win, DOBUF_WIPE_REUSE, FALSE);
+	else
+	    close_buffer(win, win->w_buffer, 0, FALSE, FALSE);
+    }
 # if defined(FEAT_TIMERS)
     if (win->w_popup_timer != NULL)
 	stop_timer(win->w_popup_timer);

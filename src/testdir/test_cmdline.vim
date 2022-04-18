@@ -620,8 +620,8 @@ func Test_fullcommand()
         \ ':5s':        'substitute',
         \ "'<,'>s":     'substitute',
         \ ":'<,'>s":    'substitute',
-        \ 'CheckUni':   'CheckUnix',
-        \ 'CheckUnix':  'CheckUnix',
+        \ 'CheckLin':   'CheckLinux',
+        \ 'CheckLinux': 'CheckLinux',
   \ }
 
   for [in, want] in items(tests)
@@ -2508,6 +2508,29 @@ func Test_wildmenumode_with_pum()
   call assert_equal('"sign define0', @:)
   set nowildmenu wildoptions&
   cunmap <F2>
+endfunc
+
+func Test_wildmenu_with_pum_foldexpr()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      call setline(1, ['folded one', 'folded two', 'some more text'])
+      func MyFoldText()
+        return 'foo'
+      endfunc
+      set foldtext=MyFoldText() wildoptions=pum
+      normal ggzfj
+  END
+  call writefile(lines, 'Xpumfold')
+  let buf = RunVimInTerminal('-S Xpumfold', #{rows: 10})
+  call term_sendkeys(buf, ":set\<Tab>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_with_pum_foldexpr_1', {})
+
+  call term_sendkeys(buf, "\<Esc>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_with_pum_foldexpr_2', {})
+
+  call StopVimInTerminal(buf)
+  call delete('Xpumfold')
 endfunc
 
 " Test for opening the cmdline completion popup menu from the terminal window.

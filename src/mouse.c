@@ -115,7 +115,7 @@ find_end_of_word(pos_T *pos)
 }
 
 #if defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_GTK) \
-	    || defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_MSWIN) \
+	    || defined(FEAT_GUI_MSWIN) \
 	    || defined(FEAT_GUI_PHOTON) \
 	    || defined(FEAT_TERM_POPUP_MENU)
 # define USE_POPUP_SETPOS
@@ -261,7 +261,10 @@ do_mouse(
 	{
 	    // If the next character is the same mouse event then use that
 	    // one. Speeds up dragging the status line.
-	    if (vpeekc() != NUL)
+	    // Note: Since characters added to the stuff buffer in the code
+	    // below need to come before the next character, do not do this
+	    // when the current character was stuffed.
+	    if (!KeyStuffed && vpeekc() != NUL)
 	    {
 		int nc;
 		int save_mouse_row = mouse_row;
@@ -539,7 +542,7 @@ do_mouse(
 		    // menu on the button down event.
 		    return FALSE;
 #  endif
-#  if defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_HAIKU)
+#  if defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_HAIKU)
 		if (is_click || is_drag)
 		    // Ignore right button down and drag mouse events.  Windows
 		    // only shows the popup menu on the button up event.

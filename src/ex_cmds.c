@@ -3182,7 +3182,7 @@ do_ecmd(
 	redraw_curbuf_later(NOT_VALID);	// redraw this buffer later
     }
 
-    if (p_im)
+    if (p_im && (State & INSERT) == 0)
 	need_start_insertmode = TRUE;
 
 #ifdef FEAT_AUTOCHDIR
@@ -4233,6 +4233,11 @@ ex_substitute(exarg_T *eap)
 			    {
 				typed = *resp;
 				vim_free(resp);
+				// When ":normal" runs out of characters we get
+				// an empty line.  Use "q" to get out of the
+				// loop.
+				if (ex_normal_busy && typed == NUL)
+				    typed = 'q';
 			    }
 			}
 			else
@@ -4955,8 +4960,7 @@ ex_global(exarg_T *eap)
     else
     {
 	delim = *cmd;		// get the delimiter
-	if (delim)
-	    ++cmd;		// skip delimiter if there is one
+	++cmd;			// skip delimiter if there is one
 	pat = cmd;		// remember start of pattern
 	cmd = skip_regexp_ex(cmd, delim, magic_isset(), &eap->arg, NULL, NULL);
 	if (cmd[0] == delim)		    // end delimiter found

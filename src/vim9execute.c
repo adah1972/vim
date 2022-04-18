@@ -196,8 +196,10 @@ exe_newdict(int count, ectx_T *ectx)
 		dict_unref(dict);
 		return FAIL;
 	    }
-	    item->di_tv = *STACK_TV_BOT(2 * (idx - count) + 1);
+	    tv = STACK_TV_BOT(2 * (idx - count) + 1);
+	    item->di_tv = *tv;
 	    item->di_tv.v_lock = 0;
+	    tv->v_type = VAR_UNKNOWN;
 	    if (dict_add(dict, item) == FAIL)
 	    {
 		// can this ever happen?
@@ -1512,7 +1514,8 @@ get_script_svar(scriptref_T *sref, int dfunc_idx)
 	return NULL;
     }
 
-    if (!sv->sv_export && sref->sref_sid != current_sctx.sc_sid)
+    if ((sv->sv_flags & SVFLAG_EXPORTED) == 0
+				      && sref->sref_sid != current_sctx.sc_sid)
     {
 	if (dfunc != NULL)
 	    semsg(_(e_item_not_exported_in_script_str), sv->sv_name);
@@ -1652,6 +1655,29 @@ exec_command(isn_T *iptr)
 			     DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_KEYTYPED) == FAIL
 		|| did_emsg)
 	return FAIL;
+    return OK;
+}
+
+/*
+ * If script "sid" is not loaded yet then load it now.
+ * Caller must make sure "sid" is a valid script ID.
+ * "loaded" is set to TRUE if the script had to be loaded.
+ * Returns FAIL if loading fails, OK if already loaded or loaded now.
+ */
+    int
+may_load_script(int sid, int *loaded)
+{
+    scriptitem_T *si = SCRIPT_ITEM(sid);
+
+    if (si->sn_state == SN_STATE_NOT_LOADED)
+    {
+	*loaded = TRUE;
+	if (do_source(si->sn_name, FALSE, DOSO_NONE, NULL) == FAIL)
+	{
+	    semsg(_(e_cant_open_file_str), si->sn_name);
+	    return FAIL;
+	}
+    }
     return OK;
 }
 
@@ -2629,15 +2655,12 @@ exec_instructions(ectx_T *ectx)
 
 	    case ISN_SOURCE:
 		{
-		    scriptitem_T *si = SCRIPT_ITEM(iptr->isn_arg.number);
+		    int notused;
 
-		    if (si->sn_state == SN_STATE_NOT_LOADED)
-		    {
-			SOURCING_LNUM = iptr->isn_lnum;
-			if (do_source(si->sn_name, FALSE, DOSO_NONE, NULL)
+		    SOURCING_LNUM = iptr->isn_lnum;
+		    if (may_load_script((int)iptr->isn_arg.number, &notused)
 								       == FAIL)
-			    goto on_error;
-		    }
+			goto on_error;
 		}
 		break;
 
@@ -2947,7 +2970,7 @@ exec_instructions(ectx_T *ectx)
 			    {
 				sv = ((svar_T *)SCRIPT_ITEM(sid)
 						  ->sn_var_vals.ga_data) + idx;
-				if (!sv->sv_export)
+				if ((sv->sv_flags & SVFLAG_EXPORTED) == 0)
 				{
 				    SOURCING_LNUM = iptr->isn_lnum;
 				    semsg(_(e_item_not_exported_in_script_str),
@@ -3112,7 +3135,7 @@ exec_instructions(ectx_T *ectx)
 				svar_T	*sv = ((svar_T *)SCRIPT_ITEM(sid)
 						  ->sn_var_vals.ga_data) + idx;
 
-				if (!sv->sv_export)
+				if ((sv->sv_flags & SVFLAG_EXPORTED) == 0)
 				{
 				    semsg(_(e_item_not_exported_in_script_str),
 									 name);
@@ -3468,7 +3491,7 @@ exec_instructions(ectx_T *ectx)
 		    goto on_error;
 		break;
 	    case ISN_UNLETENV:
-		vim_unsetenv(iptr->isn_arg.unlet.ul_name);
+		vim_unsetenv_ext(iptr->isn_arg.unlet.ul_name);
 		break;
 
 	    case ISN_LOCKUNLOCK:
@@ -5360,7 +5383,7 @@ call_def_function(
     did_emsg_def += save_did_emsg_def;
 
 failed_early:
-    // Free all local variables, but not arguments.
+    // Free all arguments and local variables.
     for (idx = 0; idx < ectx.ec_stack.ga_len; ++idx)
 	clear_tv(STACK_TV(idx));
     ex_nesting_level = orig_nesting_level;

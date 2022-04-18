@@ -21,6 +21,7 @@ jobs:
       TEST: test
       SRCDIR: ./src
       LEAK_CFLAGS: -DEXITFREE
+      CFLAGS: -Wno-error=deprecated-declarations
       LOG_DIR: ${{ github.workspace }}/logs
       TERM: xterm
       DISPLAY: ':99'
@@ -88,17 +89,25 @@ jobs:
           fi
           sudo apt update && sudo apt install -y "${PKGS[@]}"
 
-      - name: Install clang-13
+      - name: Install gcc-11
+        if:  matrix.compiler == 'gcc'
+        run: |
+          sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+          sudo apt install -y gcc-11
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
+          sudo update-alternatives --set gcc /usr/bin/gcc-11
+
+      - name: Install clang-14
         if: matrix.compiler == 'clang'
         run: |
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
           . /etc/lsb-release
-          sudo add-apt-repository -y "deb http://apt.llvm.org/${DISTRIB_CODENAME}/ llvm-toolchain-${DISTRIB_CODENAME}-13 main"
-          sudo apt-get install -y clang-13 llvm-13
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-13 100
-          sudo update-alternatives --set clang /usr/bin/clang-13
-          sudo update-alternatives --install /usr/bin/llvm-cov llvm-cov /usr/bin/llvm-cov-13 100
-          sudo update-alternatives --install /usr/bin/asan_symbolize asan_symbolize /usr/bin/asan_symbolize-13 100
+          sudo add-apt-repository -y "deb http://apt.llvm.org/${DISTRIB_CODENAME}/ llvm-toolchain-${DISTRIB_CODENAME}-14 main"
+          sudo apt install -y clang-14 llvm-14
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100
+          sudo update-alternatives --set clang /usr/bin/clang-14
+          sudo update-alternatives --install /usr/bin/llvm-cov llvm-cov /usr/bin/llvm-cov-14 100
+          sudo update-alternatives --install /usr/bin/asan_symbolize asan_symbolize /usr/bin/asan_symbolize-14 100
 
       - name: Set up environment
         run: |
@@ -245,7 +254,7 @@ jobs:
 
       - name: Codecov
         if: matrix.coverage
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
         with:
           flags: linux,${{ matrix.features }}-${{ matrix.compiler }}-${{ matrix.extra }}
 

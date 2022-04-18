@@ -639,7 +639,15 @@ deref_function_name(
 
     ref.v_type = VAR_UNKNOWN;
     if (eval7(arg, &ref, evalarg, FALSE) == FAIL)
-	return NULL;
+    {
+	dictitem_T	*v;
+
+	// If <SID>VarName was used it would not be found, try another way.
+	v = find_var_also_in_script(name, NULL, FALSE);
+	if (v == NULL)
+	    return NULL;
+	copy_tv(&v->di_tv, &ref);
+    }
     if (*skipwhite(*arg) != NUL)
     {
 	if (verbose)
@@ -1065,7 +1073,7 @@ get_lval(
 		&& lp->ll_tv == &v->di_tv
 		&& ht != NULL && ht == get_script_local_ht())
 	{
-	    svar_T  *sv = find_typval_in_script(lp->ll_tv, 0);
+	    svar_T  *sv = find_typval_in_script(lp->ll_tv, 0, TRUE);
 
 	    // Vim9 script local variable: get the type
 	    if (sv != NULL)
@@ -4094,19 +4102,23 @@ eval_lambda(
 	++*arg;
 	ret = eval1(arg, rettv, evalarg);
 	*arg = skipwhite_and_linebreak(*arg, evalarg);
-	if (**arg == ')')
-	{
-	    ++*arg;
-	}
-	else
+	if (**arg != ')')
 	{
 	    emsg(_(e_missing_closing_paren));
-	    ret = FAIL;
+	    return FAIL;
 	}
+	if (rettv->v_type != VAR_STRING && rettv->v_type != VAR_FUNC
+					       && rettv->v_type != VAR_PARTIAL)
+	{
+	    emsg(_(e_string_or_function_required_for_arrow_parens_expr));
+	    return FAIL;
+	}
+	++*arg;
     }
     if (ret != OK)
 	return FAIL;
-    else if (**arg != '(')
+
+    if (**arg != '(')
     {
 	if (verbose)
 	{
@@ -5636,34 +5648,35 @@ var2fpos(
     name = tv_get_string_chk(varp);
     if (name == NULL)
 	return NULL;
+
+    pos.lnum = 0;
     if (name[0] == '.' && (!in_vim9script() || name[1] == NUL))
     {
 	// cursor
 	pos = curwin->w_cursor;
-	if (charcol)
-	    pos.col = buf_byteidx_to_charidx(curbuf, pos.lnum, pos.col);
-	return &pos;
     }
-    if (name[0] == 'v' && name[1] == NUL)	// Visual start
+    else if (name[0] == 'v' && name[1] == NUL)
     {
+	// Visual start
 	if (VIsual_active)
 	    pos = VIsual;
 	else
 	    pos = curwin->w_cursor;
-	if (charcol)
-	    pos.col = buf_byteidx_to_charidx(curbuf, pos.lnum, pos.col);
-	return &pos;
     }
-    if (name[0] == '\'' && (!in_vim9script()
+    else if (name[0] == '\'' && (!in_vim9script()
 					|| (name[1] != NUL && name[2] == NUL)))
     {
 	// mark
 	pp = getmark_buf_fnum(curbuf, name[1], FALSE, fnum);
 	if (pp == NULL || pp == (pos_T *)-1 || pp->lnum <= 0)
 	    return NULL;
+	pos = *pp;
+    }
+    if (pos.lnum != 0)
+    {
 	if (charcol)
-	    pp->col = buf_byteidx_to_charidx(curbuf, pp->lnum, pp->col);
-	return pp;
+	    pos.col = buf_byteidx_to_charidx(curbuf, pos.lnum, pos.col);
+	return &pos;
     }
 
     pos.coladd = 0;
@@ -6800,7 +6813,7 @@ do_string_sub(
 	// If it's still empty it was changed and restored, need to restore in
 	// the complicated way.
 	if (*p_cpo == NUL)
-	    set_option_value((char_u *)"cpo", 0L, save_cpo, 0);
+	    set_option_value_give_err((char_u *)"cpo", 0L, save_cpo, 0);
 	free_string_option(save_cpo);
     }
 

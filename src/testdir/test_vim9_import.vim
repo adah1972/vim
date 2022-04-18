@@ -642,8 +642,8 @@ enddef
 def Test_use_import_in_mapping()
   var lines =<< trim END
       vim9script
-      export def Funcx()
-        g:result = 42
+      export def Funcx(nr: number)
+        g:result = nr
       enddef
   END
   writefile(lines, 'XsomeExport.vim')
@@ -651,18 +651,79 @@ def Test_use_import_in_mapping()
       vim9script
       import './XsomeExport.vim' as some
       var Funcy = some.Funcx
-      nnoremap <F3> :call <sid>Funcy()<cr>
+      nnoremap <F3> :call <sid>Funcy(42)<cr>
+      nnoremap <F4> :call <sid>some.Funcx(44)<cr>
   END
   writefile(lines, 'Xmapscript.vim')
 
   source Xmapscript.vim
   feedkeys("\<F3>", "xt")
   assert_equal(42, g:result)
+  feedkeys("\<F4>", "xt")
+  assert_equal(44, g:result)
 
   unlet g:result
   delete('XsomeExport.vim')
   delete('Xmapscript.vim')
   nunmap <F3>
+  nunmap <F4>
+enddef
+
+def Test_use_relative_autoload_import_in_mapping()
+  var lines =<< trim END
+      vim9script
+      export def Func()
+        g:result = 42
+      enddef
+  END
+  writefile(lines, 'XrelautoloadExport.vim')
+  lines =<< trim END
+      vim9script
+      import autoload './XrelautoloadExport.vim' as some
+      nnoremap <F3> :call <SID>some.Func()<CR>
+  END
+  writefile(lines, 'Xmapscript.vim')
+
+  source Xmapscript.vim
+  assert_match('\d\+ A: .*XrelautoloadExport.vim', execute('scriptnames')->split("\n")[-1])
+  feedkeys("\<F3>", "xt")
+  assert_equal(42, g:result)
+
+  unlet g:result
+  delete('XrelautoloadExport.vim')
+  delete('Xmapscript.vim')
+  nunmap <F3>
+enddef
+
+def Test_use_autoload_import_in_mapping()
+  var lines =<< trim END
+      vim9script
+      export def Func()
+        g:result = 49
+      enddef
+  END
+  mkdir('Xdir/autoload', 'p')
+  writefile(lines, 'Xdir/autoload/XautoloadExport.vim')
+  var save_rtp = &rtp
+  exe 'set rtp^=' .. getcwd() .. '/Xdir'
+
+  lines =<< trim END
+      vim9script
+      import autoload 'XautoloadExport.vim' as some
+      nnoremap <F3> :call <SID>some.Func()<CR>
+  END
+  writefile(lines, 'Xmapscript.vim')
+
+  source Xmapscript.vim
+  assert_match('\d\+ A: .*autoload/XautoloadExport.vim', execute('scriptnames')->split("\n")[-1])
+  feedkeys("\<F3>", "xt")
+  assert_equal(49, g:result)
+
+  unlet g:result
+  delete('Xmapscript.vim')
+  nunmap <F3>
+  delete('Xdir', 'rf')
+  &rtp = save_rtp
 enddef
 
 def Test_use_import_in_command_completion()
@@ -679,6 +740,30 @@ def Test_use_import_in_command_completion()
       import './Xscript.vim'
 
       command -nargs=1 -complete=customlist,Xscript.Complete Cmd echo 'ok'
+      feedkeys(":Cmd ab\<Tab>\<C-B>#\<CR>", 'xnt')
+      assert_equal('#Cmd abcd', @:)
+  END
+  v9.CheckScriptSuccess(lines)
+
+  delcommand Cmd
+  delete('Xscript.vim')
+enddef
+
+def Test_use_import_with_funcref_in_command_completion()
+  var lines =<< trim END
+      vim9script
+      export def Complete(..._): list<string>
+        return ['abcd']
+      enddef
+  END
+  writefile(lines, 'Xscript.vim')
+
+  lines =<< trim END
+      vim9script
+      import './Xscript.vim'
+
+      var Ref = Xscript.Complete
+      exe "command -nargs=1 -complete=customlist," .. expand('<SID>') .. "Ref  Cmd echo 'ok'"
       feedkeys(":Cmd ab\<Tab>\<C-B>#\<CR>", 'xnt')
       assert_equal('#Cmd abcd', @:)
   END
@@ -858,6 +943,8 @@ def Test_autoload_import_relative()
   writefile(lines, 'XimportRel.vim')
   writefile(lines, 'XimportRel2.vim')
   writefile(lines, 'XimportRel3.vim')
+  writefile(lines, 'XimportRel4.vim')
+  writefile(lines, 'XimportRel5.vim')
 
   lines =<< trim END
       vim9script
@@ -928,17 +1015,18 @@ def Test_autoload_import_relative()
   END
   v9.CheckScriptFailure(lines, 'E1049: Item not exported in script: notexp', 1)
 
+  # Same, script not imported before
   lines =<< trim END
       vim9script
-      import autoload './XimportRel.vim'
+      import autoload './XimportRel4.vim'
       def Func()
-        XimportRel.notexp = 'bad'
+        echo XimportRel4.notexp
       enddef
       Func()
   END
   v9.CheckScriptFailure(lines, 'E1049: Item not exported in script: notexp', 1)
 
-  # does not fail if the script wasn't loaded yet
+  # does not fail if the script wasn't loaded yet and only compiling
   g:loaded = 'no'
   lines =<< trim END
       vim9script
@@ -950,6 +1038,16 @@ def Test_autoload_import_relative()
   END
   v9.CheckScriptSuccess(lines)
   assert_equal('no', g:loaded)
+
+  lines =<< trim END
+      vim9script
+      import autoload './XimportRel.vim'
+      def Func()
+        XimportRel.notexp = 'bad'
+      enddef
+      Func()
+  END
+  v9.CheckScriptFailure(lines, 'E1049: Item not exported in script: notexp', 1)
 
   # fails with a not loaded import
   lines =<< trim END
@@ -964,9 +1062,37 @@ def Test_autoload_import_relative()
   assert_equal('yes', g:loaded)
   unlet g:loaded
 
+  lines =<< trim END
+      vim9script
+      import autoload './XimportRel5.vim'
+      def Func()
+        XimportRel5.nosuchvar = 'bad'
+      enddef
+      Func()
+  END
+  v9.CheckScriptFailure(lines, 'E121: Undefined variable: nosuchvar', 1)
+  unlet g:loaded
+
+  # nasty: delete script after compiling function
+  writefile(['vim9script'], 'XimportRelDel.vim')
+  lines =<< trim END
+      vim9script
+
+      import autoload './XimportRelDel.vim'
+      def DoIt()
+        echo XimportRelDel.var
+      enddef
+      defcompile
+      delete('XimportRelDel.vim')
+      DoIt()
+  END
+  v9.CheckScriptFailure(lines, 'E484:')
+
   delete('XimportRel.vim')
   delete('XimportRel2.vim')
   delete('XimportRel3.vim')
+  delete('XimportRel4.vim')
+  delete('XimportRel5.vim')
 enddef
 
 def Test_autoload_import_relative_autoload_dir()
@@ -1576,10 +1702,10 @@ def Test_script_reload_from_function()
   var lines =<< trim END
       vim9script
 
-      if exists('g:loaded')
+      if exists('g:loadedThis')
         finish
       endif
-      g:loaded = 1
+      g:loadedThis = 1
       delcommand CallFunc
       command CallFunc Func()
       def Func()
@@ -1594,7 +1720,7 @@ def Test_script_reload_from_function()
 
   delete('XreloadFunc.vim')
   delcommand CallFunc
-  unlet g:loaded
+  unlet g:loadedThis
   unlet g:didTheFunc
 enddef
 

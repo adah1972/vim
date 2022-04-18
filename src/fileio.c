@@ -1245,30 +1245,29 @@ retry:
 				read_buf_col += n;
 				break;
 			    }
-			    else
+
+			    // Append whole line and new-line.  Change NL
+			    // to NUL to reverse the effect done below.
+			    for (ni = 0; ni < n; ++ni)
 			    {
-				// Append whole line and new-line.  Change NL
-				// to NUL to reverse the effect done below.
-				for (ni = 0; ni < n; ++ni)
-				{
-				    if (p[ni] == NL)
-					ptr[tlen++] = NUL;
-				    else
-					ptr[tlen++] = p[ni];
-				}
-				ptr[tlen++] = NL;
-				read_buf_col = 0;
-				if (++read_buf_lnum > from)
-				{
-				    // When the last line didn't have an
-				    // end-of-line don't add it now either.
-				    if (!curbuf->b_p_eol)
-					--tlen;
-				    size = tlen;
-				    eof = TRUE;
-				    break;
-				}
+				if (p[ni] == NL)
+				    ptr[tlen++] = NUL;
+				else
+				    ptr[tlen++] = p[ni];
 			    }
+			    ptr[tlen++] = NL;
+			    read_buf_col = 0;
+			    if (++read_buf_lnum > from)
+			    {
+				// When the last line didn't have an
+				// end-of-line don't add it now either.
+				if (!curbuf->b_p_eol)
+				    --tlen;
+				size = tlen;
+				eof = TRUE;
+				break;
+			    }
+
 			}
 		    }
 		}
@@ -5017,13 +5016,16 @@ delete_recursive(char_u *name)
 		vim_snprintf((char *)NameBuff, MAXPATHL, "%s/%s", exp,
 					    ((char_u **)ga.ga_data)[i]);
 		if (delete_recursive(NameBuff) != 0)
+		    // Remember the failure but continue deleting any further
+		    // entries.
 		    result = -1;
 	    }
 	    ga_clear_strings(&ga);
+	    if (mch_rmdir(exp) != 0)
+		result = -1;
 	}
 	else
 	    result = -1;
-	(void)mch_rmdir(exp);
 	vim_free(exp);
     }
     else

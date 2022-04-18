@@ -180,7 +180,6 @@ alloc_clear(size_t size)
     return p;
 }
 
-#if defined(FEAT_SIGNS) || defined(PROTO)
 /*
  * Same as alloc_clear() but with allocation id for testing
  */
@@ -193,7 +192,6 @@ alloc_clear_id(size_t size, alloc_id_T id UNUSED)
 #endif
     return alloc_clear(size);
 }
-#endif
 
 /*
  * Allocate memory like lalloc() and set all bytes to zero.
@@ -719,6 +717,20 @@ ga_grow(garray_T *gap, int n)
     if (gap->ga_maxlen - gap->ga_len < n)
 	return ga_grow_inner(gap, n);
     return OK;
+}
+
+/*
+ * Same as ga_grow() but uses an allocation id for testing.
+ */
+    int
+ga_grow_id(garray_T *gap, int n, alloc_id_T id UNUSED)
+{
+#ifdef FEAT_EVAL
+    if (alloc_fail_id == id && alloc_does_fail(sizeof(list_T)))
+	return FAIL;
+#endif
+
+    return ga_grow(gap, n);
 }
 
     int

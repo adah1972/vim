@@ -303,7 +303,6 @@ static void	ex_tag_cmd(exarg_T *eap, char_u *name);
 # define ex_throw		ex_ni
 # define ex_try			ex_ni
 # define ex_unlet		ex_ni
-# define ex_unlockvar		ex_ni
 # define ex_while		ex_ni
 # define ex_import		ex_ni
 # define ex_export		ex_ni
@@ -478,7 +477,7 @@ do_exmode(
     else
 	exmode_active = EXMODE_NORMAL;
     State = NORMAL;
-    trigger_modechanged();
+    may_trigger_modechanged();
 
     // When using ":global /pat/ visual" and then "Q" we return to continue
     // the :global command.
@@ -1734,6 +1733,7 @@ do_one_cmd(
     exarg_T	ea;			// Ex command arguments
     cmdmod_T	save_cmdmod;
     int		save_reg_executing = reg_executing;
+    int		save_pending_end_reg_executing = pending_end_reg_executing;
     int		ni;			// set when Not Implemented
     char_u	*cmd;
     int		starts_with_colon = FALSE;
@@ -2631,6 +2631,7 @@ doend:
     undo_cmdmod(&cmdmod);
     cmdmod = save_cmdmod;
     reg_executing = save_reg_executing;
+    pending_end_reg_executing = save_pending_end_reg_executing;
 
     if (ea.nextcmd && *ea.nextcmd == NUL)	// not really a next command
 	ea.nextcmd = NULL;
@@ -2782,7 +2783,9 @@ parse_command_modifiers(
 	cmdmod_T    *cmod,
 	int	    skip_only)
 {
+    char_u  *orig_cmd = eap->cmd;
     char_u  *cmd_start = NULL;
+    int	    did_plus_cmd = FALSE;
     char_u  *p;
     int	    starts_with_colon = FALSE;
     int	    vim9script = in_vim9script();
@@ -2818,6 +2821,7 @@ parse_command_modifiers(
 			&& curwin->w_cursor.lnum < curbuf->b_ml.ml_line_count)
 	{
 	    eap->cmd = (char_u *)"+";
+	    did_plus_cmd = TRUE;
 	    if (!skip_only)
 		ex_pressedreturn = TRUE;
 	}
@@ -3083,7 +3087,11 @@ parse_command_modifiers(
 			if (!checkforcmd_noparen(&p, "verbose", 4))
 			    break;
 			if (vim_isdigit(*eap->cmd))
+			{
 			    cmod->cmod_verbose = atoi((char *)eap->cmd);
+			    if (cmod->cmod_verbose == 0)
+				cmod->cmod_verbose = -1;
+			}
 			else
 			    cmod->cmod_verbose = 1;
 			eap->cmd = p;
@@ -3100,13 +3108,29 @@ parse_command_modifiers(
 	    // Since the modifiers have been parsed put the colon on top of the
 	    // space: "'<,'>mod cmd" -> "mod:'<,'>cmd
 	    // Put eap->cmd after the colon.
-	    mch_memmove(cmd_start - 5, cmd_start, eap->cmd - cmd_start);
-	    eap->cmd -= 5;
-	    mch_memmove(eap->cmd - 1, ":'<,'>", 6);
+	    if (did_plus_cmd)
+	    {
+		size_t len = STRLEN(cmd_start);
+
+		// Special case: empty command may have been changed to "+":
+		//  "'<,'>mod" -> "mod'<,'>+
+		mch_memmove(orig_cmd, cmd_start, len);
+		STRCPY(orig_cmd + len, "'<,'>+");
+	    }
+	    else
+	    {
+		mch_memmove(cmd_start - 5, cmd_start, eap->cmd - cmd_start);
+		eap->cmd -= 5;
+		mch_memmove(eap->cmd - 1, ":'<,'>", 6);
+	    }
 	}
 	else
-	    // no modifiers, move the pointer back
-	    eap->cmd -= 5;
+	    // No modifiers, move the pointer back.
+	    // Special case: empty command may have been changed to "+".
+	    if (did_plus_cmd)
+		eap->cmd = (char_u *)"'<,'>+";
+	    else
+		eap->cmd = orig_cmd;
     }
 
     return OK;
@@ -3157,11 +3181,11 @@ apply_cmdmod(cmdmod_T *cmod)
 	cmod->cmod_did_sandbox = TRUE;
     }
 #endif
-    if (cmod->cmod_verbose > 0)
+    if (cmod->cmod_verbose != 0)
     {
 	if (cmod->cmod_verbose_save == 0)
 	    cmod->cmod_verbose_save = p_verbose + 1;
-	p_verbose = cmod->cmod_verbose;
+	p_verbose = cmod->cmod_verbose < 0 ? 0 : cmod->cmod_verbose;
     }
 
     if ((cmod->cmod_flags & (CMOD_SILENT | CMOD_UNSILENT))
@@ -8289,6 +8313,9 @@ ex_redraw(exarg_T *eap)
     RedrawingDisabled = r;
     p_lz = p;
 
+    // After drawing the statusline screen_attr may still be set.
+    screen_stop_highlight();
+
     // Reset msg_didout, so that a message that's there is overwritten.
     msg_didout = FALSE;
     msg_col = 0;
@@ -8457,6 +8484,7 @@ save_current_state(save_state_T *sst)
     sst->save_finish_op = finish_op;
     sst->save_opcount = opcount;
     sst->save_reg_executing = reg_executing;
+    sst->save_pending_end_reg_executing = pending_end_reg_executing;
 
     msg_scroll = FALSE;		    // no msg scrolling in Normal mode
     restart_edit = 0;		    // don't go to Insert mode
@@ -8486,6 +8514,7 @@ restore_current_state(save_state_T *sst)
     finish_op = sst->save_finish_op;
     opcount = sst->save_opcount;
     reg_executing = sst->save_reg_executing;
+    pending_end_reg_executing = sst->save_pending_end_reg_executing;
     msg_didout |= sst->save_msg_didout;	// don't reset msg_didout now
     current_sctx.sc_version = sst->save_script_version;
 
@@ -8951,8 +8980,10 @@ find_cmdline_var(char_u *src, int *usedlen)
 #define SPEC_SLNUM  (SPEC_SFILE + 1)
 		    "<stack>",		// call stack
 #define SPEC_STACK  (SPEC_SLNUM + 1)
+		    "<script>",		// script file name
+#define SPEC_SCRIPT (SPEC_STACK + 1)
 		    "<afile>",		// autocommand file name
-#define SPEC_AFILE  (SPEC_STACK + 1)
+#define SPEC_AFILE  (SPEC_SCRIPT + 1)
 		    "<abuf>",		// autocommand buffer number
 #define SPEC_ABUF   (SPEC_AFILE + 1)
 		    "<amatch>",		// autocommand match name
@@ -8991,6 +9022,7 @@ find_cmdline_var(char_u *src, int *usedlen)
  *	  "<cfile>" to path name under the cursor
  *	  "<sfile>" to sourced file name
  *	  "<stack>" to call stack
+ *	  "<script>" to current script name
  *	  "<slnum>" to sourced file line number
  *	  "<afile>" to file name for autocommand
  *	  "<abuf>"  to buffer number for autocommand
@@ -9220,14 +9252,28 @@ eval_vars(
 		break;
 
 	case SPEC_SFILE:	// file name for ":so" command
-	case SPEC_STACK:	// call stack
-		result = estack_sfile(spec_idx == SPEC_SFILE
-						? ESTACK_SFILE : ESTACK_STACK);
+		result = estack_sfile(ESTACK_SFILE);
 		if (result == NULL)
 		{
-		    *errormsg = spec_idx == SPEC_SFILE
-			? _(e_no_source_file_name_to_substitute_for_sfile)
-			: _(e_no_call_stack_to_substitute_for_stack);
+		    *errormsg = _(e_no_source_file_name_to_substitute_for_sfile);
+		    return NULL;
+		}
+		resultbuf = result;	    // remember allocated string
+		break;
+	case SPEC_STACK:	// call stack
+		result = estack_sfile(ESTACK_STACK);
+		if (result == NULL)
+		{
+		    *errormsg = _(e_no_call_stack_to_substitute_for_stack);
+		    return NULL;
+		}
+		resultbuf = result;	    // remember allocated string
+		break;
+	case SPEC_SCRIPT:	// script file name
+		result = estack_sfile(ESTACK_SCRIPT);
+		if (result == NULL)
+		{
+		    *errormsg = _(e_no_script_file_name_to_substitute_for_script);
 		    return NULL;
 		}
 		resultbuf = result;	    // remember allocated string
@@ -9396,18 +9442,23 @@ ex_behave(exarg_T *eap)
 {
     if (STRCMP(eap->arg, "mswin") == 0)
     {
-	set_option_value((char_u *)"selection", 0L, (char_u *)"exclusive", 0);
-	set_option_value((char_u *)"selectmode", 0L, (char_u *)"mouse,key", 0);
-	set_option_value((char_u *)"mousemodel", 0L, (char_u *)"popup", 0);
-	set_option_value((char_u *)"keymodel", 0L,
-					     (char_u *)"startsel,stopsel", 0);
+	set_option_value_give_err((char_u *)"selection",
+						 0L, (char_u *)"exclusive", 0);
+	set_option_value_give_err((char_u *)"selectmode",
+						 0L, (char_u *)"mouse,key", 0);
+	set_option_value_give_err((char_u *)"mousemodel",
+						     0L, (char_u *)"popup", 0);
+	set_option_value_give_err((char_u *)"keymodel",
+					  0L, (char_u *)"startsel,stopsel", 0);
     }
     else if (STRCMP(eap->arg, "xterm") == 0)
     {
-	set_option_value((char_u *)"selection", 0L, (char_u *)"inclusive", 0);
-	set_option_value((char_u *)"selectmode", 0L, (char_u *)"", 0);
-	set_option_value((char_u *)"mousemodel", 0L, (char_u *)"extend", 0);
-	set_option_value((char_u *)"keymodel", 0L, (char_u *)"", 0);
+	set_option_value_give_err((char_u *)"selection",
+						 0L, (char_u *)"inclusive", 0);
+	set_option_value_give_err((char_u *)"selectmode", 0L, (char_u *)"", 0);
+	set_option_value_give_err((char_u *)"mousemodel",
+						    0L, (char_u *)"extend", 0);
+	set_option_value_give_err((char_u *)"keymodel", 0L, (char_u *)"", 0);
     }
     else
 	semsg(_(e_invalid_argument_str), eap->arg);
@@ -9521,7 +9572,7 @@ ex_setfiletype(exarg_T *eap)
 	if (STRNCMP(arg, "FALLBACK ", 9) == 0)
 	    arg += 9;
 
-	set_option_value((char_u *)"filetype", 0L, arg, OPT_LOCAL);
+	set_option_value_give_err((char_u *)"filetype", 0L, arg, OPT_LOCAL);
 	if (arg != eap->arg)
 	    did_filetype = FALSE;
     }

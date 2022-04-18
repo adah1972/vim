@@ -53,15 +53,6 @@ static int can_update_cursor = TRUE; // can display the cursor
 static int disable_flush = 0;	// If > 0, gui_mch_flush() is disabled.
 
 /*
- * The Athena scrollbars can move the thumb to after the end of the scrollbar,
- * this makes the thumb indicate the part of the text that is shown.  Motif
- * can't do this.
- */
-#if defined(FEAT_GUI_ATHENA)
-# define SCROLL_PAST_END
-#endif
-
-/*
  * gui_start -- Called when user wants to start the GUI.
  *
  * Careful: This function can be called recursively when there is a ":gui"
@@ -445,8 +436,7 @@ gui_init_check(void)
     gui.menu_width = 0;
 # endif
 #endif
-#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_ATHENA) \
-	|| defined(FEAT_GUI_HAIKU))
+#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_HAIKU))
     gui.toolbar_height = 0;
 #endif
 #if defined(FEAT_FOOTER) && defined(FEAT_GUI_MOTIF)
@@ -514,7 +504,7 @@ gui_init(void)
 	 * Reset 'paste'.  It's useful in the terminal, but not in the GUI.  It
 	 * breaks the Paste toolbar button.
 	 */
-	set_option_value((char_u *)"paste", 0L, NULL, 0);
+	set_option_value_give_err((char_u *)"paste", 0L, NULL, 0);
 
 	// Set t_Co to the number of colors: RGB.
 	set_color_count(256 * 256 * 256);
@@ -674,7 +664,8 @@ gui_init(void)
      * Set up the fonts.  First use a font specified with "-fn" or "-font".
      */
     if (font_argument != NULL)
-	set_option_value((char_u *)"gfn", 0L, (char_u *)font_argument, 0);
+	set_option_value_give_err((char_u *)"gfn",
+					       0L, (char_u *)font_argument, 0);
     if (
 #ifdef FEAT_XFONTSET
 	    (*p_guifontset == NUL
@@ -789,7 +780,7 @@ gui_init(void)
 	balloonEval = gui_mch_create_beval_area(gui.drawarea, NULL,
 						     &general_beval_cb, NULL);
 # else
-#  if defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_ATHENA)
+#  if defined(FEAT_GUI_MOTIF)
 	{
 	    extern Widget	textArea;
 	    balloonEval = gui_mch_create_beval_area(textArea, NULL,
@@ -1441,11 +1432,11 @@ gui_position_components(int total_width UNUSED)
 	text_area_y += gui.tabline_height;
 #endif
 
-#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_MOTIF) || defined(FEAT_GUI_ATHENA) \
+#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_MOTIF) \
 	|| defined(FEAT_GUI_HAIKU) || defined(FEAT_GUI_MSWIN))
     if (vim_strchr(p_go, GO_TOOLBAR) != NULL)
     {
-# if defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_HAIKU)
+# if defined(FEAT_GUI_HAIKU)
 	gui_mch_set_toolbar_pos(0, text_area_y,
 				gui.menu_width, gui.toolbar_height);
 # endif
@@ -2043,10 +2034,10 @@ gui_write(
     old_curwin = curwin;
 
     /*
-     * We need to make sure this is cleared since Athena doesn't tell us when
-     * he is done dragging.  Do the same for GTK.
+     * We need to make sure this is cleared since GTK doesn't tell us when
+     * the user is done dragging.
      */
-#if defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_GTK)
+#if defined(FEAT_GUI_GTK)
     gui.dragged_sb = SBAR_NONE;
 #endif
 
@@ -3142,13 +3133,26 @@ button_set:
 		if (hold_gui_events)
 		    return;
 
+		row = gui_xy2colrow(x, y, &col);
+		// Don't report a mouse move unless moved to a
+		// different character position.
+		if (button == MOUSE_MOVE)
+		{
+		    if (row == prev_row && col == prev_col)
+			return;
+		    else
+		    {
+			prev_row = row >= 0 ? row : 0;
+			prev_col = col;
+		    }
+		}
+
 		string[3] = CSI;
 		string[4] = KS_EXTRA;
 		string[5] = (int)button_char;
 
 		// Pass the pointer coordinates of the scroll event so that we
 		// know which window to scroll.
-		row = gui_xy2colrow(x, y, &col);
 		string[6] = (char_u)(col / 128 + ' ' + 1);
 		string[7] = (char_u)(col % 128 + ' ' + 1);
 		string[8] = (char_u)(row / 128 + ' ' + 1);
@@ -3397,10 +3401,10 @@ button_set:
     prev_col = col;
 
     /*
-     * We need to make sure this is cleared since Athena doesn't tell us when
-     * he is done dragging.  Neither does GTK+ 2 -- at least for now.
+     * We need to make sure this is cleared since GTK doesn't tell us when
+     * the user is done dragging.
      */
-#if defined(FEAT_GUI_ATHENA) || defined(FEAT_GUI_GTK)
+#if defined(FEAT_GUI_GTK)
     gui.dragged_sb = SBAR_NONE;
 #endif
 }
@@ -3939,9 +3943,6 @@ gui_create_scrollbar(scrollbar_T *sb, int type, win_T *wp)
     sb->wp = wp;
     sb->type = type;
     sb->value = 0;
-#ifdef FEAT_GUI_ATHENA
-    sb->pixval = 0;
-#endif
     sb->size = 1;
     sb->max = 1;
     sb->top = 0;
@@ -4323,7 +4324,7 @@ gui_update_scrollbars(
 		y += gui.menu_height;
 #endif
 
-#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_MSWIN) || defined(FEAT_GUI_ATHENA) \
+#if defined(FEAT_TOOLBAR) && (defined(FEAT_GUI_MSWIN) \
 	|| defined(FEAT_GUI_HAIKU))
 	    if (vim_strchr(p_go, GO_TOOLBAR) != NULL)
 		y += gui.toolbar_height;
@@ -4356,25 +4357,10 @@ gui_update_scrollbars(
 	    }
 	}
 
-	// Reduce the number of calls to gui_mch_set_scrollbar_thumb() by
-	// checking if the thumb moved at least a pixel.  Only do this for
-	// Athena, most other GUIs require the update anyway to make the
-	// arrows work.
-#ifdef FEAT_GUI_ATHENA
-	if (max == 0)
-	    y = 0;
-	else
-	    y = (val * (sb->height + 2) * gui.char_height + max / 2) / max;
-	if (force || sb->pixval != y || sb->size != size || sb->max != max)
-#else
 	if (force || sb->value != val || sb->size != size || sb->max != max)
-#endif
 	{
 	    // Thumb of scrollbar has moved
 	    sb->value = val;
-#ifdef FEAT_GUI_ATHENA
-	    sb->pixval = y;
-#endif
 	    sb->size = size;
 	    sb->max = max;
 	    if (gui.which_scrollbars[SBAR_LEFT]
@@ -4829,7 +4815,7 @@ init_gui_options(void)
     // background color, unless the user has set it already.
     if (!option_was_set((char_u *)"bg") && STRCMP(p_bg, gui_bg_default()) != 0)
     {
-	set_option_value((char_u *)"bg", 0L, gui_bg_default(), 0);
+	set_option_value_give_err((char_u *)"bg", 0L, gui_bg_default(), 0);
 	highlight_changed();
     }
 }
@@ -4967,12 +4953,14 @@ gui_mouse_moved(int x, int y)
     // apply 'mousefocus' and pointer shape
     gui_mouse_focus(x, y);
 
+    if (p_mousemev
 #ifdef FEAT_PROP_POPUP
-    if (popup_uses_mouse_move)
-	// Generate a mouse-moved event, so that the popup can perhaps be
-	// closed, just like in the terminal.
-	gui_send_mouse_event(MOUSE_MOVE, x, y, FALSE, 0);
+	|| popup_uses_mouse_move
 #endif
+   )
+	// Generate a mouse-moved event. For a <MouseMove> mapping. Or so the
+	// popup can perhaps be closed, just like in the terminal.
+	gui_send_mouse_event(MOUSE_MOVE, x, y, FALSE, 0);
 }
 
 /*
@@ -5107,7 +5095,7 @@ ex_gui(exarg_T *eap)
 	    || defined(FEAT_GUI_HAIKU)) \
 	    && defined(FEAT_TOOLBAR)) || defined(PROTO)
 /*
- * This is shared between Athena, Haiku, Motif, and GTK.
+ * This is shared between Haiku, Motif, and GTK.
  */
 
 /*
@@ -5249,6 +5237,9 @@ gui_update_screen(void)
 # endif
 	last_cursormoved = curwin->w_cursor;
     }
+
+    if (!finish_op)
+	may_trigger_winscrolled();
 
 # ifdef FEAT_CONCEAL
     if (conceal_update_lines

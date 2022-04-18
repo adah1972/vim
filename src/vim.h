@@ -116,7 +116,6 @@
 
 #if defined(FEAT_GUI_MOTIF) \
     || defined(FEAT_GUI_GTK) \
-    || defined(FEAT_GUI_ATHENA) \
     || defined(FEAT_GUI_HAIKU) \
     || defined(FEAT_GUI_MSWIN) \
     || defined(FEAT_GUI_PHOTON)
@@ -189,9 +188,6 @@
 # endif
 # ifdef FEAT_GUI_MOTIF
 #  undef FEAT_GUI_MOTIF
-# endif
-# ifdef FEAT_GUI_ATHENA
-#  undef FEAT_GUI_ATHENA
 # endif
 # ifdef FEAT_GUI_GTK
 #  undef FEAT_GUI_GTK
@@ -1254,6 +1250,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define SEA_DIALOG	1	// use dialog when possible
 #define SEA_QUIT	2	// quit editing the file
 #define SEA_RECOVER	3	// recover the file
+#define SEA_READONLY	4	// no dialog, mark buffer as read-only
 
 /*
  * Minimal size for block 0 of a swap file.
@@ -1389,6 +1386,7 @@ enum auto_event
     EVENT_WINCLOSED,		// after closing a window
     EVENT_VIMSUSPEND,		// before Vim is suspended
     EVENT_VIMRESUME,		// after Vim is resumed
+    EVENT_WINSCROLLED,		// after Vim window was scrolled
 
     NUM_EVENTS			// MUST be the last one
 };
@@ -1412,6 +1410,7 @@ typedef enum
     , HLF_H	    // obsolete, ignored
     , HLF_I	    // incremental search
     , HLF_L	    // last search string
+    , HLF_LC	    // last search string under cursor
     , HLF_M	    // "--More--" message
     , HLF_CM	    // Mode (e.g., "-- INSERT --")
     , HLF_N	    // line number for ":number" and ":#" commands
@@ -1459,7 +1458,7 @@ typedef enum
 
 // The HL_FLAGS must be in the same order as the HLF_ enums!
 // When changing this also adjust the default for 'highlight'.
-#define HL_FLAGS {'8', '~', '@', 'd', 'e', 'h', 'i', 'l', 'm', 'M', \
+#define HL_FLAGS {'8', '~', '@', 'd', 'e', 'h', 'i', 'l', 'y', 'm', 'M', \
 		  'n', 'a', 'b', 'N', 'G', 'O', 'r', 's', 'S', 'c', 't', 'v', 'V', \
 		  'w', 'W', 'f', 'F', 'A', 'C', 'D', 'T', '-', '>', \
 		  'B', 'P', 'R', 'L', \
@@ -2221,7 +2220,8 @@ typedef enum {
 typedef enum {
     ESTACK_NONE,
     ESTACK_SFILE,
-    ESTACK_STACK
+    ESTACK_STACK,
+    ESTACK_SCRIPT,
 } estack_arg_T;
 
 // Flags for assignment functions.

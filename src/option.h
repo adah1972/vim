@@ -400,6 +400,7 @@ EXTERN int	p_bl;		// 'buflisted'
 #ifdef FEAT_CINDENT
 EXTERN int	p_cin;		// 'cindent'
 EXTERN char_u	*p_cink;	// 'cinkeys'
+EXTERN char_u	*p_cinsd;	// 'cinscopedecls'
 #endif
 #if defined(FEAT_SMARTINDENT) || defined(FEAT_CINDENT)
 EXTERN char_u	*p_cinw;	// 'cinwords'
@@ -450,7 +451,8 @@ EXTERN unsigned	bo_flags;
 #define BO_REG		0x8000
 #define BO_SH		0x10000
 #define BO_SPELL	0x20000
-#define BO_WILD		0x40000
+#define BO_TERM		0x40000
+#define BO_WILD		0x80000
 
 #ifdef FEAT_WILDIGN
 EXTERN char_u	*p_bsk;		// 'backupskip'
@@ -760,6 +762,9 @@ EXTERN int	p_mousef;	// 'mousefocus'
 EXTERN int	p_mh;		// 'mousehide'
 #endif
 EXTERN char_u	*p_mousem;	// 'mousemodel'
+#ifdef FEAT_GUI
+EXTERN int	p_mousemev;	// 'mousemoveevent'
+#endif
 EXTERN long	p_mouset;	// 'mousetime'
 EXTERN int	p_more;		// 'more'
 #ifdef FEAT_MZSCHEME
@@ -1123,6 +1128,7 @@ enum
     , BV_CIN
     , BV_CINK
     , BV_CINO
+    , BV_CINSD
 #endif
 #if defined(FEAT_SMARTINDENT) || defined(FEAT_CINDENT)
     , BV_CINW

@@ -343,6 +343,7 @@ struct wininfo_S
     int		wi_fold_manual;	// copy of w_fold_manual
     garray_T	wi_folds;	// clone of w_folds
 #endif
+    int		wi_changelistidx; // copy of w_changelistidx
 };
 
 /*
@@ -661,7 +662,8 @@ typedef struct
     regmatch_T	cmod_filter_regmatch;	// set by :filter /pat/
     int		cmod_filter_force;	// set for :filter!
 
-    int		cmod_verbose;		// non-zero to set 'verbose'
+    int		cmod_verbose;		// non-zero to set 'verbose', -1 is
+					// used for zero override
 
     // values for undo_cmdmod()
     char_u	*cmod_save_ei;		// saved value of 'eventignore'
@@ -1807,6 +1809,10 @@ struct sallvar_S {
 #define HIKEY2SAV(p)  ((sallvar_T *)(p - offsetof(sallvar_T, sav_key)))
 #define HI2SAV(hi)     HIKEY2SAV((hi)->hi_key)
 
+#define SVFLAG_TYPE_ALLOCATED	1  // call free_type() for "sv_type"
+#define SVFLAG_EXPORTED		2  // "export let var = val"
+#define SVFLAG_ASSIGNED		4  // assigned a value
+
 /*
  * Entry for "sn_var_vals".  Used for script-local variables.
  */
@@ -1814,9 +1820,8 @@ struct svar_S {
     char_u	*sv_name;	// points into "sn_all_vars" di_key
     typval_T	*sv_tv;		// points into "sn_vars" or "sn_all_vars" di_tv
     type_T	*sv_type;
-    int		sv_type_allocated;  // call free_type() for sv_type
+    int		sv_flags;	// SVFLAG_ values above
     int		sv_const;	// 0, ASSIGN_CONST or ASSIGN_FINAL
-    int		sv_export;	// "export let var = val"
 };
 
 typedef struct {
@@ -2068,7 +2073,7 @@ struct partial_S
     dict_T	*pt_dict;	// dict for "self"
 };
 
-typedef struct AutoPatCmd_S AutoPatCmd;
+typedef struct AutoPatCmd_S AutoPatCmd_T;
 
 /*
  * Entry in the execution stack "exestack".
@@ -2095,7 +2100,7 @@ typedef struct {
 #if defined(FEAT_EVAL)
 	ufunc_T *ufunc;     // function info
 #endif
-	AutoPatCmd *aucmd;  // autocommand info
+	AutoPatCmd_T *aucmd;  // autocommand info
 	except_T   *except; // exception info
     } es_info;
 #if defined(FEAT_EVAL)
@@ -2878,6 +2883,7 @@ struct file_buffer
     int		b_p_cin;	// 'cindent'
     char_u	*b_p_cino;	// 'cinoptions'
     char_u	*b_p_cink;	// 'cinkeys'
+    char_u	*b_p_cinsd;	// 'cinscopedecls'
 #endif
 #if defined(FEAT_CINDENT) || defined(FEAT_SMARTINDENT)
     char_u	*b_p_cinw;	// 'cinwords'
@@ -3325,13 +3331,16 @@ typedef struct
 			    // found match (may continue in next line)
     buf_T	*buf;	    // the buffer to search for a match
     linenr_T	lnum;	    // the line to search for a match
+    linenr_T	lines;	    // number of lines starting from lnum
     int		attr;	    // attributes to be used for a match
     int		attr_cur;   // attributes currently active in win_line()
     linenr_T	first_lnum; // first lnum to search for multi-line pat
     colnr_T	startcol;   // in win_line() points to char where HL starts
     colnr_T	endcol;	    // in win_line() points to char where HL ends
-    int		is_addpos;  // position specified directly by
+    char	is_addpos;  // position specified directly by
 			    // matchaddpos(). TRUE/FALSE
+    char	has_cursor; // TRUE if the cursor is inside the match, used for
+			    // CurSearch
 #ifdef FEAT_RELTIME
     proftime_T	tm;	    // for a time limit
 #endif
@@ -3505,6 +3514,12 @@ struct window_S
     int		w_filler_rows;	    // number of filler rows at the end of the
 				    // window
 #endif
+
+    // four fields that are only used when there is a WinScrolled autocommand
+    linenr_T	w_last_topline;	    // last known value for w_topline
+    colnr_T	w_last_leftcol;	    // last known value for w_leftcol
+    int		w_last_width;	    // last known value for w_width
+    int		w_last_height;	    // last known value for w_height
 
     /*
      * Layout of the window in the screen.
@@ -4003,9 +4018,6 @@ struct VimMenu
     char	**xpm;		    // pixmap data
     char	*xpm_fname;	    // file with pixmap data
 #endif
-#ifdef FEAT_GUI_ATHENA
-    Pixmap	image;		    // Toolbar image
-#endif
 #ifdef FEAT_BEVAL_TIP
     BalloonEval *tip;		    // tooltip for this menu item
 #endif
@@ -4301,6 +4313,7 @@ typedef struct {
     int		save_finish_op;
     int		save_opcount;
     int		save_reg_executing;
+    int		save_pending_end_reg_executing;
     int		save_script_version;
     tasave_T	tabuf;
 } save_state_T;

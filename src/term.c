@@ -165,6 +165,14 @@ static termrequest_T *all_termrequests[] = {
     &winpos_status,
     NULL
 };
+
+// The t_8u code may default to a value but get reset when the term response is
+// received.  To avoid redrawing too often, only redraw when t_8u is not reset
+// and it was supposed to be written.
+// FALSE -> don't output t_8u yet
+// MAYBE -> tried outputing t_8u while FALSE
+// OK    -> can write t_8u
+int write_t_8u_state = FALSE;
 # endif
 
 /*
@@ -2029,7 +2037,7 @@ set_termname(char_u *term)
 # endif
 	if (p != NULL)
 	{
-	    set_option_value((char_u *)"ttym", 0L, p, 0);
+	    set_option_value_give_err((char_u *)"ttym", 0L, p, 0);
 	    // Reset the WAS_SET flag, 'ttymouse' can be set to "sgr" or
 	    // "xterm2" in check_termcode().
 	    reset_option_was_set((char_u *)"ttym");
@@ -2104,6 +2112,7 @@ set_termname(char_u *term)
 #ifdef FEAT_TERMRESPONSE
     LOG_TR(("setting crv_status to STATUS_GET"));
     crv_status.tr_progress = STATUS_GET;	// Get terminal version later
+    write_t_8u_state = FALSE;
 #endif
 
     /*
@@ -3049,6 +3058,8 @@ term_rgb_color(char_u *s, guicolor_T rgb)
 #define MAX_COLOR_STR_LEN 100
     char	buf[MAX_COLOR_STR_LEN];
 
+    if (*s == NUL)
+	return;
     vim_snprintf(buf, MAX_COLOR_STR_LEN,
 				  (char *)s, RED(rgb), GREEN(rgb), BLUE(rgb));
 #ifdef FEAT_VTP
@@ -3078,7 +3089,12 @@ term_bg_rgb_color(guicolor_T rgb)
     void
 term_ul_rgb_color(guicolor_T rgb)
 {
-    term_rgb_color(T_8U, rgb);
+# ifdef FEAT_TERMRESPONSE
+    if (write_t_8u_state != OK)
+	write_t_8u_state = MAYBE;
+    else
+# endif
+	term_rgb_color(T_8U, rgb);
 }
 #endif
 
@@ -4605,7 +4621,7 @@ handle_u7_response(int *arg, char_u *tp UNUSED, int csi_len UNUSED)
 	    // Setting the option causes a screen redraw. Do
 	    // that right away if possible, keeping any
 	    // messages.
-	    set_option_value((char_u *)"ambw", 0L, (char_u *)aw, 0);
+	    set_option_value_give_err((char_u *)"ambw", 0L, (char_u *)aw, 0);
 # ifdef DEBUG_TERMRESPONSE
 	    {
 		int r = redraw_asap(CLEAR);
@@ -4775,9 +4791,10 @@ handle_version_response(int first, int *arg, int argc, char_u *tp)
 	    // vandyke SecureCRT sends 1;136;0
 	}
 
-	// Konsole sends 0;115;0
-	else if (version == 115 && arg[0] == 0 && arg[2] == 0)
-	    term_props[TPR_UNDERLINE_RGB].tpr_status = TPR_YES;
+	// Konsole sends 0;115;0 - but t_u8 does not actually work, therefore
+	// commented out.
+	// else if (version == 115 && arg[0] == 0 && arg[2] == 0)
+	//     term_props[TPR_UNDERLINE_RGB].tpr_status = TPR_YES;
 
 	// GNU screen sends 83;30600;0, 83;40500;0, etc.
 	// 30600/40500 is a version number of GNU screen. DA2 support is added
@@ -4806,9 +4823,18 @@ handle_version_response(int first, int *arg, int argc, char_u *tp)
 
 	// Unless the underline RGB color is expected to work, disable "t_8u".
 	// It does not work for the real Xterm, it resets the background color.
+	// This may cause some flicker.  Alternative would be to set "t_8u"
+	// here if the terminal is expected to support it, but that might
+	// conflict with what was set in the .vimrc.
 	if (term_props[TPR_UNDERLINE_RGB].tpr_status != TPR_YES && *T_8U != NUL)
+	{
 	    set_string_option_direct((char_u *)"t_8u", -1, (char_u *)"",
 								  OPT_FREE, 0);
+	}
+	if (*T_8U != NUL && write_t_8u_state == MAYBE)
+	    // Did skip writing t_8u, a complete redraw is needed.
+	    redraw_later_clear();
+	write_t_8u_state = OK;  // can otuput t_8u now
 
 	// Only set 'ttymouse' automatically if it was not set
 	// by the user already.
@@ -4816,7 +4842,7 @@ handle_version_response(int first, int *arg, int argc, char_u *tp)
 		&& (term_props[TPR_MOUSE].tpr_status == TPR_MOUSE_XTERM2
 		    || term_props[TPR_MOUSE].tpr_status == TPR_MOUSE_SGR))
 	{
-	    set_option_value((char_u *)"ttym", 0L,
+	    set_option_value_give_err((char_u *)"ttym", 0L,
 		    term_props[TPR_MOUSE].tpr_status == TPR_MOUSE_SGR
 				    ? (char_u *)"sgr" : (char_u *)"xterm2", 0);
 	}
@@ -5140,8 +5166,8 @@ handle_osc(char_u *tp, char_u *argp, int len, char_u *key_name, int *slen)
 				      && STRCMP(p_bg, new_bg_val) != 0)
 			{
 			    // value differs, apply it
-			    set_option_value((char_u *)"bg", 0L,
-					      (char_u *)new_bg_val, 0);
+			    set_option_value_give_err((char_u *)"bg",
+						  0L, (char_u *)new_bg_val, 0);
 			    reset_option_was_set((char_u *)"bg");
 			    redraw_asap(CLEAR);
 			}
@@ -5957,30 +5983,32 @@ replace_termcodes(
     int		i;
     int		slen;
     int		key;
-    int		dlen = 0;
+    size_t	dlen = 0;
     char_u	*src;
     int		do_backslash;	// backslash is a special character
     int		do_special;	// recognize <> key codes
     int		do_key_code;	// recognize raw key codes
     char_u	*result;	// buffer for resulting string
+    garray_T	ga;
 
     do_backslash = (vim_strchr(p_cpo, CPO_BSLASH) == NULL);
     do_special = (vim_strchr(p_cpo, CPO_SPECI) == NULL)
 						  || (flags & REPTERM_SPECIAL);
     do_key_code = (vim_strchr(p_cpo, CPO_KEYCODE) == NULL);
+    src = from;
 
     /*
      * Allocate space for the translation.  Worst case a single character is
      * replaced by 6 bytes (shifted special key), plus a NUL at the end.
+     * In the rare case more might be needed ga_grow() must be called again.
      */
-    result = alloc(STRLEN(from) * 6 + 1);
-    if (result == NULL)		// out of memory
+    ga_init2(&ga, 1L, 100);
+    if (ga_grow(&ga, (int)(STRLEN(src) * 6 + 1)) == FAIL) // out of memory
     {
 	*bufp = NULL;
 	return from;
     }
-
-    src = from;
+    result = ga.ga_data;
 
     /*
      * Check for #n at start only: function key n
@@ -6010,8 +6038,11 @@ replace_termcodes(
 	{
 #ifdef FEAT_EVAL
 	    /*
-	     * Replace <SID> by K_SNR <script-nr> _.
+	     * Change <SID>Func to K_SNR <script-nr> _Func.  This name is used
+	     * for script-locla user functions.
 	     * (room: 5 * 6 = 30 bytes; needed: 3 + <nr> + 1 <= 14)
+	     * Also change <SID>name.Func to K_SNR <import-script-nr> _Func.
+	     * Only if "name" is recognized as an import.
 	     */
 	    if (STRNICMP(src, "<SID>", 5) == 0)
 	    {
@@ -6019,19 +6050,52 @@ replace_termcodes(
 		    emsg(_(e_using_sid_not_in_script_context));
 		else
 		{
+		    char_u  *dot;
+		    long    sid = current_sctx.sc_sid;
+
 		    src += 5;
+		    if (in_vim9script()
+				       && (dot = vim_strchr(src, '.')) != NULL)
+		    {
+			imported_T *imp = find_imported(src, dot - src, FALSE);
+
+			if (imp != NULL)
+			{
+			    scriptitem_T    *si = SCRIPT_ITEM(imp->imp_sid);
+			    size_t	    len;
+
+			    src = dot + 1;
+			    if (si->sn_autoload_prefix != NULL)
+			    {
+				// Turn "<SID>name.Func"
+				// into "scriptname#Func".
+				len = STRLEN(si->sn_autoload_prefix);
+				if (ga_grow(&ga,
+				     (int)(STRLEN(src) * 6 + len + 1)) == FAIL)
+				{
+				    ga_clear(&ga);
+				    *bufp = NULL;
+				    return from;
+				}
+				result = ga.ga_data;
+				STRCPY(result + dlen, si->sn_autoload_prefix);
+				dlen += len;
+				continue;
+			    }
+			    sid = imp->imp_sid;
+			}
+		    }
+
 		    result[dlen++] = K_SPECIAL;
 		    result[dlen++] = (int)KS_EXTRA;
 		    result[dlen++] = (int)KE_SNR;
-		    sprintf((char *)result + dlen, "%ld",
-						    (long)current_sctx.sc_sid);
-		    dlen += (int)STRLEN(result + dlen);
+		    sprintf((char *)result + dlen, "%ld", sid);
+		    dlen += STRLEN(result + dlen);
 		    result[dlen++] = '_';
 		    continue;
 		}
 	    }
 #endif
-
 	    slen = trans_special(&src, result + dlen, FSK_KEYCODE
 			  | ((flags & REPTERM_NO_SIMPLIFY) ? 0 : FSK_SIMPLIFY),
 								 did_simplify);

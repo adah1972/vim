@@ -1,4 +1,4 @@
-*builtin.txt*	For Vim version 8.2.  Last change: 2022 Mar 26
+*builtin.txt*	For Vim version 8.2.  Last change: 2022 Apr 06
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -161,7 +161,8 @@ exists_compiled({expr})		Number	|TRUE| if {expr} exists at compile time
 exp({expr})			Float	exponential of {expr}
 expand({expr} [, {nosuf} [, {list}]])
 				any	expand special keywords in {expr}
-expandcmd({expr})		String	expand {expr} like with `:edit`
+expandcmd({string} [, {options}])
+				String	expand {string} like with `:edit`
 extend({expr1}, {expr2} [, {expr3}])
 				List/Dict insert items of {expr2} into {expr1}
 extendnew({expr1}, {expr2} [, {expr3}])
@@ -1753,7 +1754,10 @@ deepcopy({expr} [, {noref}])				*deepcopy()* *E698*
 
 delete({fname} [, {flags}])				*delete()*
 		Without {flags} or with {flags} empty: Deletes the file by the
-		name {fname}.  This also works when {fname} is a symbolic link.
+		name {fname}.
+
+		This also works when {fname} is a symbolic link.  The symbolic
+		link itself is deleted, not what it points to.
 
 		When {flags} is "d": Deletes the directory by the name
 		{fname}.  This fails when directory {fname} is not empty.
@@ -1762,8 +1766,6 @@ delete({fname} [, {flags}])				*delete()*
 		{fname} and everything in it, recursively.  BE CAREFUL!
 		Note: on MS-Windows it is not possible to delete a directory
 		that is being used.
-
-		A symbolic link itself is deleted, not what it points to.
 
 		The result is a Number, which is 0/false if the delete
 		operation was successful and -1/true when the deletion failed
@@ -2268,6 +2270,9 @@ expand({string} [, {nosuf} [, {list}]])				*expand()*
 		is not defined, an empty string is used.  Using "%:p" in a
 		buffer with no name, results in the current directory, with a
 		'/' added.
+		When 'verbose' is set then expanding '%', '#' and <> items
+		will result in an error message if the argument cannot be
+		expanded.
 
 		When {string} does not start with '%', '#' or '<', it is
 		expanded like a file name is expanded on the command line.
@@ -2293,16 +2298,28 @@ expand({string} [, {nosuf} [, {list}]])				*expand()*
 		Can also be used as a |method|: >
 			Getpattern()->expand()
 
-expandcmd({string})					*expandcmd()*
+expandcmd({string} [, {options}])			*expandcmd()*
 		Expand special items in String {string} like what is done for
 		an Ex command such as `:edit`.  This expands special keywords,
 		like with |expand()|, and environment variables, anywhere in
 		{string}.  "~user" and "~/path" are only expanded at the
 		start.
-		Returns the expanded string.  Example: >
-			:echo expandcmd('make %<.o')
 
-<		Can also be used as a |method|: >
+		The following items are supported in the {options} Dict
+		argument:
+		    errmsg	If set to TRUE, error messages are displayed
+				if an error is encountered during expansion.
+				By default, error messages are not displayed.
+
+		Returns the expanded string.  If an error is encountered
+		during expansion, the unmodified {string} is returned.
+
+		Example: >
+			:echo expandcmd('make %<.o')
+			make /path/runtime/doc/builtin.o
+			:echo expandcmd('make %<.o', {'errmsg': v:true})
+<
+		Can also be used as a |method|: >
 			GetCommand()->expandcmd()
 <
 extend({expr1}, {expr2} [, {expr3}])			*extend()*
@@ -2728,7 +2745,7 @@ foreground()	Move the Vim window to the foreground.  Useful when sent from
 		On Win32 systems this might not work, the OS does not always
 		allow a window to bring itself to the foreground.  Use
 		|remote_foreground()| instead.
-		{only in the Win32, Athena, Motif and GTK GUI versions and the
+		{only in the Win32, Motif and GTK GUI versions and the
 		Win32 console version}
 
 fullcommand({name})						*fullcommand()*
@@ -4820,6 +4837,8 @@ json_encode({expr})					*json_encode()*
 		Note that NaN and Infinity are passed on as values.  This is
 		missing in the JSON standard, but several implementations do
 		allow it.  If not then you will get an error.
+		If a string contains an illegal character then the replacement
+		character 0xfffd is used.
 
 		Can also be used as a |method|: >
 			GetObject()->json_encode()
@@ -5562,7 +5581,7 @@ matchfuzzy({list}, {str} [, {dict}])			*matchfuzzy()*
 
 		If {list} is a list of dictionaries, then the optional {dict}
 		argument supports the following additional items:
-		    key		key of the item which is fuzzy matched against
+		    key		Key of the item which is fuzzy matched against
 				{str}. The value of this item should be a
 				string.
 		    text_cb	|Funcref| that will be called for every item
@@ -5570,6 +5589,8 @@ matchfuzzy({list}, {str} [, {dict}])			*matchfuzzy()*
 				This should accept a dictionary item as the
 				argument and return the text for that item to
 				use for fuzzy matching.
+		    limit	Maximum number of matches in {list} to be
+				returned.  Zero means no limit.
 
 		{str} is treated as a literal string and regular expression
 		matching is NOT supported.  The maximum supported {str} length
@@ -5581,6 +5602,9 @@ matchfuzzy({list}, {str} [, {dict}])			*matchfuzzy()*
 		If there are no matching strings or there is an error, then an
 		empty list is returned. If length of {str} is greater than
 		256, then returns an empty list.
+
+		When {limit} is given, matchfuzzy() will find up to this
+		number of matches in {list} and return them in sorted order.
 
 		Refer to |fuzzy-matching| for more information about fuzzy
 		matching strings.
@@ -6010,8 +6034,10 @@ printf({fmt}, {expr1} ...)				*printf()*
 		When used as a |method| the base is passed as the second
 		argument: >
 			Compute()->printf("result: %d")
+<
+		You can use `call()` to pass the items as a list.
 
-<		Often used items are:
+		Often used items are:
 		  %s	string
 		  %6S	string right-aligned in 6 display cells
 		  %6s	string right-aligned in 6 bytes
@@ -6680,7 +6706,7 @@ remote_foreground({server})				*remote_foreground()*
 		Can also be used as a |method|: >
 			ServerName()->remote_foreground()
 
-<		{only in the Win32, Athena, Motif and GTK GUI versions and the
+<		{only in the Win32, Motif and GTK GUI versions and the
 		Win32 console version}
 
 
@@ -10012,7 +10038,7 @@ footer			Compiled with GUI footer support. |gui-footer|
 fork			Compiled to use fork()/exec() instead of system().
 gettext			Compiled with message translation |multi-lang|
 gui			Compiled with GUI enabled.
-gui_athena		Compiled with Athena GUI.
+gui_athena		Compiled with Athena GUI (always false).
 gui_gnome		Compiled with Gnome support (gui_gtk is also defined).
 gui_gtk			Compiled with GTK+ GUI (any version).
 gui_gtk2		Compiled with GTK+ 2 GUI (gui_gtk is also defined).

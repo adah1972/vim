@@ -1077,12 +1077,23 @@ get_function_body(
 			    || checkforcmd(&p, "const", 5))))
 		{
 		    p = skipwhite(arg + 3);
-		    if (STRNCMP(p, "trim", 4) == 0)
+		    while (TRUE)
 		    {
-			// Ignore leading white space.
-			p = skipwhite(p + 4);
-			heredoc_trimmed = vim_strnsave(theline,
-						 skipwhite(theline) - theline);
+			if (STRNCMP(p, "trim", 4) == 0)
+			{
+			    // Ignore leading white space.
+			    p = skipwhite(p + 4);
+			    heredoc_trimmed = vim_strnsave(theline,
+				    skipwhite(theline) - theline);
+			    continue;
+			}
+			if (STRNCMP(p, "eval", 4) == 0)
+			{
+			    // Ignore leading white space.
+			    p = skipwhite(p + 4);
+			    continue;
+			}
+			break;
 		    }
 		    skip_until = vim_strnsave(p, skiptowhite(p) - p);
 		    getline_options = GETLINE_NONE;
@@ -1092,7 +1103,7 @@ get_function_body(
 	}
 
 	// Add the line to the function.
-	if (ga_grow(newlines, 1 + sourcing_lnum_off) == FAIL)
+	if (ga_grow_id(newlines, 1 + sourcing_lnum_off, aid_get_func) == FAIL)
 	    goto theend;
 
 	if (heredoc_concat_len > 0)
@@ -1697,7 +1708,7 @@ deref_func_name(
 	{
 	    if (!did_type && type != NULL && ht == get_script_local_ht())
 	    {
-		svar_T  *sv = find_typval_in_script(tv, 0);
+		svar_T  *sv = find_typval_in_script(tv, 0, TRUE);
 
 		if (sv != NULL)
 		    *type = sv->sv_type;

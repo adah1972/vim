@@ -689,7 +689,7 @@ normal_cmd(
 # endif
     }
 #endif
-    trigger_modechanged();
+    may_trigger_modechanged();
 
     // When not finishing an operator and no register name typed, reset the
     // count.
@@ -971,7 +971,7 @@ normal_end:
     c = finish_op;
 #endif
     finish_op = FALSE;
-    trigger_modechanged();
+    may_trigger_modechanged();
 #ifdef CURSOR_SHAPE
     // Redraw the cursor with another shape, if we were in Operator-pending
     // mode or did a replace command.
@@ -1027,7 +1027,7 @@ normal_end:
 	if (restart_VIsual_select == 1)
 	{
 	    VIsual_select = TRUE;
-	    trigger_modechanged();
+	    may_trigger_modechanged();
 	    showmode();
 	    restart_VIsual_select = 0;
 	    VIsual_select_reg = 0;
@@ -1151,7 +1151,7 @@ end_visual_mode_keep_button()
     may_clear_cmdline();
 
     adjust_cursor_eol();
-    trigger_modechanged();
+    may_trigger_modechanged();
 }
 
 /*
@@ -3222,7 +3222,7 @@ nv_ctrlg(cmdarg_T *cap)
     if (VIsual_active)	// toggle Selection/Visual mode
     {
 	VIsual_select = !VIsual_select;
-	trigger_modechanged();
+	may_trigger_modechanged();
 	showmode();
     }
     else if (!checkclearop(cap->oap))
@@ -3285,7 +3285,7 @@ nv_ctrlo(cmdarg_T *cap)
     if (VIsual_active && VIsual_select)
     {
 	VIsual_select = FALSE;
-	trigger_modechanged();
+	may_trigger_modechanged();
 	showmode();
 	restart_VIsual_select = 2;	// restart Select mode later
     }
@@ -4153,6 +4153,7 @@ nv_search(cmdarg_T *cap)
 						      ? 0 : SEARCH_MARK, NULL);
 }
 
+
 /*
  * Handle "N" and "n" commands.
  * cap->arg is SEARCH_REV for "N", 0 for "n".
@@ -4173,6 +4174,12 @@ nv_next(cmdarg_T *cap)
 	(void)normal_search(cap, 0, NULL, SEARCH_MARK | cap->arg, NULL);
 	cap->count1 -= 1;
     }
+
+#ifdef FEAT_SEARCH_EXTRA
+    // Redraw the window to refresh the highlighted matches.
+    if (i > 0 && p_hls && !no_hlsearch)
+	redraw_later(SOME_VALID);
+#endif
 }
 
 /*
@@ -4190,6 +4197,9 @@ normal_search(
 {
     int		i;
     searchit_arg_T sia;
+#ifdef FEAT_SEARCH_EXTRA
+    pos_T	prev_cursor = curwin->w_cursor;
+#endif
 
     cap->oap->motion_type = MCHAR;
     cap->oap->inclusive = FALSE;
@@ -4213,6 +4223,11 @@ normal_search(
 	    foldOpenCursor();
 #endif
     }
+#ifdef FEAT_SEARCH_EXTRA
+    // Redraw the window to refresh the highlighted matches.
+    if (!EQUAL_POS(curwin->w_cursor, prev_cursor) && p_hls && !no_hlsearch)
+	redraw_later(SOME_VALID);
+#endif
 
     // "/$" will put the cursor after the end of the line, may need to
     // correct that here
@@ -5422,7 +5437,7 @@ nv_visual(cmdarg_T *cap)
 	{				    //	   or char/line mode
 	    VIsual_mode = cap->cmdchar;
 	    showmode();
-	    trigger_modechanged();
+	    may_trigger_modechanged();
 	}
 	redraw_curbuf_later(INVERTED);	    // update the inversion
     }
@@ -5549,7 +5564,7 @@ n_start_visual_mode(int c)
     foldAdjustVisual();
 #endif
 
-    trigger_modechanged();
+    may_trigger_modechanged();
     setmouse();
 #ifdef FEAT_CONCEAL
     // Check if redraw is needed after changing the state.

@@ -1,4 +1,4 @@
-*vim9.txt*	For Vim version 8.2.  Last change: 2022 Mar 28
+*vim9.txt*	For Vim version 8.2.  Last change: 2022 Mar 30
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -185,7 +185,7 @@ For now you will need to pass the dictionary explicitly: >
 	   echo d[arg]
 	enddef
 	var ad = {item: 'value', func: DictFunc}
-	ad.func(d, 'item')
+	ad.func(ad, 'item')
 
 You can call a legacy dict function though: >
 	func Legacy() dict
@@ -378,7 +378,7 @@ And with autocommands: >
 Although using a :def function probably works better.
 
 				*E1022* *E1103* *E1130* *E1131* *E1133*
-				*E1134* *E1235*
+				*E1134*
 Declaring a variable with a type but without an initializer will initialize to
 false (for bool), empty (for string, list, dict, etc.) or zero (for number,
 any, etc.).  This matters especially when using the "any" type, the value will
@@ -1720,7 +1720,15 @@ line, there can be no line break: >
 		name   # Error!
 	echo that
 		.name  # Error!
-<							*:import-cycle*
+
+To refer to a function in an imported script in a mapping, |<SID>| can be
+used: >
+	noremap <silent> ,a :call <SID>name.Function()<CR>
+
+When the mapping is defined "<SID>name." will be replaced with <SNR> and the
+script ID of the imported script.
+
+							*:import-cycle*
 The `import` commands are executed when encountered.  If script A imports
 script B, and B (directly or indirectly) imports A, this will be skipped over.
 At this point items in A after "import B" will not have been processed and
@@ -1745,7 +1753,8 @@ actually needed.  Using the autoload mechanism is recommended:
    The "autoload" argument to `:import` means that the script is not loaded
    until one of the items is actually used.  The script will be found under
    the "autoload" directory in 'runtimepath' instead of the "import"
-   directory.
+   directory.  Alternatively a relative or absolute name can be used, see
+   below.
 
 2. In the autoload script put the bulk of the code. >
 	vim9script
@@ -1764,6 +1773,14 @@ actually needed.  Using the autoload mechanism is recommended:
 
    You can split up the functionality and import other scripts from the
    autoload script as you like.  This way you can share code between plugins.
+
+Searching for the autoload script in all entries in 'runtimepath' can be a bit
+slow.  If the plugin knows where the script is located, quite often a relative
+path can be used.  This avoids the search and should be quite a bit faster.
+Another advantage is that the script name does not need to be unique.  An
+absolute path is also possible.  Examples: >
+	import autoload '../lib/implement.vim'
+	import autoload MyScriptsDir .. '/lib/implement.vim'
 
 For defining a mapping that uses the imported autoload script the special key
 |<ScriptCmd>| is useful.  It allows for a command in a mapping to use the

@@ -640,9 +640,13 @@ changed_common(
 	    if (hasAnyFolding(wp))
 		set_topline(wp, wp->w_topline);
 #endif
-	    // Relative numbering may require updating more.
+	    // If lines have been added or removed, relative numbering always
+	    // requires a redraw.
 	    if (wp->w_p_rnu && xtra != 0)
-		redraw_win_later(wp, SOME_VALID);
+	    {
+		wp->w_last_cursor_lnum_rnu = 0;
+		redraw_win_later(wp, VALID);
+	    }
 #ifdef FEAT_SYN_HL
 	    // Cursor line highlighting probably need to be updated with
 	    // "VALID" if it's below the change.
@@ -1655,7 +1659,7 @@ open_line(
 	lead_len = get_leader_len(saved_line, &lead_flags,
 							dir == BACKWARD, TRUE);
 #ifdef FEAT_CINDENT
-	if (lead_len == 0 && do_cindent && dir == FORWARD)
+	if (lead_len == 0 && curbuf->b_p_cin && do_cindent && dir == FORWARD)
 	{
 	    // Check for a line comment after code.
 	    comment_start = check_linecomment(saved_line);

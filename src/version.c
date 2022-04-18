@@ -711,28 +711,24 @@ static char *(features[]) =
 #else
 	"-xim",
 #endif
-#ifdef MSWIN
+#if defined(MSWIN)
 # ifdef FEAT_XPM_W32
 	"+xpm_w32",
 # else
 	"-xpm_w32",
 # endif
-#else
-# ifdef HAVE_XPM
+#elif defined(HAVE_XPM)
 	"+xpm",
-# else
+#else
 	"-xpm",
-# endif
 #endif
 #if defined(UNIX) || defined(VMS)
-# ifdef USE_XSMP_INTERACT
+# if defined(USE_XSMP_INTERACT)
 	"+xsmp_interact",
-# else
-#  ifdef USE_XSMP
+# elif defined(USE_XSMP)
 	"+xsmp",
-#  else
+# else
 	"-xsmp",
-#  endif
 # endif
 # ifdef FEAT_XCLIPBOARD
 	"+xterm_clipboard",
@@ -750,6 +746,236 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    4779,
+/**/
+    4778,
+/**/
+    4777,
+/**/
+    4776,
+/**/
+    4775,
+/**/
+    4774,
+/**/
+    4773,
+/**/
+    4772,
+/**/
+    4771,
+/**/
+    4770,
+/**/
+    4769,
+/**/
+    4768,
+/**/
+    4767,
+/**/
+    4766,
+/**/
+    4765,
+/**/
+    4764,
+/**/
+    4763,
+/**/
+    4762,
+/**/
+    4761,
+/**/
+    4760,
+/**/
+    4759,
+/**/
+    4758,
+/**/
+    4757,
+/**/
+    4756,
+/**/
+    4755,
+/**/
+    4754,
+/**/
+    4753,
+/**/
+    4752,
+/**/
+    4751,
+/**/
+    4750,
+/**/
+    4749,
+/**/
+    4748,
+/**/
+    4747,
+/**/
+    4746,
+/**/
+    4745,
+/**/
+    4744,
+/**/
+    4743,
+/**/
+    4742,
+/**/
+    4741,
+/**/
+    4740,
+/**/
+    4739,
+/**/
+    4738,
+/**/
+    4737,
+/**/
+    4736,
+/**/
+    4735,
+/**/
+    4734,
+/**/
+    4733,
+/**/
+    4732,
+/**/
+    4731,
+/**/
+    4730,
+/**/
+    4729,
+/**/
+    4728,
+/**/
+    4727,
+/**/
+    4726,
+/**/
+    4725,
+/**/
+    4724,
+/**/
+    4723,
+/**/
+    4722,
+/**/
+    4721,
+/**/
+    4720,
+/**/
+    4719,
+/**/
+    4718,
+/**/
+    4717,
+/**/
+    4716,
+/**/
+    4715,
+/**/
+    4714,
+/**/
+    4713,
+/**/
+    4712,
+/**/
+    4711,
+/**/
+    4710,
+/**/
+    4709,
+/**/
+    4708,
+/**/
+    4707,
+/**/
+    4706,
+/**/
+    4705,
+/**/
+    4704,
+/**/
+    4703,
+/**/
+    4702,
+/**/
+    4701,
+/**/
+    4700,
+/**/
+    4699,
+/**/
+    4698,
+/**/
+    4697,
+/**/
+    4696,
+/**/
+    4695,
+/**/
+    4694,
+/**/
+    4693,
+/**/
+    4692,
+/**/
+    4691,
+/**/
+    4690,
+/**/
+    4689,
+/**/
+    4688,
+/**/
+    4687,
+/**/
+    4686,
+/**/
+    4685,
+/**/
+    4684,
+/**/
+    4683,
+/**/
+    4682,
+/**/
+    4681,
+/**/
+    4680,
+/**/
+    4679,
+/**/
+    4678,
+/**/
+    4677,
+/**/
+    4676,
+/**/
+    4675,
+/**/
+    4674,
+/**/
+    4673,
+/**/
+    4672,
+/**/
+    4671,
+/**/
+    4670,
+/**/
+    4669,
+/**/
+    4668,
+/**/
+    4667,
+/**/
+    4666,
+/**/
+    4665,
 /**/
     4664,
 /**/
@@ -10396,61 +10622,35 @@ list_version(void)
     }
 #endif
 
-#ifdef FEAT_HUGE
+#if defined(FEAT_HUGE)
     msg_puts(_("\nHuge version "));
-#else
-# ifdef FEAT_BIG
+#elif defined(FEAT_BIG)
     msg_puts(_("\nBig version "));
-# else
-#  ifdef FEAT_NORMAL
+#elif defined(FEAT_NORMAL)
     msg_puts(_("\nNormal version "));
-#  else
-#   ifdef FEAT_SMALL
+#elif defined(FEAT_SMALL)
     msg_puts(_("\nSmall version "));
-#   else
-    msg_puts(_("\nTiny version "));
-#   endif
-#  endif
-# endif
-#endif
-#ifndef FEAT_GUI
-    msg_puts(_("without GUI."));
 #else
-# ifdef FEAT_GUI_GTK
-#  ifdef USE_GTK3
+    msg_puts(_("\nTiny version "));
+#endif
+#if !defined(FEAT_GUI)
+    msg_puts(_("without GUI."));
+#elif defined(FEAT_GUI_GTK)
+# if defined(USE_GTK3)
     msg_puts(_("with GTK3 GUI."));
-#  else
-#   ifdef FEAT_GUI_GNOME
+# elif defined(FEAT_GUI_GNOME)
      msg_puts(_("with GTK2-GNOME GUI."));
-#   else
-     msg_puts(_("with GTK2 GUI."));
-#   endif
-# endif
 # else
-#  ifdef FEAT_GUI_MOTIF
-    msg_puts(_("with X11-Motif GUI."));
-#  else
-#   ifdef FEAT_GUI_ATHENA
-#    ifdef FEAT_GUI_NEXTAW
-    msg_puts(_("with X11-neXtaw GUI."));
-#    else
-    msg_puts(_("with X11-Athena GUI."));
-#    endif
-#   else
-#    ifdef FEAT_GUI_HAIKU
-    msg_puts(_("with Haiku GUI."));
-#    else
-#     ifdef FEAT_GUI_PHOTON
-    msg_puts(_("with Photon GUI."));
-#     else
-#      if defined(MSWIN)
-    msg_puts(_("with GUI."));
-#      endif
-#     endif
-#    endif
-#   endif
-#  endif
+     msg_puts(_("with GTK2 GUI."));
 # endif
+#elif defined(FEAT_GUI_MOTIF)
+    msg_puts(_("with X11-Motif GUI."));
+#elif defined(FEAT_GUI_HAIKU)
+    msg_puts(_("with Haiku GUI."));
+#elif defined(FEAT_GUI_PHOTON)
+    msg_puts(_("with Photon GUI."));
+#elif defined(MSWIN)
+    msg_puts(_("with GUI."));
 #endif
     version_msg(_("  Features included (+) or not (-):\n"));
 
