@@ -293,7 +293,7 @@ def Test_assign_concat()
       var ls: list<string> = []
       ls[-1] ..= 'foo'
   END
-  v9.CheckDefExecAndScriptFailure(lines, 'E684: list index out of range: -1', 2)
+  v9.CheckDefExecAndScriptFailure(lines, 'E684: List index out of range: -1', 2)
 enddef
 
 def Test_assign_register()
@@ -737,6 +737,14 @@ def Test_init_in_for_loop()
       assert_equal([3, 3], l)
   END
   v9.CheckDefAndScriptSuccess(lines)
+enddef
+
+def Test_redir_is_not_assign()
+  if false
+    redir => res
+    echo var_job
+    redir END
+  endif
 enddef
 
 def Test_extend_list()
@@ -1633,7 +1641,7 @@ def Test_assign_list()
       l[g:idx : 1] = [0]
       echo l
   END
-  v9.CheckDefExecAndScriptFailure(lines, 'E684: list index out of range: 3')
+  v9.CheckDefExecAndScriptFailure(lines, 'E684: List index out of range: 3')
 
   lines =<< trim END
       var l = [1, 2]
@@ -1821,10 +1829,31 @@ def Test_assign_lambda()
 enddef
 
 def Test_heredoc()
-  var lines =<< trim END # comment
-    text
+  # simple heredoc
+  var lines =<< trim END
+    var text =<< trim TEXT # comment
+      abc
+    TEXT
+    assert_equal(['abc'], text)
   END
-  assert_equal(['text'], lines)
+  v9.CheckDefAndScriptSuccess(lines)
+
+  # empty heredoc
+  lines =<< trim END
+     var text =<< trim TEXT
+     TEXT
+     assert_equal([], text)
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+
+  # heredoc with a single empty line
+  lines =<< trim END
+     var text =<< trim TEXT
+
+     TEXT
+     assert_equal([''], text)
+  END
+  v9.CheckDefAndScriptSuccess(lines)
 
   v9.CheckDefFailure(['var lines =<< trim END X', 'END'], 'E488:')
   v9.CheckDefFailure(['var lines =<< trim END " comment', 'END'], 'E488:')
@@ -2642,51 +2671,68 @@ let g:someVar = 'X'
 " Test for heredoc with Vim expressions.
 " This messes up highlighting, keep it near the end.
 def Test_heredoc_expr()
-  var code =<< trim eval END
-    var a = `=5 + 10`
-    var b = `=min([10, 6])` + `=max([4, 6])`
-  END
-  assert_equal(['var a = 15', 'var b = 6 + 6'], code)
+  var lines =<< trim CODE
+    var s = "local"
+    var a1 = "1"
+    var a2 = "2"
+    var a3 = "3"
+    var a4 = ""
+    var code =<< trim eval END
+      var a = {5 + 10}
+      var b = {min([10, 6])} + {max([4, 6])}
+      var c = "{s}"
+      var d = x{a1}x{a2}x{a3}x{a4}
+    END
+    assert_equal(['var a = 15', 'var b = 6 + 6', 'var c = "local"', 'var d = x1x2x3x'], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
 
-  code =<< eval trim END
-    var s = "`=$SOME_ENV_VAR`"
-  END
-  assert_equal(['var s = "somemore"'], code)
+  lines =<< trim CODE
+    var code =<< eval trim END
+      var s = "{$SOME_ENV_VAR}"
+    END
+    assert_equal(['var s = "somemore"'], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
 
-  code =<< eval END
-    var s = "`=$SOME_ENV_VAR`"
-END
-  assert_equal(['    var s = "somemore"'], code)
+  lines =<< trim CODE
+    var code =<< eval END
+      var s = "{$SOME_ENV_VAR}"
+    END
+    assert_equal(['  var s = "somemore"'], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
 
-  code =<< eval trim END
-    let a = `abc`
-    let b = `=g:someVar`
-    let c = `
-  END
-  assert_equal(['let a = `abc`', 'let b = X', 'let c = `'], code)
-
-  var lines =<< trim LINES
-      var text =<< eval trim END
-        let b = `=
-      END
-  LINES
-  v9.CheckDefAndScriptFailure(lines, 'E1083:')
+  lines =<< trim CODE
+    var code =<< eval trim END
+      let a = {{abc}}
+      let b = {g:someVar}
+      let c = {{
+    END
+    assert_equal(['let a = {abc}', 'let b = X', 'let c = {'], code)
+  CODE
+  v9.CheckDefAndScriptSuccess(lines)
 
   lines =<< trim LINES
       var text =<< eval trim END
-        let b = `=abc
+        let b = {
       END
   LINES
-  v9.CheckDefAndScriptFailure(lines, 'E1083:')
+  v9.CheckDefAndScriptFailure(lines, "E1279: Missing '}'")
 
   lines =<< trim LINES
       var text =<< eval trim END
-        let b = `=`
+        let b = {abc
       END
   LINES
-  v9.CheckDefAndScriptFailure(lines, 'E15:')
+  v9.CheckDefAndScriptFailure(lines, "E1279: Missing '}'")
+
+  lines =<< trim LINES
+      var text =<< eval trim END
+        let b = {}
+      END
+  LINES
+  v9.CheckDefAndScriptFailure(lines, 'E15: Invalid expression: "}"')
 enddef
-
-
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

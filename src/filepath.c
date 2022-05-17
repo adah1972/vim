@@ -1417,6 +1417,18 @@ f_isdirectory(typval_T *argvars, typval_T *rettv)
 }
 
 /*
+ * "isabsolutepath()" function
+ */
+    void
+f_isabsolutepath(typval_T *argvars, typval_T *rettv)
+{
+    if (in_vim9script() && check_for_string_arg(argvars, 0) == FAIL)
+	return;
+
+    rettv->vval.v_number = mch_isFullName(tv_get_string_strict(&argvars[0]));
+}
+
+/*
  * Create the directory in which "dir" is located, and higher levels when
  * needed.
  * Return OK or FAIL.
@@ -1636,7 +1648,7 @@ f_readdir(typval_T *argvars, typval_T *rettv)
     char_u	*p;
     garray_T	ga;
     int		i;
-    int         sort = READDIR_SORT_BYTE;
+    int		sort = READDIR_SORT_BYTE;
 
     if (rettv_list_alloc(rettv) == FAIL)
 	return;
@@ -1689,7 +1701,7 @@ f_readdirex(typval_T *argvars, typval_T *rettv)
     char_u	*path;
     garray_T	ga;
     int		i;
-    int         sort = READDIR_SORT_BYTE;
+    int		sort = READDIR_SORT_BYTE;
 
     if (rettv_list_alloc(rettv) == FAIL)
 	return;
@@ -3085,7 +3097,7 @@ expand_wildcards_eval(
     {
 	++emsg_off;
 	eval_pat = eval_vars(exp_pat, exp_pat, &usedlen,
-						    NULL, &ignored_msg, NULL);
+					       NULL, &ignored_msg, NULL, TRUE);
 	--emsg_off;
 	if (eval_pat != NULL)
 	    exp_pat = concat_str(eval_pat, exp_pat + usedlen);
@@ -3577,6 +3589,7 @@ unix_expandpath(
     int		didstar)	// expanded "**" once already
 {
     char_u	*buf;
+    size_t	buflen;
     char_u	*path_end;
     char_u	*p, *s, *e;
     int		start_len = gap->ga_len;
@@ -3600,7 +3613,8 @@ unix_expandpath(
     }
 
     // make room for file name
-    buf = alloc(STRLEN(path) + BASENAMELEN + 5);
+    buflen = STRLEN(path) + BASENAMELEN + 5;
+    buf = alloc(buflen);
     if (buf == NULL)
 	return 0;
 
@@ -3725,14 +3739,14 @@ unix_expandpath(
 		{
 		    // For "**" in the pattern first go deeper in the tree to
 		    // find matches.
-		    STRCPY(buf + len, "/**");
-		    STRCPY(buf + len + 3, path_end);
+		    vim_snprintf((char *)buf + len, buflen - len,
+							    "/**%s", path_end);
 		    ++stardepth;
 		    (void)unix_expandpath(gap, buf, len + 1, flags, TRUE);
 		    --stardepth;
 		}
 
-		STRCPY(buf + len, path_end);
+		vim_snprintf((char *)buf + len, buflen - len, "%s", path_end);
 		if (mch_has_exp_wildcard(path_end)) // handle more wildcards
 		{
 		    // need to expand another component of the path

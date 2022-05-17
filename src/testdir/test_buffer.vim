@@ -410,6 +410,23 @@ func Test_buffer_scheme()
   set shellslash&
 endfunc
 
+" this was using a NULL pointer after failing to use the pattern
+func Test_buf_pattern_invalid()
+  vsplit 0000000
+  silent! buf [0--]\&\zs*\zs*e
+  bwipe!
+
+  vsplit 00000000000000000000000000
+  silent! buf [0--]\&\zs*\zs*e
+  bwipe!
+
+  " similar case with different code path
+  split 0
+  edit ÿ
+  silent! buf [0--]\&\zs*\zs*0
+  bwipe!
+endfunc
+
 " Test for the 'maxmem' and 'maxmemtot' options
 func Test_buffer_maxmem()
   " use 1KB per buffer and 2KB for all the buffers

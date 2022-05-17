@@ -534,6 +534,24 @@ func Test_prop_backspace()
   set bs&
 endfunc
 
+func Test_prop_change()
+  new
+  let expected = SetupOneLine() " 'xonex xtwoxx'
+
+  " Characterwise.
+  exe "normal 7|c$\<Esc>"
+  call assert_equal('xonex ', getline(1))
+  call assert_equal(expected[:0], prop_list(1))
+  " Linewise.
+  exe "normal cc\<Esc>"
+  call assert_equal('', getline(1))
+  call assert_equal([], prop_list(1))
+
+  call DeletePropTypes()
+  bwipe!
+  set bs&
+endfunc
+
 func Test_prop_replace()
   new
   set bs=2
@@ -615,6 +633,18 @@ func Test_prop_open_line()
   let expected = expected[1:1]
   let expected[0].col -= 4
   call assert_equal(expected, prop_list(2))
+  call DeletePropTypes()
+
+  " split at the space character with 'ai' active, the leading space is removed
+  " in the second line and the prop is shifted accordingly.
+  let expected = SetupOneLine() " 'xonex xtwoxx'
+  set ai
+  exe "normal 6|i\<CR>\<Esc>"
+  call assert_equal('xonex', getline(1))
+  call assert_equal('xtwoxx', getline(2))
+  let expected[1].col -= 6
+  call assert_equal(expected, prop_list(1) + prop_list(2))
+  set ai&
   call DeletePropTypes()
 
   bwipe!
@@ -1615,6 +1645,57 @@ def Test_prop_add_delete_line()
   bwipe!
 enddef
 
+" This test is to detect a regression related to #10430. It is not an attempt
+" fully cover deleting lines in the presence of multi-line properties.
+def Test_delete_line_within_multiline_prop()
+  new
+  setline(1, '# Top.')
+  append(1, ['some_text = """', 'A string.', '"""', '# Bottom.'])
+  prop_type_add('Identifier', {'highlight': 'ModeMsg', 'priority': 0, 'combine': 0, 'start_incl': 0, 'end_incl': 0})
+  prop_type_add('String', {'highlight': 'MoreMsg', 'priority': 0, 'combine': 0, 'start_incl': 0, 'end_incl': 0})
+  prop_add(2, 1, {'type': 'Identifier', 'end_lnum': 2, 'end_col': 9})
+  prop_add(2, 13, {'type': 'String', 'end_lnum': 4, 'end_col': 4})
+
+  # The property for line 3 should extend into the previous and next lines.
+  var props = prop_list(3)
+  var prop = props[0]
+  assert_equal(1, len(props))
+  assert_equal(0, prop['start'])
+  assert_equal(0, prop['end'])
+
+  # This deletion should run without raising an exception.
+  try
+    :2 del
+  catch
+    assert_report('Line delete should have workd, but it raised an error.')
+  endtry
+
+  # The property for line 2 (was 3) should no longer extend into the previous
+  # line.
+  props = prop_list(2)
+  prop = props[0]
+  assert_equal(1, len(props))
+  assert_equal(1, prop['start'], 'Property was not changed to start within the line.')
+
+  # This deletion should run without raising an exception.
+  try
+    :3 del
+  catch
+    assert_report('Line delete should have workd, but it raised an error.')
+  endtry
+
+  # The property for line 2 (originally 3) should no longer extend into the next
+  # line.
+  props = prop_list(2)
+  prop = props[0]
+  assert_equal(1, len(props))
+  assert_equal(1, prop['end'], 'Property was not changed to end within the line.')
+
+  prop_type_delete('Identifier')
+  prop_type_delete('String')
+  bwip!
+enddef
+
 func Test_prop_in_linebreak()
   CheckRunVimInTerminal
 
@@ -1845,6 +1926,165 @@ func Test_prop_list()
     :%bw!
   END
   call v9.CheckLegacyAndVim9Success(lines)
+endfunc
+
+func Test_prop_find_prev_on_same_line()
+  new
+
+  call setline(1, 'the quikc bronw fox jumsp over the layz dog')
+  call prop_type_add('misspell', #{highlight: 'ErrorMsg'})
+  for col in [8, 14, 24, 38]
+    call prop_add(1, col, #{type: 'misspell', length: 2})
+  endfor
+
+  call cursor(1,18)
+  let expected = [
+    \ #{lnum: 1, id: 0, col: 14, end: 1, type: 'misspell', type_bufnr: 0, length: 2, start: 1},
+    \ #{lnum: 1, id: 0, col: 24, end: 1, type: 'misspell', type_bufnr: 0, length: 2, start: 1}
+    \ ]
+
+  let result = prop_find(#{type: 'misspell'}, 'b')
+  call assert_equal(expected[0], result)
+  let result = prop_find(#{type: 'misspell'}, 'f')
+  call assert_equal(expected[1], result)
+
+  call prop_type_delete('misspell')
+  bwipe!
+endfunc
+
+func Test_prop_spell()
+  new
+  set spell
+  call AddPropTypes()
+
+  call setline(1, ["helo world", "helo helo helo"])
+  call prop_add(1, 1, #{type: 'one', length: 4})
+  call prop_add(1, 6, #{type: 'two', length: 5})
+  call prop_add(2, 1, #{type: 'three', length: 4})
+  call prop_add(2, 6, #{type: 'three', length: 4})
+  call prop_add(2, 11, #{type: 'three', length: 4})
+
+  " The first prop over 'helo' increases its length after the word is corrected
+  " to 'Hello', the second one is shifted to the right.
+  let expected = [
+      \ {'id': 0, 'col': 1, 'type_bufnr': 0, 'end': 1, 'type': 'one',
+      \ 'length': 5, 'start': 1},
+      \ {'id': 0, 'col': 7, 'type_bufnr': 0, 'end': 1, 'type': 'two',
+      \ 'length': 5, 'start': 1}
+      \ ]
+  call feedkeys("z=1\<CR>", 'xt')
+
+  call assert_equal('Hello world', getline(1))
+  call assert_equal(expected, prop_list(1))
+
+  " Repeat the replacement done by z=
+  spellrepall
+
+  let expected = [
+      \ {'id': 0, 'col': 1, 'type_bufnr': 0, 'end': 1, 'type': 'three',
+      \ 'length': 5, 'start': 1},
+      \ {'id': 0, 'col': 7, 'type_bufnr': 0, 'end': 1, 'type': 'three',
+      \ 'length': 5, 'start': 1},
+      \ {'id': 0, 'col': 13, 'type_bufnr': 0, 'end': 1, 'type': 'three',
+      \ 'length': 5, 'start': 1}
+      \ ]
+  call assert_equal('Hello Hello Hello', getline(2))
+  call assert_equal(expected, prop_list(2))
+
+  call DeletePropTypes()
+  set spell&
+  bwipe!
+endfunc
+
+func Test_prop_shift_block()
+  new
+  call AddPropTypes()
+
+  call setline(1, ['some     highlighted text']->repeat(2))
+  call prop_add(1, 10, #{type: 'one', length: 11})
+  call prop_add(2, 10, #{type: 'two', length: 11})
+
+  call cursor(1, 1)
+  call feedkeys("5l\<c-v>>", 'nxt')
+  call cursor(2, 1)
+  call feedkeys("5l\<c-v><", 'nxt')
+
+  let expected = [
+      \ {'lnum': 1, 'id': 0, 'col': 8, 'type_bufnr': 0, 'end': 1, 'type': 'one',
+      \ 'length': 11, 'start' : 1},
+      \ {'lnum': 2, 'id': 0, 'col': 6, 'type_bufnr': 0, 'end': 1, 'type': 'two',
+      \ 'length': 11, 'start' : 1}
+      \ ]
+  call assert_equal(expected, prop_list(1, #{end_lnum: 2}))
+
+  call DeletePropTypes()
+  bwipe!
+endfunc
+
+func Test_prop_insert_multiline()
+  new
+  call AddPropTypes()
+
+  call setline(1, ['foobar', 'barbaz'])
+  call prop_add(1, 4, #{end_lnum: 2, end_col: 4, type: 'one'})
+
+  call feedkeys("1Goquxqux\<Esc>", 'nxt')
+  call feedkeys("2GOquxqux\<Esc>", 'nxt')
+
+  let lines =<< trim END
+      foobar
+      quxqux
+      quxqux
+      barbaz
+  END
+  call assert_equal(lines, getline(1, '$'))
+  let expected = [
+      \ {'lnum': 1, 'id': 0, 'col': 4, 'type_bufnr': 0, 'end': 0, 'type': 'one',
+      \ 'length': 4 ,'start': 1},
+      \ {'lnum': 2, 'id': 0, 'col': 1, 'type_bufnr': 0, 'end': 0, 'type': 'one',
+      \ 'length': 7, 'start': 0},
+      \ {'lnum': 3, 'id': 0, 'col': 1, 'type_bufnr': 0, 'end': 0, 'type': 'one',
+      \ 'length': 7, 'start': 0},
+      \ {'lnum': 4, 'id': 0, 'col': 1, 'type_bufnr': 0, 'end': 1, 'type': 'one',
+      \ 'length': 3, 'start': 0}
+      \ ]
+  call assert_equal(expected, prop_list(1, #{end_lnum: 10}))
+
+  call DeletePropTypes()
+  bwipe!
+endfunc
+
+func Test_prop_blockwise_change()
+  new
+  call AddPropTypes()
+
+  call setline(1, ['foooooo', 'bar', 'baaaaz'])
+  call prop_add(1, 1, #{end_col: 3, type: 'one'})
+  call prop_add(2, 1, #{end_col: 3, type: 'two'})
+  call prop_add(3, 1, #{end_col: 3, type: 'three'})
+
+  " Replace the first two columns with '123', since 'start_incl' is false the
+  " prop is not extended.
+  call feedkeys("gg\<c-v>2jc123\<Esc>", 'nxt')
+
+  let lines =<< trim END
+      123oooooo
+      123ar
+      123aaaaz
+  END
+  call assert_equal(lines, getline(1, '$'))
+  let expected = [
+      \ {'lnum': 1, 'id': 0, 'col': 4, 'type_bufnr': 0, 'end': 1, 'type': 'one',
+      \ 'length': 1, 'start': 1},
+      \ {'lnum': 2, 'id': 0, 'col': 4, 'type_bufnr': 0, 'end': 1, 'type': 'two',
+      \ 'length': 1, 'start': 1},
+      \ {'lnum': 3, 'id': 0, 'col': 4, 'type_bufnr': 0, 'end': 1 ,
+      \ 'type': 'three', 'length': 1, 'start': 1}
+      \ ]
+  call assert_equal(expected, prop_list(1, #{end_lnum: 10}))
+
+  call DeletePropTypes()
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

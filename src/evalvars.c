@@ -603,59 +603,104 @@ list_script_vars(int *first)
 }
 
 /*
- * Evaluate all the Vim expressions (`=expr`) in string "str" and return the
- * resulting string.  The caller must free the returned string.
+ * Evaluate one Vim expression {expr} in string "p" and append the
+ * resulting string to "gap".  "p" points to the opening "{".
+ * When "evaluate" is FALSE only skip over the expression.
+ * Return a pointer to the character after "}", NULL for an error.
  */
-    static char_u *
+    char_u *
+eval_one_expr_in_str(char_u *p, garray_T *gap, int evaluate)
+{
+    char_u	*block_start = skipwhite(p + 1);  // skip the opening {
+    char_u	*block_end = block_start;
+    char_u	*expr_val;
+
+    if (*block_start == NUL)
+    {
+	semsg(_(e_missing_close_curly_str), p);
+	return NULL;
+    }
+    if (skip_expr(&block_end, NULL) == FAIL)
+	return NULL;
+    block_end = skipwhite(block_end);
+    if (*block_end != '}')
+    {
+	semsg(_(e_missing_close_curly_str), p);
+	return NULL;
+    }
+    if (evaluate)
+    {
+	*block_end = NUL;
+	expr_val = eval_to_string(block_start, TRUE);
+	*block_end = '}';
+	if (expr_val == NULL)
+	    return NULL;
+	ga_concat(gap, expr_val);
+	vim_free(expr_val);
+    }
+
+    return block_end + 1;
+}
+
+/*
+ * Evaluate all the Vim expressions {expr} in "str" and return the resulting
+ * string in allocated memory.  "{{" is reduced to "{" and "}}" to "}".
+ * Used for a heredoc assignment.
+ * Returns NULL for an error.
+ */
+    char_u *
 eval_all_expr_in_str(char_u *str)
 {
     garray_T	ga;
-    char_u	*s;
     char_u	*p;
-    char_u	save_c;
-    char_u	*exprval;
-    int		status;
 
     ga_init2(&ga, 1, 80);
     p = str;
 
-    // Look for `=expr`, evaluate the expression and replace `=expr` with the
-    // result.
     while (*p != NUL)
     {
-	s = p;
-	while (*p != NUL && (*p != '`' || p[1] != '='))
-	    p++;
-	ga_concat_len(&ga, s, p - s);
+	char_u	*lit_start;
+	int	escaped_brace = FALSE;
+
+	// Look for a block start.
+	lit_start = p;
+	while (*p != '{' && *p != '}' && *p != NUL)
+	    ++p;
+
+	if (*p != NUL && *p == p[1])
+	{
+	    // Escaped brace, unescape and continue.
+	    // Include the brace in the literal string.
+	    ++p;
+	    escaped_brace = TRUE;
+	}
+	else if (*p == '}')
+	{
+	    semsg(_(e_stray_closing_curly_str), str);
+	    ga_clear(&ga);
+	    return NULL;
+	}
+
+	// Append the literal part.
+	ga_concat_len(&ga, lit_start, (size_t)(p - lit_start));
+
 	if (*p == NUL)
-	    break;		// no backtick expression found
+	    break;
 
-	s = p;
-	p += 2;		// skip `=
-
-	status = *p == NUL ? OK : skip_expr(&p, NULL);
-	if (status == FAIL || *p != '`')
+	if (escaped_brace)
 	{
-	    // invalid expression or missing ending backtick
-	    if (status != FAIL)
-		emsg(_(e_missing_backtick));
-	    vim_free(ga.ga_data);
+	    // Skip the second brace.
+	    ++p;
+	    continue;
+	}
+
+	// Evaluate the expression and append the result.
+	p = eval_one_expr_in_str(p, &ga, TRUE);
+	if (p == NULL)
+	{
+	    ga_clear(&ga);
 	    return NULL;
 	}
-	s += 2;		// skip `=
-	save_c = *p;
-	*p = NUL;
-	exprval = eval_to_string(s, TRUE);
-	*p = save_c;
-	p++;
-	if (exprval == NULL)
-	{
-	    // expression evaluation failed
-	    vim_free(ga.ga_data);
-	    return NULL;
-	}
-	ga_concat(&ga, exprval);
-	vim_free(exprval);
     }
     ga_append(&ga, NUL);
 
@@ -673,18 +718,23 @@ eval_all_expr_in_str(char_u *str)
  *
  * The {marker} is a string. If the optional 'trim' word is supplied before the
  * marker, then the leading indentation before the lines (matching the
- * indentation in the 'cmd' line) is stripped.
+ * indentation in the "cmd" line) is stripped.
  *
  * When getting lines for an embedded script (e.g. python, lua, perl, ruby,
- * tcl, mzscheme), script_get is set to TRUE. In this case, if the marker is
+ * tcl, mzscheme), "script_get" is set to TRUE. In this case, if the marker is
  * missing, then '.' is accepted as a marker.
+ *
+ * When compiling a heredoc assignment to a variable in a Vim9 def function,
+ * "vim9compile" is set to TRUE. In this case, instead of generating a list of
+ * string values from the heredoc, vim9 instructions are generated.  On success
+ * the returned list will be empty.
  *
  * Returns a List with {lines} or NULL on failure.
  */
     list_T *
-heredoc_get(exarg_T *eap, char_u *cmd, int script_get)
+heredoc_get(exarg_T *eap, char_u *cmd, int script_get, int vim9compile)
 {
-    char_u	*theline;
+    char_u	*theline = NULL;
     char_u	*marker;
     list_T	*l;
     char_u	*p;
@@ -696,6 +746,8 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get)
     int		comment_char = in_vim9script() ? '#' : '"';
     int		evalstr = FALSE;
     int		eval_failed = FALSE;
+    cctx_T	*cctx = vim9compile ? eap->cookie : NULL;
+    int		count = 0;
 
     if (eap->getline == NULL)
     {
@@ -776,6 +828,7 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get)
 	int	mi = 0;
 	int	ti = 0;
 
+	vim_free(theline);
 	theline = eap->getline(NUL, eap->cookie, 0, FALSE);
 	if (theline == NULL)
 	{
@@ -789,18 +842,12 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get)
 		&& STRNCMP(theline, *eap->cmdlinep, marker_indent_len) == 0)
 	    mi = marker_indent_len;
 	if (STRCMP(marker, theline + mi) == 0)
-	{
-	    vim_free(theline);
 	    break;
-	}
 
 	// If expression evaluation failed in the heredoc, then skip till the
 	// end marker.
 	if (eval_failed)
-	{
-	    vim_free(theline);
 	    continue;
-	}
 
 	if (text_indent_len == -1 && *theline != NUL)
 	{
@@ -821,25 +868,40 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get)
 		    break;
 
 	str = theline + ti;
-	if (evalstr)
+	if (vim9compile)
 	{
-	    str = eval_all_expr_in_str(str);
-	    if (str == NULL)
+	    if (compile_all_expr_in_str(str, evalstr, cctx) == FAIL)
 	    {
-		// expression evaluation failed
 		vim_free(theline);
-		eval_failed = TRUE;
-		continue;
+		vim_free(text_indent);
+		return FAIL;
 	    }
-	    vim_free(theline);
-	    theline = str;
+	    count++;
 	}
+	else
+	{
+	    if (evalstr && !eap->skip)
+	    {
+		str = eval_all_expr_in_str(str);
+		if (str == NULL)
+		{
+		    // expression evaluation failed
+		    eval_failed = TRUE;
+		    continue;
+		}
+		vim_free(theline);
+		theline = str;
+	    }
 
-	if (list_append_string(l, str, -1) == FAIL)
-	    break;
-	vim_free(theline);
+	    if (list_append_string(l, str, -1) == FAIL)
+		break;
+	}
     }
+    vim_free(theline);
     vim_free(text_indent);
+
+    if (vim9compile && cctx->ctx_skip != SKIP_YES && !eval_failed)
+	generate_NEWLIST(cctx, count, FALSE);
 
     if (eval_failed)
     {
@@ -992,7 +1054,7 @@ ex_let(exarg_T *eap)
 	long	cur_lnum = SOURCING_LNUM;
 
 	// HERE document
-	l = heredoc_get(eap, expr + 3, FALSE);
+	l = heredoc_get(eap, expr + 3, FALSE, FALSE);
 	if (l != NULL)
 	{
 	    rettv_list_set(&rettv, l);
@@ -4019,48 +4081,53 @@ valid_varname(char_u *varname, int len, int autoload)
 }
 
 /*
- * getwinvar() and gettabwinvar()
+ * Implements the logic to retrieve local variable and option values.
+ * Used by "getwinvar()" "gettabvar()" "gettabwinvar()" "getbufvar()".
  */
     static void
-getwinvar(
-    typval_T	*argvars,
+get_var_from(
+    char_u	*varname,
     typval_T	*rettv,
-    int		off)	    // 1 for gettabwinvar()
+    typval_T	*deftv,	    // Default value if not found.
+    int		htname,	    // 't'ab, 'w'indow or 'b'uffer local.
+    tabpage_T	*tp,	    // can be NULL
+    win_T	*win,
+    buf_T	*buf)	    // Ignored if htname is not 'b'.
 {
-    win_T	*win;
-    char_u	*varname;
     dictitem_T	*v;
-    tabpage_T	*tp = NULL;
     int		done = FALSE;
     switchwin_T	switchwin;
     int		need_switch_win;
 
-    if (off == 1)
-	tp = find_tabpage((int)tv_get_number_chk(&argvars[0], NULL));
-    else
-	tp = curtab;
-    win = find_win_by_nr(&argvars[off], tp);
-    varname = tv_get_string_chk(&argvars[off + 1]);
     ++emsg_off;
 
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 
-    if (win != NULL && varname != NULL)
+    if (varname != NULL && tp != NULL && win != NULL
+	    && (htname != 'b' || buf != NULL))
     {
 	// Set curwin to be our win, temporarily.  Also set the tabpage,
 	// otherwise the window is not valid. Only do this when needed,
 	// autocommands get blocked.
-	need_switch_win = !(tp == curtab && win == curwin);
-	if (!need_switch_win
-		  || switch_win(&switchwin, win, tp, TRUE) == OK)
+	// If we have a buffer reference avoid the switching, we're saving and
+	// restoring curbuf directly.
+	need_switch_win = !(tp == curtab && win == curwin) || (buf != NULL);
+	if (!need_switch_win || switch_win(&switchwin, win, tp, TRUE) == OK)
 	{
-	    if (*varname == '&')
+	    // Handle options. There are no tab-local options.
+	    if (*varname == '&' && htname != 't')
 	    {
+		buf_T	*save_curbuf = curbuf;
+
+		// Change curbuf so the option is read from the correct buffer.
+		if (buf != NULL && htname == 'b')
+		    curbuf = buf;
+
 		if (varname[1] == NUL)
 		{
 		    // get all window-local options in a dict
-		    dict_T	*opts = get_winbuf_options(FALSE);
+		    dict_T	*opts = get_winbuf_options(htname == 'b');
 
 		    if (opts != NULL)
 		    {
@@ -4068,16 +4135,37 @@ getwinvar(
 			done = TRUE;
 		    }
 		}
-		else if (eval_option(&varname, rettv, 1) == OK)
-		    // window-local-option
+		else if (eval_option(&varname, rettv, TRUE) == OK)
+		    // Local option
 		    done = TRUE;
+
+		curbuf = save_curbuf;
+	    }
+	    else if (*varname == NUL)
+	    {
+		// Empty string: return a dict with all the local variables.
+		if (htname == 'b')
+		    v = &buf->b_bufvar;
+		else if (htname == 'w')
+		    v = &win->w_winvar;
+		else
+		    v = &tp->tp_winvar;
+		copy_tv(&v->di_tv, rettv);
+		done = TRUE;
 	    }
 	    else
 	    {
+		hashtab_T	*ht;
+
+		if (htname == 'b')
+		    ht = &buf->b_vars->dv_hashtab;
+		else if (htname == 'w')
+		    ht = &win->w_vars->dv_hashtab;
+		else
+		    ht = &tp->tp_vars->dv_hashtab;
+
 		// Look up the variable.
-		// Let getwinvar({nr}, "") return the "w:" dictionary.
-		v = find_var_in_ht(&win->w_vars->dv_hashtab, 'w',
-							      varname, FALSE);
+		v = find_var_in_ht(ht, htname, varname, FALSE);
 		if (v != NULL)
 		{
 		    copy_tv(&v->di_tv, rettv);
@@ -4091,11 +4179,34 @@ getwinvar(
 	    restore_win(&switchwin, TRUE);
     }
 
-    if (!done && argvars[off + 2].v_type != VAR_UNKNOWN)
-	// use the default return value
-	copy_tv(&argvars[off + 2], rettv);
+    if (!done && deftv->v_type != VAR_UNKNOWN)
+	// use the default value
+	copy_tv(deftv, rettv);
 
     --emsg_off;
+}
+
+/*
+ * getwinvar() and gettabwinvar()
+ */
+    static void
+getwinvar(
+    typval_T	*argvars,
+    typval_T	*rettv,
+    int		off)	    // 1 for gettabwinvar()
+{
+    char_u	*varname;
+    tabpage_T	*tp;
+    win_T	*win;
+
+    if (off == 1)
+	tp = find_tabpage((int)tv_get_number_chk(&argvars[0], NULL));
+    else
+	tp = curtab;
+    win = find_win_by_nr(&argvars[off], tp);
+    varname = tv_get_string_chk(&argvars[off + 1]);
+
+    get_var_from(varname, rettv, &argvars[off + 2], 'w', tp, win, NULL);
 }
 
 /*
@@ -4427,14 +4538,9 @@ get_clear_redir_ga(void)
     void
 f_gettabvar(typval_T *argvars, typval_T *rettv)
 {
-    switchwin_T	switchwin;
-    tabpage_T	*tp;
-    dictitem_T	*v;
     char_u	*varname;
-    int		done = FALSE;
-
-    rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = NULL;
+    tabpage_T	*tp;
+    win_T	*win = NULL;
 
     if (in_vim9script()
 	    && (check_for_number_arg(argvars, 0) == FAIL
@@ -4443,30 +4549,11 @@ f_gettabvar(typval_T *argvars, typval_T *rettv)
 
     varname = tv_get_string_chk(&argvars[1]);
     tp = find_tabpage((int)tv_get_number_chk(&argvars[0], NULL));
-    if (tp != NULL && varname != NULL)
-    {
-	// Set tp to be our tabpage, temporarily.  Also set the window to the
-	// first window in the tabpage, otherwise the window is not valid.
-	if (switch_win(&switchwin,
-		tp == curtab || tp->tp_firstwin == NULL ? firstwin
-					    : tp->tp_firstwin, tp, TRUE) == OK)
-	{
-	    // look up the variable
-	    // Let gettabvar({nr}, "") return the "t:" dictionary.
-	    v = find_var_in_ht(&tp->tp_vars->dv_hashtab, 't', varname, FALSE);
-	    if (v != NULL)
-	    {
-		copy_tv(&v->di_tv, rettv);
-		done = TRUE;
-	    }
-	}
+    if (tp != NULL)
+	win = tp == curtab || tp->tp_firstwin == NULL ? firstwin
+		: tp->tp_firstwin;
 
-	// restore previous notion of curwin
-	restore_win(&switchwin, TRUE);
-    }
-
-    if (!done && argvars[2].v_type != VAR_UNKNOWN)
-	copy_tv(&argvars[2], rettv);
+    get_var_from(varname, rettv, &argvars[2], 't', tp, win, NULL);
 }
 
 /*
@@ -4504,10 +4591,8 @@ f_getwinvar(typval_T *argvars, typval_T *rettv)
     void
 f_getbufvar(typval_T *argvars, typval_T *rettv)
 {
-    buf_T	*buf;
     char_u	*varname;
-    dictitem_T	*v;
-    int		done = FALSE;
+    buf_T	*buf;
 
     if (in_vim9script()
 	    && (check_for_buffer_arg(argvars, 0) == FAIL
@@ -4517,56 +4602,7 @@ f_getbufvar(typval_T *argvars, typval_T *rettv)
     varname = tv_get_string_chk(&argvars[1]);
     buf = tv_get_buf_from_arg(&argvars[0]);
 
-    rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = NULL;
-
-    if (buf != NULL && varname != NULL)
-    {
-	if (*varname == '&')
-	{
-	    buf_T	*save_curbuf = curbuf;
-
-	    // set curbuf to be our buf, temporarily
-	    curbuf = buf;
-
-	    if (varname[1] == NUL)
-	    {
-		// get all buffer-local options in a dict
-		dict_T	*opts = get_winbuf_options(TRUE);
-
-		if (opts != NULL)
-		{
-		    rettv_dict_set(rettv, opts);
-		    done = TRUE;
-		}
-	    }
-	    else if (eval_option(&varname, rettv, TRUE) == OK)
-		// buffer-local-option
-		done = TRUE;
-
-	    // restore previous notion of curbuf
-	    curbuf = save_curbuf;
-	}
-	else
-	{
-	    // Look up the variable.
-	    if (*varname == NUL)
-		// Let getbufvar({nr}, "") return the "b:" dictionary.
-		v = &buf->b_bufvar;
-	    else
-		v = find_var_in_ht(&buf->b_vars->dv_hashtab, 'b',
-							       varname, FALSE);
-	    if (v != NULL)
-	    {
-		copy_tv(&v->di_tv, rettv);
-		done = TRUE;
-	    }
-	}
-    }
-
-    if (!done && argvars[2].v_type != VAR_UNKNOWN)
-	// use the default value
-	copy_tv(&argvars[2], rettv);
+    get_var_from(varname, rettv, &argvars[2], 'b', curtab, curwin, buf);
 }
 
 /*

@@ -472,6 +472,33 @@ generate_COMPARE(cctx_T *cctx, exprtype_T exprtype, int ic)
 }
 
 /*
+ * Generate an ISN_CONCAT instruction.
+ * "count" is the number of stack elements to join together and it must be
+ * greater or equal to one.
+ * The caller ensures all the "count" elements on the stack have the right type.
+ */
+    int
+generate_CONCAT(cctx_T *cctx, int count)
+{
+    isn_T	*isn;
+    garray_T	*stack = &cctx->ctx_type_stack;
+
+    RETURN_OK_IF_SKIP(cctx);
+
+    if (count < 1)
+	return FAIL;
+
+    if ((isn = generate_instr(cctx, ISN_CONCAT)) == NULL)
+	return FAIL;
+    isn->isn_arg.number = count;
+
+    // drop the argument types
+    stack->ga_len -= count - 1;
+
+    return OK;
+}
+
+/*
  * Generate an ISN_2BOOL instruction.
  * "offset" is the offset in the type stack.
  */
@@ -699,6 +726,8 @@ generate_PUSHF(cctx_T *cctx, float_T fnumber)
 /*
  * Generate an ISN_PUSHS instruction.
  * Consumes "*str".  When freed *str is set to NULL, unless "str" is NULL.
+ * Note that if "str" is used in the instruction OK is returned and "*str" is
+ * not set to NULL.
  */
     int
 generate_PUSHS(cctx_T *cctx, char_u **str)
@@ -728,12 +757,19 @@ generate_PUSHS(cctx_T *cctx, char_u **str)
     int
 generate_PUSHCHANNEL(cctx_T *cctx)
 {
+#ifdef FEAT_JOB_CHANNEL
     isn_T	*isn;
+#endif
 
     RETURN_OK_IF_SKIP(cctx);
+#ifdef FEAT_JOB_CHANNEL
     if ((isn = generate_instr_type(cctx, ISN_PUSHCHANNEL, &t_channel)) == NULL)
 	return FAIL;
     return OK;
+#else
+    emsg(_(e_channel_job_feature_not_available));
+    return FAIL;
+#endif
 }
 
 /*
@@ -742,12 +778,19 @@ generate_PUSHCHANNEL(cctx_T *cctx)
     int
 generate_PUSHJOB(cctx_T *cctx)
 {
+#ifdef FEAT_JOB_CHANNEL
     isn_T	*isn;
+#endif
 
     RETURN_OK_IF_SKIP(cctx);
+#ifdef FEAT_JOB_CHANNEL
     if ((isn = generate_instr_type(cctx, ISN_PUSHJOB, &t_job)) == NULL)
 	return FAIL;
     return OK;
+#else
+    emsg(_(e_channel_job_feature_not_available));
+    return FAIL;
+#endif
 }
 
 /*
@@ -2204,7 +2247,6 @@ delete_instr(isn_T *isn)
 	case ISN_CATCH:
 	case ISN_CEXPR_AUCMD:
 	case ISN_CHECKLEN:
-	case ISN_CHECKNR:
 	case ISN_CLEARDICT:
 	case ISN_CMDMOD_REV:
 	case ISN_COMPAREANY:

@@ -482,6 +482,33 @@ func Test_list_mappings()
   call assert_match("\tLast set from .*/test_mapping.vim line \\d\\+$",
         \ execute('verbose map ,n')->trim()->split("\n")[1])
 
+  " character with K_SPECIAL byte in rhs
+  nmap foo …
+  call assert_equal(['n  foo           …'],
+        \ execute('nmap foo')->trim()->split("\n"))
+
+  " modified character with K_SPECIAL byte in rhs
+  nmap foo <M-…>
+  call assert_equal(['n  foo           <M-…>'],
+        \ execute('nmap foo')->trim()->split("\n"))
+
+  " character with K_SPECIAL byte in lhs
+  nmap … foo
+  call assert_equal(['n  …             foo'],
+        \ execute('nmap …')->trim()->split("\n"))
+
+  " modified character with K_SPECIAL byte in lhs
+  nmap <M-…> foo
+  call assert_equal(['n  <M-…>         foo'],
+        \ execute('nmap <M-…>')->trim()->split("\n"))
+
+  " illegal bytes
+  let str = ":\x7f:\x80:\x90:\xd0:"
+  exe 'nmap foo ' .. str
+  call assert_equal(['n  foo           ' .. strtrans(str)],
+        \ execute('nmap foo')->trim()->split("\n"))
+  unlet str
+
   " map to CTRL-V
   exe "nmap ,k \<C-V>"
   call assert_equal(['n  ,k            <Nop>'],
@@ -1566,6 +1593,34 @@ func Test_plug_remap()
   %bw!
 endfunc
 
+func Test_mouse_drag_mapped_start_select()
+  set mouse=a
+  set selectmode=key,mouse
+  func ClickExpr()
+    call test_setmouse(1, 1)
+    return "\<LeftMouse>"
+  endfunc
+  func DragExpr()
+    call test_setmouse(1, 2)
+    return "\<LeftDrag>"
+  endfunc
+  nnoremap <expr> <F2> ClickExpr()
+  nmap <expr> <F3> DragExpr()
+
+  nnoremap <LeftDrag> <LeftDrag><Cmd><CR>
+  exe "normal \<F2>\<F3>"
+  call assert_equal('s', mode())
+  exe "normal! \<C-\>\<C-N>"
+
+  nunmap <LeftDrag>
+  nunmap <F2>
+  nunmap <F3>
+  delfunc ClickExpr
+  delfunc DragExpr
+  set selectmode&
+  set mouse&
+endfunc
+
 " Test for mapping <LeftDrag> in Insert mode
 func Test_mouse_drag_insert_map()
   set mouse=a
@@ -1597,6 +1652,37 @@ func Test_mouse_drag_insert_map()
   delfunc ClickExpr
   delfunc DragExpr
   set mouse&
+endfunc
+
+func Test_unmap_simplifiable()
+  map <C-I> foo
+  map <Tab> bar
+  call assert_equal('foo', maparg('<C-I>'))
+  call assert_equal('bar', maparg('<Tab>'))
+  unmap <C-I>
+  call assert_equal('', maparg('<C-I>'))
+  call assert_equal('bar', maparg('<Tab>'))
+  unmap <Tab>
+
+  map <C-I> foo
+  unmap <Tab>
+  " This should not error
+  unmap <C-I>
+endfunc
+
+func Test_expr_map_escape_special()
+  nnoremap … <Cmd>let g:got_ellipsis += 1<CR>
+  func Func()
+    return '…'
+  endfunc
+  nmap <expr> <F2> Func()
+  let g:got_ellipsis = 0
+  call feedkeys("\<F2>", 'xt')
+  call assert_equal(1, g:got_ellipsis)
+  delfunc Func
+  nunmap <F2>
+  unlet g:got_ellipsis
+  nunmap …
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

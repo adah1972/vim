@@ -1,6 +1,7 @@
 " Test using builtin functions in the Vim9 script language.
 
 source check.vim
+source screendump.vim
 import './vim9.vim' as v9
 
 " Test for passing too many or too few arguments to builtin functions
@@ -77,6 +78,7 @@ enddef
 
 def Test_add()
   v9.CheckDefAndScriptFailure(['add({}, 1)'], ['E1013: Argument 1: type mismatch, expected list<any> but got dict<unknown>', 'E1226: List or Blob required for argument 1'])
+  v9.CheckDefAndScriptFailure(['add([])'], 'E119:')
   v9.CheckDefExecFailure([
         'var ln: list<number> = [1]',
         'add(ln, "a")'],
@@ -1272,56 +1274,79 @@ def Test_float_funcs_args()
 
   # acos()
   v9.CheckDefAndScriptFailure(['acos("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('1.570796', string(acos(0.0)))
   # asin()
   v9.CheckDefAndScriptFailure(['asin("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(asin(0.0)))
   # atan()
   v9.CheckDefAndScriptFailure(['atan("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(atan(0.0)))
   # atan2()
   v9.CheckDefAndScriptFailure(['atan2("a", 1.1)'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('-2.356194', string(atan2(-1, -1)))
   v9.CheckDefAndScriptFailure(['atan2(1.2, "a")'], ['E1013: Argument 2: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 2'])
   v9.CheckDefAndScriptFailure(['atan2(1.2)'], ['E119:', 'E119:'])
   # ceil()
   v9.CheckDefAndScriptFailure(['ceil("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('2.0', string(ceil(2.0)))
   # cos()
   v9.CheckDefAndScriptFailure(['cos("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('1.0', string(cos(0.0)))
   # cosh()
   v9.CheckDefAndScriptFailure(['cosh("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('1.0', string(cosh(0.0)))
   # exp()
   v9.CheckDefAndScriptFailure(['exp("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('1.0', string(exp(0.0)))
   # float2nr()
   v9.CheckDefAndScriptFailure(['float2nr("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal(1, float2nr(1.234))
   # floor()
   v9.CheckDefAndScriptFailure(['floor("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('2.0', string(floor(2.0)))
   # fmod()
   v9.CheckDefAndScriptFailure(['fmod(1.1, "a")'], ['E1013: Argument 2: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 2'])
   v9.CheckDefAndScriptFailure(['fmod("a", 1.1)'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
   v9.CheckDefAndScriptFailure(['fmod(1.1)'], ['E119:', 'E119:'])
+  assert_equal('0.13', string(fmod(12.33, 1.22)))
   # isinf()
   v9.CheckDefAndScriptFailure(['isinf("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal(1, isinf(1.0 / 0.0))
   # isnan()
   v9.CheckDefAndScriptFailure(['isnan("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_true(isnan(0.0 / 0.0))
   # log()
   v9.CheckDefAndScriptFailure(['log("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(log(1.0)))
   # log10()
   v9.CheckDefAndScriptFailure(['log10("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(log10(1.0)))
   # pow()
   v9.CheckDefAndScriptFailure(['pow("a", 1.1)'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
   v9.CheckDefAndScriptFailure(['pow(1.1, "a")'], ['E1013: Argument 2: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 2'])
   v9.CheckDefAndScriptFailure(['pow(1.1)'], ['E119:', 'E119:'])
+  assert_equal('1.0', string(pow(0.0, 0.0)))
   # round()
   v9.CheckDefAndScriptFailure(['round("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('2.0', string(round(2.1)))
   # sin()
   v9.CheckDefAndScriptFailure(['sin("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(sin(0.0)))
   # sinh()
   v9.CheckDefAndScriptFailure(['sinh("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(sinh(0.0)))
   # sqrt()
   v9.CheckDefAndScriptFailure(['sqrt("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(sqrt(0.0)))
   # tan()
   v9.CheckDefAndScriptFailure(['tan("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(tan(0.0)))
   # tanh()
   v9.CheckDefAndScriptFailure(['tanh("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('0.0', string(tanh(0.0)))
   # trunc()
   v9.CheckDefAndScriptFailure(['trunc("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1219: Float or Number required for argument 1'])
+  assert_equal('2.0', string(trunc(2.1)))
 enddef
 
 def Test_fnameescape()
@@ -2133,7 +2158,7 @@ def Test_job_getchannel()
     CheckFeature job
   else
     v9.CheckDefAndScriptFailure(['job_getchannel("a")'], ['E1013: Argument 1: type mismatch, expected job but got string', 'E1218: Job required for argument 1'])
-    assert_fails('job_getchannel(test_null_job())', 'E916: not a valid job')
+    assert_fails('job_getchannel(test_null_job())', 'E916: Not a valid job')
   endif
 enddef
 
@@ -2142,7 +2167,7 @@ def Test_job_info()
     CheckFeature job
   else
     v9.CheckDefAndScriptFailure(['job_info("a")'], ['E1013: Argument 1: type mismatch, expected job but got string', 'E1218: Job required for argument 1'])
-    assert_fails('job_info(test_null_job())', 'E916: not a valid job')
+    assert_fails('job_info(test_null_job())', 'E916: Not a valid job')
   endif
 enddef
 
@@ -2439,7 +2464,9 @@ def Test_maparg()
         sid: SID(),
         scriptversion: 999999,
         rhs: 'bar',
-        buffer: 0})
+        buffer: 0,
+        abbr: 0,
+        mode_bits: 0x47})
   unmap foo
   v9.CheckDefAndScriptFailure(['maparg(1)'], ['E1013: Argument 1: type mismatch, expected string but got number', 'E1174: String required for argument 1'])
   v9.CheckDefAndScriptFailure(['maparg("a", 2)'], ['E1013: Argument 2: type mismatch, expected string but got number', 'E1174: String required for argument 2'])
@@ -2521,7 +2548,7 @@ def Test_mapnew()
 enddef
 
 def Test_mapset()
-  v9.CheckDefAndScriptFailure(['mapset(1, true, {})'], ['E1013: Argument 1: type mismatch, expected string but got number', 'E1174: String required for argument 1'])
+  v9.CheckDefAndScriptFailure(['mapset(1, true, {})'], ['E1013: Argument 1: type mismatch, expected string but got number', 'E1223: String or Dictionary required for argument 1'])
   v9.CheckDefAndScriptFailure(['mapset("a", 2, {})'], ['E1013: Argument 2: type mismatch, expected bool but got number', 'E1212: Bool required for argument 2'])
   v9.CheckDefAndScriptFailure(['mapset("a", false, [])'], ['E1013: Argument 3: type mismatch, expected dict<any> but got list<unknown>', 'E1206: Dictionary required for argument 3'])
 enddef
@@ -3183,12 +3210,11 @@ def Test_remove()
 enddef
 
 def Test_remove_return_type()
-  var l = remove({one: [1, 2], two: [3, 4]}, 'one')
-  var res = 0
-  for n in l
-    res += n
-  endfor
-  res->assert_equal(3)
+  var l: list<number> = remove({one: [1, 2], two: [3, 4]}, 'one')
+  l->assert_equal([1, 2])
+
+  var ll: list<number> = remove(range(3), 0, 1)
+  ll->assert_equal([0, 1])
 enddef
 
 def Test_rename()
@@ -4046,13 +4072,23 @@ def Test_substitute()
   assert_equal('AX234', res)
 
   if has('job')
-    assert_fails('"text"->substitute(".*", () => test_null_job(), "")', 'E908: using an invalid value as a String: job')
-    assert_fails('"text"->substitute(".*", () => test_null_channel(), "")', 'E908: using an invalid value as a String: channel')
+    assert_fails('"text"->substitute(".*", () => test_null_job(), "")', 'E908: Using an invalid value as a String: job')
+    assert_fails('"text"->substitute(".*", () => test_null_channel(), "")', 'E908: Using an invalid value as a String: channel')
   endif
   v9.CheckDefAndScriptFailure(['substitute(1, "b", "1", "d")'], ['E1013: Argument 1: type mismatch, expected string but got number', 'E1174: String required for argument 1'])
   v9.CheckDefAndScriptFailure(['substitute("a", 2, "1", "d")'], ['E1013: Argument 2: type mismatch, expected string but got number', 'E1174: String required for argument 2'])
   v9.CheckDefAndScriptFailure(['substitute("a", "b", "1", 4)'], ['E1013: Argument 4: type mismatch, expected string but got number', 'E1174: String required for argument 4'])
   substitute('', '', '', '')->assert_equal('')
+
+  var lines =<< trim END
+    assert_equal("4", substitute("3", '\d', '\=str2nr(submatch(0)) + 1', 'g'))
+  END
+  v9.CheckDefAndScriptSuccess(lines)
+
+  lines =<< trim END
+    assert_equal("4", substitute("3", '\d', '\="text" x', 'g'))
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E488: Trailing characters: x')
 enddef
 
 def Test_swapinfo()
@@ -4492,6 +4528,48 @@ enddef
 def Test_win_gotoid()
   v9.CheckDefAndScriptFailure(['win_gotoid("x")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1210: Number required for argument 1'])
 enddef
+
+func Test_win_gotoid_in_mapping()
+  CheckScreendump
+
+  " requires a working clipboard and this doesn't work on MacOS
+  if has('clipboard_working') && !has('mac')
+    let @* = 'foo'
+    let lines =<< trim END
+        set cmdheight=2
+        func On_click()
+          call win_gotoid(getmousepos().winid)
+          execute "norm! \<LeftMouse>"
+        endfunc
+        noremap <LeftMouse> <Cmd>call On_click()<CR>
+
+        autocmd SafeState * echo 'reg = "' .. @* .. '"'
+
+        call setline(1, range(20))
+        set nomodified
+        botright new
+        call setline(1, range(21, 40))
+        set nomodified
+
+        func Click()
+          map <silent> <F3> :call test_setmouse(3, 1)<CR>
+	  call feedkeys("\<F3>\<LeftMouse>\<LeftRelease>", "xt")
+        endfunc
+    END
+    call writefile(lines, 'Xgotoscript')
+    let buf = RunVimInTerminal('-S Xgotoscript', #{rows: 15, wait_for_ruler: 0})
+    " wait longer here, since we didn't wait for the ruler
+    call VerifyScreenDump(buf, 'Test_win_gotoid_1', #{wait: 3000})
+    call term_sendkeys(buf, "3Gvl")
+    call VerifyScreenDump(buf, 'Test_win_gotoid_2', {})
+
+    call term_sendkeys(buf, ":call Click()\<CR>")
+    call VerifyScreenDump(buf, 'Test_win_gotoid_3', {})
+
+    call StopVimInTerminal(buf)
+    call delete('Xgotoscript')
+  endif
+endfunc
 
 def Test_win_id2tabwin()
   v9.CheckDefAndScriptFailure(['win_id2tabwin("x")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1210: Number required for argument 1'])

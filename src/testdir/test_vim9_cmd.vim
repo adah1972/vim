@@ -651,6 +651,20 @@ def Test_use_register()
   v9.CheckDefAndScriptFailure(lines, 'E1207:', 2)
 
   lines =<< trim END
+      @a = 'echo "text"'
+      @a
+
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1207:', 2)
+
+  lines =<< trim END
+      @a = 'echo "text"'
+      @a
+          # comment
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1207:', 2)
+
+  lines =<< trim END
       @/ = 'pattern'
       @/
   END
@@ -1690,6 +1704,9 @@ def Test_substitute_expr()
     :1s/abc/\=choice ? 'yes' : 'no'/
   endfor
   assert_equal('yes no abc', getline(1))
+
+  setline(1, 'from')
+  v9.CheckDefExecFailure(['s/from/\=g:notexist/'], 'E121: Undefined variable: g:notexist')
 
   bwipe!
 
