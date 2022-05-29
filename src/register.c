@@ -1055,9 +1055,9 @@ yank_do_autocmd(oparg_T *oap, yankreg_T *reg)
     dict_set_items_ro(v_event);
 
     recursive = TRUE;
-    textwinlock++;
+    textlock++;
     apply_autocmds(EVENT_TEXTYANKPOST, NULL, NULL, FALSE, curbuf);
-    textwinlock--;
+    textlock--;
     recursive = FALSE;
 
     // Empty the dictionary, v:event is still valid
@@ -2154,11 +2154,9 @@ do_put(
 			ptr = ml_get(lnum);
 			if (cnt == count && i == y_size - 1)
 			    lendiff = (int)STRLEN(ptr);
-#if defined(FEAT_SMARTINDENT) || defined(FEAT_CINDENT)
 			if (*ptr == '#' && preprocs_left())
 			    indent = 0;     // Leave # lines at start
 			else
-#endif
 			     if (*ptr == NUL)
 			    indent = 0;     // Ignore empty lines
 			else if (first_indent)
@@ -2221,9 +2219,12 @@ error:
 	    len = STRLEN(y_array[y_size - 1]);
 	    col = (colnr_T)len - lendiff;
 	    if (col > 1)
-		curbuf->b_op_end.col = col - 1
-				- mb_head_off(y_array[y_size - 1],
+	    {
+		curbuf->b_op_end.col = col - 1;
+		if (len > 0)
+		    curbuf->b_op_end.col -= mb_head_off(y_array[y_size - 1],
 						y_array[y_size - 1] + len - 1);
+	    }
 	    else
 		curbuf->b_op_end.col = 0;
 

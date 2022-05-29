@@ -579,9 +579,16 @@ wingotofile:
 		CHECK_CMDWIN;
 		if ((len = find_ident_under_cursor(&ptr, FIND_IDENT)) == 0)
 		    break;
+
+		// Make a copy, if the line was changed it will be freed.
+		ptr = vim_strnsave(ptr, len);
+		if (ptr == NULL)
+		    break;
+
 		find_pattern_in_path(ptr, 0, len, TRUE,
 			Prenum == 0 ? TRUE : FALSE, type,
 			Prenum1, ACTION_SPLIT, (linenr_T)1, (linenr_T)MAXLNUM);
+		vim_free(ptr);
 		curwin->w_set_curswant = TRUE;
 		break;
 #endif
@@ -1347,9 +1354,6 @@ win_split_ins(
 	    p_wh = size;
     }
 
-    // Keep same changelist position in new window.
-    wp->w_changelistidx = oldwin->w_changelistidx;
-
     /*
      * make the new window the current window
      */
@@ -1424,6 +1428,10 @@ win_init(win_T *newp, win_T *oldp, int flags UNUSED)
     }
     newp->w_tagstackidx = oldp->w_tagstackidx;
     newp->w_tagstacklen = oldp->w_tagstacklen;
+
+    // Keep same changelist position in new window.
+    newp->w_changelistidx = oldp->w_changelistidx;
+
 #ifdef FEAT_FOLDING
     copyFoldingState(oldp, newp);
 #endif
@@ -4577,7 +4585,7 @@ win_goto(win_T *wp)
 	return;
     }
 #endif
-    if (text_and_win_locked())
+    if (text_locked())
     {
 	beep_flush();
 	text_locked_msg();

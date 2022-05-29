@@ -140,6 +140,30 @@ func Test_omni_dash()
   set omnifunc=
 endfunc
 
+func Test_omni_throw()
+  let g:CallCount = 0
+  func Omni(findstart, base)
+    let g:CallCount += 1
+    if a:findstart
+      throw "he he he"
+    endif
+  endfunc
+  set omnifunc=Omni
+  new
+  try
+    exe "normal ifoo\<C-x>\<C-o>"
+    call assert_false(v:true, 'command should have failed')
+  catch
+    call assert_exception('he he he')
+    call assert_equal(1, g:CallCount)
+  endtry
+
+  bwipe!
+  delfunc Omni
+  unlet g:CallCount
+  set omnifunc=
+endfunc
+
 func Test_omni_autoload()
   let save_rtp = &rtp
   set rtp=Xruntime/some
@@ -674,7 +698,7 @@ func Test_completefunc_error()
   endfunc
   set completefunc=CompleteFunc
   call setline(1, ['', 'abcd', ''])
-  call assert_fails('exe "normal 2G$a\<C-X>\<C-U>"', 'E578:')
+  call assert_fails('exe "normal 2G$a\<C-X>\<C-U>"', 'E565:')
 
   " delete text when called for the second time
   func CompleteFunc2(findstart, base)
@@ -686,7 +710,7 @@ func Test_completefunc_error()
   endfunc
   set completefunc=CompleteFunc2
   call setline(1, ['', 'abcd', ''])
-  call assert_fails('exe "normal 2G$a\<C-X>\<C-U>"', 'E578:')
+  call assert_fails('exe "normal 2G$a\<C-X>\<C-U>"', 'E565:')
 
   " Jump to a different window from the complete function
   func CompleteFunc3(findstart, base)

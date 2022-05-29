@@ -1204,7 +1204,8 @@ do_cmdline(
 	 * In Vim9 script do not give a second error, executing aborts after
 	 * the first one.
 	 */
-	if (!got_int && !did_throw && !(did_emsg && in_vim9script())
+	if (!got_int && !did_throw && !aborting()
+		&& !(did_emsg && in_vim9script())
 		&& ((getline_equal(fgetline, cookie, getsourceline)
 			&& !source_finished(fgetline, cookie))
 		    || (getline_equal(fgetline, cookie, get_func_line)
@@ -3279,6 +3280,8 @@ parse_cmd_address(exarg_T *eap, char **errormsg, int silent)
 {
     int		address_count = 1;
     linenr_T	lnum;
+    int		need_check_cursor = FALSE;
+    int		ret = FAIL;
 
     // Repeat for all ',' or ';' separated addresses.
     for (;;)
@@ -3289,7 +3292,7 @@ parse_cmd_address(exarg_T *eap, char **errormsg, int silent)
 	lnum = get_address(eap, &eap->cmd, eap->addr_type, eap->skip, silent,
 					eap->addr_count == 0, address_count++);
 	if (eap->cmd == NULL)	// error detected
-	    return FAIL;
+	    goto theend;
 	if (lnum == MAXLNUM)
 	{
 	    if (*eap->cmd == '%')   // '%' - all lines
@@ -3334,14 +3337,14 @@ parse_cmd_address(exarg_T *eap, char **errormsg, int silent)
 			    // there is no Vim command which uses '%' and
 			    // ADDR_WINDOWS or ADDR_TABS
 			    *errormsg = _(e_invalid_range);
-			    return FAIL;
+			    goto theend;
 			}
 			break;
 		    case ADDR_TABS_RELATIVE:
 		    case ADDR_UNSIGNED:
 		    case ADDR_QUICKFIX:
 			*errormsg = _(e_invalid_range);
-			return FAIL;
+			goto theend;
 		    case ADDR_ARGUMENTS:
 			if (ARGCOUNT == 0)
 			    eap->line1 = eap->line2 = 0;
@@ -3373,7 +3376,7 @@ parse_cmd_address(exarg_T *eap, char **errormsg, int silent)
 		if (eap->addr_type != ADDR_LINES)
 		{
 		    *errormsg = _(e_invalid_range);
-		    return FAIL;
+		    goto theend;
 		}
 
 		++eap->cmd;
@@ -3381,11 +3384,11 @@ parse_cmd_address(exarg_T *eap, char **errormsg, int silent)
 		{
 		    fp = getmark('<', FALSE);
 		    if (check_mark(fp) == FAIL)
-			return FAIL;
+			goto theend;
 		    eap->line1 = fp->lnum;
 		    fp = getmark('>', FALSE);
 		    if (check_mark(fp) == FAIL)
-			return FAIL;
+			goto theend;
 		    eap->line2 = fp->lnum;
 		    ++eap->addr_count;
 		}
@@ -3400,10 +3403,13 @@ parse_cmd_address(exarg_T *eap, char **errormsg, int silent)
 	    if (!eap->skip)
 	    {
 		curwin->w_cursor.lnum = eap->line2;
+
 		// Don't leave the cursor on an illegal line or column, but do
 		// accept zero as address, so 0;/PATTERN/ works correctly.
+		// Check the cursor position before returning.
 		if (eap->line2 > 0)
 		    check_cursor();
+		need_check_cursor = TRUE;
 	    }
 	}
 	else if (*eap->cmd != ',')
@@ -3419,7 +3425,12 @@ parse_cmd_address(exarg_T *eap, char **errormsg, int silent)
 	if (lnum == MAXLNUM)
 	    eap->addr_count = 0;
     }
-    return OK;
+    ret = OK;
+
+theend:
+    if (need_check_cursor)
+	check_cursor();
+    return ret;
 }
 
 /*
@@ -3507,6 +3518,18 @@ one_letter_cmd(char_u *p, cmdidx_T *idx)
 }
 
 /*
+ * Return TRUE if "cmd" starts with "123->", a number followed by a method
+ * call.
+ */
+    int
+number_method(char_u *cmd)
+{
+    char_u *p = skipdigits(cmd);
+
+    return p > cmd && (p = skipwhite(p))[0] == '-' && p[1] == '>';
+}
+
+/*
  * Find an Ex command by its name, either built-in or user.
  * Start of the name can be found at eap->cmd.
  * Sets eap->cmdidx and returns a pointer to char after the command name.
@@ -3551,7 +3574,8 @@ find_ex_command(
 	    char_u  *swp;
 
 	    if (*eap->cmd == '&'
-		    || *eap->cmd == '$'
+		    || (eap->cmd[0] == '$'
+				  && eap->cmd[1] != '\'' && eap->cmd[1] != '"')
 		    || (eap->cmd[0] == '@'
 					&& (valid_yank_reg(eap->cmd[1], FALSE)
 						       || eap->cmd[1] == '@')))
@@ -3590,9 +3614,13 @@ find_ex_command(
 			    // "'string'->func()" is an expression.
 			 || *eap->cmd == '\''
 			    // '"string"->func()' is an expression.
-			 || (eap->cmd[0] == '0' && eap->cmd[1] == 'z')
-			    // '"string"->func()' is an expression.
 			 || *eap->cmd == '"'
+			    // '$"string"->func()' is an expression.
+			    // "$'string'->func()" is an expression.
+			 || (eap->cmd[0] == '$'
+			     && (eap->cmd[1] == '\'' || eap->cmd[1] == '"'))
+			    // '0z1234->func()' is an expression.
+			 || (eap->cmd[0] == '0' && eap->cmd[1] == 'z')
 			    // "g:varname" is an expression.
 			 || eap->cmd[1] == ':'
 			    )
@@ -3709,6 +3737,13 @@ find_ex_command(
 		eap->cmdidx = CMD_eval;
 		return eap->cmd;
 	    }
+	}
+
+	// 1234->func() is a method call
+	if (number_method(eap->cmd))
+	{
+	    eap->cmdidx = CMD_eval;
+	    return eap->cmd;
 	}
 
 	// "g:", "s:" and "l:" are always assumed to be a variable, thus start

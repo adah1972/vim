@@ -4051,6 +4051,63 @@ def Test_too_many_arguments()
     echo [0, 1, 2]->map((_) => 123)
   END
   v9.CheckDefAndScriptFailure(lines, ['E176', 'E1106: One argument too many'], 1)
+
+  lines =<< trim END
+      vim9script
+      def OneArgument(arg: string)
+        echo arg
+      enddef
+      var Ref = OneArgument
+      Ref('a', 'b')
+  END
+  v9.CheckScriptFailure(lines, 'E118:')
+enddef
+
+def Test_funcref_with_base()
+  var lines =<< trim END
+      vim9script
+      def TwoArguments(str: string, nr: number)
+        echo str nr
+      enddef
+      var Ref = TwoArguments
+      Ref('a', 12)
+      'b'->Ref(34)
+  END
+  v9.CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      vim9script
+      def TwoArguments(str: string, nr: number)
+        echo str nr
+      enddef
+      var Ref = TwoArguments
+      'a'->Ref('b')
+  END
+  v9.CheckScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected number but got string', 6)
+
+  lines =<< trim END
+      vim9script
+      def TwoArguments(str: string, nr: number)
+        echo str nr
+      enddef
+      var Ref = TwoArguments
+      123->Ref(456)
+  END
+  v9.CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected string but got number')
+
+  lines =<< trim END
+      vim9script
+      def TwoArguments(nr: number, str: string)
+        echo str nr
+      enddef
+      var Ref = TwoArguments
+      123->Ref('b')
+      def AndNowCompiled()
+        456->Ref('x')
+      enddef
+      AndNowCompiled()
+  END
+  v9.CheckScriptSuccess(lines)
 enddef
 
 def Test_closing_brace_at_start_of_line()
@@ -4106,6 +4163,47 @@ func Test_lambda_allocation_failure()
   call assert_false(exists('g:Xlambda'))
   bw!
 endfunc
+
+def Test_multiple_funcref()
+  # This was using a NULL pointer
+  var lines =<< trim END
+      vim9script
+      def A(F: func, ...args: list<any>): func
+          return funcref(F, args)
+      enddef
+
+      def B(F: func): func
+          return funcref(A, [F])
+      enddef
+
+      def Test(n: number)
+      enddef
+
+      const X = B(Test)
+      X(1)
+  END
+  v9.CheckScriptSuccess(lines)
+
+  # slightly different case
+  lines =<< trim END
+      vim9script
+
+      def A(F: func, ...args: list<any>): any
+          return call(F, args)
+      enddef
+
+      def B(F: func): func
+          return funcref(A, [F])
+      enddef
+
+      def Test(n: number)
+      enddef
+
+      const X = B(Test)
+      X(1)
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
 
 " The following messes up syntax highlight, keep near the end.
 if has('python3')

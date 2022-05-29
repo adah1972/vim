@@ -304,6 +304,18 @@ def Test_assert_report()
   v9.CheckDefAndScriptFailure(['assert_report([1, 2])'], ['E1013: Argument 1: type mismatch, expected string but got list<number>', 'E1174: String required for argument 1'])
 enddef
 
+def Test_autocmd_add()
+  v9.CheckDefAndScriptFailure(['autocmd_add({})'], ['E1013: Argument 1: type mismatch, expected list<any> but got dict<unknown>', 'E1211: List required for argument 1'])
+enddef
+
+def Test_autocmd_delete()
+  v9.CheckDefAndScriptFailure(['autocmd_delete({})'], ['E1013: Argument 1: type mismatch, expected list<any> but got dict<unknown>', 'E1211: List required for argument 1'])
+enddef
+
+def Test_autocmd_get()
+  v9.CheckDefAndScriptFailure(['autocmd_get(10)'], ['E1013: Argument 1: type mismatch, expected dict<any> but got number', 'E1206: Dictionary required for argument 1'])
+enddef
+
 def Test_balloon_show()
   CheckGui
   CheckFeature balloon_eval
@@ -4482,14 +4494,23 @@ def Test_values()
 enddef
 
 def Test_virtcol()
-  v9.CheckDefAndScriptFailure(['virtcol(1.1)'], ['E1013: Argument 1: type mismatch, expected string but got float', 'E1222: String or List required for argument 1'])
-  v9.CheckDefExecAndScriptFailure(['virtcol("")'], 'E1209: Invalid value for a line number')
+  v9.CheckDefAndScriptFailure(['virtcol(1.1)'], [
+    'E1013: Argument 1: type mismatch, expected string but got float',
+    'E1222: String or List required for argument 1'])
+  v9.CheckDefAndScriptFailure(['virtcol(".", "a")'], [
+    'E1013: Argument 2: type mismatch, expected bool but got string',
+    'E1212: Bool required for argument 2'])
+  v9.CheckDefExecAndScriptFailure(['virtcol("")'],
+    'E1209: Invalid value for a line number')
   new
-  setline(1, ['abcdefgh'])
+  setline(1, ['abcde和平fgh'])
   cursor(1, 4)
   assert_equal(4, virtcol('.'))
+  assert_equal([4, 4], virtcol('.', 1))
+  cursor(1, 6)
+  assert_equal([6, 7], virtcol('.', 1))
   assert_equal(4, virtcol([1, 4]))
-  assert_equal(9, virtcol([1, '$']))
+  assert_equal(13, virtcol([1, '$']))
   assert_equal(0, virtcol([10, '$']))
   bw!
 enddef

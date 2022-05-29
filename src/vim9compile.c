@@ -412,7 +412,8 @@ need_type_where(
     // If the actual type can be the expected type add a runtime check.
     if (!actual_is_const && ret == MAYBE && use_typecheck(actual, expected))
     {
-	generate_TYPECHECK(cctx, expected, offset, where.wt_index);
+	generate_TYPECHECK(cctx, expected, offset,
+					    where.wt_variable, where.wt_index);
 	return OK;
     }
 
@@ -1150,7 +1151,7 @@ generate_loadvar(
 	    generate_LOAD(cctx, ISN_LOADREG, name[1], NULL, &t_string);
 	    break;
 	case dest_vimvar:
-	    generate_LOADV(cctx, name + 2, TRUE);
+	    generate_LOADV(cctx, name + 2);
 	    break;
 	case dest_local:
 	    if (lvar->lv_from_outer > 0)
@@ -3000,6 +3001,7 @@ compile_def_function(
 	 * 0z1234->func() should not be confused with a zero line number
 	 * "++nr" and "--nr" are eval commands
 	 * in "$ENV->func()" the "$" is not a range
+	 * "123->func()" is a method call
 	 */
 	cmd = ea.cmd;
 	if ((*cmd != '$' || starts_with_colon)
@@ -3007,7 +3009,8 @@ compile_def_function(
 		    || !(*cmd == '\''
 			|| (cmd[0] == '0' && cmd[1] == 'z')
 			|| (cmd[0] != NUL && cmd[0] == cmd[1]
-					    && (*cmd == '+' || *cmd == '-')))))
+					    && (*cmd == '+' || *cmd == '-'))
+			|| number_method(cmd))))
 	{
 	    ea.cmd = skip_range(ea.cmd, TRUE, NULL);
 	    if (ea.cmd > cmd)

@@ -108,7 +108,6 @@ internal_format(
 	    char_u *line = ml_get_curline();
 
 	    leader_len = get_leader_len(line, NULL, FALSE, TRUE);
-#ifdef FEAT_CINDENT
 	    if (leader_len == 0 && curbuf->b_p_cin)
 	    {
 		int		comment_start;
@@ -123,7 +122,6 @@ internal_format(
 			leader_len += comment_start;
 		}
 	    }
-#endif
 	}
 	else
 	    leader_len = 0;
@@ -373,6 +371,7 @@ internal_format(
 	open_line(FORWARD, OPENLINE_DELSPACES + OPENLINE_MARKFIX
 		+ (fo_white_par ? OPENLINE_KEEPTRAIL : 0)
 		+ (do_comments ? OPENLINE_DO_COM : 0)
+		+ OPENLINE_FORMAT
 		+ ((flags & INSCHAR_COM_LIST) ? OPENLINE_COM_LIST : 0)
 		, ((flags & INSCHAR_COM_LIST) ? second_indent : old_indent),
 		&did_do_comment);
@@ -444,16 +443,12 @@ internal_format(
 	}
 
 	haveto_redraw = TRUE;
-#ifdef FEAT_CINDENT
 	set_can_cindent(TRUE);
-#endif
 	// moved the cursor, don't autoindent or cindent now
 	did_ai = FALSE;
-#ifdef FEAT_SMARTINDENT
 	did_si = FALSE;
 	can_si = FALSE;
 	can_si_back = FALSE;
-#endif
 	line_breakcheck();
     }
 
@@ -875,6 +870,9 @@ op_format(
     {
 	curwin->w_cursor = saved_cursor;
 	saved_cursor.lnum = 0;
+
+	// formatting may have made the cursor position invalid
+	check_cursor();
     }
 
     if (oap->is_VIsual)
@@ -1119,14 +1117,10 @@ format_lines(
 		    // indent.
 		    if (curwin->w_cursor.lnum == first_line)
 			indent = get_indent();
-		    else
-# ifdef FEAT_LISP
-		    if (curbuf->b_p_lisp)
+		    else if (curbuf->b_p_lisp)
 			indent = get_lisp_indent();
 		    else
-# endif
 		    {
-#ifdef FEAT_CINDENT
 			if (cindent_on())
 			{
 			    indent =
@@ -1136,7 +1130,6 @@ format_lines(
 				 get_c_indent();
 			}
 			else
-#endif
 			    indent = get_indent();
 		    }
 		    (void)set_indent(indent, SIN_CHANGED);

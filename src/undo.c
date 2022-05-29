@@ -331,9 +331,9 @@ undo_allowed(void)
 
     // Don't allow changes in the buffer while editing the cmdline.  The
     // caller of getcmdline() may get confused.
-    if (textwinlock != 0 || textlock != 0)
+    if (textlock != 0)
     {
-	emsg(_(e_not_allowed_to_change_text_here));
+	emsg(_(e_not_allowed_to_change_text_or_change_window));
 	return FALSE;
     }
 
@@ -2326,6 +2326,12 @@ undo_time(
     int		    dofile = file;
     int		    above = FALSE;
     int		    did_undo = TRUE;
+
+    if (text_locked())
+    {
+	text_locked_msg();
+	return;
+    }
 
     // First make sure the current undoable change is synced.
     if (curbuf->b_u_synced == FALSE)
