@@ -4585,14 +4585,11 @@ win_goto(win_T *wp)
 	return;
     }
 #endif
-    if (text_locked())
+    if (text_or_buf_locked())
     {
 	beep_flush();
-	text_locked_msg();
 	return;
     }
-    if (curbuf_locked())
-	return;
 
     if (wp->w_buffer != curbuf)
 	reset_VIsual_and_resel();
@@ -5191,6 +5188,7 @@ win_free(
     clear_winopt(&wp->w_allbuf_opt);
 
     vim_free(wp->w_lcs_chars.multispace);
+    vim_free(wp->w_lcs_chars.leadmultispace);
 
 #ifdef FEAT_EVAL
     vars_clear(&wp->w_vars->dv_hashtab);	// free all w: variables

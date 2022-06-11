@@ -3102,6 +3102,22 @@ func Test_autocmd_with_block()
 
   augroup block_testing
     au!
+    autocmd CursorHold * {
+      if true
+        # comment
+        && true
+
+        && true
+        g:done = 'yes'
+      endif
+      }
+  augroup END
+  doautocmd CursorHold
+  call assert_equal('yes', g:done)
+
+  unlet g:done
+  augroup block_testing
+    au!
   augroup END
 endfunc
 
@@ -3384,6 +3400,12 @@ func Test_autocmd_add()
   let l = [#{group: 'TestAcSet', event: 'BufAdd', bufnr: 9999,
         \ cmd: 'echo "bufadd"'}]
   call assert_fails("echo autocmd_add(l)", 'E680:')
+  let l = [#{group: 'TestAcSet', event: 'BufAdd', bufnr: 9999,
+        \ pattern: '*.py', cmd: 'echo "bufadd"'}]
+  call assert_fails("echo autocmd_add(l)", 'E680:')
+  let l = [#{group: 'TestAcSet', event: 'BufAdd', bufnr: 9999,
+        \ pattern: ['*.py', '*.c'], cmd: 'echo "bufadd"'}]
+  call assert_fails("echo autocmd_add(l)", 'E680:')
   let l = [#{group: 'TestAcSet', event: 'BufRead', bufnr: [],
         \ cmd: 'echo "bufread"'}]
   call assert_fails("echo autocmd_add(l)", 'E745:')
@@ -3479,6 +3501,7 @@ func Test_autocmd_add()
   " Test for invalid values for 'pattern' item
   let l = [#{group: 'TestAcSet', event: "BufEnter",
         \ pattern: test_null_string(), cmd: 'echo "bufcmds"'}]
+  call assert_fails('call autocmd_add(l)', 'E928:')
   let l = [#{group: 'TestAcSet', event: "BufEnter",
         \ pattern: test_null_list(), cmd: 'echo "bufcmds"'}]
   call assert_fails('call autocmd_add(l)', 'E714:')
@@ -3555,6 +3578,9 @@ func Test_autocmd_delete()
   " Delete a non-existing autocmd pattern
   let l = [#{group: 'TestAcSet', event: 'BufAdd', pat: 'abc'}]
   call assert_true(autocmd_delete(l))
+  " Delete an autocmd for a non-existing buffer
+  let l = [#{event: '*', bufnr: 9999, cmd: 'echo "x"'}]
+  call assert_fails('call autocmd_delete(l)', 'E680:')
 
   " Delete an autocmd group
   augroup TestAcSet
