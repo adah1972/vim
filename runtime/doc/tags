@@ -1456,6 +1456,7 @@ $quote	eval.txt	/*$quote*
 --clean	starting.txt	/*--clean*
 --cmd	starting.txt	/*--cmd*
 --echo-wid	starting.txt	/*--echo-wid*
+--gui-dialog-file	starting.txt	/*--gui-dialog-file*
 --help	starting.txt	/*--help*
 --literal	starting.txt	/*--literal*
 --log	starting.txt	/*--log*
@@ -3196,6 +3197,7 @@ $quote	eval.txt	/*$quote*
 :sort	change.txt	/*:sort*
 :source	repeat.txt	/*:source*
 :source!	repeat.txt	/*:source!*
+:source-range	repeat.txt	/*:source-range*
 :source_crnl	repeat.txt	/*:source_crnl*
 :sp	windows.txt	/*:sp*
 :spe	spell.txt	/*:spe*
@@ -5443,6 +5445,7 @@ SpellFileMissing	autocmd.txt	/*SpellFileMissing*
 StdinReadPost	autocmd.txt	/*StdinReadPost*
 StdinReadPre	autocmd.txt	/*StdinReadPre*
 String	eval.txt	/*String*
+Sven-Guckes	version9.txt	/*Sven-Guckes*
 SwapExists	autocmd.txt	/*SwapExists*
 Syntax	autocmd.txt	/*Syntax*
 T	motion.txt	/*T*
@@ -8618,6 +8621,7 @@ new-argument-list	version6.txt	/*new-argument-list*
 new-buftype	version6.txt	/*new-buftype*
 new-cmdwin	version6.txt	/*new-cmdwin*
 new-color-schemes	version6.txt	/*new-color-schemes*
+new-colorschemes-9	version9.txt	/*new-colorschemes-9*
 new-commands	version5.txt	/*new-commands*
 new-commands-5.4	version5.txt	/*new-commands-5.4*
 new-conceal	version7.txt	/*new-conceal*
@@ -8667,6 +8671,7 @@ new-other-8.2	version8.txt	/*new-other-8.2*
 new-perl-python	version5.txt	/*new-perl-python*
 new-persistent-undo	version7.txt	/*new-persistent-undo*
 new-plugins	version6.txt	/*new-plugins*
+new-popup-compl	version9.txt	/*new-popup-compl*
 new-popup-window	version8.txt	/*new-popup-window*
 new-posix	version7.txt	/*new-posix*
 new-print-multibyte	version7.txt	/*new-print-multibyte*

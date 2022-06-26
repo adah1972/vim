@@ -226,6 +226,11 @@ gui_do_fork(void)
     int		exit_status;
     pid_t	pid = -1;
 
+#if defined(FEAT_RELTIME) && defined(HAVE_TIMER_CREATE)
+    // a timer is not carried forward
+    delete_timer();
+#endif
+
     // Setup a pipe between the child and the parent, so that the parent
     // knows when the child has done the setsid() call and is allowed to
     // exit.
@@ -5641,3 +5646,26 @@ check_for_interrupt(int key, int modifiers_arg)
     return NUL;
 }
 
+/*
+ * If the "--gui-log-file fname" argument is given write the dialog title and
+ * message to a file and return TRUE.  Otherwise return FALSE.
+ * When there is any problem opening the file or writing to the file this is
+ * ignored, showing the dialog might get the test to get stuck.
+ */
+    int
+gui_dialog_log(char_u *title, char_u *message)
+{
+    char_u  *fname = get_gui_dialog_file();
+    FILE    *fd;
+
+    if (fname == NULL)
+	return FALSE;
+
+    fd = mch_fopen((char *)fname, "a");
+    if (fd != NULL)
+    {
+	fprintf(fd, "%s: %s\n", title, message);
+	fclose(fd);
+    }
+    return TRUE;
+}

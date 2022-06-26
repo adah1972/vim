@@ -1228,6 +1228,10 @@ EXTERN int	do_redraw INIT(= FALSE);    // extra redraw once
 #ifdef FEAT_DIFF
 EXTERN int	need_diff_redraw INIT(= 0); // need to call diff_redraw()
 #endif
+#ifdef FEAT_RELTIME
+// flag set when 'redrawtime' timeout has been set
+EXTERN int	redrawtime_limit_set INIT(= FALSE);
+#endif
 
 EXTERN int	need_highlight_changed INIT(= TRUE);
 
@@ -1291,7 +1295,7 @@ EXTERN pos_T	last_cursormoved	      // for CursorMoved event
 
 EXTERN int	postponed_split INIT(= 0);  // for CTRL-W CTRL-] command
 EXTERN int	postponed_split_flags INIT(= 0);  // args for win_split()
-EXTERN int	postponed_split_tab INIT(= 0);  // cmdmod.tab
+EXTERN int	postponed_split_tab INIT(= 0);  // cmdmod.cmod_tab
 #ifdef FEAT_QUICKFIX
 EXTERN int	g_do_tagpreview INIT(= 0);  // for tag preview commands:
 					    // height of preview window

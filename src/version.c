@@ -13,6 +13,7 @@
  * Vim originated from Stevie version 3.6 (Fish disk 217) by GRWalter (Fred)
  * It has been changed beyond recognition since then.
  *
+ * Differences between version 8.2 and 9.0 can be found with ":help version9".
  * Differences between version 7.4 and 8.x can be found with ":help version8".
  * Differences between version 6.4 and 7.x can be found with ":help version7".
  * Differences between version 5.8 and 6.x can be found with ":help version6".
@@ -734,6 +735,174 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    5160,
+/**/
+    5159,
+/**/
+    5158,
+/**/
+    5157,
+/**/
+    5156,
+/**/
+    5155,
+/**/
+    5154,
+/**/
+    5153,
+/**/
+    5152,
+/**/
+    5151,
+/**/
+    5150,
+/**/
+    5149,
+/**/
+    5148,
+/**/
+    5147,
+/**/
+    5146,
+/**/
+    5145,
+/**/
+    5144,
+/**/
+    5143,
+/**/
+    5142,
+/**/
+    5141,
+/**/
+    5140,
+/**/
+    5139,
+/**/
+    5138,
+/**/
+    5137,
+/**/
+    5136,
+/**/
+    5135,
+/**/
+    5134,
+/**/
+    5133,
+/**/
+    5132,
+/**/
+    5131,
+/**/
+    5130,
+/**/
+    5129,
+/**/
+    5128,
+/**/
+    5127,
+/**/
+    5126,
+/**/
+    5125,
+/**/
+    5124,
+/**/
+    5123,
+/**/
+    5122,
+/**/
+    5121,
+/**/
+    5120,
+/**/
+    5119,
+/**/
+    5118,
+/**/
+    5117,
+/**/
+    5116,
+/**/
+    5115,
+/**/
+    5114,
+/**/
+    5113,
+/**/
+    5112,
+/**/
+    5111,
+/**/
+    5110,
+/**/
+    5109,
+/**/
+    5108,
+/**/
+    5107,
+/**/
+    5106,
+/**/
+    5105,
+/**/
+    5104,
+/**/
+    5103,
+/**/
+    5102,
+/**/
+    5101,
+/**/
+    5100,
+/**/
+    5099,
+/**/
+    5098,
+/**/
+    5097,
+/**/
+    5096,
+/**/
+    5095,
+/**/
+    5094,
+/**/
+    5093,
+/**/
+    5092,
+/**/
+    5091,
+/**/
+    5090,
+/**/
+    5089,
+/**/
+    5088,
+/**/
+    5087,
+/**/
+    5086,
+/**/
+    5085,
+/**/
+    5084,
+/**/
+    5083,
+/**/
+    5082,
+/**/
+    5081,
+/**/
+    5080,
+/**/
+    5079,
+/**/
+    5078,
+/**/
+    5077,
 /**/
     5076,
 /**/
@@ -11379,7 +11548,7 @@ intro_message(
 	"",
 	N_("type  :q<Enter>               to exit         "),
 	N_("type  :help<Enter>  or  <F1>  for on-line help"),
-	N_("type  :help version8<Enter>   for version info"),
+	N_("type  :help version9<Enter>   for version info"),
 	NULL,
 	"",
 	N_("Running in Vi compatible mode"),

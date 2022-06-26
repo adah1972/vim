@@ -1,4 +1,4 @@
-*map.txt*       For Vim version 8.2.  Last change: 2022 Jun 02
+*map.txt*       For Vim version 8.2.  Last change: 2022 Jun 18
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -394,8 +394,6 @@ Note:
   mapping is recursive.
 - In Visual mode  you can use `line('v')` and `col('v')` to get one end of the
   Visual area, the cursor is at the other end.
-- In Select mode, |:map| and |:vmap| command mappings are executed in
-  Visual mode.  Use |:smap| to handle Select mode differently.
 
 							*E1255* *E1136*
 <Cmd> and <ScriptCmd> commands must terminate, that is, they must be followed

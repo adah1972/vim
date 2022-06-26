@@ -2355,11 +2355,11 @@ theend:
  * worth allowing these to make debugging of issues easier.
  */
     static void
-bad_param_handler(const wchar_t *expression,
-    const wchar_t *function,
-    const wchar_t *file,
-    unsigned int line,
-    uintptr_t pReserved)
+bad_param_handler(const wchar_t *expression UNUSED,
+    const wchar_t *function UNUSED,
+    const wchar_t *file UNUSED,
+    unsigned int line UNUSED,
+    uintptr_t pReserved UNUSED)
 {
 }
 
@@ -8342,9 +8342,9 @@ static int      timer_active = FALSE;
  * deleted. Ping-ponging between the two flags prevents this causing 'fake'
  * timeouts.
  */
-static int      timeout_flags[2];
-static int      flag_idx = 0;
-static int      *timeout_flag = &timeout_flags[0];
+static sig_atomic_t timeout_flags[2];
+static int	    timeout_flag_idx = 0;
+static sig_atomic_t *timeout_flag = &timeout_flags[0];
 
 
     static void CALLBACK
@@ -8386,12 +8386,12 @@ stop_timeout(void)
  * This function is not expected to fail, but if it does it still returns a
  * valid flag pointer; the flag will remain stuck at zero.
  */
-    const int *
+    volatile sig_atomic_t *
 start_timeout(long msec)
 {
     BOOL ret;
 
-    timeout_flag = &timeout_flags[flag_idx];
+    timeout_flag = &timeout_flags[timeout_flag_idx];
 
     stop_timeout();
     ret = CreateTimerQueueTimer(
@@ -8403,7 +8403,7 @@ start_timeout(long msec)
     }
     else
     {
-	flag_idx = (flag_idx + 1) % 2;
+	timeout_flag_idx = (timeout_flag_idx + 1) % 2;
 	timer_active = TRUE;
 	*timeout_flag = FALSE;
     }

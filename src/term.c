@@ -73,7 +73,7 @@ static int term_is_builtin(char_u *name);
 static int term_7to8bit(char_u *p);
 
 #ifdef HAVE_TGETENT
-static char *tgetent_error(char_u *, char_u *);
+static char *invoke_tgetent(char_u *, char_u *);
 
 /*
  * Here is our own prototype for tgetstr(), any prototypes from the include
@@ -1470,7 +1470,7 @@ f_terminalprops(typval_T *argvars UNUSED, typval_T *rettv)
     int i;
 # endif
 
-    if (rettv_dict_alloc(rettv) != OK)
+    if (rettv_dict_alloc(rettv) == FAIL)
 	return;
 # ifdef FEAT_TERMRESPONSE
     for (i = 0; i < TPR_COUNT; ++i)
@@ -1876,7 +1876,7 @@ set_termname(char_u *term)
 	     * If the external termcap does not have a matching entry, try the
 	     * builtin ones.
 	     */
-	    if ((error_msg = tgetent_error(tbuf, term)) == NULL)
+	    if ((error_msg = invoke_tgetent(tbuf, term)) == NULL)
 	    {
 		if (!termcap_cleared)
 		{
@@ -2204,7 +2204,7 @@ free_cur_term()
  * Return error message if it fails, NULL if it's OK.
  */
     static char *
-tgetent_error(char_u *tbuf, char_u *term)
+invoke_tgetent(char_u *tbuf, char_u *term)
 {
     int	    i;
 
@@ -2266,7 +2266,7 @@ getlinecol(
 {
     char_u	tbuf[TBUFSZ];
 
-    if (T_NAME != NULL && *T_NAME != NUL && tgetent_error(tbuf, T_NAME) == NULL)
+    if (T_NAME != NULL && *T_NAME != NUL && invoke_tgetent(tbuf, T_NAME) == NULL)
     {
 	if (*cp == 0)
 	    *cp = tgetnum("co");
@@ -2365,7 +2365,7 @@ add_termcap_entry(char_u *name, int force)
 	 * Search in external termcap
 	 */
 	{
-	    error_msg = tgetent_error(tbuf, term);
+	    error_msg = invoke_tgetent(tbuf, term);
 	    if (error_msg == NULL)
 	    {
 		string = TGETSTR((char *)name, &tp);
@@ -3366,6 +3366,12 @@ check_shellsize(void)
     if (Rows < min_rows())	// need room for one window and command line
 	Rows = min_rows();
     limit_screen_size();
+
+    // make sure these values are not invalid
+    if (cmdline_row >= Rows)
+	cmdline_row = Rows - 1;
+    if (msg_row >= Rows)
+	msg_row = Rows - 1;
 }
 
 /*

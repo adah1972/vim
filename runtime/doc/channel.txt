@@ -1,4 +1,4 @@
-*channel.txt*      For Vim version 8.2.  Last change: 2022 Jun 04
+*channel.txt*      For Vim version 8.2.  Last change: 2022 Jun 23
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -464,8 +464,10 @@ a close callback to the channel.
 
 To read all normal output from a RAW channel that is available: >
 	let output = ch_readraw(channel)
-To read the error output: >
+To read all error output from a RAW channel that is available:: >
 	let output = ch_readraw(channel, {"part": "err"})
+Note that if the channel is in NL mode, ch_readraw() will only return one line
+for each call.
 
 ch_read() and ch_readraw() use the channel timeout.  When there is nothing to
 read within that time an empty string is returned.  To specify a different
@@ -1485,7 +1487,7 @@ request to the LSP server (if needed).  Example: >
     let resp = ch_sendexpr(ch, req, #{callback: 'HoverFunc'})
 
 To cancel an outstanding asynchronous LSP request sent to the server using the
-|ch_sendexpr()| function, send a cancelation message to the server using the
+|ch_sendexpr()| function, send a cancellation message to the server using the
 |ch_sendexpr()| function with the ID returned by the |ch_sendexpr()| function
 for the request.  Example: >
 
@@ -1533,7 +1535,7 @@ A LSP request message has the following format (expressed as a Vim Dict).  The
 	"params": <list|dict>
     }
 
-A LSP reponse message has the following format (expressed as a Vim Dict).  The
+A LSP response message has the following format (expressed as a Vim Dict).  The
 "result" and "error" fields are optional: >
 
     {
@@ -1565,7 +1567,7 @@ A LSP request message has the following format (expressed as a Vim Dict).  The
 	"params": <list|dict>
     }
 
-A LSP reponse message has the following format (expressed as a Vim Dict).  The
+A LSP response message has the following format (expressed as a Vim Dict).  The
 "result" and "error" fields are optional: >
 
     {

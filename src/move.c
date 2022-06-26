@@ -315,7 +315,7 @@ update_topline(void)
 	    if (curwin->w_cursor.lnum < curwin->w_botline)
 	    {
 	      if (((long)curwin->w_cursor.lnum
-					     >= (long)curwin->w_botline - *so_ptr
+					   >= (long)curwin->w_botline - *so_ptr
 #ifdef FEAT_FOLDING
 			|| hasAnyFolding(curwin)
 #endif
@@ -378,7 +378,7 @@ update_topline(void)
 		else
 #endif
 		    line_count = curwin->w_cursor.lnum - curwin->w_botline
-								   + 1 + *so_ptr;
+								 + 1 + *so_ptr;
 		if (line_count <= curwin->w_height + 1)
 		    scroll_cursor_bot(scrolljump_value(), FALSE);
 		else
@@ -1298,7 +1298,7 @@ f_screenpos(typval_T *argvars UNUSED, typval_T *rettv)
     int		row = 0;
     int		scol = 0, ccol = 0, ecol = 0;
 
-    if (rettv_dict_alloc(rettv) != OK)
+    if (rettv_dict_alloc(rettv) == FAIL)
 	return;
     dict = rettv->vval.v_dict;
 
@@ -1986,7 +1986,7 @@ set_empty_rows(win_T *wp, int used)
 
 /*
  * Recompute topline to put the cursor at the bottom of the window.
- * Scroll at least "min_scroll" lines.
+ * When scrolling scroll at least "min_scroll" lines.
  * If "set_topbot" is TRUE, set topline and botline first (for "zb").
  * This is messy stuff!!!
  */
@@ -2952,7 +2952,12 @@ do_check_cursorbind(void)
 	    restart_edit_save = restart_edit;
 	    restart_edit = TRUE;
 	    check_cursor();
-	    validate_cursor();
+
+	    // Avoid a scroll here for the cursor position, 'scrollbind' is
+	    // more important.
+	    if (!curwin->w_p_scb)
+		validate_cursor();
+
 	    restart_edit = restart_edit_save;
 	    // Correct cursor for multi-byte character.
 	    if (has_mbyte)

@@ -1613,6 +1613,20 @@ copy_indent(int size, char_u *src)
 }
 
 /*
+ * Give a "resulting text too long" error and maybe set got_int.
+ */
+    static void
+emsg_text_too_long(void)
+{
+    emsg(_(e_resulting_text_too_long));
+#ifdef FEAT_EVAL
+    // when not inside a try/catch set got_int to break out of any loop
+    if (trylevel == 0)
+#endif
+	got_int = TRUE;
+}
+
+/*
  * ":retab".
  */
     void
@@ -1749,7 +1763,7 @@ ex_retab(exarg_T *eap)
 			new_len = old_len - col + start_col + len + 1;
 			if (new_len <= 0 || new_len >= MAXCOL)
 			{
-			    emsg(_(e_resulting_text_too_long));
+			    emsg_text_too_long();
 			    break;
 			}
 			new_line = alloc(new_len);
@@ -1780,7 +1794,7 @@ ex_retab(exarg_T *eap)
 	    vcol += chartabsize(ptr + col, (colnr_T)vcol);
 	    if (vcol >= MAXCOL)
 	    {
-		emsg(_(e_resulting_text_too_long));
+		emsg_text_too_long();
 		break;
 	    }
 	    if (has_mbyte)
@@ -2015,6 +2029,8 @@ get_lisp_indent(void)
 			    }
 			}
 		    }
+		    if (*that == NUL)
+			break;
 		}
 		if (*that == '(' || *that == '[')
 		    ++parencount;
@@ -2060,8 +2076,11 @@ get_lisp_indent(void)
 		    amount += 2;
 		else
 		{
-		    that++;
-		    amount++;
+		    if (*that != NUL)
+		    {
+			that++;
+			amount++;
+		    }
 		    firsttry = amount;
 
 		    while (VIM_ISWHITE(*that))

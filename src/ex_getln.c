@@ -256,7 +256,6 @@ do_incsearch_highlighting(
     ea.cmd = ccline.cmdbuff;
     ea.addr_type = ADDR_LINES;
 
-    CLEAR_FIELD(dummy_cmdmod);
     parse_command_modifiers(&ea, &dummy, &dummy_cmdmod, TRUE);
 
     cmd = skip_range(ea.cmd, TRUE, NULL);
@@ -1207,6 +1206,9 @@ cmdline_insert_reg(int *gotesc UNUSED)
 {
     int		i;
     int		c;
+#ifdef FEAT_EVAL
+    int		save_new_cmdpos = new_cmdpos;
+#endif
 
 #ifdef USE_ON_FLY_SCROLL
     dont_scroll = TRUE;	// disallow scrolling here
@@ -1225,8 +1227,6 @@ cmdline_insert_reg(int *gotesc UNUSED)
 #ifdef FEAT_EVAL
     /*
      * Insert the result of an expression.
-     * Need to save the current command line, to be able to enter
-     * a new one...
      */
     new_cmdpos = -1;
     if (c == '=')
@@ -1267,6 +1267,10 @@ cmdline_insert_reg(int *gotesc UNUSED)
 	}
 #endif
     }
+#ifdef FEAT_EVAL
+    new_cmdpos = save_new_cmdpos;
+#endif
+
     // remove the double quote
     redrawcmd();
 
@@ -4464,8 +4468,8 @@ open_cmdwin(void)
     {
 	if (p_wc == TAB)
 	{
-	    add_map((char_u *)"<buffer> <Tab> <C-X><C-V>", MODE_INSERT);
-	    add_map((char_u *)"<buffer> <Tab> a<C-X><C-V>", MODE_NORMAL);
+	    add_map((char_u *)"<buffer> <Tab> <C-X><C-V>", MODE_INSERT, TRUE);
+	    add_map((char_u *)"<buffer> <Tab> a<C-X><C-V>", MODE_NORMAL, TRUE);
 	}
 	set_option_value_give_err((char_u *)"ft",
 					       0L, (char_u *)"vim", OPT_LOCAL);
