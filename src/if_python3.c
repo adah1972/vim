@@ -66,6 +66,10 @@
 
 #define PY_SSIZE_T_CLEAN
 
+#ifdef _MSC_VER
+#define inline __inline
+#endif
+
 #include <Python.h>
 
 #undef main // Defined in python.h - aargh

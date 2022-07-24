@@ -1,5 +1,5 @@
 #! /bin/bash
-VIMRUNTIME_RT="/cygdrive/c/Program Files (x86)/Vim/vim82"
+VIMRUNTIME_RT="/cygdrive/c/Program Files (x86)/Vim/vim90"
 cd "`dirname \"$0\"`"
 rsync -avu --delete "autoload/" "$VIMRUNTIME_RT/autoload/"
 rsync -avu --delete "colors/"   "$VIMRUNTIME_RT/colors/"
