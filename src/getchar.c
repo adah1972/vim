@@ -2436,8 +2436,9 @@ handle_mapping(
     int		local_State = get_real_state();
     int		is_plug_map = FALSE;
 
-    // If typehead starts with <Plug> then remap, even for a "noremap" mapping.
-    if (typebuf.tb_buf[typebuf.tb_off] == K_SPECIAL
+    // If typeahead starts with <Plug> then remap, even for a "noremap" mapping.
+    if (typebuf.tb_len >= 3
+	    && typebuf.tb_buf[typebuf.tb_off] == K_SPECIAL
 	    && typebuf.tb_buf[typebuf.tb_off + 1] == KS_EXTRA
 	    && typebuf.tb_buf[typebuf.tb_off + 2] == KE_PLUG)
 	is_plug_map = TRUE;
@@ -3019,8 +3020,9 @@ check_end_reg_executing(int advance)
 vgetorpeek(int advance)
 {
     int		c, c1;
-    int		timedout = FALSE;	// waited for more than 1 second
-					// for mapping to complete
+    int		timedout = FALSE;	// waited for more than 'timeoutlen'
+					// for mapping to complete or
+					// 'ttimeoutlen' for complete key code
     int		mapdepth = 0;		// check for recursive mapping
     int		mode_deleted = FALSE;   // set when mode has been deleted
 #ifdef FEAT_CMDL_INFO

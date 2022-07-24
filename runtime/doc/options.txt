@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 8.2.  Last change: 2022 Jun 27
+*options.txt*	For Vim version 9.0.  Last change: 2022 Jun 27
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1677,7 +1677,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			feature is included}
 	This option is a list of comma-separated names.
 	Note: if one of the items is "exclude:", then you can't add an item
-	after that.  Therefore do append an item with += but use ^= to
+	after that.  Therefore do not append an item with += but use ^= to
 	prepend, e.g.: >
 		set clipboard^=unnamed
 <	These names are recognized:
@@ -3376,22 +3376,24 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'fillchars'* *'fcs'*
 'fillchars' 'fcs'	string	(default "vert:|,fold:-,eob:~")
-			global
+			global or local to window |global-local|
 			{not available when compiled without the |+folding|
 			feature}
-	Characters to fill the statuslines and vertical separators.
-	It is a comma-separated list of items:
+	Characters to fill the statuslines, vertical separators and special
+	lines in the window.
+	It is a comma-separated list of items.  Each item has a name, a colon
+	and the value of that item:
 
-	  item		default		Used for ~
-	  stl:c		' ' or '^'	statusline of the current window
-	  stlnc:c	' ' or '='	statusline of the non-current windows
-	  vert:c	'|'		vertical separators |:vsplit|
-	  fold:c	'-'		filling 'foldtext'
-	  foldopen:c	'-'		mark the beginning of a fold
-	  foldclose:c	'+'		show a closed fold
-	  foldsep:c	'|'		open fold middle character
-	  diff:c	'-'		deleted lines of the 'diff' option
-	  eob:c		'~'		empty lines below the end of a buffer
+	  item name	default		Used for ~
+	  stl		' ' or '^'	statusline of the current window
+	  stlnc		' ' or '='	statusline of the non-current windows
+	  vert		'|'		vertical separators |:vsplit|
+	  fold		'-'		filling 'foldtext'
+	  foldopen	'-'		mark the beginning of a fold
+	  foldclose	'+'		show a closed fold
+	  foldsep	'|'		open fold middle character
+	  diff		'-'		deleted lines of the 'diff' option
+	  eob		'~'		empty lines below the end of a buffer
 
 	Any one that is omitted will fall back to the default.  For "stl" and
 	"stlnc" the space will be used when there is highlighting, '^' or '='
@@ -3407,13 +3409,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 	characters are not supported.
 
 	The highlighting used for these items:
-	  item		highlight group ~
-	  stl:c		StatusLine		|hl-StatusLine|
-	  stlnc:c	StatusLineNC		|hl-StatusLineNC|
-	  vert:c	VertSplit		|hl-VertSplit|
-	  fold:c	Folded			|hl-Folded|
-	  diff:c	DiffDelete		|hl-DiffDelete|
-	  eob:c		EndOfBuffer		|hl-EndOfBuffer|
+	  item name	highlight group ~
+	  stl		StatusLine		|hl-StatusLine|
+	  stlnc		StatusLineNC		|hl-StatusLineNC|
+	  vert		VertSplit		|hl-VertSplit|
+	  fold		Folded			|hl-Folded|
+	  diff		DiffDelete		|hl-DiffDelete|
+	  eob		EndOfBuffer		|hl-EndOfBuffer|
 
 		*'fixendofline'* *'fixeol'* *'nofixendofline'* *'nofixeol'*
 'fixendofline' 'fixeol'	boolean	(default on)
@@ -4211,7 +4213,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 		b	bold		(termcap entry "md" and "me")
 		s	standout	(termcap entry "so" and "se")
 		u	underline	(termcap entry "us" and "ue")
-		c	undercurl	(termcap entry "Cs" and "Ce")
+		c	undercurl	(termcap entry "Us" and "Ce")
+		2	double underline (termcap entry "Ds" and "Ce")
+		d	dotted underline (termcap entry "ds" and "Ce")
+		=	dashed underline (termcap entry "Ds" and "Ce")
 		t	strikethrough	(termcap entry "Ts" and "Te")
 		n	no highlighting
 		-	no highlighting

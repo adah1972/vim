@@ -17,8 +17,12 @@
  * ScreenLines[off]  Contains a copy of the whole screen, as it is currently
  *		     displayed (excluding text written by external commands).
  * ScreenAttrs[off]  Contains the associated attributes.
- * LineOffset[row]   Contains the offset into ScreenLines*[] and ScreenAttrs[]
- *		     for each line.
+ * ScreenCols[off]   Contains the byte offset in the line. -1 means not
+ *		     available (below last line), MAXCOL means after the end
+ *		     of the line.
+ *
+ * LineOffset[row]   Contains the offset into ScreenLines*[], ScreenAttrs[]
+ *		     and ScreenCols[] for each line.
  * LineWraps[row]    Flag for each line whether it wraps to the next line.
  *
  * For double-byte characters, two consecutive bytes in ScreenLines[] can form
@@ -285,9 +289,9 @@ fill_foldcolumn(
     {
 	if (win_foldinfo.fi_lnum == lnum
 		&& first_level + i >= win_foldinfo.fi_low_level)
-	    symbol = fill_foldopen;
+	    symbol = wp->w_fill_chars.foldopen;
 	else if (first_level == 1)
-	    symbol = fill_foldsep;
+	    symbol = wp->w_fill_chars.foldsep;
 	else if (first_level + i <= 9)
 	    symbol = '0' + first_level + i;
 	else
@@ -312,7 +316,7 @@ fill_foldcolumn(
 		// for a multibyte character, erase all the bytes
 		vim_memset(p + byte_counter, ' ', len);
 	}
-	symbol = fill_foldclosed;
+	symbol = wp->w_fill_chars.foldclosed;
 	len = utf_char2bytes(symbol, &p[byte_counter]);
 	byte_counter += len;
     }
@@ -430,11 +434,12 @@ reset_screen_attr(void)
  */
     void
 screen_line(
-    int	    row,
-    int	    coloff,
-    int	    endcol,
-    int	    clear_width,
-    int	    flags UNUSED)
+	win_T	*wp,
+	int	row,
+	int	coloff,
+	int	endcol,
+	int	clear_width,
+	int	flags UNUSED)
 {
     unsigned	    off_from;
     unsigned	    off_to;
@@ -452,7 +457,6 @@ screen_line(
     int		    clear_next = FALSE;
     int		    char_cells;		// 1: normal char
 					// 2: occupies two display cells
-# define CHAR_CELLS char_cells
 
     // Check for illegal row and col, just in case.
     if (row >= Rows)
@@ -518,8 +522,8 @@ screen_line(
 	    char_cells = 1;
 
 	redraw_this = redraw_next;
-	redraw_next = force || char_needs_redraw(off_from + CHAR_CELLS,
-			      off_to + CHAR_CELLS, endcol - col - CHAR_CELLS);
+	redraw_next = force || char_needs_redraw(off_from + char_cells,
+			      off_to + char_cells, endcol - col - char_cells);
 
 #ifdef FEAT_GUI
 	// If the next character was bold, then redraw the current character to
@@ -527,7 +531,7 @@ screen_line(
 	// happens in the GUI.
 	if (redraw_next && gui.in_use)
 	{
-	    hl = ScreenAttrs[off_to + CHAR_CELLS];
+	    hl = ScreenAttrs[off_to + char_cells];
 	    if (hl > HL_ALL)
 		hl = syn_attr2attr(hl);
 	    if (hl & HL_BOLD)
@@ -665,11 +669,15 @@ screen_line(
 	    }
 #endif
 	    ScreenAttrs[off_to] = ScreenAttrs[off_from];
+	    ScreenCols[off_to] = ScreenCols[off_from];
 
 	    // For simplicity set the attributes of second half of a
 	    // double-wide character equal to the first half.
 	    if (char_cells == 2)
+	    {
 		ScreenAttrs[off_to + 1] = ScreenAttrs[off_from];
+		ScreenCols[off_to + 1] = ScreenCols[off_from + 1];
+	    }
 
 	    if (enc_dbcs != 0 && char_cells == 2)
 		screen_char_2(off_to, row, col + coloff);
@@ -694,9 +702,13 @@ screen_line(
 		screen_stop_highlight();
 	}
 
-	off_to += CHAR_CELLS;
-	off_from += CHAR_CELLS;
-	col += CHAR_CELLS;
+	ScreenCols[off_to] = ScreenCols[off_from];
+	if (char_cells == 2)
+	    ScreenCols[off_to + 1] = ScreenCols[off_from];
+
+	off_to += char_cells;
+	off_from += char_cells;
+	col += char_cells;
     }
 
     if (clear_next)
@@ -724,6 +736,7 @@ screen_line(
 						  && ScreenAttrs[off_to] == 0
 				  && (!enc_utf8 || ScreenLinesUC[off_to] == 0))
 	{
+	    ScreenCols[off_to] = MAXCOL;
 	    ++off_to;
 	    ++col;
 	}
@@ -773,8 +786,11 @@ screen_line(
 #endif
 	    screen_fill(row, row + 1, col + coloff, clear_width + coloff,
 								 ' ', ' ', 0);
-	    off_to += clear_width - col;
-	    col = clear_width;
+	    while (col < clear_width)
+	    {
+		ScreenCols[off_to++] = MAXCOL;
+		++col;
+	    }
 	}
     }
 
@@ -794,7 +810,7 @@ screen_line(
 	    {
 		int c;
 
-		c = fillchar_vsep(&hl);
+		c = fillchar_vsep(&hl, wp);
 		if (ScreenLines[off_to] != (schar_T)c
 			|| (enc_utf8 && (int)ScreenLinesUC[off_to]
 							!= (c >= 0x80 ? c : 0))
@@ -853,7 +869,7 @@ draw_vsep_win(win_T *wp, int row)
     if (wp->w_vsep_width)
     {
 	// draw the vertical separator right of this window
-	c = fillchar_vsep(&hl);
+	c = fillchar_vsep(&hl, wp);
 	screen_fill(W_WINROW(wp) + row, W_WINROW(wp) + wp->w_height,
 		W_ENDCOL(wp), W_ENDCOL(wp) + 1,
 		c, ' ', hl);
@@ -1678,6 +1694,7 @@ screen_puts_len(
 		ScreenLines[off + mbyte_blen] = 0;
 	    ScreenLines[off] = c;
 	    ScreenAttrs[off] = attr;
+	    ScreenCols[off] = -1;
 	    if (enc_utf8)
 	    {
 		if (c < 0x80 && u8cc[0] == 0)
@@ -1698,6 +1715,7 @@ screen_puts_len(
 		{
 		    ScreenLines[off + 1] = 0;
 		    ScreenAttrs[off + 1] = attr;
+		    ScreenCols[off + 1] = -1;
 		}
 		screen_char(off, row, col);
 	    }
@@ -1705,6 +1723,7 @@ screen_puts_len(
 	    {
 		ScreenLines[off + 1] = ptr[1];
 		ScreenAttrs[off + 1] = attr;
+		ScreenCols[off + 1] = -1;
 		screen_char_2(off, row, col);
 	    }
 	    else if (enc_dbcs == DBCS_JPNU && c == 0x8e)
@@ -1855,8 +1874,17 @@ screen_start_highlight(int attr)
 		out_str(T_SO);
 	    if ((attr & HL_UNDERCURL) && *T_UCS != NUL) // undercurl
 		out_str(T_UCS);
-	    if (((attr & HL_UNDERLINE)	    // underline or undercurl
-			|| ((attr & HL_UNDERCURL) && *T_UCS == NUL))
+	    if ((attr & HL_UNDERDOUBLE) && *T_USS != NUL) // double underline
+		out_str(T_USS);
+	    if ((attr & HL_UNDERDOTTED) && *T_DS != NUL) // dotted underline
+		out_str(T_DS);
+	    if ((attr & HL_UNDERDASHED) && *T_CDS != NUL) // dashed underline
+		out_str(T_CDS);
+	    if (((attr & HL_UNDERLINE)	    // underline or undercurl, etc.
+			|| ((attr & HL_UNDERCURL) && *T_UCS == NUL)
+			|| ((attr & HL_UNDERDOUBLE) && *T_USS == NUL)
+			|| ((attr & HL_UNDERDOTTED) && *T_DS == NUL)
+			|| ((attr & HL_UNDERDASHED) && *T_CDS == NUL))
 		    && *T_US != NUL)
 		out_str(T_US);
 	    if ((attr & HL_ITALIC) && *T_CZH != NUL)	// italic
@@ -1951,6 +1979,8 @@ screen_stop_highlight(void)
 	else
 #endif
 	{
+	    int is_under;
+
 	    if (screen_attr > HL_ALL)			// special HL attr.
 	    {
 		attrentry_T *aep;
@@ -2030,15 +2060,16 @@ screen_stop_highlight(void)
 		else
 		    out_str(T_SE);
 	    }
-	    if ((screen_attr & HL_UNDERCURL) && *T_UCE != NUL)
+	    is_under = (screen_attr & (HL_UNDERCURL
+			  | HL_UNDERDOUBLE | HL_UNDERDOTTED | HL_UNDERDASHED));
+	    if (is_under && *T_UCE != NUL)
 	    {
 		if (STRCMP(T_UCE, T_ME) == 0)
 		    do_ME = TRUE;
 		else
 		    out_str(T_UCE);
 	    }
-	    if ((screen_attr & HL_UNDERLINE)
-			    || ((screen_attr & HL_UNDERCURL) && *T_UCE == NUL))
+	    if ((screen_attr & HL_UNDERLINE) || (is_under && *T_UCE == NUL))
 	    {
 		if (STRCMP(T_UE, T_ME) == 0)
 		    do_ME = TRUE;
@@ -2161,6 +2192,7 @@ screen_char(unsigned off, int row, int col)
        )
     {
 	ScreenAttrs[off] = (sattr_T)-1;
+	ScreenCols[off] = -1;
 	return;
     }
 
@@ -2237,6 +2269,7 @@ screen_char_2(unsigned off, int row, int col)
     if (row == screen_Rows - 1 && col >= screen_Columns - 2)
     {
 	ScreenAttrs[off] = (sattr_T)-1;
+	ScreenCols[off] = -1;
 	return;
     }
 
@@ -2322,6 +2355,7 @@ space_to_screenline(int off, int attr)
 {
     ScreenLines[off] = ' ';
     ScreenAttrs[off] = attr;
+    ScreenCols[off] = -1;
     if (enc_utf8)
 	ScreenLinesUC[off] = 0;
 }
@@ -2492,6 +2526,7 @@ screen_fill(
 		if (!did_delete || c != ' ')
 		    screen_char(off, row, col);
 	    }
+	    ScreenCols[off] = -1;
 	    ++off;
 	    if (col == start_col)
 	    {
@@ -2585,6 +2620,7 @@ screenalloc(int doclear)
     schar_T	    *new_ScreenLines2 = NULL;
     int		    i;
     sattr_T	    *new_ScreenAttrs;
+    colnr_T	    *new_ScreenCols;
     unsigned	    *new_LineOffset;
     char_u	    *new_LineWraps;
     short	    *new_TabPageIdxs;
@@ -2675,6 +2711,7 @@ retry:
     if (enc_dbcs == DBCS_JPNU)
 	new_ScreenLines2 = LALLOC_MULT(schar_T, (Rows + 1) * Columns);
     new_ScreenAttrs = LALLOC_MULT(sattr_T, (Rows + 1) * Columns);
+    new_ScreenCols = LALLOC_MULT(colnr_T, (Rows + 1) * Columns);
     new_LineOffset = LALLOC_MULT(unsigned, Rows);
     new_LineWraps = LALLOC_MULT(char_u, Rows);
     new_TabPageIdxs = LALLOC_MULT(short, Columns);
@@ -2722,6 +2759,7 @@ give_up:
 	    || (enc_utf8 && (new_ScreenLinesUC == NULL || i != p_mco))
 	    || (enc_dbcs == DBCS_JPNU && new_ScreenLines2 == NULL)
 	    || new_ScreenAttrs == NULL
+	    || new_ScreenCols == NULL
 	    || new_LineOffset == NULL
 	    || new_LineWraps == NULL
 	    || new_TabPageIdxs == NULL
@@ -2747,6 +2785,7 @@ give_up:
 	    VIM_CLEAR(new_ScreenLinesC[i]);
 	VIM_CLEAR(new_ScreenLines2);
 	VIM_CLEAR(new_ScreenAttrs);
+	VIM_CLEAR(new_ScreenCols);
 	VIM_CLEAR(new_LineOffset);
 	VIM_CLEAR(new_LineWraps);
 	VIM_CLEAR(new_TabPageIdxs);
@@ -2789,6 +2828,8 @@ give_up:
 				       0, (size_t)Columns * sizeof(schar_T));
 		(void)vim_memset(new_ScreenAttrs + new_row * Columns,
 					0, (size_t)Columns * sizeof(sattr_T));
+		(void)vim_memset(new_ScreenCols + new_row * Columns,
+					0, (size_t)Columns * sizeof(colnr_T));
 		old_row = new_row + (screen_Rows - Rows);
 		if (old_row >= 0 && ScreenLines != NULL)
 		{
@@ -2822,6 +2863,9 @@ give_up:
 		    mch_memmove(new_ScreenAttrs + new_LineOffset[new_row],
 			    ScreenAttrs + LineOffset[old_row],
 			    (size_t)len * sizeof(sattr_T));
+		    mch_memmove(new_ScreenCols + new_LineOffset[new_row],
+			    ScreenAttrs + LineOffset[old_row],
+			    (size_t)len * sizeof(colnr_T));
 		}
 	    }
 	}
@@ -2844,6 +2888,7 @@ give_up:
     Screen_mco = p_mco;
     ScreenLines2 = new_ScreenLines2;
     ScreenAttrs = new_ScreenAttrs;
+    ScreenCols = new_ScreenCols;
     LineOffset = new_LineOffset;
     LineWraps = new_LineWraps;
     TabPageIdxs = new_TabPageIdxs;
@@ -2916,6 +2961,7 @@ free_screenlines(void)
     VIM_CLEAR(ScreenLines2);
     VIM_CLEAR(ScreenLines);
     VIM_CLEAR(ScreenAttrs);
+    VIM_CLEAR(ScreenCols);
     VIM_CLEAR(LineOffset);
     VIM_CLEAR(LineWraps);
     VIM_CLEAR(TabPageIdxs);
@@ -3005,6 +3051,7 @@ lineclear(unsigned off, int width, int attr)
 	(void)vim_memset(ScreenLinesUC + off, 0,
 					  (size_t)width * sizeof(u8char_T));
     (void)vim_memset(ScreenAttrs + off, attr, (size_t)width * sizeof(sattr_T));
+    (void)vim_memset(ScreenCols + off, -1, (size_t)width * sizeof(colnr_T));
 }
 
 /*
@@ -3015,6 +3062,7 @@ lineclear(unsigned off, int width, int attr)
 lineinvalid(unsigned off, int width)
 {
     (void)vim_memset(ScreenAttrs + off, -1, (size_t)width * sizeof(sattr_T));
+    (void)vim_memset(ScreenCols + off, -1, (size_t)width * sizeof(colnr_T));
 }
 
 /*
@@ -3053,6 +3101,8 @@ linecopy(int to, int from, win_T *wp)
 		wp->w_width * sizeof(schar_T));
     mch_memmove(ScreenAttrs + off_to, ScreenAttrs + off_from,
 	    wp->w_width * sizeof(sattr_T));
+    mch_memmove(ScreenCols + off_to, ScreenCols + off_from,
+	    wp->w_width * sizeof(colnr_T));
 }
 
 /*
@@ -4607,12 +4657,12 @@ fillchar_status(int *attr, win_T *wp)
 	if (wp == curwin)
 	{
 	    *attr = HL_ATTR(HLF_ST);
-	    fill = fill_stl;
+	    fill = wp->w_fill_chars.stl;
 	}
 	else
 	{
 	    *attr = HL_ATTR(HLF_STNC);
-	    fill = fill_stlnc;
+	    fill = wp->w_fill_chars.stlnc;
 	}
     }
     else
@@ -4620,19 +4670,19 @@ fillchar_status(int *attr, win_T *wp)
     if (wp == curwin)
     {
 	*attr = HL_ATTR(HLF_S);
-	fill = fill_stl;
+	fill = wp->w_fill_chars.stl;
     }
     else
     {
 	*attr = HL_ATTR(HLF_SNC);
-	fill = fill_stlnc;
+	fill = wp->w_fill_chars.stlnc;
     }
     // Use fill when there is highlighting, and highlighting of current
     // window differs, or the fillchars differ, or this is not the
     // current window
     if (*attr != 0 && ((HL_ATTR(HLF_S) != HL_ATTR(HLF_SNC)
 			|| wp != curwin || ONE_WINDOW)
-		    || (fill_stl != fill_stlnc)))
+		    || (wp->w_fill_chars.stl != wp->w_fill_chars.stlnc)))
 	return fill;
     if (wp == curwin)
 	return '^';
@@ -4644,13 +4694,13 @@ fillchar_status(int *attr, win_T *wp)
  * Get its attributes in "*attr".
  */
     int
-fillchar_vsep(int *attr)
+fillchar_vsep(int *attr, win_T *wp)
 {
     *attr = HL_ATTR(HLF_C);
-    if (*attr == 0 && fill_vert == ' ')
+    if (*attr == 0 && wp->w_fill_chars.vert == ' ')
 	return '|';
     else
-	return fill_vert;
+	return wp->w_fill_chars.vert;
 }
 
 /*
@@ -4830,36 +4880,45 @@ get_encoded_char_adv(char_u **p)
 
 /*
  * Handle setting 'listchars' or 'fillchars'.
+ * "varp" points to either the global or the window-local value.
+ * When "apply" is FALSE do not store the flags, only check for errors.
  * Assume monocell characters.
  * Returns error message, NULL if it's OK.
  */
     char *
-set_chars_option(win_T *wp, char_u **varp)
+set_chars_option(win_T *wp, char_u **varp, int apply)
 {
-    int		round, i, len, len2, entries;
-    char_u	*p, *s;
-    int		c1 = 0, c2 = 0, c3 = 0;
-    char_u	*last_multispace = NULL; // Last occurrence of "multispace:"
-    char_u	*last_lmultispace = NULL; // Last occurrence of "leadmultispace:"
-    int		multispace_len = 0;	 // Length of lcs-multispace string
-    int		lead_multispace_len = 0; // Length of lcs-leadmultispace string
+    int	    round, i, len, len2, entries;
+    char_u  *p, *s;
+    int	    c1 = 0, c2 = 0, c3 = 0;
+    char_u  *last_multispace = NULL;  // Last occurrence of "multispace:"
+    char_u  *last_lmultispace = NULL; // Last occurrence of "leadmultispace:"
+    int	    multispace_len = 0;	      // Length of lcs-multispace string
+    int	    lead_multispace_len = 0;  // Length of lcs-leadmultispace string
+    int	    is_listchars = (varp == &p_lcs || varp == &wp->w_p_lcs);
+    char_u  *value = *varp;
+
     struct charstab
     {
 	int	*cp;
 	char	*name;
     };
+    struct charstab *tab;
+
+    static fill_chars_T fill_chars;
     static struct charstab filltab[] =
     {
-	{&fill_stl,		"stl"},
-	{&fill_stlnc,		"stlnc"},
-	{&fill_vert,		"vert"},
-	{&fill_fold,		"fold"},
-	{&fill_foldopen,	"foldopen"},
-	{&fill_foldclosed,	"foldclose"},
-	{&fill_foldsep,		"foldsep"},
-	{&fill_diff,		"diff"},
-	{&fill_eob,		"eob"},
+	{&fill_chars.stl,	"stl"},
+	{&fill_chars.stlnc,	"stlnc"},
+	{&fill_chars.vert,	"vert"},
+	{&fill_chars.fold,	"fold"},
+	{&fill_chars.foldopen,	"foldopen"},
+	{&fill_chars.foldclosed, "foldclose"},
+	{&fill_chars.foldsep,	"foldsep"},
+	{&fill_chars.diff,	"diff"},
+	{&fill_chars.eob,	"eob"},
     };
+
     static lcs_chars_T lcs_chars;
     struct charstab lcstab[] =
     {
@@ -4877,20 +4936,21 @@ set_chars_option(win_T *wp, char_u **varp)
 	{NULL,			"conceal"},
 #endif
     };
-    struct charstab *tab;
 
-    if (varp == &p_lcs || varp == &wp->w_p_lcs)
+    if (is_listchars)
     {
 	tab = lcstab;
 	CLEAR_FIELD(lcs_chars);
 	entries = ARRAY_LENGTH(lcstab);
 	if (varp == &wp->w_p_lcs && wp->w_p_lcs[0] == NUL)
-	    varp = &p_lcs;
+	    value = p_lcs;  // local value is empty, us the global value
     }
     else
     {
 	tab = filltab;
 	entries = ARRAY_LENGTH(filltab);
+	if (varp == &wp->w_p_fcs && wp->w_p_fcs[0] == NUL)
+	    value = p_fcs;  // local value is empty, us the global value
     }
 
     // first round: check for valid value, second round: assign values
@@ -4898,29 +4958,28 @@ set_chars_option(win_T *wp, char_u **varp)
     {
 	if (round > 0)
 	{
-	    // After checking that the value is valid: set defaults: space for
-	    // 'fillchars', NUL for 'listchars'
-	    for (i = 0; i < entries; ++i)
-		if (tab[i].cp != NULL)
-		    *(tab[i].cp) =
-			((varp == &p_lcs || varp == &wp->w_p_lcs) ? NUL : ' ');
-
-	    if (varp == &p_lcs || varp == &wp->w_p_lcs)
+	    // After checking that the value is valid: set defaults.
+	    if (is_listchars)
 	    {
+		for (i = 0; i < entries; ++i)
+		    if (tab[i].cp != NULL)
+			*(tab[i].cp) = NUL;
 		lcs_chars.tab1 = NUL;
 		lcs_chars.tab3 = NUL;
 
 		if (multispace_len > 0)
 		{
 		    lcs_chars.multispace = ALLOC_MULT(int, multispace_len + 1);
-		    lcs_chars.multispace[multispace_len] = NUL;
+		    if (lcs_chars.multispace != NULL)
+			lcs_chars.multispace[multispace_len] = NUL;
 		}
 		else
 		    lcs_chars.multispace = NULL;
 
 		if (lead_multispace_len > 0)
 		{
-		    lcs_chars.leadmultispace = ALLOC_MULT(int, lead_multispace_len + 1);
+		    lcs_chars.leadmultispace =
+				      ALLOC_MULT(int, lead_multispace_len + 1);
 		    lcs_chars.leadmultispace[lead_multispace_len] = NUL;
 		}
 		else
@@ -4928,14 +4987,18 @@ set_chars_option(win_T *wp, char_u **varp)
 	    }
 	    else
 	    {
-		fill_diff = '-';
-		fill_foldopen = '-';
-		fill_foldclosed = '+';
-		fill_foldsep = '|';
-		fill_eob = '~';
+		fill_chars.stl = ' ';
+		fill_chars.stlnc = ' ';
+		fill_chars.vert = ' ';
+		fill_chars.fold = '-';
+		fill_chars.foldopen = '-';
+		fill_chars.foldclosed = '+';
+		fill_chars.foldsep = '|';
+		fill_chars.diff = '-';
+		fill_chars.eob = '~';
 	    }
 	}
-	p = *varp;
+	p = value;
 	while (*p)
 	{
 	    for (i = 0; i < entries; ++i)
@@ -4989,7 +5052,7 @@ set_chars_option(win_T *wp, char_u **varp)
 	    {
 		len = (int)STRLEN("multispace");
 		len2 = (int)STRLEN("leadmultispace");
-		if ((varp == &p_lcs || varp == &wp->w_p_lcs)
+		if (is_listchars
 			&& STRNCMP(p, "multispace", len) == 0
 			&& p[len] == ':'
 			&& p[len + 1] != NUL)
@@ -5026,7 +5089,7 @@ set_chars_option(win_T *wp, char_u **varp)
 		    }
 		}
 
-		else if ((varp == &p_lcs || varp == &wp->w_p_lcs)
+		else if (is_listchars
 			&& STRNCMP(p, "leadmultispace", len2) == 0
 			&& p[len2] == ':'
 			&& p[len2 + 1] != NUL)
@@ -5071,11 +5134,24 @@ set_chars_option(win_T *wp, char_u **varp)
 		++p;
 	}
     }
-    if (tab == lcstab)
+
+    if (apply)
     {
-	vim_free(wp->w_lcs_chars.multispace);
-	vim_free(wp->w_lcs_chars.leadmultispace);
-	wp->w_lcs_chars = lcs_chars;
+	if (is_listchars)
+	{
+	    vim_free(wp->w_lcs_chars.multispace);
+	    vim_free(wp->w_lcs_chars.leadmultispace);
+	    wp->w_lcs_chars = lcs_chars;
+	}
+	else
+	{
+	    wp->w_fill_chars = fill_chars;
+	}
+    }
+    else if (is_listchars)
+    {
+	vim_free(lcs_chars.multispace);
+	vim_free(lcs_chars.leadmultispace);
     }
 
     return NULL;	// no error

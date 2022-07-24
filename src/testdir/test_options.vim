@@ -65,7 +65,9 @@ func Test_pastetoggle()
   let &pastetoggle = str
   call assert_equal(str, &pastetoggle)
   call assert_equal("\n  pastetoggle=" .. strtrans(str), execute('set pastetoggle?'))
+
   unlet str
+  set pastetoggle&
 endfunc
 
 func Test_wildchar()
@@ -899,7 +901,6 @@ endfunc
 func Test_rightleftcmd()
   CheckFeature rightleft
   set rightleft
-  set rightleftcmd
 
   let g:l = []
   func AddPos()
@@ -908,6 +909,13 @@ func Test_rightleftcmd()
   endfunc
   cmap <expr> <F2> AddPos()
 
+  set rightleftcmd=
+  call feedkeys("/\<F2>abc\<Right>\<F2>\<Left>\<Left>\<F2>" ..
+        \ "\<Right>\<F2>\<Esc>", 'xt')
+  call assert_equal([2, 5, 3, 4], g:l)
+
+  let g:l = []
+  set rightleftcmd=search
   call feedkeys("/\<F2>abc\<Left>\<F2>\<Right>\<Right>\<F2>" ..
         \ "\<Left>\<F2>\<Esc>", 'xt')
   call assert_equal([&co - 1, &co - 4, &co - 2, &co - 3], g:l)
@@ -955,6 +963,18 @@ func Test_opt_set_keycode()
   set <F9>=xyz
   call assert_equal('xyz', &t_k9)
   set <t_k9>&
+
+  " should we test all of them?
+  set t_Ce=testCe
+  set t_Cs=testCs
+  set t_Us=testUs
+  set t_ds=testds
+  set t_Ds=testDs
+  call assert_equal('testCe', &t_Ce)
+  call assert_equal('testCs', &t_Cs)
+  call assert_equal('testUs', &t_Us)
+  call assert_equal('testds', &t_ds)
+  call assert_equal('testDs', &t_Ds)
 endfunc
 
 " Test for changing options in a sandbox

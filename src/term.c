@@ -1187,6 +1187,9 @@ static struct builtin_term builtin_termcaps[] =
     {(int)KS_US,	"[US]"},
     {(int)KS_UCE,	"[UCE]"},
     {(int)KS_UCS,	"[UCS]"},
+    {(int)KS_USS,	"[USS]"},
+    {(int)KS_DS,	"[DS]"},
+    {(int)KS_CDS,	"[CDS]"},
     {(int)KS_STE,	"[STE]"},
     {(int)KS_STS,	"[STS]"},
     {(int)KS_MS,	"[MS]"},
@@ -1669,6 +1672,7 @@ get_term_entries(int *height, int *width)
 			{KS_MD, "md"}, {KS_SE, "se"}, {KS_SO, "so"},
 			{KS_CZH,"ZH"}, {KS_CZR,"ZR"}, {KS_UE, "ue"},
 			{KS_US, "us"}, {KS_UCE, "Ce"}, {KS_UCS, "Cs"},
+			{KS_USS, "Us"}, {KS_DS, "ds"}, {KS_CDS, "Ds"},
 			{KS_STE,"Te"}, {KS_STS,"Ts"},
 			{KS_CM, "cm"}, {KS_SR, "sr"},
 			{KS_CRI,"RI"}, {KS_VB, "vb"}, {KS_KS, "ks"},
@@ -5389,6 +5393,7 @@ check_termcode(
 	if (*tp == ESC && !p_ek && (State & MODE_INSERT))
 	    continue;
 
+	tp[len] = NUL;
 	key_name[0] = NUL;	// no key name found yet
 	key_name[1] = NUL;	// no key name found yet
 	modifiers = 0;		// no modifiers yet

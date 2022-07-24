@@ -659,10 +659,13 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define HL_ITALIC		0x04
 #define HL_UNDERLINE		0x08
 #define HL_UNDERCURL		0x10
-#define HL_STANDOUT		0x20
-#define HL_NOCOMBINE		0x40
-#define HL_STRIKETHROUGH	0x80
-#define HL_ALL			0xff
+#define HL_UNDERDOUBLE		0x20
+#define HL_UNDERDOTTED		0x40
+#define HL_UNDERDASHED		0x80
+#define HL_STANDOUT		0x100
+#define HL_NOCOMBINE		0x200
+#define HL_STRIKETHROUGH	0x400
+#define HL_ALL			0x7ff
 
 // special attribute addition: Put message in history
 #define MSG_HIST		0x1000
@@ -2816,7 +2819,7 @@ long elapsed(DWORD start_tick);
 #define UC_BUFFER	1	// -buffer: local to current buffer
 #define UC_VIM9		2	// {} argument: Vim9 syntax.
 
-// flags used by vim_strsave_escaped()
+// flags used by vim_strsave_fnameescape()
 #define VSE_NONE	0
 #define VSE_SHELL	1	// escape for a shell command
 #define VSE_BUFFER	2	// escape for a ":buffer" command

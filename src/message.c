@@ -1820,8 +1820,8 @@ str2special(
 	    *sp = str + 1;
     }
     else
-	// single-byte character or illegal byte
-	*sp = str + 1;
+	// single-byte character, NUL or illegal byte
+	*sp = str + (*str == NUL ? 0 : 1);
 
     // Make special keys and C0 control characters in <> form, also <M-Space>.
     // Use <Space> only for lhs of a mapping.
@@ -1883,7 +1883,8 @@ msg_prt_line(char_u *s, int list)
 		--trail;
 	}
 	// find end of leading whitespace
-	if (curwin->w_lcs_chars.lead || curwin->w_lcs_chars.leadmultispace != NULL)
+	if (curwin->w_lcs_chars.lead
+				 || curwin->w_lcs_chars.leadmultispace != NULL)
 	{
 	    lead = s;
 	    while (VIM_ISWHITE(lead[0]))

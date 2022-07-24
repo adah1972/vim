@@ -83,6 +83,7 @@ let s:filename_checks = {
     \ 'bib': ['file.bib'],
     \ 'bicep': ['file.bicep'],
     \ 'bindzone': ['named.root', '/bind/db.file', '/named/db.file', 'any/bind/db.file', 'any/named/db.file'],
+    \ 'bitbake': ['file.bb', 'file.bbappend', 'file.bbclass', 'build/conf/local.conf', 'meta/conf/layer.conf', 'build/conf/bbappend.conf', 'meta-layer/conf/distro/foo.conf'],
     \ 'blank': ['file.bl'],
     \ 'bsdl': ['file.bsd', 'file.bsdl', 'bsd', 'some-bsd'],
     \ 'bst': ['file.bst'],
@@ -115,7 +116,7 @@ let s:filename_checks = {
     \ 'coco': ['file.atg'],
     \ 'conaryrecipe': ['file.recipe'],
     \ 'conf': ['auto.master'],
-    \ 'config': ['configure.in', 'configure.ac', '/etc/hostname.file'],
+    \ 'config': ['configure.in', 'configure.ac', '/etc/hostname.file', 'any/etc/hostname.file'],
     \ 'confini': ['/etc/pacman.conf', 'any/etc/pacman.conf', 'mpv.conf'],
     \ 'context': ['tex/context/any/file.tex', 'file.mkii', 'file.mkiv', 'file.mkvi', 'file.mkxl', 'file.mklx'],
     \ 'cook': ['file.cook'],
@@ -128,6 +129,7 @@ let s:filename_checks = {
     \ 'csp': ['file.csp', 'file.fdr'],
     \ 'css': ['file.css'],
     \ 'cterm': ['file.con'],
+    \ 'csv': ['file.csv'],
     \ 'cucumber': ['file.feature'],
     \ 'cuda': ['file.cu', 'file.cuh'],
     \ 'cupl': ['file.pld'],
@@ -208,7 +210,7 @@ let s:filename_checks = {
     \ 'gemtext': ['file.gmi', 'file.gemini'],
     \ 'gift': ['file.gift'],
     \ 'gitcommit': ['COMMIT_EDITMSG', 'MERGE_MSG', 'TAG_EDITMSG', 'NOTES_EDITMSG', 'EDIT_DESCRIPTION'],
-    \ 'gitconfig': ['file.git/config', 'file.git/config.worktree', 'file.git/worktrees/x/config.worktree', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/usr/local/etc/gitconfig', '/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'],
+    \ 'gitconfig': ['file.git/config', 'file.git/config.worktree', 'file.git/worktrees/x/config.worktree', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/usr/local/etc/gitconfig', '/etc/gitconfig.d/file', 'any/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'],
     \ 'gitolite': ['gitolite.conf', '/gitolite-admin/conf/file', 'any/gitolite-admin/conf/file'],
     \ 'gitrebase': ['git-rebase-todo'],
     \ 'gitsendemail': ['.gitsendemail.msg.xxxxxx'],
@@ -234,6 +236,7 @@ let s:filename_checks = {
     \ 'haml': ['file.haml'],
     \ 'hamster': ['file.hsm'],
     \ 'handlebars': ['file.hbs'],
+    \ 'hare': ['file.ha'],
     \ 'haskell': ['file.hs', 'file.hsc', 'file.hs-boot', 'file.hsig'],
     \ 'haste': ['file.ht'],
     \ 'hastepreproc': ['file.htpp'],
@@ -312,7 +315,6 @@ let s:filename_checks = {
     \ 'lotos': ['file.lot', 'file.lotos'],
     \ 'lout': ['file.lou', 'file.lout'],
     \ 'lpc': ['file.lpc', 'file.ulpc'],
-    \ 'lprolog': ['file.sig'],
     \ 'lsl': ['file.lsl'],
     \ 'lss': ['file.lss'],
     \ 'lua': ['file.lua', 'file.rockspec', 'file.nse'],
@@ -564,6 +566,7 @@ let s:filename_checks = {
     \ 'tsscl': ['file.tsscl'],
     \ 'tssgm': ['file.tssgm'],
     \ 'tssop': ['file.tssop'],
+    \ 'tsv': ['file.tsv'],
     \ 'twig': ['file.twig'],
     \ 'typescript.glimmer': ['file.gts'],
     \ 'typescriptreact': ['file.tsx'],
@@ -706,7 +709,8 @@ let s:script_checks = {
       \ 'awk': [['#!/path/awk'],
       \         ['#!/path/gawk']],
       \ 'wml': [['#!/path/wml']],
-      \ 'scheme': [['#!/path/scheme']],
+      \ 'scheme': [['#!/path/scheme'],
+      \            ['#!/path/guile']],
       \ 'cfengine': [['#!/path/cfengine']],
       \ 'erlang': [['#!/path/escript']],
       \ 'haskell': [['#!/path/haskell']],
@@ -836,7 +840,7 @@ func Test_bas_file()
 
   " Visual Basic
 
-  call writefile(['Attribute VB_NAME = "Testing"'], 'Xfile.bas')
+  call writefile(['Attribute VB_NAME = "Testing"', 'Enum Foo', 'End Enum'], 'Xfile.bas')
   split Xfile.bas
   call assert_equal('vb', &filetype)
   bwipe!
@@ -1718,5 +1722,153 @@ func Test_xpm_file()
   filetype off
 endfunc
 
+func Test_cls_file()
+  filetype on
+
+  call writefile(['looks like Smalltalk'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('st', &filetype)
+  bwipe!
+
+  " Test dist#ft#FTcls()
+
+  let g:filetype_cls = 'vb'
+  split Xfile.cls
+  call assert_equal('vb', &filetype)
+  bwipe!
+  unlet g:filetype_cls
+
+  " TeX
+
+  call writefile(['%'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('tex', &filetype)
+  bwipe!
+
+  " Rexx
+
+  call writefile(['# rexx'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('rexx', &filetype)
+  bwipe!
+
+  " Visual Basic
+
+  call writefile(['VERSION 1.0 CLASS'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('vb', &filetype)
+  bwipe!
+
+  call delete('Xfile.cls')
+  filetype off
+endfunc
+
+func Test_sig_file()
+  filetype on
+
+  call writefile(['this is neither Lambda Prolog nor SML'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('', &filetype)
+  bwipe!
+
+  " Test dist#ft#FTsig()
+
+  let g:filetype_sig = 'sml'
+  split Xfile.sig
+  call assert_equal('sml', &filetype)
+  bwipe!
+  unlet g:filetype_sig
+
+  " Lambda Prolog
+
+  call writefile(['sig foo.'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('lprolog', &filetype)
+  bwipe!
+
+  call writefile(['/* ... */'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('lprolog', &filetype)
+  bwipe!
+
+  call writefile(['% ...'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('lprolog', &filetype)
+  bwipe!
+
+  " SML signature file
+
+  call writefile(['signature FOO ='], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('sml', &filetype)
+  bwipe!
+
+  call writefile(['structure FOO ='], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('sml', &filetype)
+  bwipe!
+
+  call writefile(['(* ... *)'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('sml', &filetype)
+  bwipe!
+
+  call delete('Xfile.sig')
+  filetype off
+endfunc
+
+func Test_inc_file()
+  filetype on
+
+  call writefile(['this is the fallback'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('pov', &filetype)
+  bwipe!
+
+  let g:filetype_inc = 'foo'
+  split Xfile.inc
+  call assert_equal('foo', &filetype)
+  bwipe!
+  unlet g:filetype_inc
+
+  " aspperl
+  call writefile(['perlscript'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('aspperl', &filetype)
+  bwipe!
+
+  " aspvbs
+  call writefile(['<% something'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('aspvbs', &filetype)
+  bwipe!
+
+  " php
+  call writefile(['<?php'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('php', &filetype)
+  bwipe!
+
+  " pascal
+  call writefile(['program'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('pascal', &filetype)
+  bwipe!
+
+  " bitbake
+  call writefile(['require foo'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('bitbake', &filetype)
+  bwipe!
+
+  " asm
+  call writefile(['asmsyntax=foo'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('foo', &filetype)
+  bwipe!
+
+  call delete('Xfile.inc')
+  filetype off
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

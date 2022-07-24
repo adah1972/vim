@@ -3136,6 +3136,12 @@ func Test_cwindow_highlight()
   call term_sendkeys(buf, ":cnext\<CR>")
   call VerifyScreenDump(buf, 'Test_quickfix_cwindow_2', {})
 
+  call term_sendkeys(buf, "\<C-W>j:set cursorline\<CR>")
+  call VerifyScreenDump(buf, 'Test_quickfix_cwindow_3', {})
+
+  call term_sendkeys(buf, "j")
+  call VerifyScreenDump(buf, 'Test_quickfix_cwindow_4', {})
+
   " clean up
   call StopVimInTerminal(buf)
   call delete('XtestCwindow')
@@ -3363,8 +3369,11 @@ func Test_bufoverflow()
   cgetexpr ['Compiler: ' . repeat('a', 1015), 'File1:10:Hello World']
 
   set efm=%DEntering\ directory\ %f,%f:%l:%m
-  cgetexpr ['Entering directory ' . repeat('a', 1006),
-	      \ 'File1:10:Hello World']
+  let lines =<< trim eval END
+    Entering directory $"{repeat('a', 1006)}"
+    File1:10:Hello World
+  END
+  cgetexpr lines
   set efm&vim
 endfunc
 

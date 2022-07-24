@@ -32,6 +32,7 @@ static void gui_do_scrollbar(win_T *wp, int which, int enable);
 static void gui_update_horiz_scrollbar(int);
 static void gui_set_fg_color(char_u *name);
 static void gui_set_bg_color(char_u *name);
+static void init_gui_options(void);
 static win_T *xy2win(int x, int y, mouse_find_T popup);
 
 #ifdef GUI_MAY_FORK
@@ -1395,7 +1396,7 @@ gui_update_cursor(
 }
 
 #if defined(FEAT_MENU) || defined(PROTO)
-    void
+    static void
 gui_position_menu(void)
 {
 # if !defined(FEAT_GUI_GTK) && !defined(FEAT_GUI_MOTIF)
@@ -2130,8 +2131,7 @@ gui_outstr(char_u *s, int len)
 	    if (this_len > len)
 		this_len = len;	    // don't include following composing char
 	}
-	else
-	    if (gui.col + len > Columns)
+	else if (gui.col + len > Columns)
 	    this_len = Columns - gui.col;
 	else
 	    this_len = len;
@@ -2499,6 +2499,8 @@ gui_outstr_nowrap(
     // Do we undercurl the text?
     if (hl_mask_todo & HL_UNDERCURL)
 	draw_flags |= DRAW_UNDERC;
+
+    // TODO: HL_UNDERDOUBLE, HL_UNDERDOTTED, HL_UNDERDASHED
 
     // Do we strikethrough the text?
     if (hl_mask_todo & HL_STRIKETHROUGH)
@@ -4815,7 +4817,7 @@ gui_bg_default(void)
 /*
  * Option initializations that can only be done after opening the GUI window.
  */
-    void
+    static void
 init_gui_options(void)
 {
     // Set the 'background' option according to the lightness of the

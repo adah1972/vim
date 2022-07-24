@@ -232,6 +232,8 @@ typedef struct
 #define w_p_list w_onebuf_opt.wo_list	// 'list'
     char_u	*wo_lcs;
 #define w_p_lcs w_onebuf_opt.wo_lcs	// 'listchars'
+    char_u	*wo_fcs;
+#define w_p_fcs w_onebuf_opt.wo_fcs	// 'fillchars'
     int		wo_nu;
 #define w_p_nu w_onebuf_opt.wo_nu	// 'number'
     int		wo_rnu;
@@ -756,10 +758,11 @@ typedef struct memline
     int		ml_stack_top;	// current top of ml_stack
     int		ml_stack_size;	// total number of entries in ml_stack
 
-#define ML_EMPTY	1	// empty buffer
-#define ML_LINE_DIRTY	2	// cached line was changed and allocated
-#define ML_LOCKED_DIRTY	4	// ml_locked was changed
-#define ML_LOCKED_POS	8	// ml_locked needs positive block number
+#define ML_EMPTY	0x01	// empty buffer
+#define ML_LINE_DIRTY	0x02	// cached line was changed and allocated
+#define ML_LOCKED_DIRTY	0x04	// ml_locked was changed
+#define ML_LOCKED_POS	0x08	// ml_locked needs positive block number
+#define ML_ALLOCATED	0x10	// ml_line_ptr is an allocated copy
     int		ml_flags;
 
     colnr_T	ml_line_len;	// length of the cached line, including NUL
@@ -3418,6 +3421,22 @@ typedef struct
 } lcs_chars_T;
 
 /*
+ * Characters from the 'fillchars' option
+ */
+typedef struct
+{
+    int	stl;
+    int	stlnc;
+    int	vert;
+    int	fold;
+    int	foldopen;
+    int	foldclosed;
+    int	foldsep;
+    int	diff;
+    int	eob;
+} fill_chars_T;
+
+/*
  * Structure which contains all information that belongs to a window
  *
  * All row numbers are relative to the start of the window, except w_winrow.
@@ -3469,6 +3488,7 @@ struct window_S
 					 // redrawn
 
     lcs_chars_T	w_lcs_chars;	    // 'listchars' characters
+    fill_chars_T w_fill_chars;	    // 'fillchars' characters
 
     /*
      * "w_topline", "w_leftcol" and "w_skipcol" specify the offsets for

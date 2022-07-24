@@ -779,7 +779,7 @@ win_line(
 	    trailcol = (colnr_T)STRLEN(ptr);
 	    while (trailcol > (colnr_T)0 && VIM_ISWHITE(ptr[trailcol - 1]))
 		--trailcol;
-	    trailcol += (colnr_T) (ptr - line);
+	    trailcol += (colnr_T)(ptr - line);
 	}
 	// find end of leading whitespace
 	if (wp->w_lcs_chars.lead || wp->w_lcs_chars.leadmultispace != NULL)
@@ -792,7 +792,7 @@ win_line(
 		leadcol = (colnr_T)0;
 	    else
 		// keep track of the first column not filled with spaces
-		leadcol += (colnr_T) (ptr - line) + 1;
+		leadcol += (colnr_T)(ptr - line) + 1;
 	}
     }
 
@@ -970,7 +970,11 @@ win_line(
 		}
 		else
 # endif
+# if defined(FEAT_QUICKFIX)
+		    line_attr = hl_combine_attr(line_attr, cul_attr);
+# else
 		    line_attr = cul_attr;
+# endif
 	    }
 	    else
 	    {
@@ -1023,12 +1027,14 @@ win_line(
     // Repeat for the whole displayed line.
     for (;;)
     {
+	char_u	*prev_ptr = ptr;
 #if defined(FEAT_CONCEAL) || defined(FEAT_SEARCH_EXTRA)
-	int has_match_conc = 0;	// match wants to conceal
+	int	has_match_conc = 0;	// match wants to conceal
 #endif
 #ifdef FEAT_CONCEAL
-	int did_decrement_ptr = FALSE;
+	int	did_decrement_ptr = FALSE;
 #endif
+
 	// Skip this quickly when working on the text.
 	if (draw_state != WL_LINE)
 	{
@@ -1264,14 +1270,14 @@ win_line(
 		if (filler_todo > 0)
 		{
 		    // Draw "deleted" diff line(s).
-		    if (char2cells(fill_diff) > 1)
+		    if (char2cells(wp->w_fill_chars.diff) > 1)
 		    {
 			c_extra = '-';
 			c_final = NUL;
 		    }
 		    else
 		    {
-			c_extra = fill_diff;
+			c_extra = wp->w_fill_chars.diff;
 			c_final = NUL;
 		    }
 #  ifdef FEAT_RIGHTLEFT
@@ -1348,7 +1354,7 @@ win_line(
 #endif
 		)
 	{
-	    screen_line(screen_row, wp->w_wincol, col, -wp->w_width,
+	    screen_line(wp, screen_row, wp->w_wincol, col, -wp->w_width,
 							    screen_line_flags);
 	    // Pretend we have finished updating the window.  Except when
 	    // 'cursorcolumn' is set.
@@ -1388,6 +1394,7 @@ win_line(
 				      &match_conc, did_line_attr, lcs_eol_one,
 				      &on_last_col);
 		ptr = line + v;  // "line" may have been changed
+		prev_ptr = ptr;
 
 		// Do not allow a conceal over EOL otherwise EOL will be missed
 		// and bad things happen.
@@ -1549,6 +1556,7 @@ win_line(
 		    // have made it invalid.
 		    line = ml_get_buf(wp->w_buffer, lnum, FALSE);
 		    ptr = line + v;
+		    prev_ptr = ptr;
 # ifdef FEAT_CONCEAL
 		    // no concealing past the end of the line, it interferes
 		    // with line highlighting
@@ -1729,9 +1737,10 @@ win_line(
 	else
 	{
 #ifdef FEAT_LINEBREAK
-	    int c0;
+	    int		c0;
 #endif
 	    VIM_CLEAR(p_extra_free);
+	    prev_ptr = ptr;
 
 	    // Get a character from the line itself.
 	    c = *ptr;
@@ -1938,17 +1947,12 @@ win_line(
 # endif
 				can_spell))
 		    {
-			char_u	*prev_ptr, *p;
+			char_u	*p;
 			int	len;
 			hlf_T	spell_hlf = HLF_COUNT;
 
 			if (has_mbyte)
-			{
-			    prev_ptr = ptr - mb_l;
 			    v -= mb_l - 1;
-			}
-			else
-			    prev_ptr = ptr - 1;
 
 			// Use nextline[] if possible, it has the start of the
 			// next line concatenated.
@@ -2767,6 +2771,7 @@ win_line(
 		}
 #endif
 		ScreenAttrs[off] = char_attr;
+		ScreenCols[off] = MAXCOL;
 #ifdef FEAT_RIGHTLEFT
 		if (wp->w_p_rl)
 		{
@@ -2835,6 +2840,7 @@ win_line(
 		    ScreenLines[off] = ' ';
 		    if (enc_utf8)
 			ScreenLinesUC[off] = 0;
+		    ScreenCols[off] = MAXCOL;
 		    ++col;
 		    if (draw_color_col)
 			draw_color_col = advance_color_col(VCOL_HLC,
@@ -2855,7 +2861,7 @@ win_line(
 	    }
 #endif
 
-	    screen_line(screen_row, wp->w_wincol, col,
+	    screen_line(wp, screen_row, wp->w_wincol, col,
 					  wp->w_width, screen_line_flags);
 	    row++;
 
@@ -2988,6 +2994,8 @@ win_line(
 	    else
 		ScreenAttrs[off] = char_attr;
 
+	    ScreenCols[off] = (colnr_T)(prev_ptr - line);
+
 	    if (has_mbyte && (*mb_char2cells)(mb_c) > 1)
 	    {
 		// Need to fill two screen columns.
@@ -3009,6 +3017,9 @@ win_line(
 		// the character, otherwise highlighting won't stop.
 		if (tocol == vcol)
 		    ++tocol;
+
+		ScreenCols[off] = (colnr_T)(prev_ptr - line);
+
 #ifdef FEAT_RIGHTLEFT
 		if (wp->w_p_rl)
 		{
@@ -3156,11 +3167,11 @@ win_line(
 		)
 	{
 #ifdef FEAT_CONCEAL
-	    screen_line(screen_row, wp->w_wincol, col - boguscols,
+	    screen_line(wp, screen_row, wp->w_wincol, col - boguscols,
 					  wp->w_width, screen_line_flags);
 	    boguscols = 0;
 #else
-	    screen_line(screen_row, wp->w_wincol, col,
+	    screen_line(wp, screen_row, wp->w_wincol, col,
 					  wp->w_width, screen_line_flags);
 #endif
 	    ++row;

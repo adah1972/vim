@@ -75,7 +75,6 @@ static void f_getregtype(typval_T *argvars, typval_T *rettv);
 static void f_gettagstack(typval_T *argvars, typval_T *rettv);
 static void f_gettext(typval_T *argvars, typval_T *rettv);
 static void f_haslocaldir(typval_T *argvars, typval_T *rettv);
-static void f_hasmapto(typval_T *argvars, typval_T *rettv);
 static void f_hlID(typval_T *argvars, typval_T *rettv);
 static void f_hlexists(typval_T *argvars, typval_T *rettv);
 static void f_hostname(typval_T *argvars, typval_T *rettv);
@@ -4218,8 +4217,7 @@ f_expandcmd(typval_T *argvars, typval_T *rettv)
 	return;
 
     if (argvars[1].v_type == VAR_DICT
-	    && dict_get_bool(argvars[1].vval.v_dict, (char_u *)"errmsg",
-								VVAL_FALSE))
+		&& dict_get_bool(argvars[1].vval.v_dict, "errmsg", VVAL_FALSE))
 	emsgoff = FALSE;
 
     rettv->v_type = VAR_STRING;
@@ -6474,7 +6472,7 @@ f_has(typval_T *argvars, typval_T *rettv)
 			     || (minor == VIM_VERSION_MINOR
 				 && has_patch(atoi((char *)name + 10))))));
 	    }
-	    else
+	    else if (isdigit(name[5]))
 		n = has_patch(atoi((char *)name + 5));
 	}
 	else if (STRICMP(name, "vim_starting") == 0)
@@ -6651,40 +6649,6 @@ f_haslocaldir(typval_T *argvars, typval_T *rettv)
 	rettv->vval.v_number = 2;
     else
 	rettv->vval.v_number = 0;
-}
-
-/*
- * "hasmapto()" function
- */
-    static void
-f_hasmapto(typval_T *argvars, typval_T *rettv)
-{
-    char_u	*name;
-    char_u	*mode;
-    char_u	buf[NUMBUFLEN];
-    int		abbr = FALSE;
-
-    if (in_vim9script()
-	    && (check_for_string_arg(argvars, 0) == FAIL
-		|| check_for_opt_string_arg(argvars, 1) == FAIL
-		|| (argvars[1].v_type != VAR_UNKNOWN
-		    && check_for_opt_bool_arg(argvars, 2) == FAIL)))
-	return;
-
-    name = tv_get_string(&argvars[0]);
-    if (argvars[1].v_type == VAR_UNKNOWN)
-	mode = (char_u *)"nvo";
-    else
-    {
-	mode = tv_get_string_buf(&argvars[1], buf);
-	if (argvars[2].v_type != VAR_UNKNOWN)
-	    abbr = (int)tv_get_bool(&argvars[2]);
-    }
-
-    if (map_to_exists(name, mode, abbr))
-	rettv->vval.v_number = TRUE;
-    else
-	rettv->vval.v_number = FALSE;
 }
 
 /*
@@ -9207,7 +9171,7 @@ f_setcharsearch(typval_T *argvars, typval_T *rettv UNUSED)
 
     if ((d = argvars[0].vval.v_dict) != NULL)
     {
-	csearch = dict_get_string(d, (char_u *)"char", FALSE);
+	csearch = dict_get_string(d, "char", FALSE);
 	if (csearch != NULL)
 	{
 	    if (enc_utf8)
@@ -9403,7 +9367,7 @@ f_setreg(typval_T *argvars, typval_T *rettv)
 	if (di != NULL)
 	    regcontents = &di->di_tv;
 
-	stropt = dict_get_string(d, (char_u *)"regtype", FALSE);
+	stropt = dict_get_string(d, "regtype", FALSE);
 	if (stropt != NULL)
 	{
 	    int ret = get_yank_type(&stropt, &yank_type, &block_len);
@@ -9417,14 +9381,14 @@ f_setreg(typval_T *argvars, typval_T *rettv)
 
 	if (regname == '"')
 	{
-	    stropt = dict_get_string(d, (char_u *)"points_to", FALSE);
+	    stropt = dict_get_string(d, "points_to", FALSE);
 	    if (stropt != NULL)
 	    {
 		pointreg = *stropt;
 		regname = pointreg;
 	    }
 	}
-	else if (dict_get_bool(d, (char_u *)"isunnamed", -1) > 0)
+	else if (dict_get_bool(d, "isunnamed", -1) > 0)
 	    pointreg = regname;
     }
     else
@@ -10139,14 +10103,27 @@ f_synIDattr(typval_T *argvars UNUSED, typval_T *rettv)
 		break;
 
 	case 'u':
-		if (TOLOWER_ASC(what[1]) == 'l')	// ul
-		    p = highlight_color(id, what, modec);
-		else if (STRLEN(what) <= 5 || TOLOWER_ASC(what[5]) != 'c')
+		if (STRLEN(what) >= 9)
+		{
+		    if (TOLOWER_ASC(what[5]) == 'l')
 							// underline
-		    p = highlight_has_attr(id, HL_UNDERLINE, modec);
-		else
+			p = highlight_has_attr(id, HL_UNDERLINE, modec);
+		    else if (TOLOWER_ASC(what[5]) != 'd')
 							// undercurl
-		    p = highlight_has_attr(id, HL_UNDERCURL, modec);
+			p = highlight_has_attr(id, HL_UNDERCURL, modec);
+		    else if (TOLOWER_ASC(what[6]) != 'o')
+							// underdashed
+			p = highlight_has_attr(id, HL_UNDERDASHED, modec);
+		    else if (TOLOWER_ASC(what[7]) == 'u')
+							// underdouble
+			p = highlight_has_attr(id, HL_UNDERDOUBLE, modec);
+		    else
+							// underdotted
+			p = highlight_has_attr(id, HL_UNDERDOTTED, modec);
+		}
+		else
+							// ul
+		    p = highlight_color(id, what, modec);
 		break;
     }
 

@@ -32,15 +32,17 @@ EXTERN long	Columns INIT(= 80);	// nr of columns in the screen
  * The characters that are currently on the screen are kept in ScreenLines[].
  * It is a single block of characters, the size of the screen plus one line.
  * The attributes for those characters are kept in ScreenAttrs[].
+ * The byte offset in the line is kept in ScreenCols[].
  *
  * "LineOffset[n]" is the offset from ScreenLines[] for the start of line 'n'.
- * The same value is used for ScreenLinesUC[] and ScreenAttrs[].
+ * The same value is used for ScreenLinesUC[], ScreenAttrs[] and ScreenCols[].
  *
  * Note: before the screen is initialized and when out of memory these can be
  * NULL.
  */
 EXTERN schar_T	*ScreenLines INIT(= NULL);
 EXTERN sattr_T	*ScreenAttrs INIT(= NULL);
+EXTERN colnr_T  *ScreenCols INIT(= NULL);
 EXTERN unsigned	*LineOffset INIT(= NULL);
 EXTERN char_u	*LineWraps INIT(= NULL);	// line wraps to next line
 
@@ -62,7 +64,7 @@ EXTERN int	Screen_mco INIT(= 0);		// value of p_mco used when
 EXTERN schar_T	*ScreenLines2 INIT(= NULL);
 
 /*
- * Buffer for one screen line (characters and attributes).
+ * One screen line to be displayed.  Points into ScreenLines.
  */
 EXTERN schar_T	*current_ScreenLine INIT(= NULL);
 
@@ -1380,17 +1382,6 @@ EXTERN char_u	*homedir INIT(= NULL);
 // directory is not a local directory, globaldir is NULL.
 EXTERN char_u	*globaldir INIT(= NULL);
 
-// Characters from 'fillchars' option
-EXTERN int	fill_stl INIT(= ' ');
-EXTERN int	fill_stlnc INIT(= ' ');
-EXTERN int	fill_vert INIT(= ' ');
-EXTERN int	fill_fold INIT(= '-');
-EXTERN int	fill_foldopen INIT(= '-');
-EXTERN int	fill_foldclosed INIT(= '+');
-EXTERN int	fill_foldsep INIT(= '|');
-EXTERN int	fill_diff INIT(= '-');
-EXTERN int	fill_eob INIT(= '~');
-
 #ifdef FEAT_FOLDING
 EXTERN int	disable_fold_update INIT(= 0);
 #endif
@@ -1654,6 +1645,7 @@ EXTERN int  reset_term_props_on_termresponse INIT(= FALSE);
 EXTERN int  disable_vterm_title_for_testing INIT(= FALSE);
 EXTERN long override_sysinfo_uptime INIT(= -1);
 EXTERN int  override_autoload INIT(= FALSE);
+EXTERN int  ml_get_alloc_lines INIT(= FALSE);
 
 EXTERN int  in_free_unref_items INIT(= FALSE);
 #endif
