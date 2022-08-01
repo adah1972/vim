@@ -1005,6 +1005,8 @@ win_split_ins(
 	needed = wmh1 + STATUS_HEIGHT;
 	if (flags & WSP_ROOM)
 	    needed += p_wh - wmh1;
+	if (p_ch == 0)
+	    needed += 1;  // Adjust for cmdheight=0.
 	if (flags & (WSP_BOT | WSP_TOP))
 	{
 	    minheight = frame_minheight(topframe, NOWIN) + need_status;
@@ -2002,32 +2004,30 @@ win_equal_rec(
 		next_curwin_size = -1;
 		FOR_ALL_FRAMES(fr, topfr->fr_child)
 		{
-		    // If 'winfixwidth' set keep the window width if
-		    // possible.
+		    if (!frame_fixed_width(fr))
+			continue;
+		    // If 'winfixwidth' set keep the window width if possible.
 		    // Watch out for this window being the next_curwin.
-		    if (frame_fixed_width(fr))
+		    n = frame_minwidth(fr, NOWIN);
+		    new_size = fr->fr_width;
+		    if (frame_has_win(fr, next_curwin))
 		    {
-			n = frame_minwidth(fr, NOWIN);
-			new_size = fr->fr_width;
-			if (frame_has_win(fr, next_curwin))
-			{
-			    room += p_wiw - p_wmw;
-			    next_curwin_size = 0;
-			    if (new_size < p_wiw)
-				new_size = p_wiw;
-			}
-			else
-			    // These windows don't use up room.
-			    totwincount -= (n + (fr->fr_next == NULL
-					      ? extra_sep : 0)) / (p_wmw + 1);
-			room -= new_size - n;
-			if (room < 0)
-			{
-			    new_size += room;
-			    room = 0;
-			}
-			fr->fr_newwidth = new_size;
+			room += p_wiw - p_wmw;
+			next_curwin_size = 0;
+			if (new_size < p_wiw)
+			    new_size = p_wiw;
 		    }
+		    else
+			// These windows don't use up room.
+			totwincount -= (n + (fr->fr_next == NULL
+					       ? extra_sep : 0)) / (p_wmw + 1);
+		    room -= new_size - n;
+		    if (room < 0)
+		    {
+			new_size += room;
+			room = 0;
+		    }
+		    fr->fr_newwidth = new_size;
 		}
 		if (next_curwin_size == -1)
 		{
@@ -2143,32 +2143,31 @@ win_equal_rec(
 		next_curwin_size = -1;
 		FOR_ALL_FRAMES(fr, topfr->fr_child)
 		{
+		    if (!frame_fixed_height(fr))
+			continue;
 		    // If 'winfixheight' set keep the window height if
 		    // possible.
 		    // Watch out for this window being the next_curwin.
-		    if (frame_fixed_height(fr))
+		    n = frame_minheight(fr, NOWIN);
+		    new_size = fr->fr_height;
+		    if (frame_has_win(fr, next_curwin))
 		    {
-			n = frame_minheight(fr, NOWIN);
-			new_size = fr->fr_height;
-			if (frame_has_win(fr, next_curwin))
-			{
-			    room += p_wh - p_wmh;
-			    next_curwin_size = 0;
-			    if (new_size < p_wh)
-				new_size = p_wh;
-			}
-			else
-			    // These windows don't use up room.
-			    totwincount -= (n + (fr->fr_next == NULL
-					      ? extra_sep : 0)) / (p_wmh + 1);
-			room -= new_size - n;
-			if (room < 0)
-			{
-			    new_size += room;
-			    room = 0;
-			}
-			fr->fr_newheight = new_size;
+			room += p_wh - p_wmh;
+			next_curwin_size = 0;
+			if (new_size < p_wh)
+			    new_size = p_wh;
 		    }
+		    else
+			// These windows don't use up room.
+			totwincount -= (n + (fr->fr_next == NULL
+					       ? extra_sep : 0)) / (p_wmh + 1);
+		    room -= new_size - n;
+		    if (room < 0)
+		    {
+			new_size += room;
+			room = 0;
+		    }
+		    fr->fr_newheight = new_size;
 		}
 		if (next_curwin_size == -1)
 		{
@@ -3750,36 +3749,34 @@ close_others(
     for (wp = firstwin; win_valid(wp); wp = nextwp)
     {
 	nextwp = wp->w_next;
-	if (wp != curwin)		// don't close current window
-	{
+	if (wp == curwin)		// don't close current window
+	    continue;
 
-	    // Check if it's allowed to abandon this window
-	    r = can_abandon(wp->w_buffer, forceit);
-	    if (!win_valid(wp))		// autocommands messed wp up
-	    {
-		nextwp = firstwin;
-		continue;
-	    }
-	    if (!r)
-	    {
-#if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
-		if (message && (p_confirm
-			     || (cmdmod.cmod_flags & CMOD_CONFIRM)) && p_write)
-		{
-		    dialog_changed(wp->w_buffer, FALSE);
-		    if (!win_valid(wp))		// autocommands messed wp up
-		    {
-			nextwp = firstwin;
-			continue;
-		    }
-		}
-		if (bufIsChanged(wp->w_buffer))
-#endif
-		    continue;
-	    }
-	    win_close(wp, !buf_hide(wp->w_buffer)
-					       && !bufIsChanged(wp->w_buffer));
+	// Check if it's allowed to abandon this window
+	r = can_abandon(wp->w_buffer, forceit);
+	if (!win_valid(wp))		// autocommands messed wp up
+	{
+	    nextwp = firstwin;
+	    continue;
 	}
+	if (!r)
+	{
+#if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
+	    if (message && (p_confirm
+			 || (cmdmod.cmod_flags & CMOD_CONFIRM)) && p_write)
+	    {
+		dialog_changed(wp->w_buffer, FALSE);
+		if (!win_valid(wp))		// autocommands messed wp up
+		{
+		    nextwp = firstwin;
+		    continue;
+		}
+	    }
+	    if (bufIsChanged(wp->w_buffer))
+#endif
+		continue;
+	}
+	win_close(wp, !buf_hide(wp->w_buffer) && !bufIsChanged(wp->w_buffer));
     }
 
     if (message && !ONE_WINDOW)
@@ -5668,6 +5665,8 @@ win_setheight_win(int height, win_T *win)
     if (full_screen && msg_scrolled == 0 && row < cmdline_row)
 	screen_fill(row, cmdline_row, 0, (int)Columns, ' ', ' ', 0);
     cmdline_row = row;
+    p_ch = MAX(Rows - cmdline_row, 0);
+    curtab->tp_ch_used = p_ch;
     msg_row = row;
     msg_col = 0;
 
@@ -5706,7 +5705,11 @@ frame_setheight(frame_T *curfrp, int height)
     {
 	// topframe: can only change the command line
 	if (height > ROWS_AVAIL)
-	    height = ROWS_AVAIL;
+	    // If height is greater than the available space, try to create
+	    // space for the frame by reducing 'cmdheight' if possible, while
+	    // making sure `cmdheight` doesn't go below 1.
+	    height = MIN((p_ch > 0 ? ROWS_AVAIL + (p_ch - 1)
+							: ROWS_AVAIL), height);
 	if (height > 0)
 	    frame_new_height(curfrp, height, FALSE, FALSE);
     }
@@ -6037,7 +6040,7 @@ win_setminheight(void)
     while (p_wmh > 0)
     {
 	room = Rows - p_ch;
-	needed = min_rows() - 1;  // 1 was added for the cmdline
+	needed = min_rows();
 	if (room >= needed)
 	    break;
 	--p_wmh;
@@ -6143,9 +6146,7 @@ win_drag_status_line(win_T *dragwin, int offset)
 	 * Only dragging the last status line can reduce p_ch.
 	 */
 	room = Rows - cmdline_row;
-	if (curfr->fr_next == NULL)
-	    room -= 1;
-	else
+	if (curfr->fr_next != NULL)
 	    room -= p_ch;
 	if (room < 0)
 	    room = 0;
@@ -6196,9 +6197,7 @@ win_drag_status_line(win_T *dragwin, int offset)
     row = win_comp_pos();
     screen_fill(row, cmdline_row, 0, (int)Columns, ' ', ' ', 0);
     cmdline_row = row;
-    p_ch = Rows - cmdline_row;
-    if (p_ch < 1)
-	p_ch = 1;
+    p_ch = MAX(Rows - cmdline_row, 0);
     curtab->tp_ch_used = p_ch;
     redraw_all_later(SOME_VALID);
     showmode();
@@ -6362,7 +6361,8 @@ win_new_height(win_T *wp, int height)
 
     // There is no point in adjusting the scroll position when exiting.  Some
     // values might be invalid.
-    if (!exiting)
+    // Skip scroll_to_fraction() when 'cmdheight' was set to one from zero.
+    if (!exiting && !made_cmdheight_nonzero)
 	scroll_to_fraction(wp, prev_height);
 }
 
@@ -6733,7 +6733,8 @@ min_rows(void)
 	    total = n;
     }
     total += tabline_height();
-    total += 1;		// count the room for the command line
+    if (p_ch > 0)
+	total += 1;		// count the room for the command line
     return total;
 }
 
@@ -6781,6 +6782,8 @@ check_lnums_both(int do_curwin, int nested)
     FOR_ALL_TAB_WINDOWS(tp, wp)
 	if ((do_curwin || wp != curwin) && wp->w_buffer == curbuf)
 	{
+	    int need_adjust;
+
 	    if (!nested)
 	    {
 		// save the original cursor position and topline
@@ -6788,14 +6791,19 @@ check_lnums_both(int do_curwin, int nested)
 		wp->w_save_cursor.w_topline_save = wp->w_topline;
 	    }
 
-	    if (wp->w_cursor.lnum > curbuf->b_ml.ml_line_count)
+	    need_adjust = wp->w_cursor.lnum > curbuf->b_ml.ml_line_count;
+	    if (need_adjust)
 		wp->w_cursor.lnum = curbuf->b_ml.ml_line_count;
-	    if (wp->w_topline > curbuf->b_ml.ml_line_count)
-		wp->w_topline = curbuf->b_ml.ml_line_count;
+	    if (need_adjust || !nested)
+		// save the (corrected) cursor position
+		wp->w_save_cursor.w_cursor_corr = wp->w_cursor;
 
-	    // save the (corrected) cursor position and topline
-	    wp->w_save_cursor.w_cursor_corr = wp->w_cursor;
-	    wp->w_save_cursor.w_topline_corr = wp->w_topline;
+	    need_adjust = wp->w_topline > curbuf->b_ml.ml_line_count;
+	    if (need_adjust)
+		wp->w_topline = curbuf->b_ml.ml_line_count;
+	    if (need_adjust || !nested)
+		// save the (corrected) topline
+		wp->w_save_cursor.w_topline_corr = wp->w_topline;
 	}
 }
 
@@ -6832,10 +6840,13 @@ reset_lnums()
     FOR_ALL_TAB_WINDOWS(tp, wp)
 	if (wp->w_buffer == curbuf)
 	{
-	    // Restore the value if the autocommand didn't change it.
-	    if (EQUAL_POS(wp->w_save_cursor.w_cursor_corr, wp->w_cursor))
+	    // Restore the value if the autocommand didn't change it and it was
+	    // set.
+	    if (EQUAL_POS(wp->w_save_cursor.w_cursor_corr, wp->w_cursor)
+				  && wp->w_save_cursor.w_cursor_save.lnum != 0)
 		wp->w_cursor = wp->w_save_cursor.w_cursor_save;
-	    if (wp->w_save_cursor.w_topline_corr == wp->w_topline)
+	    if (wp->w_save_cursor.w_topline_corr == wp->w_topline
+				      && wp->w_save_cursor.w_topline_save != 0)
 		wp->w_topline = wp->w_save_cursor.w_topline_save;
 	}
 }

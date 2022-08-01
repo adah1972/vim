@@ -2218,7 +2218,7 @@ static funcentry_T global_functions[] =
     {"prompt_setprompt", 2, 2, FEARG_1,	    arg2_buffer_string,
 			ret_void,	    JOB_FUNC(f_prompt_setprompt)},
     {"prop_add",	3, 3, FEARG_1,	    arg3_number_number_dict,
-			ret_void,	    PROP_FUNC(f_prop_add)},
+			ret_number,	    PROP_FUNC(f_prop_add)},
     {"prop_add_list",	2, 2, FEARG_1,	    arg2_dict_any_list_any,
 			ret_void,	    PROP_FUNC(f_prop_add_list)},
     {"prop_clear",	1, 3, FEARG_1,	    arg3_number_number_dict,
@@ -6458,19 +6458,26 @@ f_has(typval_T *argvars, typval_T *rettv)
 	    x = TRUE;
 	    if (name[5] == '-'
 		    && STRLEN(name) >= 11
-		    && vim_isdigit(name[6])
-		    && vim_isdigit(name[8])
-		    && vim_isdigit(name[10]))
+		    && (name[6] >= '1' && name[6] <= '9'))
 	    {
-		int major = atoi((char *)name + 6);
-		int minor = atoi((char *)name + 8);
+		char	*end;
+		int	major, minor;
 
-		// Expect "patch-9.9.01234".
-		n = (major < VIM_VERSION_MAJOR
-		     || (major == VIM_VERSION_MAJOR
-			 && (minor < VIM_VERSION_MINOR
-			     || (minor == VIM_VERSION_MINOR
-				 && has_patch(atoi((char *)name + 10))))));
+		// This works for patch-8.1.2, patch-9.0.3, patch-10.0.4, etc.
+		// Not for patch-9.10.5.
+		major = (int)strtoul((char *)name + 6, &end, 10);
+		if (*end == '.' && vim_isdigit(end[1])
+			&& end[2] == '.' && vim_isdigit(end[3]))
+		{
+		    minor = atoi(end + 1);
+
+		    // Expect "patch-9.9.01234".
+		    n = (major < VIM_VERSION_MAJOR
+			 || (major == VIM_VERSION_MAJOR
+			     && (minor < VIM_VERSION_MINOR
+				 || (minor == VIM_VERSION_MINOR
+				     && has_patch(atoi(end + 3))))));
+		}
 	    }
 	    else if (isdigit(name[5]))
 		n = has_patch(atoi((char *)name + 5));
@@ -10083,8 +10090,11 @@ f_synIDattr(typval_T *argvars UNUSED, typval_T *rettv)
 		    p = highlight_has_attr(id, HL_ITALIC, modec);
 		break;
 
-	case 'n':					// name
-		p = get_highlight_name_ext(NULL, id - 1, FALSE);
+	case 'n':					
+		if (TOLOWER_ASC(what[1]) == 'o')	// nocombine
+		    p = highlight_has_attr(id, HL_NOCOMBINE, modec);
+		else					// name
+		    p = get_highlight_name_ext(NULL, id - 1, FALSE);
 		break;
 
 	case 'r':					// reverse

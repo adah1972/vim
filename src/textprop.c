@@ -150,7 +150,7 @@ get_bufnr_from_arg(typval_T *arg, buf_T **buf)
  * prop_add({lnum}, {col}, {props})
  */
     void
-f_prop_add(typval_T *argvars, typval_T *rettv UNUSED)
+f_prop_add(typval_T *argvars, typval_T *rettv)
 {
     linenr_T	start_lnum;
     colnr_T	start_col;
@@ -163,31 +163,29 @@ f_prop_add(typval_T *argvars, typval_T *rettv UNUSED)
 
     start_lnum = tv_get_number(&argvars[0]);
     start_col = tv_get_number(&argvars[1]);
-    if (start_col < 1)
-    {
-	semsg(_(e_invalid_column_number_nr), (long)start_col);
-	return;
-    }
     if (argvars[2].v_type != VAR_DICT)
     {
 	emsg(_(e_dictionary_required));
 	return;
     }
 
-    prop_add_common(start_lnum, start_col, argvars[2].vval.v_dict,
-							  curbuf, &argvars[2]);
+    rettv->vval.v_number = prop_add_common(start_lnum, start_col,
+				 argvars[2].vval.v_dict, curbuf, &argvars[2]);
 }
 
 /*
  * Attach a text property 'type_name' to the text starting
  * at [start_lnum, start_col] and ending at [end_lnum, end_col] in
- * the buffer 'buf' and assign identifier 'id'.
+ * the buffer "buf" and assign identifier "id".
+ * When "text" is not NULL add it to buf->b_textprop_text[-id - 1].
  */
     static int
 prop_add_one(
 	buf_T		*buf,
 	char_u		*type_name,
 	int		id,
+	char_u		*text_arg,
+	int		text_flags,
 	linenr_T	start_lnum,
 	linenr_T	end_lnum,
 	colnr_T		start_col,
@@ -202,26 +200,43 @@ prop_add_one(
     char_u	*newtext;
     int		i;
     textprop_T	tmp_prop;
+    char_u	*text = text_arg;
+    int		res = FAIL;
 
     type = lookup_prop_type(type_name, buf);
     if (type == NULL)
-	return FAIL;
+	goto theend;
 
     if (start_lnum < 1 || start_lnum > buf->b_ml.ml_line_count)
     {
 	semsg(_(e_invalid_line_number_nr), (long)start_lnum);
-	return FAIL;
+	goto theend;
     }
     if (end_lnum < start_lnum || end_lnum > buf->b_ml.ml_line_count)
     {
 	semsg(_(e_invalid_line_number_nr), (long)end_lnum);
-	return FAIL;
+	goto theend;
     }
 
     if (buf->b_ml.ml_mfp == NULL)
     {
 	emsg(_(e_cannot_add_text_property_to_unloaded_buffer));
-	return FAIL;
+	goto theend;
+    }
+
+    if (text != NULL)
+    {
+	garray_T *gap = &buf->b_textprop_text;
+
+	// double check we got the right ID
+	if (-id - 1 != gap->ga_len)
+	    iemsg("text prop ID mismatch");
+	if (gap->ga_growsize == 0)
+	    ga_init2(gap, sizeof(char *), 50);
+	if (ga_grow(gap, 1) == FAIL)
+	    goto theend;
+	((char_u **)gap->ga_data)[gap->ga_len++] = text;
+	text = NULL;
     }
 
     for (lnum = start_lnum; lnum <= end_lnum; ++lnum)
@@ -237,10 +252,10 @@ prop_add_one(
 	    col = start_col;
 	else
 	    col = 1;
-	if (col - 1 > (colnr_T)textlen)
+	if (col - 1 > (colnr_T)textlen && !(col == 0 && text_arg != NULL))
 	{
 	    semsg(_(e_invalid_column_number_nr), (long)start_col);
-	    return FAIL;
+	    goto theend;
 	}
 
 	if (lnum == end_lnum)
@@ -252,10 +267,17 @@ prop_add_one(
 	if (length < 0)
 	    length = 0;		// zero-width property
 
+	if (text_arg != NULL)
+	{
+	    length = 1;		// text is placed on one character
+	    if (col == 0)
+		col = MAXCOL;	// after the line
+	}
+
 	// Allocate the new line with space for the new property.
 	newtext = alloc(buf->b_ml.ml_line_len + sizeof(textprop_T));
 	if (newtext == NULL)
-	    return FAIL;
+	    goto theend;
 	// Copy the text, including terminating NUL.
 	mch_memmove(newtext, buf->b_ml.ml_line_ptr, textlen);
 
@@ -277,8 +299,9 @@ prop_add_one(
 	tmp_prop.tp_len = length;
 	tmp_prop.tp_id = id;
 	tmp_prop.tp_type = type->pt_id;
-	tmp_prop.tp_flags = (lnum > start_lnum ? TP_FLAG_CONT_PREV : 0)
-			  | (lnum < end_lnum ? TP_FLAG_CONT_NEXT : 0);
+	tmp_prop.tp_flags = text_flags
+			    | (lnum > start_lnum ? TP_FLAG_CONT_PREV : 0)
+			    | (lnum < end_lnum ? TP_FLAG_CONT_NEXT : 0);
 	mch_memmove(newprops + i * sizeof(textprop_T), &tmp_prop,
 							   sizeof(textprop_T));
 
@@ -295,7 +318,11 @@ prop_add_one(
     }
 
     changed_lines_buf(buf, start_lnum, end_lnum + 1, 0);
-    return OK;
+    res = OK;
+
+theend:
+    vim_free(text);
+    return res;
 }
 
 /*
@@ -367,7 +394,7 @@ f_prop_add_list(typval_T *argvars, typval_T *rettv UNUSED)
 	    emsg(_(e_invalid_argument));
 	    return;
 	}
-	if (prop_add_one(buf, type_name, id, start_lnum, end_lnum,
+	if (prop_add_one(buf, type_name, id, NULL, 0, start_lnum, end_lnum,
 						start_col, end_col) == FAIL)
 	    return;
     }
@@ -376,11 +403,22 @@ f_prop_add_list(typval_T *argvars, typval_T *rettv UNUSED)
 }
 
 /*
+ * Get the next ID to use for a textprop with text in buffer "buf".
+ */
+    static int
+get_textprop_id(buf_T *buf)
+{
+    // TODO: recycle deleted entries
+    return -(buf->b_textprop_text.ga_len + 1);
+}
+
+/*
  * Shared between prop_add() and popup_create().
  * "dict_arg" is the function argument of a dict containing "bufnr".
  * it is NULL for popup_create().
+ * Returns the "id" used for "text" or zero.
  */
-    void
+    int
 prop_add_common(
 	linenr_T    start_lnum,
 	colnr_T	    start_col,
@@ -393,11 +431,13 @@ prop_add_common(
     char_u	*type_name;
     buf_T	*buf = default_buf;
     int		id = 0;
+    char_u	*text = NULL;
+    int		flags = 0;
 
     if (dict == NULL || !dict_has_key(dict, "type"))
     {
 	emsg(_(e_missing_property_type_name));
-	return;
+	goto theend;
     }
     type_name = dict_get_string(dict, "type", FALSE);
 
@@ -407,7 +447,7 @@ prop_add_common(
 	if (end_lnum < start_lnum)
 	{
 	    semsg(_(e_invalid_value_for_argument_str), "end_lnum");
-	    return;
+	    goto theend;
 	}
     }
     else
@@ -420,7 +460,7 @@ prop_add_common(
 	if (length < 0 || end_lnum > start_lnum)
 	{
 	    semsg(_(e_invalid_value_for_argument_str), "length");
-	    return;
+	    goto theend;
 	}
 	end_col = start_col + length;
     }
@@ -430,7 +470,7 @@ prop_add_common(
 	if (end_col <= 0)
 	{
 	    semsg(_(e_invalid_value_for_argument_str), "end_col");
-	    return;
+	    goto theend;
 	}
     }
     else if (start_lnum == end_lnum)
@@ -441,17 +481,79 @@ prop_add_common(
     if (dict_has_key(dict, "id"))
 	id = dict_get_number(dict, "id");
 
+    if (dict_has_key(dict, "text"))
+    {
+	text = dict_get_string(dict, "text", TRUE);
+	if (text == NULL)
+	    goto theend;
+	// use a default length of 1 to make multiple props show up
+	end_col = start_col + 1;
+
+	if (dict_has_key(dict, "text_align"))
+	{
+	    char_u *p = dict_get_string(dict, "text_align", FALSE);
+
+	    if (p == NULL)
+		goto theend;
+	    if (STRCMP(p, "right") == 0)
+		flags |= TP_FLAG_ALIGN_RIGHT;
+	    else if (STRCMP(p, "below") == 0)
+		flags |= TP_FLAG_ALIGN_BELOW;
+	    else if (STRCMP(p, "after") != 0)
+	    {
+		semsg(_(e_invalid_value_for_argument_str_str), "text_align", p);
+		goto theend;
+	    }
+	}
+
+	if (dict_has_key(dict, "text_wrap"))
+	{
+	    char_u *p = dict_get_string(dict, "text_wrap", FALSE);
+	    if (p == NULL)
+		goto theend;
+	    if (STRCMP(p, "wrap") == 0)
+		flags |= TP_FLAG_WRAP;
+	    else if (STRCMP(p, "truncate") != 0)
+	    {
+		semsg(_(e_invalid_value_for_argument_str_str), "text_wrap", p);
+		goto theend;
+	    }
+	}
+    }
+
+    // Column must be 1 or more for a normal text property; when "text" is
+    // present zero means it goes after the line.
+    if (start_col < (text == NULL ? 1 : 0))
+    {
+	semsg(_(e_invalid_column_number_nr), (long)start_col);
+	goto theend;
+    }
+
     if (dict_arg != NULL && get_bufnr_from_arg(dict_arg, &buf) == FAIL)
-	return;
+	goto theend;
+
+    if (id < 0 && buf->b_textprop_text.ga_len > 0)
+    {
+	emsg(_(e_cannot_use_negative_id_after_adding_textprop_with_text));
+	goto theend;
+    }
+    if (text != NULL)
+	id = get_textprop_id(buf);
 
     // This must be done _before_ we add the property because property changes
     // trigger buffer (memline) reorganisation, which needs this flag to be
     // correctly set.
     buf->b_has_textprop = TRUE;  // this is never reset
 
-    prop_add_one(buf, type_name, id, start_lnum, end_lnum, start_col, end_col);
+    prop_add_one(buf, type_name, id, text, flags,
+				    start_lnum, end_lnum, start_col, end_col);
+    text = NULL;
 
     redraw_buf_later(buf, VALID);
+
+theend:
+    vim_free(text);
+    return id;
 }
 
 /*
@@ -954,9 +1056,9 @@ get_props_in_line(
 	if ((prop_types == NULL
 		    || prop_type_or_id_in_list(prop_types, prop_types_len,
 			prop.tp_type))
-		&& (prop_ids == NULL ||
-		    prop_type_or_id_in_list(prop_ids, prop_ids_len,
-			prop.tp_id)))
+		&& (prop_ids == NULL
+		    || prop_type_or_id_in_list(prop_ids, prop_ids_len,
+								 prop.tp_id)))
 	{
 	    dict_T *d = dict_alloc();
 
@@ -1175,9 +1277,10 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
     dict_T	*dict;
     buf_T	*buf = curbuf;
     int		do_all;
-    int		id = -1;
+    int		id = -MAXCOL;
     int		type_id = -1;
     int		both;
+    int		did_remove_text = FALSE;
 
     rettv->vval.v_number = 0;
 
@@ -1228,12 +1331,12 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
     }
     both = dict_get_bool(dict, "both", FALSE);
 
-    if (id == -1 && type_id == -1)
+    if (id == -MAXCOL && type_id == -1)
     {
 	emsg(_(e_need_at_least_one_of_id_or_type));
 	return;
     }
-    if (both && (id == -1 || type_id == -1))
+    if (both && (id == -MAXCOL || type_id == -1))
     {
 	emsg(_(e_need_id_and_type_with_both));
 	return;
@@ -1292,6 +1395,21 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 		    buf->b_ml.ml_line_len -= sizeof(textprop_T);
 		    --idx;
 
+		    if (textprop.tp_id < 0)
+		    {
+			garray_T    *gap = &buf->b_textprop_text;
+			int	    ii = -textprop.tp_id - 1;
+
+			// negative ID: property with text - free the text
+			if (ii < gap->ga_len)
+			{
+			    char_u **p = ((char_u **)gap->ga_data) + ii;
+			    vim_free(*p);
+			    *p = NULL;
+			    did_remove_text = TRUE;
+			}
+		    }
+
 		    if (first_changed == 0)
 			first_changed = lnum;
 		    last_changed = lnum;
@@ -1302,10 +1420,21 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 	    }
 	}
     }
+
     if (first_changed > 0)
     {
 	changed_lines_buf(buf, first_changed, last_changed + 1, 0);
 	redraw_buf_later(buf, VALID);
+    }
+
+    if (did_remove_text)
+    {
+	garray_T    *gap = &buf->b_textprop_text;
+
+	// Reduce the growarray size for NULL pointers at the end.
+	while (gap->ga_len > 0
+			 && ((char_u **)gap->ga_data)[gap->ga_len - 1] == NULL)
+	    --gap->ga_len;
     }
 }
 
@@ -1653,22 +1782,32 @@ typedef struct
  */
     static adjustres_T
 adjust_prop(
-	textprop_T *prop,
-	colnr_T col,
-	int added,
-	int flags)
+	textprop_T  *prop,
+	colnr_T	    col,
+	int	    added,
+	int	    flags)
 {
-    proptype_T	*pt = text_prop_type_by_id(curbuf, prop->tp_type);
-    int		start_incl = (pt != NULL
-				    && (pt->pt_flags & PT_FLAG_INS_START_INCL))
+    proptype_T	*pt;
+    int		start_incl;
+    int		end_incl;
+    int		droppable;
+    adjustres_T res = {TRUE, FALSE};
+
+    // prop after end of the line doesn't move
+    if (prop->tp_col == MAXCOL)
+    {
+	res.dirty = FALSE;
+	return res;
+    }
+
+    pt = text_prop_type_by_id(curbuf, prop->tp_type);
+    start_incl = (pt != NULL && (pt->pt_flags & PT_FLAG_INS_START_INCL))
 				|| (flags & APC_SUBSTITUTE)
 				|| (prop->tp_flags & TP_FLAG_CONT_PREV);
-    int		end_incl = (pt != NULL
-				      && (pt->pt_flags & PT_FLAG_INS_END_INCL))
+    end_incl = (pt != NULL && (pt->pt_flags & PT_FLAG_INS_END_INCL))
 				|| (prop->tp_flags & TP_FLAG_CONT_NEXT);
-    // Do not drop zero-width props if they later can increase in size.
-    int		droppable = !(start_incl || end_incl);
-    adjustres_T res = {TRUE, FALSE};
+    // do not drop zero-width props if they later can increase in size
+    droppable = !(start_incl || end_incl);
 
     if (added > 0)
     {

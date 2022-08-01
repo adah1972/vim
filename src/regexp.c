@@ -1303,7 +1303,7 @@ reg_match_visual(void)
 	rex.line = reg_getline(rex.lnum);
 	rex.input = rex.line + col;
 
-	cols = win_linetabsize(wp, rex.line, col);
+	cols = win_linetabsize(wp, rex.reg_firstlnum + rex.lnum, rex.line, col);
 	if (cols < start || cols > end - (*p_sel == 'e'))
 	    return FALSE;
     }
@@ -1641,7 +1641,11 @@ cstrchr(char_u *s, int c)
 	{
 	    if (enc_utf8 && c > 0x80)
 	    {
-		if (utf_fold(utf_ptr2char(p)) == cc)
+		int uc = utf_ptr2char(p);
+
+		// Do not match an illegal byte.  E.g. 0xff matches 0xc3 0xbf,
+		// not 0xff.
+		if ((uc < 0x80 || uc != *p) && utf_fold(uc) == cc)
 		    return p;
 	    }
 	    else if (*p == c || *p == cc)

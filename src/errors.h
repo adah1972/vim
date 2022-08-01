@@ -3306,3 +3306,11 @@ EXTERN char e_substitute_nesting_too_deep[]
 EXTERN char e_invalid_argument_nr[]
 	INIT(= N_("E1291: Invalid argument: %ld"));
 #endif
+#ifdef FEAT_CMDWIN
+EXTERN char e_cmdline_window_already_open[]
+	INIT(= N_("E1292: Command-line window is already open"));
+#endif
+#ifdef FEAT_PROP_POPUP
+EXTERN char e_cannot_use_negative_id_after_adding_textprop_with_text[]
+	INIT(= N_("E1293: Cannot use a negative id after adding a textprop with text"));
+#endif

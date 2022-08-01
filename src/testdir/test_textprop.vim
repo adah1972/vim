@@ -2187,4 +2187,73 @@ func Test_props_do_not_affect_byte_offsets_editline()
   bwipe!
 endfunc
 
+func Test_prop_inserts_text()
+  CheckRunVimInTerminal
+
+  " Just a basic check for now
+  let lines =<< trim END
+      call setline(1, 'insert some text here and other text there and some more text after wrapping')
+      call prop_type_add('someprop', #{highlight: 'ErrorMsg'})
+      call prop_type_add('otherprop', #{highlight: 'Search'})
+      call prop_type_add('moreprop', #{highlight: 'DiffAdd'})
+      call prop_add(1, 18, #{type: 'someprop', text: 'SOME '})
+      call prop_add(1, 38, #{type: 'otherprop', text: 'OTHER '})
+      call prop_add(1, 69, #{type: 'moreprop', text: 'MORE '})
+      redraw
+      normal $
+  END
+  call writefile(lines, 'XscriptPropsWithText')
+  let buf = RunVimInTerminal('-S XscriptPropsWithText', #{rows: 6, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_inserts_text_1', {})
+
+  call term_sendkeys(buf, ":set signcolumn=yes\<CR>")
+  call VerifyScreenDump(buf, 'Test_prop_inserts_text_2', {})
+
+  call StopVimInTerminal(buf)
+  call delete('XscriptPropsWithText')
+endfunc
+
+func Test_props_with_text_after()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      call setline(1, 'some text here and other text there')
+      call prop_type_add('rightprop', #{highlight: 'ErrorMsg'})
+      call prop_type_add('afterprop', #{highlight: 'Search'})
+      call prop_type_add('belowprop', #{highlight: 'DiffAdd'})
+      call prop_add(1, 0, #{type: 'rightprop', text: ' RIGHT ', text_align: 'right'})
+      call prop_add(1, 0, #{type: 'afterprop', text: ' AFTER ', text_align: 'after'})
+      call prop_add(1, 0, #{type: 'belowprop', text: ' BELOW ', text_align: 'below'})
+
+      call setline(2, 'Last line.')
+      call prop_add(2, 0, #{type: 'afterprop', text: ' After Last ', text_align: 'after'})
+      normal G$
+  END
+  call writefile(lines, 'XscriptPropsWithTextAfter')
+  let buf = RunVimInTerminal('-S XscriptPropsWithTextAfter', #{rows: 6, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_with_text_after_1', {})
+
+  call StopVimInTerminal(buf)
+  call delete('XscriptPropsWithTextAfter')
+endfunc
+
+func Test_removed_prop_with_text_cleans_up_array()
+  new
+  call setline(1, 'some text here')
+  call prop_type_add('some', #{highlight: 'ErrorMsg'})
+  let id1 = prop_add(1, 5, #{type: 'some', text: "SOME"})
+  call assert_equal(-1, id1)
+  let id2 = prop_add(1, 10, #{type: 'some', text: "HERE"})
+  call assert_equal(-2, id2)
+
+  " removing the props resets the index
+  call prop_remove(#{id: id1})
+  call prop_remove(#{id: id2})
+  let id1 = prop_add(1, 5, #{type: 'some', text: "SOME"})
+  call assert_equal(-1, id1)
+
+  call prop_type_delete('some')
+  bwipe!
+endfunc
+
 " vim: shiftwidth=2 sts=2 expandtab
