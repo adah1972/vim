@@ -187,6 +187,8 @@ prop_add({lnum}, {col}, {props})
 		in the text will move the cursor to the first character after
 		the text, or the last character of the line.
 		A negative "id" will be chosen and is returned.  Once a
+		Any Tab in the text will be changed to a space (Rationale:
+		otherwise the size of the text is difficult to compute).
 		property with "text" has been added for a buffer then using a
 		negative "id" for any other property will give an error:
 		*E1293*
@@ -375,6 +377,8 @@ prop_type_add({name}, {props})		*prop_type_add()* *E969* *E970*
 		   combine	when omitted or TRUE combine the highlight
 				with any syntax highlight; when FALSE syntax
 				highlight will not be used
+		   override	when TRUE the highlight overrides any other,
+				including 'cursorline' and Visual
 		   start_incl	when TRUE inserts at the start position will
 				be included in the text property
 		   end_incl	when TRUE inserts at the end position will be

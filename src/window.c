@@ -4324,10 +4324,8 @@ enter_tabpage(
     diff_need_scrollbind = TRUE;
 #endif
 
-    // The tabpage line may have appeared or disappeared, may need to resize
-    // the frames for that.  When the Vim window was resized need to update
-    // frame sizes too.  Use the stored value of p_ch, so that it can be
-    // different for each tab page.
+    // Use the stored value of p_ch, so that it can be different for each tab
+    // page.
     if (p_ch != curtab->tp_ch_used)
 	clear_cmdline = TRUE;
     p_ch = curtab->tp_ch_used;
@@ -4338,6 +4336,9 @@ enter_tabpage(
     if ((row < cmdline_row) && (cmdline_row <= Rows - p_ch))
 	clear_cmdline = TRUE;
 
+    // The tabpage line may have appeared or disappeared, may need to resize
+    // the frames for that.  When the Vim window was resized need to update
+    // frame sizes too.
     if (curtab->tp_old_Rows != Rows || (old_off != firstwin->w_winrow
 #ifdef FEAT_GUI_TABLINE
 			    && !gui_use_tabline()
@@ -5665,8 +5666,6 @@ win_setheight_win(int height, win_T *win)
     if (full_screen && msg_scrolled == 0 && row < cmdline_row)
 	screen_fill(row, cmdline_row, 0, (int)Columns, ' ', ' ', 0);
     cmdline_row = row;
-    p_ch = MAX(Rows - cmdline_row, 0);
-    curtab->tp_ch_used = p_ch;
     msg_row = row;
     msg_col = 0;
 

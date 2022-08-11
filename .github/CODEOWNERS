@@ -98,6 +98,7 @@ runtime/doc/pi_tar.txt			@cecamp
 runtime/doc/pi_vimball.txt		@cecamp
 runtime/doc/pi_zip.txt			@cecamp
 runtime/doc/ps1.txt			@heaths
+runtime/ftplugin/abaqus.vim		@costerwi
 runtime/ftplugin/awk.vim		@dkearns
 runtime/ftplugin/basic.vim		@dkearns
 runtime/ftplugin/bst.vim		@tpope
@@ -107,6 +108,7 @@ runtime/ftplugin/cs.vim			@nickspoons
 runtime/ftplugin/csh.vim		@dkearns
 runtime/ftplugin/css.vim		@dkearns
 runtime/ftplugin/cucumber.vim		@tpope
+runtime/ftplugin/desktop.vim		@e-kwsm
 runtime/ftplugin/dosbatch.vim		@mrdubya
 runtime/ftplugin/eiffel.vim		@dkearns
 runtime/ftplugin/expect.vim		@dkearns
@@ -173,6 +175,7 @@ runtime/ftplugin/scss.vim		@tpope
 runtime/ftplugin/sdoc.vim		@gpanders
 runtime/ftplugin/solution.vim		@dkearns
 runtime/ftplugin/spec.vim		@ignatenkobrain
+runtime/ftplugin/swayconfig.vim		@jamespeapen
 runtime/ftplugin/systemverilog.vim	@Kocha
 runtime/ftplugin/tap.vim		@petdance
 runtime/ftplugin/tcsh.vim		@dkearns
@@ -265,6 +268,7 @@ runtime/plugin/netrwPlugin.vim		@cecamp
 runtime/plugin/tarPlugin.vim		@cecamp
 runtime/plugin/vimballPlugin.vim	@cecamp
 runtime/plugin/zipPlugin.vim		@cecamp
+runtime/syntax/abaqus.vim		@costerwi
 runtime/syntax/aidl.vim			@dpelle
 runtime/syntax/amiga.vim		@cecamp
 runtime/syntax/arduino.vim		@johshoff
@@ -394,6 +398,7 @@ runtime/syntax/sshconfig.vim		@Jakuje
 runtime/syntax/sshdconfig.vim		@Jakuje
 runtime/syntax/sudoers.vim		@e-kwsm
 runtime/syntax/svn.vim			@hdima
+runtime/syntax/swayconfig.vim       @jamespeapen
 runtime/syntax/systemverilog.vim	@Kocha
 runtime/syntax/tags.vim			@cecamp
 runtime/syntax/tap.vim			@petdance

@@ -38,26 +38,6 @@ browser use: https://github.com/vim/vim/issues/1234
 							*known-bugs*
 -------------------- Known bugs and current work -----------------------
 
-PR to consider:
-- stricter parsing for has('patch-x.y.z')  #10752
-- cmdheight=0  #10675  Does it work properly?
-- add splitscroll  #10682  Useful?  Any trouble? Null Chilly says it's OK.
-    suggestion: names instead of numbers for the option value
-    problem depending on whether window is focused or not
-
-Support virtual text:  #7553
-- Remove and free text when textprop is removed with negative ID.
-- "gj" does not work correctly
-- no virtual text when 'signcolumn' is set to "yes"  #10794
-- placement at the end of the line: after the text (text_align: "end"), right
-  aligned (text_align: "right"); choice: truncate when not enough space or
-  wrap to next line (text_wrap: "yes"); Also: fill with space to text wraps to
-  start of next screen line (text_align: "below")
-  Also consider an empty line, should fix #10786.  Also check inserting text.
-- win_lbr_chartabsize() TODO item: count screen cells
-- wrong cursor position (Yegappan, July 27)
-- many tests
-
 Further Vim9 improvements, possibly after launch:
 - Use Vim9 for more runtime files.
 - Check performance with callgrind and kcachegrind.
@@ -135,19 +115,6 @@ Popup windows:
   Use ERROR_IF_POPUP_WINDOW for these.
 - Figure out the size and position better if wrapping inserts indent
 
-Text properties:
-- property is overruled by cursorline. (#8225).
-  Add better control over priority?  Make list of all highlighting, specify
-  where property fits in.
-  Or Should we let the textprop highlight overrule other (e.g. diff) highlight
-  if the priority is above a certain value?  (#7392)
-  Combining text property with 'cursorline' does not always work (Billie
-  Cleek, #5533)
-- Add text property that shifts text to make room for annotation (e.g.
-  variable type).  Like the opposite of conceal.  Requires fixing the cursor
-  positioning and mouse clicks as with conceal mode.
-- See remarks at top of src/textprop.c
-
 'incsearch' with :s:
 - :s/foo  using CTRL-G moves to another line, should not happen, or use the
   correct line (it uses the last but one line) (Lifepillar, Aug 18, #3345)
@@ -222,8 +189,13 @@ Terminal emulator window:
   conversions.
 
 Patches considered for including:
+- use int instead of char_ for index  #10818  needs a test
 - Add "-n" option to xxd. #10599  needs a test
 - allow for nesting of timeout, sketch in #10595
+
+Add 'splitscroll'  #10682  Useful?  Any trouble? Null Chilly says it's OK.
+    suggestion: names instead of numbers for the option value
+    problem depending on whether window is focused or not
 
 Autoconf: must use autoconf 2.69, later version generates lots of warnings
 - try using autoconf 2.71 and fix all "obsolete" warnings
@@ -246,6 +218,10 @@ pass it on with modifications.
 
 Using "A" and "o" in manually created fold (in empty buffer) does not behave
 consistenly (James McCoy, #10698)
+
+To avoid flicker: add an option that when a screen clear is requested, instead
+of clearing it draws everything and uses "clear to end of line" for every line.
+Resetting 't_ut' already causes this?
 
 When scheme can't be found by configure there is no clear "not found" message:
     configure:5769: checking MzScheme install prefix
@@ -2677,6 +2653,8 @@ Better 'rightleft' or BIDI support:
 
 
 Spell checking:
+-   [s does not find missing capital at start of the line.  #10838
+    Probably because the dot at the end of the previous line isn't seen.
 -   When 'cursorline' is set and the first word should have SpellCap
     highlighting, redrawing the line removes it when moving the cursor away
     from the line. (#7085)  Would need to inspect the end of the previous line
@@ -3782,6 +3760,7 @@ Printing:
 Syntax highlighting:
     Long term goal: faster, better, etc.  Options:
     - use treesitter, NeoVim uses it - Many people don't like it.
+	After changes requires rebuilding the library.
     - use TextMate, vscode uses it.  #9087 - Other people don't like it.
       Vscode is asked to switch to treesitter:
       https://github.com/microsoft/vscode/issues/50140
