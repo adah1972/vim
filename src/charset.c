@@ -1181,9 +1181,15 @@ win_lbr_chartabsize(
 		    if (tp->tp_col == MAXCOL)
 		    {
 			int below = (tp->tp_flags & TP_FLAG_ALIGN_BELOW);
+			int right = (tp->tp_flags & TP_FLAG_ALIGN_RIGHT);
 			int wrap = (tp->tp_flags & TP_FLAG_WRAP);
 			int len = (int)STRLEN(p);
 			int n_used = len;
+
+			// The "$" for 'list' mode will go between the EOL and
+			// the text prop, account for that.
+			if (wp->w_p_list && wp->w_lcs_chars.eol != NUL)
+			    ++vcol;
 
 			// Keep in sync with where textprop_size_after_trunc()
 			// is called in win_line().
@@ -1193,15 +1199,25 @@ win_lbr_chartabsize(
 			    cells = textprop_size_after_trunc(wp,
 						     below, added, p, &n_used);
 			}
-			// right-aligned does not really matter here, same as
-			// "after"
 			if (below)
 			    cells += wp->w_width - (vcol + size) % wp->w_width;
+			else if (right)
+			{
+			    len = wp->w_width - vcol % wp->w_width;
+			    if (len > cells + size)
+				// add the padding for right-alignment
+				cells = len - size;
+			    else if (len == 0)
+				// padding to right-align in the next line
+				cells += cells > wp->w_width ? 0
+							  :wp->w_width - cells;
+			}
 #ifdef FEAT_LINEBREAK
 			no_sbr = TRUE;  // don't use 'showbreak' now
 #endif
 		    }
 		    cts->cts_cur_text_width += cells;
+		    cts->cts_start_incl = tp->tp_flags & TP_FLAG_START_INCL;
 		    size += cells;
 		    if (*s == TAB)
 		    {
@@ -1575,7 +1591,9 @@ getvcol(
 	else
 	{
 #ifdef FEAT_PROP_POPUP
-	    if ((State & MODE_INSERT) == 0 && !on_NUL)
+	    // in Insert mode, if "start_incl" is true the text gets inserted
+	    // after the virtual text, thus add its width
+	    if (((State & MODE_INSERT) == 0 || cts.cts_start_incl) && !on_NUL)
 		// cursor is after inserted text, unless on the NUL
 		vcol += cts.cts_cur_text_width;
 #endif

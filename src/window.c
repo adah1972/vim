@@ -1313,8 +1313,8 @@ win_split_ins(
 
      // Both windows need redrawing.  Update all status lines, in case they
      // show something related to the window count or position.
-    redraw_win_later(wp, NOT_VALID);
-    redraw_win_later(oldwin, NOT_VALID);
+    redraw_win_later(wp, UPD_NOT_VALID);
+    redraw_win_later(oldwin, UPD_NOT_VALID);
     status_redraw_all();
 
     if (need_status)
@@ -1718,7 +1718,7 @@ win_exchange(long Prenum)
 	wp->w_cursor = curwin->w_cursor;
 
     win_enter(wp, TRUE);
-    redraw_all_later(NOT_VALID);
+    redraw_all_later(UPD_NOT_VALID);
 }
 
 /*
@@ -1801,7 +1801,7 @@ win_rotate(int upwards, int count)
 	(void)win_comp_pos();
     }
 
-    redraw_all_later(NOT_VALID);
+    redraw_all_later(UPD_NOT_VALID);
 }
 
 /*
@@ -1903,7 +1903,7 @@ win_move_after(win_T *win1, win_T *win2)
 	frame_append(win2->w_frame, win1->w_frame);
 
 	(void)win_comp_pos();	// recompute w_winrow for all windows
-	redraw_later(NOT_VALID);
+	redraw_later(UPD_NOT_VALID);
     }
     win_enter(win1, FALSE);
 }
@@ -1966,7 +1966,7 @@ win_equal_rec(
 	    frame_new_height(topfr, height, FALSE, FALSE);
 	    topfr->fr_win->w_wincol = col;
 	    frame_new_width(topfr, width, FALSE, FALSE);
-	    redraw_all_later(NOT_VALID);
+	    redraw_all_later(UPD_NOT_VALID);
 	}
     }
     else if (topfr->fr_layout == FR_ROW)
@@ -2296,7 +2296,7 @@ entering_window(win_T *win)
     static void
 win_init_empty(win_T *wp)
 {
-    redraw_win_later(wp, NOT_VALID);
+    redraw_win_later(wp, UPD_NOT_VALID);
     wp->w_lines_valid = 0;
     wp->w_cursor.lnum = 1;
     wp->w_curswant = wp->w_cursor.col = 0;
@@ -2786,7 +2786,7 @@ win_close(win_T *win, int free_buf)
 	gui_init_which_components(NULL);
 #endif
 
-    redraw_all_later(NOT_VALID);
+    redraw_all_later(UPD_NOT_VALID);
     return OK;
 }
 
@@ -4075,7 +4075,7 @@ win_new_tabpage(int after)
 	entering_window(curwin);
 #endif
 
-	redraw_all_later(NOT_VALID);
+	redraw_all_later(UPD_NOT_VALID);
 	apply_autocmds(EVENT_WINNEW, NULL, NULL, FALSE, curbuf);
 	apply_autocmds(EVENT_WINENTER, NULL, NULL, FALSE, curbuf);
 	apply_autocmds(EVENT_TABNEW, NULL, NULL, FALSE, curbuf);
@@ -4373,7 +4373,7 @@ enter_tabpage(
 	    apply_autocmds(EVENT_BUFENTER, NULL, NULL, FALSE, curbuf);
     }
 
-    redraw_all_later(NOT_VALID);
+    redraw_all_later(UPD_NOT_VALID);
 }
 
 /*
@@ -4970,7 +4970,7 @@ win_enter_ext(win_T *wp, int flags)
 #endif
     redraw_tabline = TRUE;
     if (restart_edit)
-	redraw_later(VALID);	// causes status line redraw
+	redraw_later(UPD_VALID);	// causes status line redraw
 
     // set window height to desired minimal value
     if (curwin->w_height < p_wh && !curwin->w_p_wfh
@@ -5589,7 +5589,7 @@ frame_comp_pos(frame_T *topfrp, int *row, int *col)
 	    // position changed, redraw
 	    wp->w_winrow = *row;
 	    wp->w_wincol = *col;
-	    redraw_win_later(wp, NOT_VALID);
+	    redraw_win_later(wp, UPD_NOT_VALID);
 	    wp->w_redr_status = TRUE;
 	}
 	// WinBar will not show if the window height is zero
@@ -5669,7 +5669,7 @@ win_setheight_win(int height, win_T *win)
     msg_row = row;
     msg_col = 0;
 
-    redraw_all_later(NOT_VALID);
+    redraw_all_later(UPD_NOT_VALID);
 }
 
 /*
@@ -5702,7 +5702,7 @@ frame_setheight(frame_T *curfrp, int height)
 
     if (curfrp->fr_parent == NULL)
     {
-	// topframe: can only change the command line
+	// topframe: can only change the command line height
 	if (height > ROWS_AVAIL)
 	    // If height is greater than the available space, try to create
 	    // space for the frame by reducing 'cmdheight' if possible, while
@@ -5880,7 +5880,7 @@ win_setwidth_win(int width, win_T *wp)
     // recompute the window positions
     (void)win_comp_pos();
 
-    redraw_all_later(NOT_VALID);
+    redraw_all_later(UPD_NOT_VALID);
 }
 
 /*
@@ -6089,6 +6089,12 @@ win_drag_status_line(win_T *dragwin, int offset)
     int		row;
     int		up;	// if TRUE, drag status line up, otherwise down
     int		n;
+    static int	p_ch_was_zero = FALSE;
+
+    // If the user explicitly set 'cmdheight' to zero, then allow for dragging
+    // the status line making it zero again.
+    if (p_ch == 0)
+	p_ch_was_zero = TRUE;
 
     fr = dragwin->w_frame;
     curfr = fr;
@@ -6147,6 +6153,8 @@ win_drag_status_line(win_T *dragwin, int offset)
 	room = Rows - cmdline_row;
 	if (curfr->fr_next != NULL)
 	    room -= p_ch;
+	else if (!p_ch_was_zero)
+	    --room;
 	if (room < 0)
 	    room = 0;
 	// sum up the room of frames below of the current one
@@ -6196,9 +6204,9 @@ win_drag_status_line(win_T *dragwin, int offset)
     row = win_comp_pos();
     screen_fill(row, cmdline_row, 0, (int)Columns, ' ', ' ', 0);
     cmdline_row = row;
-    p_ch = MAX(Rows - cmdline_row, 0);
+    p_ch = MAX(Rows - cmdline_row, p_ch_was_zero ? 0 : 1);
     curtab->tp_ch_used = p_ch;
-    redraw_all_later(SOME_VALID);
+    redraw_all_later(UPD_SOME_VALID);
     showmode();
 }
 
@@ -6304,7 +6312,7 @@ win_drag_vsep_line(win_T *dragwin, int offset)
 	    fr = fr->fr_next;
     }
     (void)win_comp_pos();
-    redraw_all_later(NOT_VALID);
+    redraw_all_later(UPD_NOT_VALID);
 }
 
 #define FRACTION_MULT	16384L
@@ -6483,7 +6491,7 @@ scroll_to_fraction(win_T *wp, int prev_height)
 	wp->w_prev_fraction_row = wp->w_wrow;
 
     win_comp_scroll(wp);
-    redraw_win_later(wp, SOME_VALID);
+    redraw_win_later(wp, UPD_SOME_VALID);
     wp->w_redr_status = TRUE;
     invalidate_botline_win(wp);
 }
@@ -6503,7 +6511,7 @@ win_new_width(win_T *wp, int width)
 	update_topline();
 	curs_columns(TRUE);	// validate w_wrow
     }
-    redraw_win_later(wp, NOT_VALID);
+    redraw_win_later(wp, UPD_NOT_VALID);
     wp->w_redr_status = TRUE;
 }
 
@@ -6541,6 +6549,17 @@ command_height(void)
     // GUI starts up, we can't be sure in what order things happen.  And when
     // p_ch was changed in another tab page.
     curtab->tp_ch_used = p_ch;
+
+    // If the space for the command line is already more than 'cmdheight' there
+    // is nothing to do (window size must have decreased).
+    if (p_ch > old_p_ch && cmdline_row <= Rows - p_ch)
+	return;
+
+    // If cmdline_row is smaller than what it is supposed to be for 'cmdheight'
+    // then set old_p_ch to what it would be, so that the windows get resized
+    // properly for the new value.
+    if (cmdline_row < Rows - p_ch)
+	old_p_ch = Rows - cmdline_row;
 
     // Find bottom frame with width of screen.
     frp = lastwin->w_frame;
@@ -6673,7 +6692,7 @@ last_status_rec(frame_T *fr, int statusline)
 	    else
 		win_new_height(wp, wp->w_height - 1);
 	    comp_col();
-	    redraw_all_later(SOME_VALID);
+	    redraw_all_later(UPD_SOME_VALID);
 	}
     }
     else if (fr->fr_layout == FR_ROW)
@@ -6965,7 +6984,7 @@ restore_snapshot(
 	win_comp_pos();
 	if (wp != NULL && close_curwin)
 	    win_goto(wp);
-	redraw_all_later(NOT_VALID);
+	redraw_all_later(UPD_NOT_VALID);
     }
     clear_snapshot(curtab, idx);
 }

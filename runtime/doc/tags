@@ -4300,6 +4300,7 @@ E1290	change.txt	/*E1290*
 E1291	testing.txt	/*E1291*
 E1292	cmdline.txt	/*E1292*
 E1293	textprop.txt	/*E1293*
+E1294	textprop.txt	/*E1294*
 E13	message.txt	/*E13*
 E131	eval.txt	/*E131*
 E132	eval.txt	/*E132*
@@ -6228,6 +6229,7 @@ collate-variable	eval.txt	/*collate-variable*
 color-schemes	syntax.txt	/*color-schemes*
 color-xterm	syntax.txt	/*color-xterm*
 coloring	syntax.txt	/*coloring*
+colorscheme-override	syntax.txt	/*colorscheme-override*
 colortest.vim	syntax.txt	/*colortest.vim*
 command-attributes	map.txt	/*command-attributes*
 command-block	vim9.txt	/*command-block*
@@ -7933,6 +7935,7 @@ indentkeys-format	indent.txt	/*indentkeys-format*
 index	index.txt	/*index*
 index()	builtin.txt	/*index()*
 index.txt	index.txt	/*index.txt*
+indexof()	builtin.txt	/*indexof()*
 info-message	starting.txt	/*info-message*
 inform.vim	syntax.txt	/*inform.vim*
 informix	ft_sql.txt	/*informix*

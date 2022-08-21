@@ -294,7 +294,9 @@ prop_add_one(
 	tmp_prop.tp_type = type->pt_id;
 	tmp_prop.tp_flags = text_flags
 			    | (lnum > start_lnum ? TP_FLAG_CONT_PREV : 0)
-			    | (lnum < end_lnum ? TP_FLAG_CONT_NEXT : 0);
+			    | (lnum < end_lnum ? TP_FLAG_CONT_NEXT : 0)
+			    | ((type->pt_flags & PT_FLAG_INS_START_INCL)
+						     ? TP_FLAG_START_INCL : 0);
 	mch_memmove(newprops + i * sizeof(textprop_T), &tmp_prop,
 							   sizeof(textprop_T));
 
@@ -310,6 +312,7 @@ prop_add_one(
 	buf->b_ml.ml_flags |= ML_LINE_DIRTY;
     }
 
+    changed_line_display_buf(buf);
     changed_lines_buf(buf, start_lnum, end_lnum + 1, 0);
     res = OK;
 
@@ -392,7 +395,7 @@ f_prop_add_list(typval_T *argvars, typval_T *rettv UNUSED)
 	    return;
     }
 
-    redraw_buf_later(buf, VALID);
+    redraw_buf_later(buf, UPD_VALID);
 }
 
 /*
@@ -547,7 +550,7 @@ prop_add_common(
 				    start_lnum, end_lnum, start_col, end_col);
     text = NULL;
 
-    redraw_buf_later(buf, VALID);
+    redraw_buf_later(buf, UPD_VALID);
 
 theend:
     vim_free(text);
@@ -589,6 +592,8 @@ get_text_props(buf_T *buf, linenr_T lnum, char_u **props, int will_change)
 
 /*
  * Return the number of text properties with "below" alignment in line "lnum".
+ * A "right" aligned property also goes below after a "below" or other "right"
+ * aligned property.
  */
     int
 prop_count_below(buf_T *buf, linenr_T lnum)
@@ -598,14 +603,25 @@ prop_count_below(buf_T *buf, linenr_T lnum)
     int		result = 0;
     textprop_T	prop;
     int		i;
+    int		next_right_goes_below = FALSE;
 
     if (count == 0)
 	return 0;
     for (i = 0; i < count; ++i)
     {
 	mch_memmove(&prop, props + i * sizeof(prop), sizeof(prop));
-	if (prop.tp_col == MAXCOL && (prop.tp_flags & TP_FLAG_ALIGN_BELOW))
-	    ++result;
+	if (prop.tp_col == MAXCOL)
+	{
+	    if ((prop.tp_flags & TP_FLAG_ALIGN_BELOW)
+		    || (next_right_goes_below
+				     && (prop.tp_flags & TP_FLAG_ALIGN_RIGHT)))
+	    {
+		next_right_goes_below = TRUE;
+		++result;
+	    }
+	    else if (prop.tp_flags & TP_FLAG_ALIGN_RIGHT)
+		next_right_goes_below = TRUE;
+	}
     }
     return result;
 }
@@ -893,7 +909,7 @@ f_prop_clear(typval_T *argvars, typval_T *rettv UNUSED)
 	}
     }
     if (did_clear)
-	redraw_buf_later(buf, NOT_VALID);
+	redraw_buf_later(buf, UPD_NOT_VALID);
 }
 
 /*
@@ -994,7 +1010,7 @@ f_prop_find(typval_T *argvars, typval_T *rettv)
     }
     if (both && (!id_found || type_id == -1))
     {
-	emsg(_(e_need_id_and_type_with_both));
+	emsg(_(e_need_id_and_type_or_types_with_both));
 	return;
     }
 
@@ -1362,7 +1378,9 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
     buf_T	*buf = curbuf;
     int		do_all;
     int		id = -MAXCOL;
-    int		type_id = -1;
+    int		type_id = -1;	    // for a single "type"
+    int		*type_ids = NULL;   // array, for a list of "types", allocated
+    int		num_type_ids = 0;   // number of elements in "type_ids"
     int		both;
     int		did_remove_text = FALSE;
 
@@ -1404,6 +1422,9 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 
     if (dict_has_key(dict, "id"))
 	id = dict_get_number(dict, "id");
+
+    // if a specific type was supplied "type": check that (and ignore "types".
+    // Otherwise check against the list of "types".
     if (dict_has_key(dict, "type"))
     {
 	char_u	    *name = dict_get_string(dict, "type", FALSE);
@@ -1413,17 +1434,48 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 	    return;
 	type_id = type->pt_id;
     }
+    if (dict_has_key(dict, "types"))
+    {
+	typval_T types;
+	listitem_T *li = NULL;
+
+	dict_get_tv(dict, "types", &types);
+	if (types.v_type == VAR_LIST && types.vval.v_list->lv_len > 0)
+	{
+	    type_ids = alloc( sizeof(int) * types.vval.v_list->lv_len );
+
+	    FOR_ALL_LIST_ITEMS(types.vval.v_list, li)
+	    {
+		proptype_T *prop_type;
+
+		if (li->li_tv.v_type != VAR_STRING)
+		    continue;
+
+		prop_type = lookup_prop_type(li->li_tv.vval.v_string, buf);
+
+		if (!prop_type)
+		    goto cleanup_prop_remove;
+
+		type_ids[num_type_ids++] = prop_type->pt_id;
+	    }
+	}
+    }
     both = dict_get_bool(dict, "both", FALSE);
 
-    if (id == -MAXCOL && type_id == -1)
+    if (id == -MAXCOL && (type_id == -1 && num_type_ids == 0))
     {
 	emsg(_(e_need_at_least_one_of_id_or_type));
-	return;
+	goto cleanup_prop_remove;
     }
-    if (both && (id == -MAXCOL || type_id == -1))
+    if (both && (id == -MAXCOL || (type_id == -1 && num_type_ids == 0)))
     {
-	emsg(_(e_need_id_and_type_with_both));
-	return;
+	emsg(_(e_need_id_and_type_or_types_with_both));
+	goto cleanup_prop_remove;
+    }
+    if (type_id != -1 && num_type_ids > 0)
+    {
+	emsg(_(e_cannot_specify_both_type_and_types));
+	goto cleanup_prop_remove;
     }
 
     if (end == 0)
@@ -1448,10 +1500,26 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 		char_u *cur_prop = buf->b_ml.ml_line_ptr + len
 						    + idx * sizeof(textprop_T);
 		size_t	taillen;
+		int matches_id = 0;
+		int matches_type = 0;
 
 		mch_memmove(&textprop, cur_prop, sizeof(textprop_T));
-		if (both ? textprop.tp_id == id && textprop.tp_type == type_id
-			 : textprop.tp_id == id || textprop.tp_type == type_id)
+
+		matches_id = textprop.tp_id == id;
+		if (num_type_ids > 0)
+		{
+		    int idx2;
+
+		    for (idx2 = 0; !matches_type && idx2 < num_type_ids; ++idx2)
+			matches_type = textprop.tp_type == type_ids[idx2];
+		}
+		else
+		{
+		    matches_type = textprop.tp_type == type_id;
+		}
+
+		if (both ? matches_id && matches_type
+			 : matches_id || matches_type)
 		{
 		    if (!(buf->b_ml.ml_flags & ML_LINE_DIRTY))
 		    {
@@ -1459,7 +1527,7 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 
 			// need to allocate the line to be able to change it
 			if (newptr == NULL)
-			    return;
+			    goto cleanup_prop_remove;
 			mch_memmove(newptr, buf->b_ml.ml_line_ptr,
 							buf->b_ml.ml_line_len);
 			if (buf->b_ml.ml_flags & ML_ALLOCATED)
@@ -1507,8 +1575,9 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 
     if (first_changed > 0)
     {
+	changed_line_display_buf(buf);
 	changed_lines_buf(buf, first_changed, last_changed + 1, 0);
-	redraw_buf_later(buf, VALID);
+	redraw_buf_later(buf, UPD_VALID);
     }
 
     if (did_remove_text)
@@ -1520,6 +1589,9 @@ f_prop_remove(typval_T *argvars, typval_T *rettv)
 			 && ((char_u **)gap->ga_data)[gap->ga_len - 1] == NULL)
 	    --gap->ga_len;
     }
+
+cleanup_prop_remove:
+    vim_free(type_ids);
 }
 
 /*
@@ -1889,6 +1961,7 @@ typedef struct
  * Only for the current buffer.
  * "flags" can have:
  * APC_SUBSTITUTE:	Text is replaced, not inserted.
+ * APC_INDENT:		Text is inserted before virtual text prop
  */
     static adjustres_T
 adjust_prop(
@@ -1914,6 +1987,10 @@ adjust_prop(
     start_incl = (pt != NULL && (pt->pt_flags & PT_FLAG_INS_START_INCL))
 				|| (flags & APC_SUBSTITUTE)
 				|| (prop->tp_flags & TP_FLAG_CONT_PREV);
+    if (prop->tp_id < 0 && (flags & APC_INDENT))
+	// when inserting indent just before a character with virtual text
+	// shift the text property
+	start_incl = FALSE;
     end_incl = (pt != NULL && (pt->pt_flags & PT_FLAG_INS_END_INCL))
 				|| (prop->tp_flags & TP_FLAG_CONT_NEXT);
     // do not drop zero-width props if they later can increase in size
@@ -1965,6 +2042,7 @@ adjust_prop(
  * "flags" can have:
  * APC_SAVE_FOR_UNDO:	Call u_savesub() before making changes to the line.
  * APC_SUBSTITUTE:	Text is replaced, not inserted.
+ * APC_INDENT:		Text is inserted before virtual text prop
  * Caller is expected to check b_has_textprop and "bytes_added" being non-zero.
  * Returns TRUE when props were changed.
  */
@@ -2080,6 +2158,9 @@ adjust_props_for_split(
 	cont_prev = prop.tp_col != MAXCOL && prop.tp_col + !start_incl <= kept;
 	cont_next = prop.tp_col != MAXCOL
 			   && skipped <= prop.tp_col + prop.tp_len - !end_incl;
+	// when a prop has text it is never copied
+	if (prop.tp_id < 0 && cont_next)
+	    cont_prev = FALSE;
 
 	if (cont_prev && ga_grow(&prevprop, 1) == OK)
 	{

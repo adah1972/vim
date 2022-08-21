@@ -554,10 +554,13 @@ win_line(
     int		*text_prop_idxs = NULL;
     int		text_props_active = 0;
     proptype_T  *text_prop_type = NULL;
+    int		extra_for_textprop = FALSE; // wlv.n_extra set for textprop
     int		text_prop_attr = 0;
     int		text_prop_id = 0;	// active property ID
     int		text_prop_flags = 0;
     int		text_prop_follows = FALSE;  // another text prop to display
+    int		saved_search_attr = 0;	// search_attr to be used when n_extra
+					// goes to zero
 #endif
 #ifdef FEAT_SPELL
     int		has_spell = FALSE;	// this buffer has spell checking
@@ -1583,46 +1586,6 @@ win_line(
 			|| (noinvcur && (colnr_T)wlv.vcol == wp->w_virtcol)))
 		area_attr = 0;			// stop highlighting
 
-#ifdef FEAT_SEARCH_EXTRA
-	    if (!wlv.n_extra)
-	    {
-		// Check for start/end of 'hlsearch' and other matches.
-		// After end, check for start/end of next match.
-		// When another match, have to check for start again.
-		v = (long)(ptr - line);
-		search_attr = update_search_hl(wp, lnum, (colnr_T)v, &line,
-				      &screen_search_hl, &has_match_conc,
-				      &match_conc, did_line_attr, lcs_eol_one,
-				      &on_last_col);
-		ptr = line + v;  // "line" may have been changed
-		prev_ptr = ptr;
-
-		// Do not allow a conceal over EOL otherwise EOL will be missed
-		// and bad things happen.
-		if (*ptr == NUL)
-		    has_match_conc = 0;
-	    }
-#endif
-
-#ifdef FEAT_DIFF
-	    if (wlv.diff_hlf != (hlf_T)0)
-	    {
-		if (wlv.diff_hlf == HLF_CHD && ptr - line >= change_start
-							   && wlv.n_extra == 0)
-		    wlv.diff_hlf = HLF_TXD;		// changed text
-		if (wlv.diff_hlf == HLF_TXD && ptr - line > change_end
-							   && wlv.n_extra == 0)
-		    wlv.diff_hlf = HLF_CHD;		// changed line
-		line_attr = HL_ATTR(wlv.diff_hlf);
-		if (wp->w_p_cul && lnum == wp->w_cursor.lnum
-			&& wp->w_p_culopt_flags != CULOPT_NBR
-			&& (!wlv.cul_screenline || (wlv.vcol >= left_curline_col
-					    && wlv.vcol <= right_curline_col)))
-		    line_attr = hl_combine_attr(
-					  line_attr, HL_ATTR(HLF_CUL));
-	    }
-#endif
-
 #ifdef FEAT_PROP_POPUP
 	    if (text_props != NULL)
 	    {
@@ -1676,16 +1639,27 @@ win_line(
 						       & TP_FLAG_ALIGN_BELOW)))
 			      : bcol >= text_props[text_prop_next].tp_col - 1))
 		{
-		    if (bcol <= text_props[text_prop_next].tp_col - 1
+		    if (text_props[text_prop_next].tp_col == MAXCOL
+			     && *ptr == NUL && wp->w_p_list && lcs_eol_one > 0)
+		    {
+			// first display the '$' after the line
+			text_prop_follows = TRUE;
+			break;
+		    }
+		    if (text_props[text_prop_next].tp_col == MAXCOL
+			    || bcol <= text_props[text_prop_next].tp_col - 1
 					   + text_props[text_prop_next].tp_len)
 			text_prop_idxs[text_props_active++] = text_prop_next;
 		    ++text_prop_next;
 		}
 
-		text_prop_attr = 0;
-		text_prop_flags = 0;
-		text_prop_type = NULL;
-		text_prop_id = 0;
+		if (wlv.n_extra == 0 || !extra_for_textprop)
+		{
+		    text_prop_attr = 0;
+		    text_prop_flags = 0;
+		    text_prop_type = NULL;
+		    text_prop_id = 0;
+		}
 		if (text_props_active > 0 && wlv.n_extra == 0)
 		{
 		    int used_tpi = -1;
@@ -1746,8 +1720,11 @@ win_line(
 			    wlv.c_extra = NUL;
 			    wlv.c_final = NUL;
 			    wlv.n_extra = (int)STRLEN(p);
+			    extra_for_textprop = TRUE;
 			    extra_attr = used_attr;
 			    n_attr = mb_charlen(p);
+			    saved_search_attr = search_attr;
+			    search_attr = 0;	// restore when n_extra is zero
 			    text_prop_attr = 0;
 			    if (*ptr == NUL)
 				// don't combine char attr after EOL
@@ -1785,6 +1762,16 @@ win_line(
 						? wlv.col == 0 || !wp->w_p_wrap
 						: n_used < wlv.n_extra))
 					added = 0;
+
+				    // With 'nowrap' add one to show the
+				    // "extends" character if needed (it
+				    // doesn't show it the text just fits).
+				    if (!wp->w_p_wrap
+					    && n_used < wlv.n_extra
+					    && wp->w_lcs_chars.ext != NUL
+					    && wp->w_p_list)
+					++n_used;
+
 				    // add 1 for NUL, 2 for when '…' is used
 				    l = alloc(n_used + added + 3);
 				    if (l != NULL)
@@ -1853,6 +1840,46 @@ win_line(
 		    // displaying that character.
 		    // Or when not wrapping and at the rightmost column.
 		    text_prop_follows = TRUE;
+	    }
+#endif
+
+#ifdef FEAT_SEARCH_EXTRA
+	    if (wlv.n_extra == 0)
+	    {
+		// Check for start/end of 'hlsearch' and other matches.
+		// After end, check for start/end of next match.
+		// When another match, have to check for start again.
+		v = (long)(ptr - line);
+		search_attr = update_search_hl(wp, lnum, (colnr_T)v, &line,
+				      &screen_search_hl, &has_match_conc,
+				      &match_conc, did_line_attr, lcs_eol_one,
+				      &on_last_col);
+		ptr = line + v;  // "line" may have been changed
+		prev_ptr = ptr;
+
+		// Do not allow a conceal over EOL otherwise EOL will be missed
+		// and bad things happen.
+		if (*ptr == NUL)
+		    has_match_conc = 0;
+	    }
+#endif
+
+#ifdef FEAT_DIFF
+	    if (wlv.diff_hlf != (hlf_T)0)
+	    {
+		if (wlv.diff_hlf == HLF_CHD && ptr - line >= change_start
+							   && wlv.n_extra == 0)
+		    wlv.diff_hlf = HLF_TXD;		// changed text
+		if (wlv.diff_hlf == HLF_TXD && ptr - line > change_end
+							   && wlv.n_extra == 0)
+		    wlv.diff_hlf = HLF_CHD;		// changed line
+		line_attr = HL_ATTR(wlv.diff_hlf);
+		if (wp->w_p_cul && lnum == wp->w_cursor.lnum
+			&& wp->w_p_culopt_flags != CULOPT_NBR
+			&& (!wlv.cul_screenline || (wlv.vcol >= left_curline_col
+					    && wlv.vcol <= right_curline_col)))
+		    line_attr = hl_combine_attr(
+					  line_attr, HL_ATTR(HLF_CUL));
 	    }
 #endif
 
@@ -2086,9 +2113,14 @@ win_line(
 		++wlv.p_extra;
 	    }
 	    --wlv.n_extra;
-#if defined(FEAT_LINEBREAK) && defined(FEAT_PROP_POPUP)
+#if defined(FEAT_PROP_POPUP)
 	    if (wlv.n_extra <= 0)
+	    {
+		extra_for_textprop = FALSE;
 		in_linebreak = FALSE;
+		if (search_attr == 0)
+		    search_attr = saved_search_attr;
+	    }
 #endif
 	}
 	else
@@ -2713,16 +2745,10 @@ win_line(
 		    {
 			// In virtualedit, visual selections may extend
 			// beyond end of line.
-			if (area_highlighting && virtual_active()
-				&& tocol != MAXCOL && wlv.vcol < tocol)
-			    wlv.n_extra = 0;
-			else
-			{
+			if (!(area_highlighting && virtual_active()
+				       && tocol != MAXCOL && wlv.vcol < tocol))
 			    wlv.p_extra = at_end_str;
-			    wlv.n_extra = 1;
-			    wlv.c_extra = NUL;
-			    wlv.c_final = NUL;
-			}
+			wlv.n_extra = 0;
 		    }
 		    if (wp->w_p_list && wp->w_lcs_chars.eol > 0)
 			c = wp->w_lcs_chars.eol;
@@ -2973,15 +2999,20 @@ win_line(
 	}
 #endif
 
-	// Use "extra_attr", but don't override visual selection highlighting.
+	// Use "extra_attr", but don't override visual selection highlighting,
+	// unless text property overrides.
 	// Don't use "extra_attr" until n_attr_skip is zero.
 	if (n_attr_skip == 0 && n_attr > 0
 		&& wlv.draw_state == WL_LINE
-		&& !attr_pri)
+		&& (!attr_pri
+#ifdef FEAT_PROP_POPUP
+		    || (text_prop_flags & PT_FLAG_OVERRIDE)
+#endif
+		   ))
 	{
 #ifdef LINE_ATTR
 	    if (line_attr)
-		wlv.char_attr = hl_combine_attr(extra_attr, line_attr);
+		wlv.char_attr = hl_combine_attr(line_attr, extra_attr);
 	    else
 #endif
 		wlv.char_attr = extra_attr;
@@ -3198,8 +3229,8 @@ win_line(
 #endif
 		    wlv.col == wp->w_width - 1)
 		&& (*ptr != NUL
-		    || (wp->w_p_list && lcs_eol_one > 0)
-		    || (wlv.n_extra && (wlv.c_extra != NUL
+		    || lcs_eol_one > 0
+		    || (wlv.n_extra > 0 && (wlv.c_extra != NUL
 						     || *wlv.p_extra != NUL))))
 	{
 	    c = wp->w_lcs_chars.ext;
