@@ -1282,11 +1282,11 @@ op_tilde(oparg_T *oap)
 #ifdef FEAT_NETBEANS_INTG
 	    if (netbeans_active() && one_change)
 	    {
-		char_u *ptr = ml_get_buf(curbuf, pos.lnum, FALSE);
+		char_u *ptr;
 
 		netbeans_removed(curbuf, pos.lnum, bd.textcol,
 							    (long)bd.textlen);
-		// get the line again, it may have been flushed
+		// get the line now, it may have been flushed
 		ptr = ml_get_buf(curbuf, pos.lnum, FALSE);
 		netbeans_inserted(curbuf, pos.lnum, bd.textcol,
 						&ptr[bd.textcol], bd.textlen);
@@ -1344,7 +1344,6 @@ op_tilde(oparg_T *oap)
 		    pos.col = 0;
 		    pos.lnum++;
 		}
-		ptr = ml_get_buf(curbuf, pos.lnum, FALSE);
 		count = oap->end.col - pos.col + 1;
 		netbeans_removed(curbuf, pos.lnum, pos.col, (long)count);
 		// get the line again, it may have been flushed
@@ -3260,11 +3259,6 @@ cursor_pos_info(dict_T *dict)
 	    // Don't shorten this message, the user asked for it.
 	    p = p_shm;
 	    p_shm = (char_u *)"";
-	    if (p_ch < 1)
-	    {
-		msg_start();
-		msg_scroll = TRUE;
-	    }
 	    msg((char *)IObuff);
 	    p_shm = p;
 	}

@@ -883,7 +883,7 @@ func Test_write()
   new
   call setline(1, ['L1'])
   set nowrite
-  call assert_fails('write Xfile', 'E142:')
+  call assert_fails('write Xwrfile', 'E142:')
   set write
   close!
 endfunc
@@ -949,7 +949,6 @@ endfunc
 
 " Test for the default CDPATH option
 func Test_opt_default_cdpath()
-  CheckFeature file_in_path
   let after =<< trim [CODE]
     call assert_equal(',/path/to/dir1,/path/to/dir2', &cdpath)
     call writefile(v:errors, 'Xtestout')

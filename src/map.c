@@ -2635,11 +2635,8 @@ f_mapset(typval_T *argvars, typval_T *rettv UNUSED)
 	    return;
 	is_abbr = (int)tv_get_bool(&argvars[1]);
 
-	if (argvars[2].v_type != VAR_DICT)
-	{
-	    emsg(_(e_dictionary_required));
+	if (check_for_dict_arg(argvars, 2) == FAIL)
 	    return;
-	}
 	d = argvars[2].vval.v_dict;
     }
     mode = get_map_mode_string(which, is_abbr);
@@ -2661,7 +2658,10 @@ f_mapset(typval_T *argvars, typval_T *rettv UNUSED)
 	return;
     }
     orig_rhs = rhs;
-    rhs = replace_termcodes(rhs, &arg_buf,
+    if (STRICMP(rhs, "<nop>") == 0)	// "<Nop>" means nothing
+	rhs = (char_u *)"";
+    else
+	rhs = replace_termcodes(rhs, &arg_buf,
 					REPTERM_DO_LT | REPTERM_SPECIAL, NULL);
 
     noremap = dict_get_number(d, "noremap") ? REMAP_NONE: 0;

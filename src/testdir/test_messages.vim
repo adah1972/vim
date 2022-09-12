@@ -387,64 +387,110 @@ func Test_fileinfo_after_echo()
   call delete('b.txt')
 endfunc
 
-func Test_cmdheight_zero()
-  enew
-  set cmdheight=0
-  set showcmd
-  redraw!
+func Test_echowindow()
+  CheckScreendump
 
-  echo 'test echo'
-  call assert_equal(116, screenchar(&lines, 1))
-  redraw!
+  let lines =<< trim END
+      call setline(1, 'some text')
+      func ShowMessage(arg)
+        echowindow a:arg
+      endfunc
+      echowindow 'first line'
+      func ManyMessages()
+        for n in range(20)
+          echowindow 'line' n
+        endfor
+      endfunc
 
-  echomsg 'test echomsg'
-  call assert_equal(116, screenchar(&lines, 1))
-  redraw!
+      def TwoMessages()
+        popup_clear()
+        set cmdheight=2
+        redraw
+        timer_start(100, (_) => {
+            echowin 'message'
+          })
+        echo 'one'
+        echo 'two'
+      enddef
 
-  call feedkeys(":ls\<CR>", "xt")
-  call assert_equal(':ls', Screenline(&lines - 1))
-  redraw!
+      def ThreeMessages()
+        popup_clear()
+        redraw
+        timer_start(100, (_) => {
+            echowin 'later message'
+          })
+        echo 'one'
+        echo 'two'
+        echo 'three'
+      enddef
+  END
+  call writefile(lines, 'XtestEchowindow')
+  let buf = RunVimInTerminal('-S XtestEchowindow', #{rows: 8})
+  call VerifyScreenDump(buf, 'Test_echowindow_1', {})
 
-  let char = getchar(0)
-  call assert_match(char, 0)
+  call term_sendkeys(buf, ":call ShowMessage('second line')\<CR>")
+  call VerifyScreenDump(buf, 'Test_echowindow_2', {})
 
-  " Check change/restore cmdheight when macro
-  call feedkeys("qa", "xt")
-  call assert_equal(1, &cmdheight)
-  call feedkeys("q", "xt")
-  call assert_equal(0, &cmdheight)
+  call term_sendkeys(buf, ":call popup_clear()\<CR>")
+  call VerifyScreenDump(buf, 'Test_echowindow_3', {})
 
-  call setline(1, 'somestring')
-  call feedkeys("y", "n")
-  %s/somestring/otherstring/gc
-  call assert_equal('otherstring', getline(1))
+  call term_sendkeys(buf, ":call ManyMessages()\<CR>")
+  call VerifyScreenDump(buf, 'Test_echowindow_4', {})
 
-  call feedkeys("g\<C-g>", "xt")
-  call assert_match(
-        \ 'Col 1 of 11; Line 1 of 1; Word 1 of 1',
-        \ Screenline(&lines))
+  call term_sendkeys(buf, ":call TwoMessages()\<CR>")
+  call VerifyScreenDump(buf, 'Test_echowindow_5', {})
 
-  " Check split behavior
-  for i in range(1, 10)
-    split
-  endfor
-  only
-  call assert_equal(0, &cmdheight)
+  call term_sendkeys(buf, ":call ThreeMessages()\<CR>")
+  sleep 120m
+  call VerifyScreenDump(buf, 'Test_echowindow_6', {})
 
-  " Check that pressing ":" should not scroll a window
-  " Check for what patch 9.0.0115 fixes
-  botright 10new
-  call setline(1, range(12))
-  7
-  call feedkeys(":\"\<C-R>=line('w0')\<CR>\<CR>", "xt")
-  call assert_equal('"1', @:)
+  call term_sendkeys(buf, "\<CR>")
+  call VerifyScreenDump(buf, 'Test_echowindow_7', {})
 
-  bwipe!
-  bwipe!
-  set cmdheight&
-  set showcmd&
-  tabnew
-  tabonly
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XtestEchowindow')
 endfunc
+
+" messages window should not be used while evaluating the :echowin argument
+func Test_echowin_eval()
+  CheckScreendump
+
+  let lines =<< trim END
+      func ShowMessage()
+        echo 123
+        return 'test'
+      endfunc
+      echowindow ShowMessage()
+  END
+  call writefile(lines, 'XtestEchowindow')
+  let buf = RunVimInTerminal('-S XtestEchowindow', #{rows: 8})
+  call VerifyScreenDump(buf, 'Test_echowin_eval', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XtestEchowindow')
+endfunc
+
+" messages window should not be used for showing the mode
+func Test_echowin_showmode()
+  CheckScreendump
+
+  let lines =<< trim END
+      vim9script
+      setline(1, ['one', 'two'])
+      timer_start(100, (_) => {
+           echowin 'echo window'
+         })
+      normal V
+  END
+  call writefile(lines, 'XtestEchowinMode', 'D')
+  let buf = RunVimInTerminal('-S XtestEchowinMode', #{rows: 8})
+  call VerifyScreenDump(buf, 'Test_echowin_showmode', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

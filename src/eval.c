@@ -263,8 +263,17 @@ eval_expr_typval(typval_T *expr, typval_T *argv, int argc, typval_T *rettv)
 	if (partial->pt_func != NULL
 			  && partial->pt_func->uf_def_status != UF_NOT_COMPILED)
 	{
-	    if (call_def_function(partial->pt_func, argc, argv,
-						       partial, rettv) == FAIL)
+	    funccall_T	*fc = create_funccal(partial->pt_func, rettv);
+	    int		r;
+
+	    if (fc == NULL)
+		return FAIL;
+
+	    // Shortcut to call a compiled function without overhead.
+	    r = call_def_function(partial->pt_func, argc, argv,
+					  DEF_USE_PT_ARGV, partial, fc, rettv);
+	    remove_funccal();
+	    if (r == FAIL)
 		return FAIL;
 	}
 	else
@@ -694,8 +703,15 @@ deref_function_name(
 {
     typval_T	ref;
     char_u	*name = *arg;
+    int		save_flags = 0;
 
     ref.v_type = VAR_UNKNOWN;
+    if (evalarg != NULL)
+    {
+	// need to evaluate this to get an import, like in "a.Func"
+	save_flags = evalarg->eval_flags;
+	evalarg->eval_flags |= EVAL_EVALUATE;
+    }
     if (eval9(arg, &ref, evalarg, FALSE) == FAIL)
     {
 	dictitem_T	*v;
@@ -703,7 +719,10 @@ deref_function_name(
 	// If <SID>VarName was used it would not be found, try another way.
 	v = find_var_also_in_script(name, NULL, FALSE);
 	if (v == NULL)
-	    return NULL;
+	{
+	    name = NULL;
+	    goto theend;
+	}
 	copy_tv(&v->di_tv, &ref);
     }
     if (*skipwhite(*arg) != NUL)
@@ -739,7 +758,11 @@ deref_function_name(
 	    semsg(_(e_not_callable_type_str), name);
 	name = NULL;
     }
+
+theend:
     clear_tv(&ref);
+    if (evalarg != NULL)
+	evalarg->eval_flags = save_flags;
     return name;
 }
 
@@ -819,6 +842,7 @@ call_func_retstr(
  * Call Vim script function "func" and return the result as a List.
  * Uses "argv" and "argc" as call_func_retstr().
  * Returns NULL when there is something wrong.
+ * Gives an error when the returned value is not a list.
  */
     void *
 call_func_retlist(
@@ -833,6 +857,8 @@ call_func_retlist(
 
     if (rettv.v_type != VAR_LIST)
     {
+	semsg(_(e_custom_list_completion_function_does_not_return_list_but_str),
+		vartype_name(rettv.v_type));
 	clear_tv(&rettv);
 	return NULL;
     }
@@ -1005,12 +1031,16 @@ get_lval(
 	    {
 		char_u	    *tp = skipwhite(p + 1);
 
+		if (is_scoped_variable(name))
+		{
+		    semsg(_(e_cannot_use_type_with_this_variable_str), name);
+		    return NULL;
+		}
 		if (tp == p + 1 && !quiet)
 		{
 		    semsg(_(e_white_space_required_after_str_str), ":", p);
 		    return NULL;
 		}
-
 		if (!SCRIPT_ID_VALID(current_sctx.sc_sid))
 		{
 		    semsg(_(e_using_type_not_in_script_context_str), p);
@@ -1039,6 +1069,7 @@ get_lval(
 	    ufunc_T *ufunc;
 	    type_T *type;
 
+	    import_check_sourced_sid(&import->imp_sid);
 	    lp->ll_sid = import->imp_sid;
 	    lp->ll_name = skipwhite(p + 1);
 	    p = find_name_end(lp->ll_name, NULL, NULL, fne_flags);
@@ -1097,6 +1128,8 @@ get_lval(
     var2.v_type = VAR_UNKNOWN;
     while (*p == '[' || (*p == '.' && p[1] != '=' && p[1] != '.'))
     {
+	int r = OK;
+
 	if (*p == '.' && lp->ll_tv->v_type != VAR_DICT)
 	{
 	    if (!quiet)
@@ -1112,12 +1145,14 @@ get_lval(
 	    return NULL;
 	}
 
-	// a NULL list/blob works like an empty list/blob, allocate one now.
+	// A NULL list/blob works like an empty list/blob, allocate one now.
 	if (lp->ll_tv->v_type == VAR_LIST && lp->ll_tv->vval.v_list == NULL)
-	    rettv_list_alloc(lp->ll_tv);
+	    r = rettv_list_alloc(lp->ll_tv);
 	else if (lp->ll_tv->v_type == VAR_BLOB
 					     && lp->ll_tv->vval.v_blob == NULL)
-	    rettv_blob_alloc(lp->ll_tv);
+	    r = rettv_blob_alloc(lp->ll_tv);
+	if (r == FAIL)
+	    return NULL;
 
 	if (lp->ll_range)
 	{
@@ -2077,7 +2112,8 @@ set_context_for_expression(
     if ((cmdidx == CMD_execute
 		|| cmdidx == CMD_echo
 		|| cmdidx == CMD_echon
-		|| cmdidx == CMD_echomsg)
+		|| cmdidx == CMD_echomsg
+		|| cmdidx == CMD_echowindow)
 	    && xp->xp_context == EXPAND_EXPRESSION)
     {
 	for (;;)
@@ -4078,7 +4114,7 @@ eval9(
     // Handle following '[', '(' and '.' for expr[expr], expr.name,
     // expr(expr), expr->name(expr)
     if (ret == OK)
-	ret = handle_subscript(arg, name_start, rettv, evalarg, TRUE);
+	ret = handle_subscript(arg, name_start, rettv, evalarg, evaluate);
 
     /*
      * Apply logical NOT and unary '-', from right to left, ignore '+'.
@@ -4347,7 +4383,7 @@ eval_method(
     rettv->v_type = VAR_UNKNOWN;
 
     name = *arg;
-    len = get_name_len(arg, &alias, evaluate, TRUE);
+    len = get_name_len(arg, &alias, evaluate, evaluate);
     if (alias != NULL)
 	name = alias;
 
@@ -6708,6 +6744,7 @@ get_echo_attr(void)
 /*
  * ":execute expr1 ..."	execute the result of an expression.
  * ":echomsg expr1 ..."	Print a message
+ * ":echowindow expr1 ..." Print a message in the messages window
  * ":echoerr expr1 ..."	Print an error
  * ":echoconsole expr1 ..." Print a message on stdout
  * Each gets spaces around each argument and a newline at the end for
@@ -6779,7 +6816,9 @@ ex_execute(exarg_T *eap)
 	// use the first line of continuation lines for messages
 	SOURCING_LNUM = start_lnum;
 
-	if (eap->cmdidx == CMD_echomsg || eap->cmdidx == CMD_echoerr)
+	if (eap->cmdidx == CMD_echomsg
+		|| eap->cmdidx == CMD_echowindow
+		|| eap->cmdidx == CMD_echoerr)
 	{
 	    // Mark the already saved text as finishing the line, so that what
 	    // follows is displayed on a new line when scrolling back at the
@@ -6791,6 +6830,16 @@ ex_execute(exarg_T *eap)
 	{
 	    msg_attr(ga.ga_data, echo_attr);
 	    out_flush();
+	}
+	else if (eap->cmdidx == CMD_echowindow)
+	{
+#ifdef HAS_MESSAGE_WINDOW
+	    start_echowindow();
+#endif
+	    msg_attr(ga.ga_data, echo_attr);
+#ifdef HAS_MESSAGE_WINDOW
+	    end_echowindow();
+#endif
 	}
 	else if (eap->cmdidx == CMD_echoconsole)
 	{
@@ -6823,7 +6872,6 @@ ex_execute(exarg_T *eap)
 
     if (eap->skip)
 	--emsg_skip;
-
     set_nextcmd(eap, arg);
 }
 

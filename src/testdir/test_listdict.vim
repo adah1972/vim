@@ -198,6 +198,26 @@ func Test_list_range_assign()
   call v9.CheckDefAndScriptFailure(lines, 'E1012:', 2)
 endfunc
 
+func Test_list_items()
+  let r = []
+  let l = ['a', 'b', 'c']
+  for [idx, val] in items(l)
+    call extend(r, [[idx, val]])
+  endfor
+  call assert_equal([[0, 'a'], [1, 'b'], [2, 'c']], r)
+
+  call assert_fails('call items(3)', 'E1225:')
+endfunc
+
+func Test_string_items()
+  let r = []
+  let s = 'ábツ'
+  for [idx, val] in items(s)
+    call extend(r, [[idx, val]])
+  endfor
+  call assert_equal([[0, 'á'], [1, 'b'], [2, 'ツ']], r)
+endfunc
+
 " Test removing items in list
 func Test_list_func_remove()
   let lines =<< trim END
@@ -301,6 +321,10 @@ func Test_dict()
 
   " allow key starting with number at the start, not a curly expression
   call assert_equal({'1foo': 77}, #{1foo: 77})
+
+  " #{expr} is not a curly expression
+  let x = 'x'
+  call assert_equal(#{g: x}, #{g:x})
 endfunc
 
 " This was allowed in legacy Vim script
@@ -548,7 +572,7 @@ func Test_dict_deepcopy()
   END
   call v9.CheckLegacyAndVim9Success(lines)
 
-  call assert_fails("call deepcopy([1, 2], 2)", 'E1023:')
+  call assert_fails("call deepcopy([1, 2], 2)", 'E1212:')
 endfunc
 
 " Locked variables
@@ -961,7 +985,7 @@ func Test_reverse_sort_uniq()
 
   call assert_fails('call reverse("")', 'E899:')
   call assert_fails('call uniq([1, 2], {x, y -> []})', 'E745:')
-  call assert_fails("call sort([1, 2], function('min'), 1)", "E715:")
+  call assert_fails("call sort([1, 2], function('min'), 1)", "E1206:")
   call assert_fails("call sort([1, 2], function('invalid_func'))", "E700:")
   call assert_fails("call sort([1, 2], function('min'))", "E118:")
 
@@ -1024,16 +1048,16 @@ func Test_reduce()
   call assert_fails("call reduce({}, { acc, val -> acc + val }, 1)", 'E1098:')
   call assert_fails("call reduce(0, { acc, val -> acc + val }, 1)", 'E1098:')
   call assert_fails("call reduce([1, 2], 'Xdoes_not_exist')", 'E117:')
-  call assert_fails("echo reduce(0z01, { acc, val -> 2 * acc + val }, '')", 'E39:')
+  call assert_fails("echo reduce(0z01, { acc, val -> 2 * acc + val }, '')", 'E1210:')
 
   call assert_fails("vim9 reduce(0, (acc, val) => (acc .. val), '')", 'E1252:')
   call assert_fails("vim9 reduce({}, (acc, val) => (acc .. val), '')", 'E1252:')
   call assert_fails("vim9 reduce(0.1, (acc, val) => (acc .. val), '')", 'E1252:')
   call assert_fails("vim9 reduce(function('tr'), (acc, val) => (acc .. val), '')", 'E1252:')
-  call assert_fails("call reduce('', { acc, val -> acc + val }, 1)", 'E1253:')
-  call assert_fails("call reduce('', { acc, val -> acc + val }, {})", 'E1253:')
-  call assert_fails("call reduce('', { acc, val -> acc + val }, 0.1)", 'E1253:')
-  call assert_fails("call reduce('', { acc, val -> acc + val }, function('tr'))", 'E1253:')
+  call assert_fails("call reduce('', { acc, val -> acc + val }, 1)", 'E1174:')
+  call assert_fails("call reduce('', { acc, val -> acc + val }, {})", 'E1174:')
+  call assert_fails("call reduce('', { acc, val -> acc + val }, 0.1)", 'E1174:')
+  call assert_fails("call reduce('', { acc, val -> acc + val }, function('tr'))", 'E1174:')
   call assert_fails("call reduce('abc', { a, v -> a10}, '')", 'E121:')
   call assert_fails("call reduce(0z0102, { a, v -> a10}, 1)", 'E121:')
   call assert_fails("call reduce([1, 2], { a, v -> a10}, '')", 'E121:')

@@ -509,6 +509,23 @@ check_for_list_arg(typval_T *args, int idx)
 }
 
 /*
+ * Give an error and return FAIL unless "args[idx]" is a non-NULL list.
+ */
+    int
+check_for_nonnull_list_arg(typval_T *args, int idx)
+{
+    if (check_for_list_arg(args, idx) == FAIL)
+	return FAIL;
+
+    if (args[idx].vval.v_list == NULL)
+    {
+	semsg(_(e_non_null_list_required_for_argument_nr), idx + 1);
+	return FAIL;
+    }
+    return OK;
+}
+
+/*
  * Check for an optional list argument at 'idx'
  */
     int
@@ -527,6 +544,23 @@ check_for_dict_arg(typval_T *args, int idx)
     if (args[idx].v_type != VAR_DICT)
     {
 	semsg(_(e_dict_required_for_argument_nr), idx + 1);
+	return FAIL;
+    }
+    return OK;
+}
+
+/*
+ * Give an error and return FAIL unless "args[idx]" is a non-NULL dict.
+ */
+    int
+check_for_nonnull_dict_arg(typval_T *args, int idx)
+{
+    if (check_for_dict_arg(args, idx) == FAIL)
+	return FAIL;
+
+    if (args[idx].vval.v_dict == NULL)
+    {
+	semsg(_(e_non_null_dict_required_for_argument_nr), idx + 1);
 	return FAIL;
     }
     return OK;
@@ -755,6 +789,24 @@ check_for_opt_string_or_number_or_list_arg(typval_T *args, int idx)
 {
     return (args[idx].v_type == VAR_UNKNOWN
 	    || check_for_string_or_number_or_list_arg(args, idx) != FAIL);
+}
+
+/*
+ * Give an error and return FAIL unless "args[idx]" is a string or a number
+ * or a list or a blob.
+ */
+    int
+check_for_string_or_number_or_list_or_blob_arg(typval_T *args, int idx)
+{
+    if (args[idx].v_type != VAR_STRING
+	    && args[idx].v_type != VAR_NUMBER
+	    && args[idx].v_type != VAR_LIST
+	    && args[idx].v_type != VAR_BLOB)
+    {
+	semsg(_(e_string_number_list_or_blob_required_for_argument_nr), idx + 1);
+	return FAIL;
+    }
+    return OK;
 }
 
 /*
@@ -1179,7 +1231,7 @@ typval_compare(
 
     if (type_is && tv1->v_type != tv2->v_type)
     {
-	// For "is" a different type always means FALSE, for "notis"
+	// For "is" a different type always means FALSE, for "isnot"
 	// it means TRUE.
 	n1 = (type == EXPR_ISNOT);
     }

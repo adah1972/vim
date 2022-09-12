@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2022 Jul 5
+" Last Change:	2022 Sep 09
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -696,7 +696,10 @@ au BufNewFile,BufRead *.mo,*.gdmo		setf gdmo
 au BufNewFile,BufRead *.gd			setf gdscript
 
 " Godot resource
-au BufRead,BufNewFile *.tscn,*.tres			setf gdresource
+au BufRead,BufNewFile *.tscn,*.tres		setf gdresource
+
+" Godot shader
+au BufRead,BufNewFile *.gdshader,*.shader	setf gdshader
 
 " Gedcom
 au BufNewFile,BufRead *.ged,lltxxxxx.txt	setf gedcom
@@ -717,9 +720,16 @@ au BufNewFile,BufRead *.git/worktrees/*/config.worktree		setf gitconfig
 au BufNewFile,BufRead .gitmodules,*.git/modules/*/config	setf gitconfig
 if !empty($XDG_CONFIG_HOME)
   au BufNewFile,BufRead $XDG_CONFIG_HOME/git/config		setf gitconfig
+  au BufNewFile,BufRead $XDG_CONFIG_HOME/git/attributes		setf gitattributes
+  au BufNewFile,BufRead $XDG_CONFIG_HOME/git/ignore		setf gitignore
 endif
-au BufNewFile,BufRead git-rebase-todo		setf gitrebase
-au BufRead,BufNewFile .gitsendemail.msg.??????	setf gitsendemail
+au BufNewFile,BufRead .gitattributes,*.git/info/attributes	setf gitattributes
+au BufNewFile,BufRead */.config/git/attributes			setf gitattributes
+au BufNewFile,BufRead */etc/gitattributes			setf gitattributes
+au BufNewFile,BufRead .gitignore,*.git/info/exclude		setf gitignore
+au BufNewFile,BufRead */.config/git/ignore			setf gitignore
+au BufNewFile,BufRead git-rebase-todo				setf gitrebase
+au BufRead,BufNewFile .gitsendemail.msg.??????			setf gitsendemail
 au BufNewFile,BufRead *.git/*
       \ if getline(1) =~# '^\x\{40,\}\>\|^ref: ' |
       \   setf git |
@@ -864,11 +874,11 @@ au BufNewFile,BufRead *.htt,*.htb		setf httest
 
 " i3
 au BufNewFile,BufRead */i3/config		setf i3config
-au BufNewFile,BufRead */.i3/config  	setf i3config
+au BufNewFile,BufRead */.i3/config		setf i3config
 
 " sway
 au BufNewFile,BufRead */sway/config		setf swayconfig
-au BufNewFile,BufRead */.sway/config	setf swayconfig
+au BufNewFile,BufRead */.sway/config		setf swayconfig
 
 " Icon
 au BufNewFile,BufRead *.icn			setf icon
@@ -937,7 +947,7 @@ au BufNewFile,BufRead *.java,*.jav		setf java
 au BufNewFile,BufRead *.jj,*.jjt		setf javacc
 
 " JavaScript, ECMAScript, ES module script, CommonJS script
-au BufNewFile,BufRead *.js,*.javascript,*.es,*.mjs,*.cjs   setf javascript
+au BufNewFile,BufRead *.js,*.jsm,*.javascript,*.es,*.mjs,*.cjs   setf javascript
 
 " JavaScript with React
 au BufNewFile,BufRead *.jsx			setf javascriptreact
@@ -974,6 +984,9 @@ au BufNewFile,BufRead .babelrc,.eslintrc,.prettierrc,.firebaserc  setf json
 
 " JSONC
 au BufNewFile,BufRead *.jsonc			setf jsonc
+
+" Jsonnet
+au BufNewFile,BufRead *.jsonnet,*.libjsonnet	setf jsonnet
 
 " Julia
 au BufNewFile,BufRead *.jl			setf julia
@@ -1313,7 +1326,7 @@ au BufNewFile,BufRead *.or				setf openroad
 au BufNewFile,BufRead *.[Oo][Pp][Ll]			setf opl
 
 " OpenSCAD
-au BufNewFile,BufRead *.scad				setf openscad		
+au BufNewFile,BufRead *.scad				setf openscad
 
 " Oracle config file
 au BufNewFile,BufRead *.ora				setf ora
@@ -1388,7 +1401,8 @@ au BufNewFile,BufRead *.pod			setf pod
 " Also Phtml (was used for PHP 2 in the past).
 " Also .ctp for Cake template file.
 " Also .phpt for php tests.
-au BufNewFile,BufRead *.php,*.php\d,*.phtml,*.ctp,*.phpt	setf php
+" Also .theme for Drupal theme files.
+au BufNewFile,BufRead *.php,*.php\d,*.phtml,*.ctp,*.phpt,*.theme	setf php
 
 " PHP config
 au BufNewFile,BufRead php.ini-*			setf dosini
@@ -1819,7 +1833,7 @@ au BufNewFile,BufRead *.score			setf slrnsc
 au BufNewFile,BufRead *.st			setf st
 
 " Smalltalk (and Rexx, TeX, and Visual Basic)
-au BufNewFile,BufRead *.cls                     call dist#ft#FTcls()
+au BufNewFile,BufRead *.cls			call dist#ft#FTcls()
 
 " Smarty templates
 au BufNewFile,BufRead *.tpl			setf smarty
@@ -1926,8 +1940,8 @@ au BufNewFile,BufRead *.cm			setf voscm
 au BufNewFile,BufRead *.swift			setf swift
 au BufNewFile,BufRead *.swift.gyb		setf swiftgyb
 
-" Swift Intermediate Language
-au BufNewFile,BufRead *.sil			setf sil
+" Swift Intermediate Language or SILE
+au BufNewFile,BufRead *.sil			call dist#ft#FTsil()
 
 " Sysctl
 au BufNewFile,BufRead */etc/sysctl.conf,*/etc/sysctl.d/*.conf	setf sysctl
@@ -2090,6 +2104,11 @@ au BufNewFile,BufRead */.config/upstart/*.override	       setf upstart
 
 " Vala
 au BufNewFile,BufRead *.vala			setf vala
+
+" VDM
+au BufRead,BufNewFile *.vdmpp,*.vpp		setf vdmpp
+au BufRead,BufNewFile *.vdmrt			setf vdmrt
+au BufRead,BufNewFile *.vdmsl,*.vdm		setf vdmsl
 
 " Vera
 au BufNewFile,BufRead *.vr,*.vri,*.vrh		setf vera
@@ -2560,6 +2579,8 @@ au BufNewFile,BufRead *.txt
 	\|   setf text
 	\| endif
 
+" Blueprint markup files
+au BufNewFile,BufRead *.blp			setf blueprint
 
 " Use the filetype detect plugins.  They may overrule any of the previously
 " detected filetypes.

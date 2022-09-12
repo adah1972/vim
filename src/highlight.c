@@ -204,10 +204,8 @@ static char *(highlight_init_light[]) = {
 	 "Title term=bold ctermfg=DarkMagenta gui=bold guifg=Magenta"),
     CENT("WarningMsg term=standout ctermfg=DarkRed",
 	 "WarningMsg term=standout ctermfg=DarkRed guifg=Red"),
-#ifdef FEAT_WILDMENU
     CENT("WildMenu term=standout ctermbg=Yellow ctermfg=Black",
 	 "WildMenu term=standout ctermbg=Yellow ctermfg=Black guibg=Yellow guifg=Black"),
-#endif
 #ifdef FEAT_FOLDING
     CENT("Folded term=standout ctermbg=Grey ctermfg=DarkBlue",
 	 "Folded term=standout ctermbg=Grey ctermfg=DarkBlue guibg=LightGrey guifg=DarkBlue"),
@@ -295,10 +293,8 @@ static char *(highlight_init_dark[]) = {
 	 "Title term=bold ctermfg=LightMagenta gui=bold guifg=Magenta"),
     CENT("WarningMsg term=standout ctermfg=LightRed",
 	 "WarningMsg term=standout ctermfg=LightRed guifg=Red"),
-#ifdef FEAT_WILDMENU
     CENT("WildMenu term=standout ctermbg=Yellow ctermfg=Black",
 	 "WildMenu term=standout ctermbg=Yellow ctermfg=Black guibg=Yellow guifg=Black"),
-#endif
 #ifdef FEAT_FOLDING
     CENT("Folded term=standout ctermbg=DarkGrey ctermfg=Cyan",
 	 "Folded term=standout ctermbg=DarkGrey ctermfg=Cyan guibg=DarkGrey guifg=Cyan"),
@@ -511,7 +507,9 @@ load_colors(char_u *name)
 	sprintf((char *)buf, "colors/%s.vim", name);
 	retval = source_runtime(buf, DIP_START + DIP_OPT);
 	vim_free(buf);
-	apply_autocmds(EVENT_COLORSCHEME, name, curbuf->b_fname, FALSE, curbuf);
+	if (retval == OK)
+	    apply_autocmds(EVENT_COLORSCHEME, name, curbuf->b_fname,
+								FALSE, curbuf);
     }
     recursive = FALSE;
 
@@ -939,7 +937,7 @@ highlight_set_ctermfg(int idx, int color, int is_normal_group)
 	if (!gui.in_use && !gui.starting)
 #endif
 	{
-	    must_redraw = UPD_CLEAR;
+	    set_must_redraw(UPD_CLEAR);
 	    if (termcap_active && color >= 0)
 		term_fg_color(color);
 	}
@@ -962,7 +960,7 @@ highlight_set_ctermbg(int idx, int color, int is_normal_group)
 	if (!gui.in_use && !gui.starting)
 #endif
 	{
-	    must_redraw = UPD_CLEAR;
+	    set_must_redraw(UPD_CLEAR);
 	    if (color >= 0)
 	    {
 		int dark = -1;
@@ -1005,7 +1003,7 @@ highlight_set_ctermul(int idx, int color, int is_normal_group)
 	if (!gui.in_use && !gui.starting)
 #endif
 	{
-	    must_redraw = UPD_CLEAR;
+	    set_must_redraw(UPD_CLEAR);
 	    if (termcap_active && color >= 0)
 		term_ul_color(color);
 	}
@@ -1919,7 +1917,7 @@ set_normal_colors(void)
 				 FALSE, TRUE, FALSE))
 	{
 	    gui_mch_new_colors();
-	    must_redraw = UPD_CLEAR;
+	    set_must_redraw(UPD_CLEAR);
 	}
 #  ifdef FEAT_GUI_X11
 	if (set_group_colors((char_u *)"Menu",
@@ -1929,7 +1927,7 @@ set_normal_colors(void)
 #   ifdef FEAT_MENU
 	    gui_mch_new_menu_colors();
 #   endif
-	    must_redraw = UPD_CLEAR;
+	    set_must_redraw(UPD_CLEAR);
 	}
 #   ifdef FEAT_BEVAL_GUI
 	if (set_group_colors((char_u *)"Tooltip",
@@ -1939,7 +1937,7 @@ set_normal_colors(void)
 #    ifdef FEAT_TOOLBAR
 	    gui_mch_new_tooltip_colors();
 #    endif
-	    must_redraw = UPD_CLEAR;
+	    set_must_redraw(UPD_CLEAR);
 	}
 #   endif
 	if (set_group_colors((char_u *)"Scrollbar",
@@ -1947,7 +1945,7 @@ set_normal_colors(void)
 			FALSE, FALSE, FALSE))
 	{
 	    gui_new_scrollbar_colors();
-	    must_redraw = UPD_CLEAR;
+	    set_must_redraw(UPD_CLEAR);
 	}
 #  endif
     }
@@ -1973,7 +1971,7 @@ set_normal_colors(void)
 		// color
 		cterm_normal_fg_gui_color = HL_TABLE()[idx].sg_gui_fg;
 		cterm_normal_bg_gui_color = HL_TABLE()[idx].sg_gui_bg;
-		must_redraw = UPD_CLEAR;
+		set_must_redraw(UPD_CLEAR);
 	    }
 	}
     }
@@ -2545,7 +2543,7 @@ get_attr_entry(garray_T *table, attrentry_T *aep)
 
 	clear_hl_tables();
 
-	must_redraw = UPD_CLEAR;
+	set_must_redraw(UPD_CLEAR);
 
 	for (i = 0; i < highlight_ga.ga_len; ++i)
 	    set_hl_attr(i);
@@ -4517,7 +4515,7 @@ hlg_add_or_update(dict_T *dict)
 # endif
     p = add_attr_and_value(p, (char_u *)" guifg=", 7, guifg);
     p = add_attr_and_value(p, (char_u *)" guibg=", 7, guibg);
-    p = add_attr_and_value(p, (char_u *)" guisp=", 7, guisp);
+    (void)add_attr_and_value(p, (char_u *)" guisp=", 7, guisp);
 
     do_highlight(hlsetBuf, forceit, FALSE);
 

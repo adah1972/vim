@@ -1654,6 +1654,9 @@ compile_throw(char_u *arg, cctx_T *cctx UNUSED)
     return p;
 }
 
+/*
+ * Compile an expression or function call.
+ */
     char_u *
 compile_eval(char_u *arg, cctx_T *cctx)
 {
@@ -1679,6 +1682,93 @@ compile_eval(char_u *arg, cctx_T *cctx)
     generate_instr_drop(cctx, ISN_DROP, 1);
 
     return skipwhite(p);
+}
+
+/*
+ * Get the local variable index for deferred function calls.
+ * Reserve it when not done already.
+ * Returns zero for failure.
+ */
+    int
+get_defer_var_idx(cctx_T *cctx)
+{
+    dfunc_T	*dfunc = ((dfunc_T *)def_functions.ga_data)
+					       + cctx->ctx_ufunc->uf_dfunc_idx;
+    if (dfunc->df_defer_var_idx == 0)
+    {
+	lvar_T *lvar = reserve_local(cctx, (char_u *)"@defer@", 7,
+							    TRUE, &t_list_any);
+	if (lvar == NULL)
+	    return 0;
+	dfunc->df_defer_var_idx = lvar->lv_idx + 1;
+    }
+    return dfunc->df_defer_var_idx;
+}
+
+/*
+ * Compile "defer func(arg)".
+ */
+    char_u *
+compile_defer(char_u *arg_start, cctx_T *cctx)
+{
+    char_u	*paren;
+    char_u	*arg = arg_start;
+    int		argcount = 0;
+    int		defer_var_idx;
+    type_T	*type;
+    int		func_idx;
+
+    // Get a funcref for the function name.
+    // TODO: better way to find the "(".
+    paren = vim_strchr(arg, '(');
+    if (paren == NULL)
+    {
+	semsg(_(e_missing_parenthesis_str), arg);
+	return NULL;
+    }
+    *paren = NUL;
+    func_idx = find_internal_func(arg);
+    if (func_idx >= 0)
+	// TODO: better type
+	generate_PUSHFUNC(cctx, (char_u *)internal_func_name(func_idx),
+							   &t_func_any, FALSE);
+    else if (compile_expr0(&arg, cctx) == FAIL)
+	return NULL;
+    *paren = '(';
+
+    // check for function type
+    type = get_type_on_stack(cctx, 0);
+    if (type->tt_type != VAR_FUNC)
+    {
+	emsg(_(e_function_name_required));
+	return NULL;
+    }
+
+    // compile the arguments
+    arg = skipwhite(paren + 1);
+    if (compile_arguments(&arg, cctx, &argcount, CA_NOT_SPECIAL) == FAIL)
+	return NULL;
+
+    if (func_idx >= 0)
+    {
+	type2_T	*argtypes = NULL;
+	type2_T	shuffled_argtypes[MAX_FUNC_ARGS];
+
+	if (check_internal_func_args(cctx, func_idx, argcount, FALSE,
+					 &argtypes, shuffled_argtypes) == FAIL)
+	    return NULL;
+    }
+    else if (check_func_args_from_type(cctx, type, argcount, TRUE,
+							    arg_start) == FAIL)
+	return NULL;
+
+    defer_var_idx = get_defer_var_idx(cctx);
+    if (defer_var_idx == 0)
+	return NULL;
+    if (generate_DEFER(cctx, defer_var_idx - 1, argcount) == FAIL)
+	return NULL;
+
+    return skipwhite(arg);
 }
 
 /*
@@ -1735,6 +1825,10 @@ compile_mult_expr(char_u *arg, int cmdidx, cctx_T *cctx)
 	    generate_MULT_EXPR(cctx, ISN_EXECUTE, count);
 	else if (cmdidx == CMD_echomsg)
 	    generate_MULT_EXPR(cctx, ISN_ECHOMSG, count);
+#ifdef HAS_MESSAGE_WINDOW
+	else if (cmdidx == CMD_echowindow)
+	    generate_MULT_EXPR(cctx, ISN_ECHOWINDOW, count);
+#endif
 	else if (cmdidx == CMD_echoconsole)
 	    generate_MULT_EXPR(cctx, ISN_ECHOCONSOLE, count);
 	else

@@ -1495,7 +1495,7 @@ theend:
  * skipping the word at 'skip_word'.  Returns OK on success.
  */
     static int
-thesarurs_add_words_in_line(
+thesaurus_add_words_in_line(
 	char_u	*fname,
 	char_u	**buf_arg,
 	int	dir,
@@ -1598,7 +1598,7 @@ ins_compl_files(
 		{
 		    // For a thesaurus, add all the words in the line
 		    ptr = buf;
-		    add_r = thesarurs_add_words_in_line(files[i], &ptr, *dir,
+		    add_r = thesaurus_add_words_in_line(files[i], &ptr, *dir,
 							regmatch->startp[0]);
 		}
 		if (add_r == OK)
@@ -2083,7 +2083,7 @@ set_ctrl_x_mode(int c)
 	    ctrl_x_mode = CTRL_X_FILES;
 	    break;
 	case Ctrl_K:
-	    // complete words from a dictinoary
+	    // complete words from a dictionary
 	    ctrl_x_mode = CTRL_X_DICTIONARY;
 	    break;
 	case Ctrl_R:
@@ -2930,9 +2930,7 @@ f_complete(typval_T *argvars, typval_T *rettv UNUSED)
     if (!undo_allowed())
 	return;
 
-    if (argvars[1].v_type != VAR_LIST || argvars[1].vval.v_list == NULL)
-	emsg(_(e_invalid_argument));
-    else
+    if (check_for_nonnull_list_arg(argvars, 1) != FAIL)
     {
 	startcol = (int)tv_get_number_chk(&argvars[0], NULL);
 	if (startcol > 0)
@@ -3123,8 +3121,10 @@ get_complete_info(list_T *what_list, dict_T *retdict)
 				      ? compl_curr_match->cp_number - 1 : -1);
     }
 
-    // TODO
-    // if (ret == OK && (what_flag & CI_WHAT_INSERTED))
+    if (ret == OK && (what_flag & CI_WHAT_INSERTED))
+    {
+	// TODO
+    }
 }
 
 /*
@@ -3143,11 +3143,8 @@ f_complete_info(typval_T *argvars, typval_T *rettv)
 
     if (argvars[0].v_type != VAR_UNKNOWN)
     {
-	if (argvars[0].v_type != VAR_LIST)
-	{
-	    emsg(_(e_list_required));
+	if (check_for_list_arg(argvars, 0) == FAIL)
 	    return;
-	}
 	what_list = argvars[0].vval.v_list;
     }
     get_complete_info(what_list, rettv->vval.v_dict);

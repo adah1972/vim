@@ -381,7 +381,7 @@ func Test_prop_add_list()
   call assert_fails('call prop_add_list(#{type: "one"}, [[2, 2, 2, 2], [3, 20, 3, 22]])', 'E964:')
   call assert_fails('eval #{type: "one"}->prop_add_list([[2, 2, 2, 2], [3, 20, 3, 22]])', 'E964:')
   call assert_fails('call prop_add_list(test_null_dict(), [[2, 2, 2]])', 'E965:')
-  call assert_fails('call prop_add_list(#{type: "one"}, test_null_list())', 'E714:')
+  call assert_fails('call prop_add_list(#{type: "one"}, test_null_list())', 'E1298:')
   call assert_fails('call prop_add_list(#{type: "one"}, [test_null_list()])', 'E714:')
   call DeletePropTypes()
   bw!
@@ -1679,14 +1679,14 @@ endfunc
 func Test_prop_func_invalid_args()
   call assert_fails('call prop_clear(1, 2, [])', 'E715:')
   call assert_fails('call prop_clear(-1, 2)', 'E16:')
-  call assert_fails('call prop_find(test_null_dict())', 'E715:')
+  call assert_fails('call prop_find(test_null_dict())', 'E1297:')
   call assert_fails('call prop_find({"bufnr" : []})', 'E730:')
   call assert_fails('call prop_find({})', 'E968:')
   call assert_fails('call prop_find({}, "x")', 'E474:')
   call assert_fails('call prop_find({"lnum" : -2})', 'E16:')
-  call assert_fails('call prop_list(1, [])', 'E715:')
+  call assert_fails('call prop_list(1, [])', 'E1206:')
   call assert_fails('call prop_list(-1, {})', 'E16:')
-  call assert_fails('call prop_remove([])', 'E474:')
+  call assert_fails('call prop_remove([])', 'E1206:')
   call assert_fails('call prop_remove({}, -2)', 'E16:')
   call assert_fails('call prop_remove({})', 'E968:')
   call assert_fails('call prop_type_add([], {})', 'E730:')
@@ -1699,7 +1699,7 @@ func Test_prop_func_invalid_args()
   call assert_fails("call prop_type_add('yyy', 'not_a_dict')", 'E715:')
   call assert_fails("call prop_add(1, 5, {'type':'missing_type', 'length':1})", 'E971:')
   call assert_fails("call prop_add(1, 5, {'type': ''})", 'E971:')
-  call assert_fails('call prop_add(1, 1, 0)', 'E715:')
+  call assert_fails('call prop_add(1, 1, 0)', 'E1206:')
 
   new
   call setline(1, ['first', 'second'])
@@ -1925,12 +1925,21 @@ func Test_prop_in_linebreak()
   let lines =<< trim END
     set breakindent linebreak breakat+=]
     call printf('%s]%s', repeat('x', 50), repeat('x', 70))->setline(1)
-    call prop_type_add('test', #{highlight: 'ErrorMsg'})
+    call prop_type_add('test', #{highlight: 'MatchParen'})
     call prop_add(1, 51, #{length: 1, type: 'test'})
+    func AddMatch()
+      syntax on
+      syntax match xTest /.*/
+      hi link xTest Comment
+      set signcolumn=yes
+    endfunc
   END
   call writefile(lines, 'XscriptPropLinebreak')
   let buf = RunVimInTerminal('-S XscriptPropLinebreak', #{rows: 10})
-  call VerifyScreenDump(buf, 'Test_prop_linebreak', {})
+  call VerifyScreenDump(buf, 'Test_prop_linebreak_1', {})
+
+  call term_sendkeys(buf, ":call AddMatch()\<CR>")
+  call VerifyScreenDump(buf, 'Test_prop_linebreak_2', {})
 
   call StopVimInTerminal(buf)
   call delete('XscriptPropLinebreak')
@@ -2574,11 +2583,11 @@ func Test_props_with_text_right_align_twice()
 
   let lines =<< trim END
       call setline(1, ["some text some text some text some text", 'line two'])
-      call prop_type_add( 'MyErrorText', #{ highlight: 'ErrorMsg' } )
-      call prop_type_add( 'MyPadding', #{ highlight: 'DiffChange' } )
-      call prop_add( 1, 0, #{ type: 'MyPadding', text: ' nothing here', text_wrap: 'wrap'} )
-      call prop_add( 1, 0, #{ type: 'MyErrorText', text: 'Some error', text_wrap: 'wrap', text_align: 'right' } )
-      call prop_add( 1, 0, #{ type: 'MyErrorText', text: 'Another error', text_wrap: 'wrap', text_align: 'right' } )
+      call prop_type_add('MyErrorText', #{ highlight: 'ErrorMsg'})
+      call prop_type_add('MyPadding', #{ highlight: 'DiffChange'})
+      call prop_add(1, 0, #{type: 'MyPadding', text: ' nothing here', text_wrap: 'wrap'})
+      call prop_add(1, 0, #{type: 'MyErrorText', text: 'Some error', text_wrap: 'wrap', text_align: 'right'})
+      call prop_add(1, 0, #{type: 'MyErrorText', text: 'Another error', text_wrap: 'wrap', text_align: 'right'})
       normal G$
   END
   call writefile(lines, 'XscriptPropsRightAlign')
@@ -2587,6 +2596,9 @@ func Test_props_with_text_right_align_twice()
 
   call term_sendkeys(buf, "ggisome more text\<Esc>G$")
   call VerifyScreenDump(buf, 'Test_prop_right_align_twice_2', {})
+
+  call term_sendkeys(buf, ":set signcolumn=yes\<CR>")
+  call VerifyScreenDump(buf, 'Test_prop_right_align_twice_3', {})
 
   call StopVimInTerminal(buf)
   call delete('XscriptPropsRightAlign')
@@ -2836,6 +2848,34 @@ func Test_props_with_text_below_nowrap()
   call delete('XscriptPropsBelowNowrap')
 endfunc
 
+func Test_props_with_text_above()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      call setline(1, ['one two', 'three four', 'five six'])
+      call prop_type_add('above1', #{highlight: 'Search'})
+      call prop_type_add('above2', #{highlight: 'DiffChange'})
+      call prop_add(1, 0, #{type: 'above1', text: 'first thing above', text_align: 'above'})
+      call prop_add(1, 0, #{type: 'above2', text: 'second thing above', text_align: 'above'})
+      call prop_add(3, 0, #{type: 'above1', text: 'another thing', text_align: 'above', text_padding_left: 3})
+
+      normal gglllj
+  END
+  call writefile(lines, 'XscriptPropsWithTextAbove', 'D')
+  let buf = RunVimInTerminal('-S XscriptPropsWithTextAbove', #{rows: 9, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_with_text_above_1', {})
+
+  call term_sendkeys(buf, "ggI")
+  call VerifyScreenDump(buf, 'Test_prop_with_text_above_2', {})
+  call term_sendkeys(buf, "inserted \<Esc>")
+  call VerifyScreenDump(buf, 'Test_prop_with_text_above_3', {})
+
+  call term_sendkeys(buf, ":set number signcolumn=yes\<CR>")
+  call VerifyScreenDump(buf, 'Test_prop_with_text_above_4', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
 func Test_props_with_text_override()
   CheckRunVimInTerminal
 
@@ -3039,6 +3079,92 @@ func Test_insert_text_list_mode()
 
   call StopVimInTerminal(buf)
   call delete('XscriptPropsListMode')
+endfunc
+
+func Test_insert_text_with_padding()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+      setline(1, ['Some text to add virtual text to.',
+                  'second line',
+                  'Another line with some text to make the wrap.'])
+      prop_type_add('theprop', {highlight: 'DiffChange'})
+      prop_add(1, 0, {
+          type: 'theprop',
+          text: 'after',
+          text_align: 'after',
+          text_padding_left: 3,
+      })
+      prop_add(1, 0, {
+          type: 'theprop',
+          text: 'right aligned',
+          text_align: 'right',
+          text_padding_left: 5,
+      })
+      prop_add(1, 0, {
+          type: 'theprop',
+          text: 'below the line',
+          text_align: 'below',
+          text_padding_left: 4,
+      })
+      prop_add(3, 0, {
+          type: 'theprop',
+          text: 'rightmost',
+          text_align: 'right',
+          text_padding_left: 6,
+          text_wrap: 'wrap',
+      })
+  END
+  call writefile(lines, 'XscriptPropsPadded')
+  let buf = RunVimInTerminal('-S XscriptPropsPadded', #{rows: 8, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_text_with_padding_1', {})
+
+  call term_sendkeys(buf, "ggixxxxxxxxxx\<Esc>")
+  call term_sendkeys(buf, "3Gix\<Esc>")
+  call VerifyScreenDump(buf, 'Test_prop_text_with_padding_2', {})
+
+  call term_sendkeys(buf, "ggix\<Esc>")
+  call VerifyScreenDump(buf, 'Test_prop_text_with_padding_3', {})
+
+  call StopVimInTerminal(buf)
+  call delete('XscriptPropsPadded')
+endfunc
+
+func Test_insert_text_change_arg()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+      setline(1, ['SetErrorCode( 10, 20 )', 'second line'])
+      prop_type_add('param', {highlight: 'DiffChange', start_incl: 1})
+      prop_type_add('padd', {highlight: 'NonText', start_incl: 1})
+      prop_add(1, 15, {
+          type: 'param',
+          text: 'id:',
+      })
+      prop_add(1, 15, {
+          type: 'padd',
+          text: '-',
+      })
+      prop_add(1, 19, {
+          type: 'param',
+          text: 'id:',
+      })
+      prop_add(1, 19, {
+          type: 'padd',
+          text: '-',
+      })
+  END
+  call writefile(lines, 'XscriptPropsChange')
+  let buf = RunVimInTerminal('-S XscriptPropsChange', #{rows: 5, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_text_change_arg_1', {})
+
+  call term_sendkeys(buf, "ggf1cw1234\<Esc>")
+  call VerifyScreenDump(buf, 'Test_prop_text_change_arg_2', {})
+
+  call StopVimInTerminal(buf)
+  call delete('XscriptPropsChange')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

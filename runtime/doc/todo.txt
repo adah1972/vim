@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 9.0.  Last change: 2022 Jun 27
+*todo.txt*      For Vim version 9.0.  Last change: 2022 Sep 10
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -38,8 +38,14 @@ browser use: https://github.com/vim/vim/issues/1234
 							*known-bugs*
 -------------------- Known bugs and current work -----------------------
 
-Text props: Add "padding" argument - only for when using "text" and {col} is
-zero.  Use tp_len field and n_attr_skip. #10906
+Use :defer command:
+    - Use "D" flag of writefile() and mkdir() in tests.
+	(testdir/test_c*.vim done)
+
+When using :echomessage do use msg_row and msg_col, but save and restore.
+How to test any failure?  If nothing fails perhaps it's OK alrady.
+
+Drop Windows XP?  #11089
 
 Further Vim9 improvements, possibly after launch:
 - Use Vim9 for more runtime files.
@@ -179,15 +185,7 @@ Terminal emulator window:
 - When 'encoding' is not utf-8, or the job is using another encoding, setup
   conversions.
 
-Patches considered for including:
-- use int instead of char_ for index  #10818  needs a test
-- Add "-n" option to xxd. #10599  needs a test
-- allow for nesting of timeout, sketch in #10595
-- Add setcmdline()  #10869
-
-Add 'splitscroll'  #10682  Useful?  Any trouble? Null Chilly says it's OK.
-    suggestion: names instead of numbers for the option value
-    problem depending on whether window is focused or not
+Add 'splitscroll'  #10682  Anything remaining
 
 Autoconf: must use autoconf 2.69, later version generates lots of warnings
 - try using autoconf 2.71 and fix all "obsolete" warnings
@@ -196,6 +194,8 @@ Can deref_func_name() and deref_function_name() be merged?
 
 After patch 8.2.4915 w_botline is computed much more often. Can this be
 reduced?
+
+Add BufDeletePost.  #11041
 
 NFA regexp does not handle composing characters well: #10286
     [ɔ̃] matches both ɔ and ɔ̃
@@ -244,6 +244,9 @@ MS-Windows: did path modifier :p:8 stop working?  #8600
 Version of getchar() that does not move the cursor - #10603 Use a separate
 argument for the new flag.
 
+Add "lastline" entry to 'fillchars' to specify a character instead of '@'.
+#10963
+
 test_arglist func Test_all_not_allowed_from_cmdwin() hangs on MS-Windows.
 
 Information for a specific terminal (e.g. gnome, tmux, konsole, alacritty) is
@@ -271,6 +274,7 @@ Adding "10" to 'spellsuggest' causes spell suggestions to become very slow.
 Also, z= in German on a long word can take a very long time, but CTRL-C to
 interrupt does not work. Where to add ui_breakcheck()?
 New English spell files also have very slow suggestions.
+French spell files don't work correctly.  #4916
 
 Make "g>" and "g<" in Visual mode move the text right or left.
 Also for a block selection.  #8558
@@ -875,9 +879,6 @@ The ++ options for the :edit command are also useful on the Vim command line.
 
 Overlong utf-8 sequence is displayed wrong. (Harm te Hennepe, 2017 Sep 14,
 #2089)  Patch with possible solution by Björn Linse.
-
-The change list index is local to a buffer, but it doesn't make sense using it
-for another buffer.  (lacygoill) Copy w_changelistidx to wininfo_S and back.
 
 X11: Putting more than about 262040 characters of text on the clipboard and
 pasting it in another Vim doesn't work.  (Dominique Pelle, 2008 Aug 21-23)
@@ -2645,6 +2646,11 @@ Better 'rightleft' or BIDI support:
 
 
 Spell checking:
+-   List of common misspellings in English:
+    https://en.wikipedia.org/wiki/Wikipedia:Lists_of_common_misspellings/For_machines
+    German:
+    https://de.wikipedia.org/wiki/Wikipedia:Liste_von_Tippfehlern/F%C3%BCr_Maschinen
+    There are other languages.
 -   [s does not find missing capital at start of the line.  #10838
     Probably because the dot at the end of the previous line isn't seen.
 -   When 'cursorline' is set and the first word should have SpellCap
@@ -3754,6 +3760,7 @@ Syntax highlighting:
     - use treesitter, NeoVim uses it - Many people don't like it.
 	After changes requires rebuilding the library.
     - use TextMate, vscode uses it.  #9087 - Other people don't like it.
+	    https://github.com/icedman/vim-textmate
       Vscode is asked to switch to treesitter:
       https://github.com/microsoft/vscode/issues/50140
     - sublime grammar?

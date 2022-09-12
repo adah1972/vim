@@ -1466,6 +1466,13 @@ prep_redo_num2(
     int	    cmd5)
 {
     ResetRedobuff();
+
+#ifdef FEAT_EVAL
+    // Put info about a mapping in the redo buffer, so that "." will use the
+    // same script context.
+    may_add_last_used_map_to_redobuff();
+#endif
+
     if (regname != 0)	// yank from specified buffer
     {
 	AppendCharToRedobuff('"');
@@ -1795,9 +1802,6 @@ pop_showcmd(void)
 display_showcmd(void)
 {
     int	    len;
-
-    if (p_ch == 0)
-	return;
 
     cursor_off();
 
@@ -4049,7 +4053,6 @@ nv_down(cmdarg_T *cap)
     }
 }
 
-#ifdef FEAT_SEARCHPATH
 /*
  * Grab the file name under the cursor and edit it.
  */
@@ -4092,7 +4095,6 @@ nv_gotofile(cmdarg_T *cap)
     else
 	clearop(cap->oap);
 }
-#endif
 
 /*
  * <End> command: to end of current line or last line.
@@ -4439,12 +4441,10 @@ nv_brackets(cmdarg_T *cap)
     old_pos = curwin->w_cursor;
     curwin->w_cursor.coladd = 0;    // TODO: don't do this for an error.
 
-#ifdef FEAT_SEARCHPATH
     // "[f" or "]f" : Edit file under the cursor (same as "gf")
     if (cap->nchar == 'f')
 	nv_gotofile(cap);
     else
-#endif
 
 #ifdef FEAT_FIND_ID
     // Find the occurrence(s) of the identifier or define under cursor
@@ -6079,14 +6079,12 @@ nv_g_cmd(cmdarg_T *cap)
 	    invoke_edit(cap, FALSE, 'g', FALSE);
 	break;
 
-#ifdef FEAT_SEARCHPATH
     // "gf": goto file, edit file under cursor
     // "]f" and "[f": can also be used.
     case 'f':
     case 'F':
 	nv_gotofile(cap);
 	break;
-#endif
 
     // "g'm" and "g`m": jump to mark without setting pcmark
     case '\'':
@@ -6808,11 +6806,11 @@ nv_esc(cmdarg_T *cap)
 #endif
     }
 #ifdef FEAT_CMDWIN
-    else if (cmdwin_type != 0 && ex_normal_busy)
+    else if (cmdwin_type != 0 && ex_normal_busy && typebuf_was_empty)
     {
 	// When :normal runs out of characters while in the command line window
-	// vgetorpeek() will return ESC.  Exit the cmdline window to break the
-	// loop.
+	// vgetorpeek() will repeatedly return ESC.  Exit the cmdline window to
+	// break the loop.
 	cmdwin_result = K_IGNORE;
 	return;
     }
@@ -6826,7 +6824,14 @@ nv_esc(cmdarg_T *cap)
 	redraw_curbuf_later(UPD_INVERTED);
     }
     else if (no_reason)
-	vim_beep(BO_ESC);
+    {
+#ifdef HAS_MESSAGE_WINDOW
+	if (!cap->arg && popup_message_win_visible())
+	    popup_hide_message_win();
+	else
+#endif
+	    vim_beep(BO_ESC);
+    }
     clearop(cap->oap);
 
     // A CTRL-C is often used at the start of a menu.  When 'insertmode' is

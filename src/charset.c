@@ -943,40 +943,39 @@ vim_isprintc_strict(int c)
 init_chartabsize_arg(
 	chartabsize_T	*cts,
 	win_T		*wp,
-	linenr_T	lnum,
+	linenr_T	lnum UNUSED,
 	colnr_T		col,
 	char_u		*line,
 	char_u		*ptr)
 {
     CLEAR_POINTER(cts);
     cts->cts_win = wp;
-    cts->cts_lnum = lnum;
     cts->cts_vcol = col;
     cts->cts_line = line;
     cts->cts_ptr = ptr;
 #ifdef FEAT_PROP_POPUP
     if (lnum > 0)
     {
-	char_u *prop_start;
+	char_u	*prop_start;
+	int	count;
 
-	cts->cts_text_prop_count = get_text_props(wp->w_buffer, lnum,
-							  &prop_start, FALSE);
-	if (cts->cts_text_prop_count > 0)
+	count = get_text_props(wp->w_buffer, lnum, &prop_start, FALSE);
+	cts->cts_text_prop_count = count;
+	if (count > 0)
 	{
 	    // Make a copy of the properties, so that they are properly
-	    // aligned.
-	    cts->cts_text_props = ALLOC_MULT(textprop_T,
-						    cts->cts_text_prop_count);
+	    // aligned.  Make it twice as long for the sorting below.
+	    cts->cts_text_props = ALLOC_MULT(textprop_T, count * 2);
 	    if (cts->cts_text_props == NULL)
 		cts->cts_text_prop_count = 0;
 	    else
 	    {
-		int i;
+		int	i;
 
-		mch_memmove(cts->cts_text_props, prop_start,
-			       cts->cts_text_prop_count * sizeof(textprop_T));
-		for (i = 0; i < cts->cts_text_prop_count; ++i)
-		    if (cts->cts_text_props[i].tp_id < 0)
+		mch_memmove(cts->cts_text_props + count, prop_start,
+						   count * sizeof(textprop_T));
+		for (i = 0; i < count; ++i)
+		    if (cts->cts_text_props[i + count].tp_id < 0)
 		    {
 			cts->cts_has_prop_with_text = TRUE;
 			break;
@@ -986,6 +985,27 @@ init_chartabsize_arg(
 		    // won't use the text properties, free them
 		    VIM_CLEAR(cts->cts_text_props);
 		    cts->cts_text_prop_count = 0;
+		}
+		else
+		{
+		    int	    *text_prop_idxs;
+
+		    // Need to sort the array to get any truncation right.
+		    // Do the sorting in the second part of the array, then
+		    // move the sorted props to the first part of the array.
+		    text_prop_idxs = ALLOC_MULT(int, count);
+		    if (text_prop_idxs != NULL)
+		    {
+			for (i = 0; i < count; ++i)
+			    text_prop_idxs[i] = i + count;
+			sort_text_props(curbuf, cts->cts_text_props,
+							text_prop_idxs, count);
+			// Here we want the reverse order.
+			for (i = 0; i < count; ++i)
+			    cts->cts_text_props[count - i - 1] =
+					cts->cts_text_props[text_prop_idxs[i]];
+			vim_free(text_prop_idxs);
+		    }
 		}
 	    }
 	}
@@ -1049,40 +1069,6 @@ lbr_chartabsize_adv(chartabsize_T *cts)
     return retval;
 }
 
-#if defined(FEAT_PROP_POPUP) || defined(PROTO)
-/*
- * Return the cell size of virtual text after truncation.
- */
-    int
-textprop_size_after_trunc(
-	win_T	*wp,
-	int	below,
-	int	added,
-	char_u	*text,
-	int	*n_used_ptr)
-{
-    int	space = below ? wp->w_width : added;
-    int len = (int)STRLEN(text);
-    int strsize = 0;
-    int n_used;
-
-    // if the remaining size is to small wrap
-    // anyway and use the next line
-    if (space < PROP_TEXT_MIN_CELLS)
-	space += wp->w_width;
-    for (n_used = 0; n_used < len; n_used += (*mb_ptr2len)(text + n_used))
-    {
-	int clen = ptr2cells(text + n_used);
-
-	if (strsize + clen > space)
-	    break;
-	strsize += clen;
-    }
-    *n_used_ptr = n_used;
-    return strsize;
-}
-#endif
-
 /*
  * Return the screen size of the character indicated by "cts".
  * "cts->cts_cur_text_width" is set to the extra size for a text property that
@@ -1122,6 +1108,7 @@ win_lbr_chartabsize(
 
 #if defined(FEAT_PROP_POPUP)
     cts->cts_cur_text_width = 0;
+    cts->cts_first_char = 0;
 #endif
 
 #if defined(FEAT_LINEBREAK) || defined(FEAT_PROP_POPUP)
@@ -1159,64 +1146,50 @@ win_lbr_chartabsize(
 	int	    col = (int)(s - line);
 	garray_T    *gap = &wp->w_buffer->b_textprop_text;
 
+	// The "$" for 'list' mode will go between the EOL and
+	// the text prop, account for that.
+	if (wp->w_p_list && wp->w_lcs_chars.eol != NUL)
+	    ++vcol;
+
 	for (i = 0; i < cts->cts_text_prop_count; ++i)
 	{
-	    textprop_T *tp = cts->cts_text_props + i;
+	    textprop_T	*tp = cts->cts_text_props + i;
+	    int		col_off = win_col_off(wp);
 
 	    // Watch out for the text being deleted.  "cts_text_props" is a
 	    // copy, the text prop may actually have been removed from the line.
 	    if (tp->tp_id < 0
 		    && ((tp->tp_col - 1 >= col
 					     && tp->tp_col - 1 < col + charlen)
-		       || (tp->tp_col == MAXCOL && (s[0] == NUL || s[1] == NUL)
-						   && cts->cts_with_trailing))
-		    && -tp->tp_id - 1 < gap->ga_len)
+		       || (tp->tp_col == MAXCOL
+			   && ((tp->tp_flags & TP_FLAG_ALIGN_ABOVE)
+				? col == 0
+				: (s[0] == NUL || s[1] == NUL)
+						  && cts->cts_with_trailing)))
+		    && tp->tp_id - 1 < gap->ga_len)
 	    {
 		char_u *p = ((char_u **)gap->ga_data)[-tp->tp_id - 1];
 
 		if (p != NULL)
 		{
-		    int	cells = vim_strsize(p);
+		    int	cells;
 
 		    if (tp->tp_col == MAXCOL)
 		    {
-			int below = (tp->tp_flags & TP_FLAG_ALIGN_BELOW);
-			int right = (tp->tp_flags & TP_FLAG_ALIGN_RIGHT);
-			int wrap = (tp->tp_flags & TP_FLAG_WRAP);
-			int len = (int)STRLEN(p);
-			int n_used = len;
+			int n_extra = (int)STRLEN(p);
 
-			// The "$" for 'list' mode will go between the EOL and
-			// the text prop, account for that.
-			if (wp->w_p_list && wp->w_lcs_chars.eol != NUL)
-			    ++vcol;
-
-			// Keep in sync with where textprop_size_after_trunc()
-			// is called in win_line().
-			if (!wrap)
-			{
-			    added = wp->w_width - (vcol + size) % wp->w_width;
-			    cells = textprop_size_after_trunc(wp,
-						     below, added, p, &n_used);
-			}
-			if (below)
-			    cells += wp->w_width - (vcol + size) % wp->w_width;
-			else if (right)
-			{
-			    len = wp->w_width - vcol % wp->w_width;
-			    if (len > cells + size)
-				// add the padding for right-alignment
-				cells = len - size;
-			    else if (len == 0)
-				// padding to right-align in the next line
-				cells += cells > wp->w_width ? 0
-							  :wp->w_width - cells;
-			}
+			cells = text_prop_position(wp, tp,
+			     (vcol + size) % (wp->w_width - col_off) + col_off,
+						     &n_extra, &p, NULL, NULL);
 #ifdef FEAT_LINEBREAK
 			no_sbr = TRUE;  // don't use 'showbreak' now
 #endif
 		    }
+		    else
+			cells = vim_strsize(p);
 		    cts->cts_cur_text_width += cells;
+		    if (tp->tp_flags & TP_FLAG_ALIGN_ABOVE)
+			cts->cts_first_char += cells;
 		    cts->cts_start_incl = tp->tp_flags & TP_FLAG_START_INCL;
 		    size += cells;
 		    if (*s == TAB)
@@ -1231,6 +1204,8 @@ win_lbr_chartabsize(
 	    if (tp->tp_col != MAXCOL && tp->tp_col - 1 > col)
 		break;
 	}
+	if (wp->w_p_list && wp->w_lcs_chars.eol != NUL)
+	    --vcol;
     }
 # endif
 
@@ -1561,6 +1536,11 @@ getvcol(
 #endif
 		break;
 	    }
+#ifdef FEAT_PROP_POPUP
+	    if (cursor == &wp->w_virtcol && cts.cts_ptr == cts.cts_line)
+		// do not count the virtual text above for w_curswant
+		wp->w_virtcol_first_char = cts.cts_first_char;
+#endif
 
 	    if (posptr != NULL && cts.cts_ptr >= posptr)
 		// character at pos->col
@@ -1596,6 +1576,9 @@ getvcol(
 	    if (((State & MODE_INSERT) == 0 || cts.cts_start_incl) && !on_NUL)
 		// cursor is after inserted text, unless on the NUL
 		vcol += cts.cts_cur_text_width;
+	    else
+		// insertion also happens after the "above" virtual text
+		vcol += cts.cts_first_char;
 #endif
 	    *cursor = vcol + head;	    // cursor at start
 	}

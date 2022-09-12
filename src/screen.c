@@ -49,7 +49,7 @@
 static int	screen_attr = 0;
 
 static void screen_char_2(unsigned off, int row, int col);
-static void screenclear2(void);
+static void screenclear2(int doclear);
 static void lineclear(unsigned off, int width, int attr);
 static void lineinvalid(unsigned off, int width);
 static int win_do_lines(win_T *wp, int row, int line_count, int mayclear, int del, int clear_attr);
@@ -876,7 +876,6 @@ draw_vsep_win(win_T *wp, int row)
     }
 }
 
-#ifdef FEAT_WILDMENU
 static int skip_status_match_char(expand_T *xp, char_u *s);
 
 /*
@@ -1144,7 +1143,6 @@ win_redr_status_matches(
     win_redraw_last_status(topframe);
     vim_free(buf);
 }
-#endif
 
 /*
  * Return TRUE if the status line of window "wp" is connected to the status
@@ -2906,9 +2904,9 @@ give_up:
     screen_Rows = Rows;
     screen_Columns = Columns;
 
-    must_redraw = UPD_CLEAR;	// need to clear the screen later
+    set_must_redraw(UPD_CLEAR);	// need to clear the screen later
     if (doclear)
-	screenclear2();
+	screenclear2(TRUE);
 #ifdef FEAT_GUI
     else if (gui.in_use
 	    && !gui.starting
@@ -2971,16 +2969,30 @@ free_screenlines(void)
 #endif
 }
 
+/*
+ * Clear the screen.
+ * May delay if there is something the user should read.
+ * Allocated the screen for resizing if needed.
+ */
     void
 screenclear(void)
 {
     check_for_delay(FALSE);
     screenalloc(FALSE);	    // allocate screen buffers if size changed
-    screenclear2();	    // clear the screen
+    screenclear2(TRUE);	    // clear the screen
+}
+
+/*
+ * Do not clear the screen but mark everything for redraw.
+ */
+    void
+redraw_as_cleared(void)
+{
+    screenclear2(FALSE);
 }
 
     static void
-screenclear2(void)
+screenclear2(int doclear)
 {
     int	    i;
 
@@ -3009,7 +3021,7 @@ screenclear2(void)
 	LineWraps[i] = FALSE;
     }
 
-    if (can_clear(T_CL))
+    if (doclear && can_clear(T_CL))
     {
 	out_str(T_CL);		// clear the display
 	clear_cmdline = FALSE;
@@ -3025,16 +3037,19 @@ screenclear2(void)
 
     screen_cleared = TRUE;	// can use contents of ScreenLines now
 
-    win_rest_invalid(firstwin);
+    win_rest_invalid(firstwin);	// redraw all regular windows
     redraw_cmdline = TRUE;
     redraw_tabline = TRUE;
     if (must_redraw == UPD_CLEAR)	// no need to clear again
 	must_redraw = UPD_NOT_VALID;
+    msg_scrolled = 0;		// compute_cmdrow() uses this
     compute_cmdrow();
+#ifdef FEAT_PROP_POPUP
+    popup_redraw_all();		// redraw all popup windows
+#endif
     msg_row = cmdline_row;	// put cursor on last line for messages
     msg_col = 0;
     screen_start();		// don't know where cursor is now
-    msg_scrolled = 0;		// can't scroll back
     msg_didany = FALSE;
     msg_didout = FALSE;
 }
@@ -4213,10 +4228,10 @@ showmode(void)
     int		nwr_save;
     int		sub_attr;
 
-    do_mode = ((p_smd && msg_silent == 0)
+    do_mode = p_smd && msg_silent == 0
 	    && ((State & MODE_INSERT)
 		|| restart_edit != NUL
-		|| VIsual_active));
+		|| VIsual_active);
     if (do_mode || reg_recording != 0)
     {
 	if (skip_showmode())
@@ -4726,7 +4741,7 @@ redrawing(void)
     int
 messaging(void)
 {
-    return (!(p_lz && char_avail() && !KeyTyped)) && p_ch > 0;
+    return (!(p_lz && char_avail() && !KeyTyped));
 }
 
 /*
