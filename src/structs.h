@@ -1445,10 +1445,10 @@ typedef struct {
     type_T	*type_decl;	    // declared type or equal to type_current
 } type2_T;
 
-#define TTFLAG_VARARGS	1	    // func args ends with "..."
-#define TTFLAG_OPTARG	2	    // func arg type with "?"
-#define TTFLAG_BOOL_OK	4	    // can be converted to bool
-#define TTFLAG_STATIC	8	    // one of the static types, e.g. t_any
+#define TTFLAG_VARARGS	0x01	    // func args ends with "..."
+#define TTFLAG_BOOL_OK	0x02	    // can be converted to bool
+#define TTFLAG_STATIC	0x04	    // one of the static types, e.g. t_any
+#define TTFLAG_CONST	0x08	    // cannot be changed
 
 /*
  * Structure to hold an internal variable without a name.
@@ -1460,9 +1460,7 @@ typedef struct
     union
     {
 	varnumber_T	v_number;	// number value
-#ifdef FEAT_FLOAT
 	float_T		v_float;	// floating number value
-#endif
 	char_u		*v_string;	// string value (can be NULL!)
 	list_T		*v_list;	// list value (can be NULL!)
 	dict_T		*v_dict;	// dict value (can be NULL!)
@@ -1626,6 +1624,23 @@ typedef enum {
 typedef struct svar_S svar_T;
 
 #if defined(FEAT_EVAL) || defined(PROTO)
+/*
+ * Info used by a ":for" loop.
+ */
+typedef struct
+{
+    int		fi_semicolon;	// TRUE if ending in '; var]'
+    int		fi_varcount;	// nr of variables in [] or zero
+    int		fi_break_count;	// nr of line breaks encountered
+    listwatch_T	fi_lw;		// keep an eye on the item used.
+    list_T	*fi_list;	// list being used
+    int		fi_bi;		// index of blob
+    blob_T	*fi_blob;	// blob being used
+    char_u	*fi_string;	// copy of string being used
+    int		fi_byte_idx;	// byte index in fi_string
+    int		fi_cs_flags;	// cs_flags or'ed together
+} forinfo_T;
+
 typedef struct funccall_S funccall_T;
 
 // values used for "uf_def_status"
@@ -1639,7 +1654,7 @@ typedef enum {
 
 /*
  * Structure to hold info for a user function.
- * When adding a field check copy_func().
+ * When adding a field check copy_lambda_to_global_func().
  */
 typedef struct
 {
@@ -1724,7 +1739,8 @@ typedef struct
 #define FC_NOARGS   0x200	// no a: variables in lambda
 #define FC_VIM9	    0x400	// defined in vim9 script file
 #define FC_CFUNC    0x800	// defined as Lua C func
-#define FC_COPY	    0x1000	// copy of another function by copy_func()
+#define FC_COPY	    0x1000	// copy of another function by
+				// copy_lambda_to_global_func()
 #define FC_LAMBDA   0x2000	// one line "return {expr}"
 
 #define MAX_FUNC_ARGS	20	// maximum number of function arguments
@@ -2035,13 +2051,13 @@ typedef struct
 
 // Struct passed between functions dealing with function call execution.
 //
-// "argv_func", when not NULL, can be used to fill in arguments only when the
+// "fe_argv_func", when not NULL, can be used to fill in arguments only when the
 // invoked function uses them.  It is called like this:
-//   new_argcount = argv_func(current_argcount, argv, partial_argcount,
-//							called_func_argcount)
+//   new_argcount = fe_argv_func(current_argcount, argv, partial_argcount,
+//							called_func)
 //
 typedef struct {
-    int		(* fe_argv_func)(int, typval_T *, int, int);
+    int		(* fe_argv_func)(int, typval_T *, int, ufunc_T *);
     linenr_T	fe_firstline;	// first line of range
     linenr_T	fe_lastline;	// last line of range
     int		*fe_doesrange;	// if not NULL: return: function handled range
@@ -2059,7 +2075,6 @@ typedef struct {
  * defined in that function.
  */
 typedef struct funcstack_S funcstack_T;
-
 struct funcstack_S
 {
     funcstack_T *fs_next;	// linked list at "first_funcstack"
@@ -2074,15 +2089,44 @@ struct funcstack_S
 
     int		fs_refcount;	// nr of closures referencing this funcstack
     int		fs_min_refcount; // nr of closures on this funcstack
-    int		fs_copyID;	// for garray_T collection
+    int		fs_copyID;	// for garbage collection
 };
+
+/*
+ * Structure to hold the variables declared in a loop that are possiblly used
+ * in a closure.
+ */
+typedef struct loopvars_S loopvars_T;
+struct loopvars_S
+{
+    loopvars_T *lvs_next;	// linked list at "first_loopvars"
+    loopvars_T *lvs_prev;
+
+    garray_T	lvs_ga;		// contains the variables
+    int		lvs_refcount;	// nr of closures referencing this loopvars
+    int		lvs_min_refcount; // nr of closures on this loopvars
+    int		lvs_copyID;	// for garbage collection
+};
+
+// maximum nesting of :while and :for loops in a :def function
+#define MAX_LOOP_DEPTH 10
 
 typedef struct outer_S outer_T;
 struct outer_S {
-    garray_T	*out_stack;	    // stack from outer scope
+    garray_T	*out_stack;	    // stack from outer scope, or a copy
+				    // containing only arguments and local vars
     int		out_frame_idx;	    // index of stack frame in out_stack
     outer_T	*out_up;	    // outer scope of outer scope or NULL
     partial_T	*out_up_partial;    // partial owning out_up or NULL
+
+    struct {
+	garray_T *stack;	    // stack from outer scope, or a copy
+				    // containing only vars inside the loop
+	short	 var_idx;	    // first variable defined in a loop in
+				    // out_loop_stack
+	short	 var_count;	    // number of variables defined in a loop
+    } out_loop[MAX_LOOP_DEPTH];
+    int		out_loop_size;	    // nr of used entries in out_loop[]
 };
 
 struct partial_S
@@ -2103,6 +2147,9 @@ struct partial_S
 
     funcstack_T	*pt_funcstack;	// copy of stack, used after context
 				// function returns
+    loopvars_T	*(pt_loopvars[MAX_LOOP_DEPTH]);
+				// copy of loop variables, used after loop
+				// block ends
 
     typval_T	*pt_argv;	// arguments in allocated array
     int		pt_argc;	// number of arguments
@@ -2110,6 +2157,14 @@ struct partial_S
     int		pt_copyID;	// funcstack may contain pointer to partial
     dict_T	*pt_dict;	// dict for "self"
 };
+
+typedef struct {
+    short	lvi_depth;	    // current nested loop depth
+    struct {
+	short	var_idx;	    // index of first variable inside loop
+	short	var_count;	    // number of variables inside loop
+    } lvi_loop[MAX_LOOP_DEPTH];
+} loopvarinfo_T;
 
 typedef struct AutoPatCmd_S AutoPatCmd_T;
 
@@ -3369,9 +3424,6 @@ typedef struct
 			    // CurSearch
 } match_T;
 
-// number of positions supported by matchaddpos()
-#define MAXPOSMATCH 8
-
 /*
  * Same as lpos_T, but with additional field len.
  */
@@ -3383,35 +3435,31 @@ typedef struct
 } llpos_T;
 
 /*
- * posmatch_T provides an array for storing match items for matchaddpos()
- * function.
- */
-typedef struct posmatch posmatch_T;
-struct posmatch
-{
-    llpos_T	pos[MAXPOSMATCH];	// array of positions
-    int		cur;			// internal position counter
-    linenr_T	toplnum;		// top buffer line
-    linenr_T	botlnum;		// bottom buffer line
-};
-
-/*
- * matchitem_T provides a linked list for storing match items for ":match" and
- * the match functions.
+ * matchitem_T provides a linked list for storing match items for ":match",
+ * matchadd() and matchaddpos().
  */
 typedef struct matchitem matchitem_T;
 struct matchitem
 {
-    matchitem_T	*next;
-    int		id;	    // match ID
-    int		priority;   // match priority
-    char_u	*pattern;   // pattern to highlight
-    regmmatch_T	match;	    // regexp program for pattern
-    posmatch_T	pos;	    // position matches
-    match_T	hl;	    // struct for doing the actual highlighting
-    int		hlg_id;	    // highlight group ID
+    matchitem_T	*mit_next;
+    int		mit_id;		// match ID
+    int		mit_priority;   // match priority
+
+    // Either a pattern is defined (mit_pattern is not NUL) or a list of
+    // positions is given (mit_pos is not NULL and mit_pos_count > 0).
+    char_u	*mit_pattern;   // pattern to highlight
+    regmmatch_T	mit_match;	// regexp program for pattern
+
+    llpos_T	*mit_pos_array;	// array of positions
+    int		mit_pos_count;	// nr of entries in mit_pos
+    int		mit_pos_cur;	// internal position counter
+    linenr_T	mit_toplnum;	// top buffer line
+    linenr_T	mit_botlnum;	// bottom buffer line
+
+    match_T	mit_hl;		// struct for doing the actual highlighting
+    int		mit_hlg_id;	// highlight group ID
 #ifdef FEAT_CONCEAL
-    int		conceal_char; // cchar for Conceal highlighting
+    int		mit_conceal_char; // cchar for Conceal highlighting
 #endif
 };
 

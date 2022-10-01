@@ -4048,19 +4048,30 @@ cmd_exists(char_u *name)
     void
 f_fullcommand(typval_T *argvars, typval_T *rettv)
 {
-    exarg_T  ea;
-    char_u   *name;
-    char_u   *p;
+    exarg_T	ea;
+    char_u	*name;
+    char_u	*p;
+    int		vim9script = in_vim9script();
+    int		save_cmod_flags = cmdmod.cmod_flags;
 
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = NULL;
 
-    if (in_vim9script() && check_for_string_arg(argvars, 0) == FAIL)
+    if (in_vim9script()
+	    && (check_for_string_arg(argvars, 0) == FAIL
+		|| check_for_opt_bool_arg(argvars, 1) == FAIL))
 	return;
 
     name = argvars[0].vval.v_string;
     if (name == NULL)
 	return;
+
+    if (argvars[1].v_type != VAR_UNKNOWN)
+    {
+	vim9script = tv_get_bool(&argvars[1]);
+	cmdmod.cmod_flags &= ~(CMOD_VIM9CMD | CMOD_LEGACY);
+	cmdmod.cmod_flags |= vim9script ? CMOD_VIM9CMD : CMOD_LEGACY;
+    }
 
     while (*name == ':')
 	name++;
@@ -4069,10 +4080,13 @@ f_fullcommand(typval_T *argvars, typval_T *rettv)
     ea.cmd = (*name == '2' || *name == '3') ? name + 1 : name;
     ea.cmdidx = (cmdidx_T)0;
     ea.addr_count = 0;
+    ++emsg_silent;  // don't complain about using "en" in Vim9 script
     p = find_ex_command(&ea, NULL, NULL, NULL);
+    --emsg_silent;
     if (p == NULL || ea.cmdidx == CMD_SIZE)
-	return;
-    if (in_vim9script())
+	goto theend;
+
+    if (vim9script)
     {
 	int	     res;
 
@@ -4081,12 +4095,14 @@ f_fullcommand(typval_T *argvars, typval_T *rettv)
 	--emsg_silent;
 
 	if (res == FAIL)
-	    return;
+	    goto theend;
     }
 
     rettv->vval.v_string = vim_strsave(IS_USER_CMDIDX(ea.cmdidx)
 				 ? get_user_command_name(ea.useridx, ea.cmdidx)
 				 : cmdnames[ea.cmdidx].cmd_name);
+theend:
+    cmdmod.cmod_flags = save_cmod_flags;
 }
 #endif
 
@@ -6288,7 +6304,6 @@ tabpage_close_other(tabpage_T *tp, int forceit)
 {
     int		done = 0;
     win_T	*wp;
-    int		h = tabline_height();
 
     // Limit to 1000 windows, autocommands may add a window while we close
     // one.  OK, so I'm paranoid...
@@ -6304,10 +6319,6 @@ tabpage_close_other(tabpage_T *tp, int forceit)
     }
 
     apply_autocmds(EVENT_TABCLOSED, NULL, NULL, FALSE, curbuf);
-
-    redraw_tabline = TRUE;
-    if (h != tabline_height())
-	shell_new_rows();
 }
 
 /*
@@ -8411,13 +8422,19 @@ ex_redrawstatus(exarg_T *eap UNUSED)
     int		r = RedrawingDisabled;
     int		p = p_lz;
 
-    RedrawingDisabled = 0;
-    p_lz = FALSE;
     if (eap->forceit)
 	status_redraw_all();
     else
 	status_redraw_curbuf();
-    update_screen(VIsual_active ? UPD_INVERTED : 0);
+    if (msg_scrolled && (State & MODE_CMDLINE))
+	return;  // redraw later
+
+    RedrawingDisabled = 0;
+    p_lz = FALSE;
+    if (State & MODE_CMDLINE)
+	redraw_statuslines();
+    else
+	update_screen(VIsual_active ? UPD_INVERTED : 0);
     RedrawingDisabled = r;
     p_lz = p;
     out_flush();
