@@ -295,7 +295,7 @@ get_arglist(garray_T *gap, char_u *str, int escaped)
     return OK;
 }
 
-#if defined(FEAT_QUICKFIX) || defined(FEAT_SYN_HL) || defined(PROTO)
+#if defined(FEAT_QUICKFIX) || defined(FEAT_SYN_HL) || defined(FEAT_SPELL) || defined(PROTO)
 /*
  * Parse a list of arguments (file names), expand them and return in
  * "fnames[fcountp]".  When "wig" is TRUE, removes files matching 'wildignore'.
@@ -1186,13 +1186,11 @@ do_arg_all(
     tabpage_T		*last_curtab;
     int			prev_arglist_locked = arglist_locked;
 
-#ifdef FEAT_CMDWIN
     if (cmdwin_type != 0)
     {
 	emsg(_(e_invalid_in_cmdline_window));
 	return;
     }
-#endif
     if (ARGCOUNT <= 0)
     {
 	// Don't give an error message.  We don't want it when the ":all"

@@ -182,6 +182,7 @@ static struct event_name
     {"TextChanged",	EVENT_TEXTCHANGED},
     {"TextChangedI",	EVENT_TEXTCHANGEDI},
     {"TextChangedP",	EVENT_TEXTCHANGEDP},
+    {"TextChangedT",	EVENT_TEXTCHANGEDT},
     {"User",		EVENT_USER},
     {"VimEnter",	EVENT_VIMENTER},
     {"VimLeave",	EVENT_VIMLEAVE},
@@ -2095,6 +2096,7 @@ apply_autocmds_group(
 		|| event == EVENT_DIRCHANGED
 		|| event == EVENT_DIRCHANGEDPRE
 		|| event == EVENT_MODECHANGED
+		|| event == EVENT_MENUPOPUP
 		|| event == EVENT_USER
 		|| event == EVENT_WINCLOSED
 		|| event == EVENT_WINSCROLLED)

@@ -289,7 +289,7 @@ let s:filename_checks = {
     \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', '.babelrc', '.eslintrc', '.prettierrc', '.firebaserc', 'file.slnf'],
     \ 'json5': ['file.json5'],
     \ 'jsonc': ['file.jsonc'],
-    \ 'jsonnet': ['file.jsonnet', 'file.libjsonnet'],
+    \ 'jsonnet': ['file.jsonnet', 'file.libsonnet'],
     \ 'jsp': ['file.jsp'],
     \ 'julia': ['file.jl'],
     \ 'kconfig': ['Kconfig', 'Kconfig.debug', 'Kconfig.file'],
@@ -365,7 +365,7 @@ let s:filename_checks = {
     \ 'mmp': ['file.mmp'],
     \ 'modconf': ['/etc/modules.conf', '/etc/modules', '/etc/conf.modules', '/etc/modprobe.file', 'any/etc/conf.modules', 'any/etc/modprobe.file', 'any/etc/modules', 'any/etc/modules.conf'],
     \ 'modula2': ['file.m2', 'file.mi'],
-    \ 'modula3': ['file.m3', 'file.mg', 'file.i3', 'file.ig'],
+    \ 'modula3': ['file.m3', 'file.mg', 'file.i3', 'file.ig', 'file.lm3'],
     \ 'monk': ['file.isc', 'file.monk', 'file.ssc', 'file.tsc'],
     \ 'moo': ['file.moo'],
     \ 'moonscript': ['file.moon'],
@@ -400,6 +400,7 @@ let s:filename_checks = {
     \ 'opam': ['opam', 'file.opam', 'file.opam.template'],
     \ 'openroad': ['file.or'],
     \ 'openscad': ['file.scad'],
+    \ 'openvpn': ['file.ovpn', '/etc/openvpn/client/client.conf', '/usr/share/openvpn/examples/server.conf'],
     \ 'opl': ['file.OPL', 'file.OPl', 'file.OpL', 'file.Opl', 'file.oPL', 'file.oPl', 'file.opL', 'file.opl'],
     \ 'ora': ['file.ora'],
     \ 'org': ['file.org', 'file.org_archive'],
@@ -426,6 +427,7 @@ let s:filename_checks = {
     \ 'plsql': ['file.pls', 'file.plsql'],
     \ 'po': ['file.po', 'file.pot'],
     \ 'pod': ['file.pod'],
+    \ 'poefilter': ['file.filter'],
     \ 'poke': ['file.pk'],
     \ 'postscr': ['file.ps', 'file.pfa', 'file.afm', 'file.eps', 'file.epsf', 'file.epsi', 'file.ai'],
     \ 'pov': ['file.pov'],
@@ -452,7 +454,7 @@ let s:filename_checks = {
     \ 'ql': ['file.ql', 'file.qll'],
     \ 'quake': ['anybaseq2/file.cfg', 'anyid1/file.cfg', 'quake3/file.cfg', 'baseq2/file.cfg', 'id1/file.cfg', 'quake1/file.cfg', 'some-baseq2/file.cfg', 'some-id1/file.cfg', 'some-quake1/file.cfg'],
     \ 'quarto': ['file.qmd'],
-    \ 'r': ['file.r'],
+    \ 'r': ['file.r', '.Rprofile', 'Rprofile', 'Rprofile.site'],
     \ 'radiance': ['file.rad', 'file.mat'],
     \ 'raku': ['file.pm6', 'file.p6', 'file.t6', 'file.pod6', 'file.raku', 'file.rakumod', 'file.rakudoc', 'file.rakutest'],
     \ 'raml': ['file.raml'],
@@ -535,6 +537,7 @@ let s:filename_checks = {
     \ 'squirrel': ['file.nut'],
     \ 'srec': ['file.s19', 'file.s28', 'file.s37', 'file.mot', 'file.srec'],
     \ 'srt': ['file.srt'],
+    \ 'ssa': ['file.ass', 'file.ssa'],
     \ 'sshconfig': ['ssh_config', '/.ssh/config', '/etc/ssh/ssh_config.d/file.conf', 'any/etc/ssh/ssh_config.d/file.conf', 'any/.ssh/config', 'any/.ssh/file.conf'],
     \ 'sshdconfig': ['sshd_config', '/etc/ssh/sshd_config.d/file.conf', 'any/etc/ssh/sshd_config.d/file.conf'],
     \ 'st': ['file.st'],
@@ -638,7 +641,7 @@ let s:filename_checks = {
     \ 'xsd': ['file.xsd'],
     \ 'xslt': ['file.xsl', 'file.xslt'],
     \ 'yacc': ['file.yy', 'file.yxx', 'file.y++'],
-    \ 'yaml': ['file.yaml', 'file.yml'],
+    \ 'yaml': ['file.yaml', 'file.yml', '.clang-format', '.clang-tidy'],
     \ 'yang': ['file.yang'],
     \ 'z8a': ['file.z8a'],
     \ 'zig': ['file.zig'],
@@ -1739,6 +1742,11 @@ func Test_cls_file()
   call assert_equal('tex', &filetype)
   bwipe!
 
+  call writefile(['\NeedsTeXFormat{LaTeX2e}'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('tex', &filetype)
+  bwipe!
+
   " Rexx
 
   call writefile(['# rexx'], 'Xfile.cls')
@@ -1919,6 +1927,37 @@ func Test_inc_file()
   call writefile(['asmsyntax=foo'], 'Xfile.inc')
   split Xfile.inc
   call assert_equal('foo', &filetype)
+  bwipe!
+
+  filetype off
+endfunc
+
+func Test_lsl_file()
+  filetype on
+
+  call writefile(['looks like Linden Scripting Language'], 'Xfile.lsl', 'D')
+  split Xfile.lsl
+  call assert_equal('lsl', &filetype)
+  bwipe!
+
+  " Test dist#ft#FTlsl()
+
+  let g:filetype_lsl = 'larch'
+  split Xfile.lsl
+  call assert_equal('larch', &filetype)
+  bwipe!
+  unlet g:filetype_lsl
+
+  " Larch Shared Language
+
+  call writefile(['% larch comment'], 'Xfile.lsl')
+  split Xfile.lsl
+  call assert_equal('larch', &filetype)
+  bwipe!
+
+  call writefile(['foo: trait'], 'Xfile.lsl')
+  split Xfile.lsl
+  call assert_equal('larch', &filetype)
   bwipe!
 
   filetype off

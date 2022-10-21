@@ -954,22 +954,25 @@ err_closing:
 
 	// run the cscope command
 #ifdef UNIX
-	vim_snprintf(cmd, cmdlen, "/bin/sh -c \"exec %s -dl -f %s\"",
+	vim_snprintf(cmd, cmdlen, "/bin/sh -c \"exec %s -dl -f %s",
 							prog, csinfo[i].fname);
 #else
 	vim_snprintf(cmd, cmdlen, "%s -dl -f %s", prog, csinfo[i].fname);
 #endif
 	if (csinfo[i].ppath != NULL)
 	{
-	    len = STRLEN(cmd);
+	    len = (int)STRLEN(cmd);
 	    vim_snprintf(cmd + len, cmdlen - len, " -P%s", csinfo[i].ppath);
 	}
 	if (csinfo[i].flags != NULL)
 	{
-	    len = STRLEN(cmd);
+	    len = (int)STRLEN(cmd);
 	    vim_snprintf(cmd + len, cmdlen - len, " %s", csinfo[i].flags);
 	}
 # ifdef UNIX
+	// terminate the -c command argument
+	STRCAT(cmd, "\"");
+
 	// on Win32 we still need prog
 	vim_free(prog);
 # endif

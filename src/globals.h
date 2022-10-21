@@ -219,8 +219,8 @@ EXTERN char_u	*emsg_assert_fails_context INIT(= NULL);
 
 EXTERN int	did_endif INIT(= FALSE);    // just had ":endif"
 #endif
-EXTERN int	did_emsg;		    // set by emsg() when the message
-					    // is displayed or thrown
+EXTERN int	did_emsg;		    // incremented by emsg() when a
+					    // message is displayed or thrown
 #ifdef FEAT_EVAL
 EXTERN int	did_emsg_silent INIT(= 0);  // incremented by emsg() when
 					    // emsg_silent was set and did_emsg
@@ -1637,10 +1637,8 @@ EXTERN int	disable_fold_update INIT(= 0);
 EXTERN int	km_stopsel INIT(= FALSE);
 EXTERN int	km_startsel INIT(= FALSE);
 
-#ifdef FEAT_CMDWIN
 EXTERN int	cmdwin_type INIT(= 0);	// type of cmdline window or 0
 EXTERN int	cmdwin_result INIT(= 0); // result of cmdline window or 0
-#endif
 
 EXTERN char_u no_lines_msg[]	INIT(= N_("--No lines in buffer--"));
 
@@ -1974,11 +1972,9 @@ EXTERN int channel_need_redraw INIT(= FALSE);
 // overrules p_magic.  Otherwise set to OPTION_MAGIC_NOT_SET.
 EXTERN optmagic_T magic_overruled INIT(= OPTION_MAGIC_NOT_SET);
 
-#ifdef FEAT_CMDWIN
-// Skip win_fix_cursor() call for 'nosplitscroll' when cmdwin is closed.
+// Skip win_fix_cursor() call for 'splitkeep' when cmdwin is closed.
 EXTERN int skip_win_fix_cursor INIT(= FALSE);
-#endif
-// Skip win_fix_scroll() call for 'nosplitscroll' when closing tab page.
+// Skip win_fix_scroll() call for 'splitkeep' when closing tab page.
 EXTERN int skip_win_fix_scroll INIT(= FALSE);
 // Skip update_topline() call while executing win_fix_scroll().
 EXTERN int skip_update_topline INIT(= FALSE);

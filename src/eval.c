@@ -66,6 +66,12 @@ num_divide(varnumber_T n1, varnumber_T n2, int *failed)
 	else
 	    result = VARNUM_MAX;
     }
+    else if (n1 == VARNUM_MIN && n2 == -1)
+    {
+	// specific case: trying to do VARNUM_MIN / -1 results in a positive
+	// number that doesn't fit in varnumber_T and causes an FPE
+	result = VARNUM_MAX;
+    }
     else
 	result = n1 / n2;
 
@@ -143,17 +149,23 @@ eval_to_bool(
     char_u	*arg,
     int		*error,
     exarg_T	*eap,
-    int		skip)	    // only parse, don't execute
+    int		skip,	    // only parse, don't execute
+    int		use_simple_function)
 {
     typval_T	tv;
     varnumber_T	retval = FALSE;
     evalarg_T	evalarg;
+    int		r;
 
     fill_evalarg_from_eap(&evalarg, eap, skip);
 
     if (skip)
 	++emsg_skip;
-    if (eval0(arg, &tv, eap, &evalarg) == FAIL)
+    if (use_simple_function)
+	r = eval0_simple_funccal(arg, &tv, eap, &evalarg);
+    else
+	r = eval0(arg, &tv, eap, &evalarg);
+    if (r == FAIL)
 	*error = TRUE;
     else
     {
@@ -601,14 +613,20 @@ typval2string(typval_T *tv, int convert)
 eval_to_string_eap(
     char_u	*arg,
     int		convert,
-    exarg_T	*eap)
+    exarg_T	*eap,
+    int		use_simple_function)
 {
     typval_T	tv;
     char_u	*retval;
     evalarg_T	evalarg;
+    int		r;
 
     fill_evalarg_from_eap(&evalarg, eap, eap != NULL && eap->skip);
-    if (eval0(arg, &tv, NULL, &evalarg) == FAIL)
+    if (use_simple_function)
+	r = eval0_simple_funccal(arg, &tv, NULL, &evalarg);
+    else
+	r = eval0(arg, &tv, NULL, &evalarg);
+    if (r == FAIL)
 	retval = NULL;
     else
     {
@@ -623,9 +641,10 @@ eval_to_string_eap(
     char_u *
 eval_to_string(
     char_u	*arg,
-    int		convert)
+    int		convert,
+    int		use_simple_function)
 {
-    return eval_to_string_eap(arg, convert, NULL);
+    return eval_to_string_eap(arg, convert, NULL, use_simple_function);
 }
 
 /*
@@ -637,7 +656,8 @@ eval_to_string(
 eval_to_string_safe(
     char_u	*arg,
     int		use_sandbox,
-    int		keep_script_version)
+    int		keep_script_version,
+    int		use_simple_function)
 {
     char_u	*retval;
     funccal_entry_T funccal_entry;
@@ -651,7 +671,7 @@ eval_to_string_safe(
 	++sandbox;
     ++textlock;
     may_garbage_collect = FALSE;
-    retval = eval_to_string(arg, FALSE);
+    retval = eval_to_string(arg, FALSE, use_simple_function);
     if (use_sandbox)
 	--sandbox;
     --textlock;
@@ -667,15 +687,20 @@ eval_to_string_safe(
  * Returns -1 for an error.
  */
     varnumber_T
-eval_to_number(char_u *expr)
+eval_to_number(char_u *expr, int use_simple_function)
 {
     typval_T	rettv;
     varnumber_T	retval;
     char_u	*p = skipwhite(expr);
+    int		r = NOTDONE;
 
     ++emsg_off;
 
-    if (eval1(&p, &rettv, &EVALARG_EVALUATE) == FAIL)
+    if (use_simple_function)
+	r = may_call_simple_func(expr, &rettv);
+    if (r == NOTDONE)
+	r = eval1(&p, &rettv, &EVALARG_EVALUATE);
+    if (r == FAIL)
 	retval = -1;
     else
     {
@@ -695,14 +720,30 @@ eval_to_number(char_u *expr)
     typval_T *
 eval_expr(char_u *arg, exarg_T *eap)
 {
+    return eval_expr_ext(arg, eap, FALSE);
+}
+
+    typval_T *
+eval_expr_ext(char_u *arg, exarg_T *eap, int use_simple_function)
+{
     typval_T	*tv;
     evalarg_T	evalarg;
 
     fill_evalarg_from_eap(&evalarg, eap, eap != NULL && eap->skip);
 
     tv = ALLOC_ONE(typval_T);
-    if (tv != NULL && eval0(arg, tv, eap, &evalarg) == FAIL)
-	VIM_CLEAR(tv);
+    if (tv != NULL)
+    {
+	int	r = NOTDONE;
+
+	if (use_simple_function)
+	    r = eval0_simple_funccal(arg, tv, eap, &evalarg);
+	if (r == NOTDONE)
+	    r = eval0(arg, tv, eap, &evalarg);
+
+	if (r == FAIL)
+	    VIM_CLEAR(tv);
+    }
 
     clear_evalarg(&evalarg, eap);
     return tv;
@@ -903,9 +944,9 @@ eval_foldexpr(win_T *wp, int *cp)
     char_u	*s;
     sctx_T	saved_sctx = current_sctx;
     int		use_sandbox = was_set_insecurely((char_u *)"foldexpr",
-								   OPT_LOCAL);
+								    OPT_LOCAL);
 
-    arg = wp->w_p_fde;
+    arg = skipwhite(wp->w_p_fde);
     current_sctx = wp->w_p_script_ctx[WV_FDE];
 
     ++emsg_off;
@@ -913,7 +954,10 @@ eval_foldexpr(win_T *wp, int *cp)
 	++sandbox;
     ++textlock;
     *cp = NUL;
-    if (eval0(arg, &tv, NULL, &EVALARG_EVALUATE) == FAIL)
+
+    // Evaluate the expression.  If the expression is "FuncName()" call the
+    // function directly.
+    if (eval0_simple_funccal(arg, &tv, NULL, &EVALARG_EVALUATE) == FAIL)
 	retval = 0;
     else
     {
@@ -2413,9 +2457,10 @@ skipwhite_and_linebreak(char_u *arg, evalarg_T *evalarg)
 }
 
 /*
- * The "evaluate" argument: When FALSE, the argument is only parsed but not
- * executed.  The function may return OK, but the rettv will be of type
- * VAR_UNKNOWN.  The function still returns FAIL for a syntax error.
+ * The "eval" functions have an "evalarg" argument: When NULL or
+ * "evalarg->eval_flags" does not have EVAL_EVALUATE, then the argument is only
+ * parsed but not executed.  The functions may return OK, but the rettv will be
+ * of type VAR_UNKNOWN.  The functions still returns FAIL for a syntax error.
  */
 
 /*
@@ -2434,6 +2479,47 @@ eval0(
     evalarg_T	*evalarg)
 {
     return eval0_retarg(arg, rettv, eap, evalarg, NULL);
+}
+
+/*
+ * If "arg" is a simple function call without arguments then call it and return
+ * the result.  Otherwise return NOTDONE.
+ */
+    int
+may_call_simple_func(
+    char_u	*arg,
+    typval_T	*rettv)
+{
+    char_u  *parens = (char_u *)strstr((char *)arg, "()");
+    int	    r = NOTDONE;
+
+    // If the expression is "FuncName()" then we can skip a lot of overhead.
+    if (parens != NULL && *skipwhite(parens + 2) == NUL)
+    {
+	char_u *p = STRNCMP(arg, "<SNR>", 5) == 0 ? skipdigits(arg + 5) : arg;
+
+	if (to_name_end(p, TRUE) == parens)
+	    r = call_simple_func(arg, (int)(parens - arg), rettv);
+    }
+    return r;
+}
+
+/*
+ * Handle zero level expression with optimization for a simple function call.
+ * Same arguments and return value as eval0().
+ */
+    int
+eval0_simple_funccal(
+    char_u	*arg,
+    typval_T	*rettv,
+    exarg_T	*eap,
+    evalarg_T	*evalarg)
+{
+    int	    r = may_call_simple_func(arg, rettv);
+
+    if (r == NOTDONE)
+	r = eval0_retarg(arg, rettv, eap, evalarg, NULL);
+    return r;
 }
 
 /*
@@ -5943,10 +6029,12 @@ var2fpos(
 }
 
 /*
- * Convert list in "arg" into a position and optional file number.
- * When "fnump" is NULL there is no file number, only 3 items.
+ * Convert list in "arg" into position "posp" and optional file number "fnump".
+ * When "fnump" is NULL there is no file number, only 3 items: [lnum, col, off]
  * Note that the column is passed on as-is, the caller may want to decrement
  * it to use 1 for the first column.
+ * If "charcol" is TRUE use the column as the character index instead of the
+ * byte index.
  * Return FAIL when conversion is not possible, doesn't check the position for
  * validity.
  */
@@ -5989,6 +6077,7 @@ list2fpos(
     if (n < 0)
 	return FAIL;
     // If character position is specified, then convert to byte position
+    // If the line number is zero use the cursor line.
     if (charcol)
     {
 	buf_T	*buf;
@@ -5998,7 +6087,8 @@ list2fpos(
 	if (buf == NULL || buf->b_ml.ml_mfp == NULL)
 	    return FAIL;
 
-	n = buf_charidx_to_byteidx(buf, posp->lnum, n) + 1;
+	n = buf_charidx_to_byteidx(buf,
+		  posp->lnum == 0 ? curwin->w_cursor.lnum : posp->lnum, n) + 1;
     }
     posp->col = n;
 
@@ -6268,7 +6358,7 @@ make_expanded_name(
     c1 = *in_end;
     *in_end = NUL;
 
-    temp_result = eval_to_string(expr_start + 1, FALSE);
+    temp_result = eval_to_string(expr_start + 1, FALSE, FALSE);
     if (temp_result != NULL)
     {
 	retval = alloc(STRLEN(temp_result) + (expr_start - in_start)
@@ -6836,7 +6926,7 @@ ex_execute(exarg_T *eap)
 	else if (eap->cmdidx == CMD_echowindow)
 	{
 #ifdef HAS_MESSAGE_WINDOW
-	    start_echowindow();
+	    start_echowindow(eap->addr_count > 0 ? eap->line2 : 0);
 #endif
 	    msg_attr(ga.ga_data, echo_attr);
 #ifdef HAS_MESSAGE_WINDOW

@@ -28,8 +28,8 @@
 # Updated 2014 Oct 13.
 
 #>>>>> choose options:
-# FEATURES=[TINY | SMALL | NORMAL | BIG | HUGE]
-# Set to TINY to make minimal version (few features).
+# FEATURES=[TINY | NORMAL | HUGE]
+# Set to TINY to make a minimal version (no optional features).
 FEATURES=HUGE
 
 # Set to yes for a debug build.
@@ -113,7 +113,7 @@ TERMINAL=no
 endif
 
 # Set to yes to enable sound support.
-ifneq ($(findstring $(FEATURES),BIG HUGE),)
+ifneq ($(findstring $(FEATURES),HUGE),)
 SOUND=yes
 else
 SOUND=no

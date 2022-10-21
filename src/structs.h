@@ -262,11 +262,13 @@ typedef struct
 #endif
     long	wo_scr;
 #define w_p_scr w_onebuf_opt.wo_scr	// 'scroll'
+    int		wo_sms;
+#define w_p_sms w_onebuf_opt.wo_sms	// 'smoothscroll'
 #ifdef FEAT_SPELL
     int		wo_spell;
 # define w_p_spell w_onebuf_opt.wo_spell // 'spell'
 #endif
-#ifdef FEAT_SYN_HL
+#if defined(FEAT_SYN_HL) || defined(FEAT_FOLDING) || defined(FEAT_DIFF)
     int		wo_cuc;
 # define w_p_cuc w_onebuf_opt.wo_cuc	// 'cursorcolumn'
     int		wo_cul;
@@ -3032,6 +3034,7 @@ struct file_buffer
 #endif
     char_u	*b_p_kp;	// 'keywordprg'
     int		b_p_lisp;	// 'lisp'
+    char_u	*b_p_lop;	// 'lispoptions'
     char_u	*b_p_menc;	// 'makeencoding'
     char_u	*b_p_mps;	// 'matchpairs'
     int		b_p_ml;		// 'modeline'
@@ -3517,6 +3520,7 @@ typedef struct
     int	foldsep;
     int	diff;
     int	eob;
+    int	lastline;
 } fill_chars_T;
 
 /*
@@ -3592,11 +3596,12 @@ struct window_S
 				    // below w_topline (at end of file)
     int		w_old_botfill;	    // w_botfill at last redraw
 #endif
-    colnr_T	w_leftcol;	    // window column number of the left most
+    colnr_T	w_leftcol;	    // screen column number of the left most
 				    // character in the window; used when
 				    // 'wrap' is off
-    colnr_T	w_skipcol;	    // starting column when a single line
-				    // doesn't fit in the window
+    colnr_T	w_skipcol;	    // starting screen column for the first
+				    // line in the window; used when 'wrap' is
+				    // on; does not include win_col_off()
 
     int		w_empty_rows;	    // number of ~ rows in window
 #ifdef FEAT_DIFF
@@ -3618,8 +3623,8 @@ struct window_S
     int		w_winrow;	    // first row of window in screen
     int		w_height;	    // number of rows in window, excluding
 				    // status/command/winbar line(s)
-    int		w_prev_winrow;	    // previous winrow used for 'splitscroll'
-    int		w_prev_height;	    // previous height used for 'splitscroll'
+    int		w_prev_winrow;	    // previous winrow used for 'splitkeep'
+    int		w_prev_height;	    // previous height used for 'splitkeep'
 
     int		w_status_height;    // number of status lines (0 or 1)
     int		w_wincol;	    // Leftmost column of window in screen.
@@ -3710,6 +3715,7 @@ struct window_S
     pos_T	w_valid_cursor;	    // last known position of w_cursor, used
 				    // to adjust w_valid
     colnr_T	w_valid_leftcol;    // last known w_leftcol
+    colnr_T	w_valid_skipcol;    // last known w_skipcol
 
     /*
      * w_cline_height is the number of physical lines taken by the buffer line
@@ -3780,17 +3786,15 @@ struct window_S
     linenr_T	w_redraw_bot;	    // when != 0: last line needing redraw
     int		w_redr_status;	    // if TRUE status line must be redrawn
 
-#ifdef FEAT_CMDL_INFO
     // remember what is shown in the ruler for this window (if 'ruler' set)
     pos_T	w_ru_cursor;	    // cursor position shown in ruler
     colnr_T	w_ru_virtcol;	    // virtcol shown in ruler
     linenr_T	w_ru_topline;	    // topline shown in ruler
     linenr_T	w_ru_line_count;    // line count used for ruler
-# ifdef FEAT_DIFF
+#ifdef FEAT_DIFF
     int		w_ru_topfill;	    // topfill shown in ruler
-# endif
-    char	w_ru_empty;	    // TRUE if ruler shows 0-1 (empty line)
 #endif
+    char	w_ru_empty;	    // TRUE if ruler shows 0-1 (empty line)
 
     int		w_alt_fnum;	    // alternate file (for # and CTRL-^)
 
@@ -3828,7 +3832,7 @@ struct window_S
     long_u	w_p_fde_flags;	    // flags for 'foldexpr'
     long_u	w_p_fdt_flags;	    // flags for 'foldtext'
 #endif
-#ifdef FEAT_SYN_HL
+#if defined(FEAT_SIGNS) || defined(FEAT_FOLDING) || defined(FEAT_DIFF)
     int		*w_p_cc_cols;	    // array of columns to highlight or NULL
     char_u	w_p_culopt_flags;   // flags for cursorline highlighting
 #endif
@@ -4662,8 +4666,8 @@ typedef struct {
 					// cts_text_props is not used
     textprop_T	*cts_text_props;	// text props (allocated)
     char	cts_has_prop_with_text; // TRUE if if a property inserts text
-    int         cts_cur_text_width;     // width of current inserted text
-    int         cts_first_char;		// width text props above the line
+    int		cts_cur_text_width;     // width of current inserted text
+    int		cts_first_char;		// width text props above the line
     int		cts_with_trailing;	// include size of trailing props with
 					// last character
     int		cts_start_incl;		// prop has true "start_incl" arg
