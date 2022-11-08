@@ -1284,9 +1284,10 @@ win_redr_custom(
     char_u	buf[MAXPATHL];
     char_u	*stl;
     char_u	*p;
+    char_u	*opt_name;
+    int         opt_scope = 0;
     stl_hlrec_T *hltab;
     stl_hlrec_T *tabtab;
-    int		use_sandbox = FALSE;
     win_T	*ewp;
     int		p_crb_save;
 
@@ -1306,9 +1307,7 @@ win_redr_custom(
 	fillchar = ' ';
 	attr = HL_ATTR(HLF_TPF);
 	maxwidth = Columns;
-# ifdef FEAT_EVAL
-	use_sandbox = was_set_insecurely((char_u *)"tabline", 0);
-# endif
+	opt_name = (char_u *)"tabline";
     }
     else
     {
@@ -1319,6 +1318,7 @@ win_redr_custom(
 	if (draw_ruler)
 	{
 	    stl = p_ruf;
+	    opt_name = (char_u *)"rulerformat";
 	    // advance past any leading group spec - implicit in ru_col
 	    if (*stl == '%')
 	    {
@@ -1341,21 +1341,17 @@ win_redr_custom(
 		fillchar = ' ';
 		attr = 0;
 	    }
-
-# ifdef FEAT_EVAL
-	    use_sandbox = was_set_insecurely((char_u *)"rulerformat", 0);
-# endif
 	}
 	else
 	{
+	    opt_name = (char_u *)"statusline";
 	    if (*wp->w_p_stl != NUL)
+	    {
 		stl = wp->w_p_stl;
+		opt_scope = OPT_LOCAL;
+	    }
 	    else
 		stl = p_stl;
-# ifdef FEAT_EVAL
-	    use_sandbox = was_set_insecurely((char_u *)"statusline",
-					 *wp->w_p_stl == NUL ? 0 : OPT_LOCAL);
-# endif
 	}
 
 	col += wp->w_wincol;
@@ -1374,7 +1370,7 @@ win_redr_custom(
     // might change the option value and free the memory.
     stl = vim_strsave(stl);
     width = build_stl_str_hl(ewp, buf, sizeof(buf),
-				stl, use_sandbox,
+				stl, opt_name, opt_scope,
 				fillchar, maxwidth, &hltab, &tabtab);
     vim_free(stl);
     ewp->w_p_crb = p_crb_save;
@@ -2287,7 +2283,7 @@ screen_char_2(unsigned off, int row, int col)
     if (off + 1 >= (unsigned)(screen_Rows * screen_Columns))
 	return;
 
-    // Outputting the last character on the screen may scrollup the screen.
+    // Outputting the last character on the screen may scroll the screen up.
     // Don't to it!  Mark the character invalid (update it when scrolled up)
     if (row == screen_Rows - 1 && col >= screen_Columns - 2)
     {
@@ -2734,7 +2730,7 @@ retry:
     if (enc_dbcs == DBCS_JPNU)
 	new_ScreenLines2 = LALLOC_MULT(schar_T, (Rows + 1) * Columns);
     new_ScreenAttrs = LALLOC_MULT(sattr_T, (Rows + 1) * Columns);
-    // Clear ScreenCols to avoid a warning for unitialized memory in
+    // Clear ScreenCols to avoid a warning for uninitialized memory in
     // jump_to_mouse().
     new_ScreenCols = LALLOC_CLEAR_MULT(colnr_T, (Rows + 1) * Columns);
     new_LineOffset = LALLOC_MULT(unsigned, Rows);
@@ -4547,18 +4543,7 @@ draw_tabline(void)
 
     // Use the 'tabline' option if it's set.
     if (*p_tal != NUL)
-    {
-	int	saved_did_emsg = did_emsg;
-
-	// Check for an error.  If there is one we would loop in redrawing the
-	// screen.  Avoid that by making 'tabline' empty.
-	did_emsg = FALSE;
 	win_redr_custom(NULL, FALSE);
-	if (did_emsg)
-	    set_string_option_direct((char_u *)"tabline", -1,
-					   (char_u *)"", OPT_FREE, SID_ERROR);
-	did_emsg |= saved_did_emsg;
-    }
     else
 #endif
     {

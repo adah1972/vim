@@ -899,11 +899,13 @@ do_bang(
     }
 
     /*
-     * Try to find an embedded bang, like in :!<cmd> ! [args]
-     * (:!! is indicated by the 'forceit' variable)
+     * Try to find an embedded bang, like in ":!<cmd> ! [args]"
+     * ":!!" is indicated by the 'forceit' variable.
      */
     ins_prevcmd = forceit;
-    trailarg = arg;
+
+    // Skip leading white space to avoid a strange error with some shells.
+    trailarg = skipwhite(arg);
     do
     {
 	len = (int)STRLEN(trailarg) + 1;
@@ -957,16 +959,15 @@ do_bang(
 	}
     } while (trailarg != NULL);
 
-    // Don't do anything if there is no command as there isn't really anything
-    // useful in running "sh -c ''".  Avoids changing "prevcmd".
-    if (STRLEN(newcmd) == 0)
+    // Only set "prevcmd" if there is a command to run, otherwise keep te one
+    // we have.
+    if (STRLEN(newcmd) > 0)
     {
-	vim_free(newcmd);
-	return;
+	vim_free(prevcmd);
+	prevcmd = newcmd;
     }
-
-    vim_free(prevcmd);
-    prevcmd = newcmd;
+    else
+	free_newcmd = TRUE;
 
     if (bangredo)	    // put cmd in redo buffer for ! command
     {
@@ -990,6 +991,8 @@ do_bang(
      */
     if (*p_shq != NUL)
     {
+	if (free_newcmd)
+	    vim_free(newcmd);
 	newcmd = alloc(STRLEN(prevcmd) + 2 * STRLEN(p_shq) + 1);
 	if (newcmd == NULL)
 	    return;

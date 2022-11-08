@@ -1372,6 +1372,7 @@ au BufNewFile,BufRead pf.conf				setf pf
 
 " ini style config files, using # comments
 au BufNewFile,BufRead */etc/pacman.conf,mpv.conf	setf confini
+au BufNewFile,BufRead */.aws/config,*/.aws/credentials	setf confini
 
 " Pacman hooks
 au BufNewFile,BufRead *.hook
@@ -2179,6 +2180,11 @@ au BufNewFile,BufRead *.va,*.vams		setf verilogams
 
 " SystemVerilog
 au BufNewFile,BufRead *.sv,*.svh		setf systemverilog
+
+" VHS tape
+" .tape is also used by TapeCalc, which we do not support ATM.  If TapeCalc
+" support is needed the contents of the file needs to be inspected.
+au BufNewFile,BufRead *.tape			setf vhs
 
 " VHDL
 au BufNewFile,BufRead *.hdl,*.vhd,*.vhdl,*.vbe,*.vst,*.vho  setf vhdl

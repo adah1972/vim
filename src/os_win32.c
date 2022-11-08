@@ -1307,7 +1307,7 @@ decode_mouse_wheel(MOUSE_EVENT_RECORD *pmer)
     else
 	direction = zDelta >= 0 ? KE_MOUSEDOWN : KE_MOUSEUP;
 
-    // Decode the win32 console key modifers into Vim mouse modifers.
+    // Decode the win32 console key modifiers into Vim mouse modifiers.
     if (pmer->dwControlKeyState & SHIFT_PRESSED)
 	modifiers |= MOD_MASK_SHIFT; // MOUSE_SHIFT;
     if (pmer->dwControlKeyState & (RIGHT_CTRL_PRESSED | LEFT_CTRL_PRESSED))
@@ -4402,7 +4402,6 @@ dump_pipe(int	    options,
     int		ret;
     DWORD	len;
     DWORD	toRead;
-    int		repeatCount;
 
     // we query the pipe to see if there is any data to read
     // to avoid to perform a blocking read
@@ -4413,11 +4412,9 @@ dump_pipe(int	    options,
 			&availableBytes,    // available bytes total
 			NULL);		    // byteLeft
 
-    repeatCount = 0;
     // We got real data in the pipe, read it
     while (ret != 0 && availableBytes > 0)
     {
-	repeatCount++;
 	toRead = (DWORD)(BUFLEN - *buffer_off);
 	toRead = availableBytes < toRead ? availableBytes : toRead;
 	ReadFile(g_hChildStd_OUT_Rd, buffer + *buffer_off, toRead , &len, NULL);
