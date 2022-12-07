@@ -168,6 +168,7 @@ static void f_split(typval_T *argvars, typval_T *rettv);
 static void f_srand(typval_T *argvars, typval_T *rettv);
 static void f_submatch(typval_T *argvars, typval_T *rettv);
 static void f_substitute(typval_T *argvars, typval_T *rettv);
+static void f_swapfilelist(typval_T *argvars, typval_T *rettv);
 static void f_swapinfo(typval_T *argvars, typval_T *rettv);
 static void f_swapname(typval_T *argvars, typval_T *rettv);
 static void f_synID(typval_T *argvars, typval_T *rettv);
@@ -1058,6 +1059,7 @@ static argcheck_T arg2_string_list_number[] = {arg_string, arg_list_number};
 static argcheck_T arg2_string_number[] = {arg_string, arg_number};
 static argcheck_T arg2_string_or_list_dict[] = {arg_string_or_list_any, arg_dict_any};
 static argcheck_T arg2_string_or_list_bool[] = {arg_string_or_list_any, arg_bool};
+static argcheck_T arg2_string_or_list_number[] = {arg_string_or_list_any, arg_number};
 static argcheck_T arg2_string_string_or_number[] = {arg_string, arg_string_or_nr};
 static argcheck_T arg3_any_list_dict[] = {NULL, arg_list_any, arg_dict_any};
 static argcheck_T arg3_buffer_lnum_lnum[] = {arg_buffer, arg_lnum, arg_lnum};
@@ -1749,9 +1751,9 @@ static funcentry_T global_functions[] =
     {"ch_info",		1, 1, FEARG_1,	    arg1_chan_or_job,
 			ret_dict_any,	    JOB_FUNC(f_ch_info)},
     {"ch_log",		1, 2, FEARG_1,	    arg2_string_chan_or_job,
-			ret_void,	    JOB_FUNC(f_ch_log)},
+			ret_void,	    f_ch_log},
     {"ch_logfile",	1, 2, FEARG_1,	    arg2_string,
-			ret_void,	    JOB_FUNC(f_ch_logfile)},
+			ret_void,	    f_ch_logfile},
     {"ch_open",		1, 2, FEARG_1,	    arg2_string_dict,
 			ret_channel,	    JOB_FUNC(f_ch_open)},
     {"ch_read",		1, 2, FEARG_1,	    arg2_chan_or_job_dict,
@@ -1774,7 +1776,7 @@ static funcentry_T global_functions[] =
 			ret_number,	    f_char2nr},
     {"charclass",	1, 1, FEARG_1,	    arg1_string,
 			ret_number,	    f_charclass},
-    {"charcol",		1, 1, FEARG_1,	    arg1_string_or_list_any,
+    {"charcol",		1, 2, FEARG_1,	    arg2_string_or_list_number,
 			ret_number,	    f_charcol},
     {"charidx",		2, 3, FEARG_1,	    arg3_string_number_bool,
 			ret_number,	    f_charidx},
@@ -1784,7 +1786,7 @@ static funcentry_T global_functions[] =
 			ret_number,	    f_cindent},
     {"clearmatches",	0, 1, FEARG_1,	    arg1_number,
 			ret_void,	    f_clearmatches},
-    {"col",		1, 1, FEARG_1,	    arg1_string_or_list_any,
+    {"col",		1, 2, FEARG_1,	    arg2_string_or_list_number,
 			ret_number,	    f_col},
     {"complete",	2, 2, FEARG_2,	    arg2_number_list,
 			ret_void,	    f_complete},
@@ -1922,6 +1924,8 @@ static funcentry_T global_functions[] =
 			ret_list_dict_any,  f_getbufinfo},
     {"getbufline",	2, 3, FEARG_1,	    arg3_buffer_lnum_lnum,
 			ret_list_string,    f_getbufline},
+    {"getbufoneline",	2, 2, FEARG_1,	    arg2_buffer_lnum,
+			ret_string,	    f_getbufoneline},
     {"getbufvar",	2, 3, FEARG_1,	    arg3_buffer_string_any,
 			ret_any,	    f_getbufvar},
     {"getchangelist",	0, 1, FEARG_1,	    arg1_buffer,
@@ -1982,6 +1986,8 @@ static funcentry_T global_functions[] =
 			ret_list_dict_any,  f_getmatches},
     {"getmousepos",	0, 0, 0,	    NULL,
 			ret_dict_number,    f_getmousepos},
+    {"getmouseshape",	0, 0, 0,	    NULL,
+			ret_string,	    f_getmouseshape},
     {"getpid",		0, 0, 0,	    NULL,
 			ret_number,	    f_getpid},
     {"getpos",		1, 1, FEARG_1,	    arg1_string,
@@ -2574,6 +2580,8 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_submatch},
     {"substitute",	4, 4, FEARG_1,	    arg4_string_string_any_string,
 			ret_string,	    f_substitute},
+    {"swapfilelist",	0, 0, 0,	    NULL,
+			ret_list_string,    f_swapfilelist},
     {"swapinfo",	1, 1, FEARG_1,	    arg1_string,
 			ret_dict_any,	    f_swapinfo},
     {"swapname",	1, 1, FEARG_1,	    arg1_buffer,
@@ -3389,12 +3397,31 @@ get_col(typval_T *argvars, typval_T *rettv, int charcol)
 {
     colnr_T	col = 0;
     pos_T	*fp;
-    int		fnum = curbuf->b_fnum;
+    switchwin_T	switchwin;
+    int		winchanged = FALSE;
 
-    if (in_vim9script()
-	    && check_for_string_or_list_arg(argvars, 0) == FAIL)
+    if (check_for_string_or_list_arg(argvars, 0) == FAIL
+	    || check_for_opt_number_arg(argvars, 1) == FAIL)
 	return;
 
+    if (argvars[1].v_type != VAR_UNKNOWN)
+    {
+	tabpage_T	*tp;
+	win_T		*wp;
+
+	// use the window specified in the second argument
+	wp = win_id2wp_tp((int)tv_get_number(&argvars[1]), &tp);
+	if (wp == NULL || tp == NULL)
+	    return;
+
+	if (switch_win_noblock(&switchwin, wp, tp, TRUE) != OK)
+	    return;
+
+	check_cursor();
+	winchanged = TRUE;
+    }
+
+    int fnum = curbuf->b_fnum;
     fp = var2fpos(&argvars[0], FALSE, &fnum, charcol);
     if (fp != NULL && fnum == curbuf->b_fnum)
     {
@@ -3427,6 +3454,9 @@ get_col(typval_T *argvars, typval_T *rettv, int charcol)
 	}
     }
     rettv->vval.v_number = col;
+
+    if (winchanged)
+	restore_win_noblock(&switchwin, TRUE);
 }
 
 /*
@@ -4316,7 +4346,6 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
     int		context = FALSE;
     int		dangerous = FALSE;
     int		lowlevel = FALSE;
-    char_u	*keys_esc;
 
     // This is not allowed in the sandbox.  If the commands would still be
     // executed in the sandbox it would be OK, but it probably happens later,
@@ -4352,73 +4381,79 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 
     if (*keys != NUL || execute)
     {
-	// Need to escape K_SPECIAL and CSI before putting the string in the
-	// typeahead buffer.
-	keys_esc = vim_strsave_escape_csi(keys);
-	if (keys_esc != NULL)
+	if (lowlevel)
 	{
-	    if (lowlevel)
-	    {
 #ifdef USE_INPUT_BUF
-		int len = (int)STRLEN(keys);
+	    ch_log(NULL, "feedkeys() lowlevel: %s", keys);
 
-		for (int idx = 0; idx < len; ++idx)
-		{
-		    // if a CTRL-C was typed, set got_int, similar to what
-		    // happens in fill_input_buf()
-		    if (keys[idx] == 3 && ctrl_c_interrupts && typed)
-			got_int = TRUE;
-		    add_to_input_buf(keys + idx, 1);
-		}
+	    int len = (int)STRLEN(keys);
+	    for (int idx = 0; idx < len; ++idx)
+	    {
+		// if a CTRL-C was typed, set got_int, similar to what
+		// happens in fill_input_buf()
+		if (keys[idx] == 3 && ctrl_c_interrupts && typed)
+		    got_int = TRUE;
+		add_to_input_buf(keys + idx, 1);
+	    }
 #else
-		emsg(_(e_lowlevel_input_not_supported));
+	    emsg(_(e_lowlevel_input_not_supported));
 #endif
-	    }
-	    else
-	    {
-		ins_typebuf(keys_esc, (remap ? REMAP_YES : REMAP_NONE),
-				  insert ? 0 : typebuf.tb_len, !typed, FALSE);
-		if (vgetc_busy
+	}
+	else
+	{
+	    // Need to escape K_SPECIAL and CSI before putting the string in
+	    // the typeahead buffer.
+	    char_u *keys_esc = vim_strsave_escape_csi(keys);
+	    if (keys_esc == NULL)
+		return;
+
+	    ch_log(NULL, "feedkeys(%s): %s", typed ? "typed" : "", keys);
+
+	    ins_typebuf(keys_esc, (remap ? REMAP_YES : REMAP_NONE),
+				   insert ? 0 : typebuf.tb_len, !typed, FALSE);
+	    if (vgetc_busy
 #ifdef FEAT_TIMERS
-			|| timer_busy
+		    || timer_busy
 #endif
-			|| input_busy)
-		    typebuf_was_filled = TRUE;
-	    }
+		    || input_busy)
+		typebuf_was_filled = TRUE;
+
 	    vim_free(keys_esc);
+	}
 
-	    if (execute)
+	if (execute)
+	{
+	    int		save_msg_scroll = msg_scroll;
+	    sctx_T	save_sctx;
+
+	    // Avoid a 1 second delay when the keys start Insert mode.
+	    msg_scroll = FALSE;
+
+	    ch_log(NULL, "feedkeys() executing");
+
+	    if (context)
 	    {
-		int	save_msg_scroll = msg_scroll;
-		sctx_T	save_sctx;
-
-		// Avoid a 1 second delay when the keys start Insert mode.
-		msg_scroll = FALSE;
-
-		if (context)
-		{
-		    save_sctx = current_sctx;
-		    current_sctx.sc_sid = 0;
-		    current_sctx.sc_version = 0;
-		}
-
-		if (!dangerous)
-		{
-		    ++ex_normal_busy;
-		    ++in_feedkeys;
-		}
-		exec_normal(TRUE, lowlevel, TRUE);
-		if (!dangerous)
-		{
-		    --ex_normal_busy;
-		    --in_feedkeys;
-		}
-
-		msg_scroll |= save_msg_scroll;
-
-		if (context)
-		    current_sctx = save_sctx;
+		save_sctx = current_sctx;
+		current_sctx.sc_sid = 0;
+		current_sctx.sc_version = 0;
 	    }
+
+	    if (!dangerous)
+	    {
+		++ex_normal_busy;
+		++in_feedkeys;
+	    }
+	    exec_normal(TRUE, lowlevel, TRUE);
+	    if (!dangerous)
+	    {
+		--ex_normal_busy;
+		--in_feedkeys;
+	    }
+
+	    msg_scroll |= save_msg_scroll;
+
+	    if (context)
+		current_sctx = save_sctx;
 	}
     }
 }
@@ -8124,9 +8159,32 @@ init_srand(UINT32_T *x)
 	}
     }
     if (dev_urandom_state != OK)
-	// Reading /dev/urandom doesn't work, fall back to time().
 #endif
-	*x = vim_time();
+    {
+	// Reading /dev/urandom doesn't work, fall back to:
+	// - randombytes_random()
+	// - reltime() or time()
+	// - XOR with process ID
+#if defined(FEAT_SODIUM)
+	if (crypt_sodium_init() >= 0)
+	    *x = crypt_sodium_randombytes_random();
+	else
+#endif
+	{
+#if defined(FEAT_RELTIME)
+	    proftime_T res;
+	    profile_start(&res);
+#  if defined(MSWIN)
+	    *x = (UINT32_T)res.LowPart;
+#  else
+	    *x = (UINT32_T)res.tv_usec;
+#  endif
+#else
+	    *x = vim_time();
+#endif
+	    *x ^= mch_get_pid();
+	}
+    }
 }
 
 #define ROTL(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
@@ -8388,7 +8446,7 @@ f_getreginfo(typval_T *argvars, typval_T *rettv)
 
 	if (item != NULL)
 	{
-	    item->di_tv.v_type = VAR_SPECIAL;
+	    item->di_tv.v_type = VAR_BOOL;
 	    item->di_tv.vval.v_number = regname == buf[0]
 						      ? VVAL_TRUE : VVAL_FALSE;
 	    (void)dict_add(dict, item);
@@ -10136,6 +10194,17 @@ f_substitute(typval_T *argvars, typval_T *rettv)
 	rettv->vval.v_string = NULL;
     else
 	rettv->vval.v_string = do_string_sub(str, pat, sub, expr, flg);
+}
+
+/*
+ * "swapfilelist()" function
+ */
+    static void
+f_swapfilelist(typval_T *argvars UNUSED, typval_T *rettv)
+{
+    if (rettv_list_alloc(rettv) == FAIL)
+	return;
+    recover_names(NULL, FALSE, rettv->vval.v_list, 0, NULL);
 }
 
 /*

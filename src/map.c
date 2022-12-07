@@ -24,6 +24,10 @@ static mapblock_T	*first_abbr = NULL; // first entry in abbrlist
 static mapblock_T	*(maphash[256]);
 static int		maphash_valid = FALSE;
 
+// When non-zero then no mappings can be added or removed.  Prevents mappings
+// to change while listing them.
+static int		map_locked = 0;
+
 /*
  * Make a hash value for a mapping.
  * "mode" is the lower 4 bits of the State for the mapping.
@@ -150,11 +154,15 @@ showmap(
     if (message_filtered(mp->m_keys) && message_filtered(mp->m_str))
 	return;
 
+    // Prevent mappings to be cleared while at the more prompt.
+    // Must jump to "theend" instead of returning.
+    ++map_locked;
+
     if (msg_didout || msg_silent != 0)
     {
 	msg_putchar('\n');
 	if (got_int)	    // 'q' typed at MORE prompt
-	    return;
+	    goto theend;
     }
 
     mapchars = map_mode_to_chars(mp->m_mode);
@@ -200,6 +208,9 @@ showmap(
 #endif
     msg_clr_eos();
     out_flush();			// show one line at a time
+
+theend:
+    --map_locked;
 }
 
     static int
@@ -298,8 +309,50 @@ list_mappings(
 	int	mode,
 	int	*did_local)
 {
-    if (p_verbose > 0 && keyround == 1 && seenModifyOtherKeys)
-	msg_puts(_("Seen modifyOtherKeys: true"));
+    // Prevent mappings to be cleared while at the more prompt.
+    ++map_locked;
+
+    if (p_verbose > 0 && keyround == 1)
+    {
+	if (seenModifyOtherKeys)
+	    msg_puts(_("Seen modifyOtherKeys: true\n"));
+
+	if (modify_otherkeys_state != MOKS_INITIAL)
+	{
+	    char *name = _("Unknown");
+	    switch (modify_otherkeys_state)
+	    {
+		case MOKS_INITIAL: break;
+		case MOKS_OFF: name = _("Off"); break;
+		case MOKS_ENABLED: name = _("On"); break;
+		case MOKS_DISABLED: name = _("Disabled"); break;
+		case MOKS_AFTER_T_KE: name = _("Cleared"); break;
+	    }
+
+	    char buf[200];
+	    vim_snprintf(buf, sizeof(buf),
+				    _("modifyOtherKeys detected: %s\n"), name);
+	    msg_puts(buf);
+	}
+
+	if (kitty_protocol_state != KKPS_INITIAL)
+	{
+	    char *name = _("Unknown");
+	    switch (kitty_protocol_state)
+	    {
+		case KKPS_INITIAL: break;
+		case KKPS_OFF: name = _("Off"); break;
+		case KKPS_ENABLED: name = _("On"); break;
+		case KKPS_DISABLED: name = _("Disabled"); break;
+		case KKPS_AFTER_T_KE: name = _("Cleared"); break;
+	    }
+
+	    char buf[200];
+	    vim_snprintf(buf, sizeof(buf),
+				     _("Kitty keyboard protocol: %s\n"), name);
+	    msg_puts(buf);
+	}
+    }
 
     // need to loop over all global hash lists
     for (int hash = 0; hash < 256 && !got_int; ++hash)
@@ -337,6 +390,8 @@ list_mappings(
 	    }
 	}
     }
+
+    --map_locked;
 }
 
 /*
@@ -955,6 +1010,21 @@ map_clear(
 }
 
 /*
+ * If "map_locked" is set then give an error and return TRUE.
+ * Otherwise return FALSE.
+ */
+    static int
+is_map_locked(void)
+{
+    if (map_locked > 0)
+    {
+	emsg(_(e_cannot_change_mappings_while_listing));
+	return TRUE;
+    }
+    return FALSE;
+}
+
+/*
  * Clear all mappings in "mode".
  */
     void
@@ -967,6 +1037,9 @@ map_clear_mode(
     mapblock_T	*mp, **mpp;
     int		hash;
     int		new_hash;
+
+    if (is_map_locked())
+	return;
 
     validate_maphash();
 

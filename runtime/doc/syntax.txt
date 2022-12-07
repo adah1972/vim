@@ -1,4 +1,4 @@
-*syntax.txt*	For Vim version 9.0.  Last change: 2022 Oct 17
+*syntax.txt*	For Vim version 9.0.  Last change: 2022 Nov 24
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1888,6 +1888,16 @@ following two lines to the syntax coloring file for that language
 Now you just need to make sure that you add all regions that contain
 the preprocessor language to the cluster htmlPreproc.
 
+							*html-folding*
+The HTML syntax file provides syntax |folding| (see |:syn-fold|) between start
+and end tags.  This can be turned on by >
+
+	:let g:html_syntax_folding = 1
+	:set foldmethod=syntax
+
+Note: Syntax folding might slow down syntax highlighting significantly,
+especially for large files.
+
 
 HTML/OS (by Aestiva)				*htmlos.vim* *ft-htmlos-syntax*
 
@@ -2416,7 +2426,7 @@ you set the variable: >
 
 	:let papp_include_html=1
 
-in your startup file it will try to syntax-hilight html code inside phtml
+in your startup file it will try to syntax-highlight html code inside phtml
 sections, but this is relatively slow and much too colourful to be able to
 edit sensibly. ;)
 
@@ -3609,6 +3619,14 @@ highlighting is to put the following line in your |vimrc|: >
 
 	let g:vimsyn_noerror = 1
 <
+
+
+WDL							*wdl.vim* *wdl-syntax*
+
+The Workflow Description Language is a way to specify data processing workflows
+with a human-readable and writeable syntax.  This is used a lot in
+bioinformatics.  More info on the spec can be found here:
+https://github.com/openwdl/wdl
 
 
 XF86CONFIG				*xf86conf.vim* *ft-xf86conf-syntax*
@@ -4891,7 +4909,7 @@ is mostly used, because it looks better.
 In the next section you can find information about indivisual highlight groups
 and how to specify colors for them.  Most likely you want to just select a set
 of colors by using the `:colorscheme` command, for example: >
-	
+
 	    colorscheme pablo
 <
 						*:colo* *:colorscheme* *E185*
@@ -4943,7 +4961,7 @@ Change a couple more colors: >
 	augroup my_colorschemes
 	  au!
 	  au Colorscheme pablo hi Normal ctermbg=NONE
-		      \ | higlight Special ctermfg=63
+		      \ | highlight Special ctermfg=63
 		      \ | highlight Identifier ctermfg=44
 	augroup END
 
@@ -5386,16 +5404,16 @@ LineNrBelow	Line number for when the 'relativenumber'
 							*hl-CursorLineNr*
 CursorLineNr	Like LineNr when 'cursorline' is set and 'cursorlineopt'
 		contains "number" or is "both", for the cursor line.
-							*hl-CursorLineSign*
-CursorLineSign	Like SignColumn when 'cursorline' is set for the cursor line.
 							*hl-CursorLineFold*
 CursorLineFold	Like FoldColumn when 'cursorline' is set for the cursor line.
+							*hl-CursorLineSign*
+CursorLineSign	Like SignColumn when 'cursorline' is set for the cursor line.
 							*hl-MatchParen*
 MatchParen	Character under the cursor or just before it, if it
 		is a paired bracket, and its match. |pi_paren.txt|
 							*hl-MessageWindow*
-MessageWindow	Messages popup window used when 'cmdheight' is zero.  If not
-		defined |hl-WarningMsg| is used.
+MessageWindow	Messages popup window used by `:echowindow`.  If not defined
+		|hl-WarningMsg| is used.
 							*hl-ModeMsg*
 ModeMsg		'showmode' message (e.g., "-- INSERT --").
 							*hl-MoreMsg*

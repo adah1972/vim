@@ -1700,7 +1700,7 @@ func Test_prop_func_invalid_args()
   call assert_fails("call prop_type_delete([])", 'E730:')
   call assert_fails("call prop_type_delete('xyz', [])", 'E715:')
   call assert_fails("call prop_type_get([])", 'E730:')
-  call assert_fails("call prop_type_get('', [])", 'E474:')
+  call assert_fails("call prop_type_get('', [])", 'E475:')
   call assert_fails("call prop_type_list([])", 'E715:')
   call assert_fails("call prop_type_add('yyy', 'not_a_dict')", 'E715:')
   call assert_fails("call prop_add(1, 5, {'type':'missing_type', 'length':1})", 'E971:')
@@ -2690,12 +2690,14 @@ func Test_props_with_text_after_below_trunc()
       prop_add(1, 0, {
           type: 'test',
           text: 'the quick brown fox jumps over the lazy dog',
-          text_align: 'after'
+          text_align: 'after',
       })
+      prop_type_add('another', {highlight: 'DiffChange'})
       prop_add(1, 0, {
-          type: 'test',
+          type: 'another',
           text: 'the quick brown fox jumps over the lazy dog',
-          text_align: 'below'
+          text_align: 'below',
+          text_padding_left: 4,
       })
       normal G$
   END
@@ -2705,6 +2707,71 @@ func Test_props_with_text_after_below_trunc()
 
   call term_sendkeys(buf, ":set number\<CR>")
   call VerifyScreenDump(buf, 'Test_prop_with_text_after_below_trunc_2', {})
+
+  call term_sendkeys(buf, ":set cursorline\<CR>gg")
+  call VerifyScreenDump(buf, 'Test_prop_with_text_after_below_trunc_3', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_prop_with_text_below_after_empty()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+      
+      setline(1, ['vim9script', '', 'three', ''])
+
+      # Add text prop below empty line 2 with padding.
+      prop_type_add('test', {highlight: 'ErrorMsg'})
+      prop_add(2, 0, {
+           type: 'test',
+           text: 'The quick brown fox jumps over the lazy dog',
+           text_align: 'below',
+           text_padding_left: 1,
+      })
+
+      # Add text prop below empty line 4 without padding.
+      prop_type_add('other', {highlight: 'DiffChange'})
+      prop_add(4, 0, {
+           type: 'other',
+           text: 'The slow fox bumps into the lazy dog',
+           text_align: 'below',
+           text_padding_left: 0,
+      })
+  END
+  call writefile(lines, 'XscriptPropBelowAfterEmpty', 'D')
+  let buf = RunVimInTerminal('-S XscriptPropBelowAfterEmpty', #{rows: 8, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_below_after_empty_1', {}) 
+
+  call term_sendkeys(buf, ":set number\<CR>")
+  call VerifyScreenDump(buf, 'Test_prop_below_after_empty_2', {}) 
+
+  call term_sendkeys(buf, ":set nowrap\<CR>")
+  call VerifyScreenDump(buf, 'Test_prop_below_after_empty_3', {}) 
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_prop_with_text_below_after_match()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+
+      setline(1, ['vim9script', 'some text'])
+      set signcolumn=yes
+      matchaddpos('Search', [[1, 10]])
+      prop_type_add('test', {highlight: 'Error'})
+      prop_add(1, 0, {
+          type: 'test',
+          text: 'The quick brown fox',
+          text_align: 'below'
+      })
+  END
+  call writefile(lines, 'XscriptPropsBelow', 'D')
+  let buf = RunVimInTerminal('-S XscriptPropsBelow', #{rows: 8, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_with_text_below_after_match_1', {})
 
   call StopVimInTerminal(buf)
 endfunc
@@ -2850,6 +2917,29 @@ func Test_props_with_text_after_nowrap()
 
   call term_sendkeys(buf, "j")
   call VerifyScreenDump(buf, 'Test_prop_with_text_after_nowrap_3', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_prop_with_text_below_cul()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+
+      setline(1, ['some text', 'last line'])
+      set cursorline nowrap
+      prop_type_add('test', {highlight: 'DiffChange'})
+      prop_add(1, 0, {
+          type: 'test',
+          text: 'The quick brown fox jumps over the lazy dog',
+          text_align: 'below',
+          text_padding_left: 4,
+      })
+  END
+  call writefile(lines, 'XscriptPropsBelowCurline', 'D')
+  let buf = RunVimInTerminal('-S XscriptPropsBelowCurline', #{rows: 6, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_with_text_below_cul_1', {})
 
   call StopVimInTerminal(buf)
 endfunc
@@ -3019,6 +3109,34 @@ func Test_prop_below_split_line()
 
   call term_sendkeys(buf, ":set nowrap\<CR>")
   call VerifyScreenDump(buf, 'Test_prop_below_split_line_3', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_prop_above_below_smoothscroll()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+      setline(1, range(1, 10)->mapnew((_, v) => '" line ' .. v))
+
+      set smoothscroll wrap
+      call prop_type_add('mytype', {highlight: 'DiffChange'})
+      call prop_add(3, 0, {text: "insert above", type: "mytype", text_align: 'above'})
+      call prop_add(5, 0, {text: "insert above 1", type: "mytype", text_align: 'above'})
+      call prop_add(5, 0, {text: "insert above 2", type: "mytype", text_align: 'above'})
+      call prop_add(7, 0, {text: "insert below", type: "mytype", text_align: 'below'})
+      call prop_add(9, 0, {text: "insert below 1", type: "mytype", text_align: 'below'})
+      call prop_add(9, 0, {text: "insert below 2", type: "mytype", text_align: 'below'})
+  END
+  call writefile(lines, 'XscriptPropsSmoothscroll', 'D')
+  let buf = RunVimInTerminal('-S XscriptPropsSmoothscroll', #{rows: 8, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_above_below_smoothscroll_1', {})
+
+  for nr in range(2, 16)
+    call term_sendkeys(buf, "\<C-E>")
+    call VerifyScreenDump(buf, 'Test_prop_above_below_smoothscroll_' .. nr, {})
+  endfor
 
   call StopVimInTerminal(buf)
 endfunc
@@ -3370,6 +3488,42 @@ func Test_text_after_nowrap()
   call StopVimInTerminal(buf)
 endfunc
 
+func Test_text_after_nowrap_list()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+
+      set nowrap
+      set listchars+=extends:>
+      set list
+      setline(1, ['some text here', '', 'last line'])
+
+      prop_type_add('test', {highlight: 'DiffChange'})
+      prop_add(1, 0, {
+          type: 'test',
+          text: 'The quick brown fox jumps.',
+          text_padding_left: 2,
+      })
+      prop_add(1, 0, {
+          type: 'test',
+          text: '■ The fox jumps over the lazy dog.',
+          text_padding_left: 2,
+      })
+      prop_add(1, 0, {
+          type: 'test',
+          text: '■ The lazy dog.',
+          text_padding_left: 2,
+      })
+      normal 3G$
+  END
+  call writefile(lines, 'XTextAfterNowrapList', 'D')
+  let buf = RunVimInTerminal('-S XTextAfterNowrapList', #{rows: 6, cols: 60})
+  call VerifyScreenDump(buf, 'Test_text_after_nowrap_list_1', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
 func Test_text_below_nowrap()
   CheckRunVimInTerminal
 
@@ -3395,6 +3549,50 @@ func Test_text_below_nowrap()
   call writefile(lines, 'XTextBelowNowrap', 'D')
   let buf = RunVimInTerminal('-S XTextBelowNowrap', #{rows: 8, cols: 60})
   call VerifyScreenDump(buf, 'Test_text_below_nowrap_1', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_virtual_text_in_popup_highlight()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+
+      # foreground highlight only, popup background is used
+      prop_type_add('Prop1', {'highlight': 'SpecialKey'})
+      # foreground and background highlight, popup background is not used
+      prop_type_add('Prop2', {'highlight': 'DiffDelete'})
+
+      var popupText = [{
+        text: 'Some text',
+        props: [
+                    {
+                      col: 1,
+                      type: 'Prop1',
+                      text: ' + '
+                    },
+                    {
+                      col: 6,
+                      type: 'Prop2',
+                      text: ' x '
+                    },
+                ]
+          }]
+      var popupArgs = {
+            line: 3,
+            col: 20,
+            maxwidth: 80,
+            highlight: 'PMenu',
+            border: [],
+            borderchars: [' '],
+          }
+
+      popup_create(popupText, popupArgs)
+  END
+  call writefile(lines, 'XscriptVirtualHighlight', 'D')
+  let buf = RunVimInTerminal('-S XscriptVirtualHighlight', #{rows: 8})
+  call VerifyScreenDump(buf, 'Test_virtual_text_in_popup_highlight_1', {})
 
   call StopVimInTerminal(buf)
 endfunc
@@ -3433,5 +3631,70 @@ func Test_insert_text_change_arg()
 
   call StopVimInTerminal(buf)
 endfunc
+
+def Test_textprop_in_quickfix_window()
+  enew!
+  var prop_type = 'my_prop'
+  prop_type_add(prop_type, {})
+
+  for lnum in range(1, 10)
+    setline(lnum, 'hello world')
+  endfor
+
+  cgetbuffer
+  copen
+
+  var bufnr = bufnr()
+  for lnum in range(1, line('$', bufnr->bufwinid()))
+    prop_add(lnum, 1, {
+      id: 1000 + lnum,
+      type: prop_type,
+      bufnr: bufnr,
+    })
+  endfor
+
+  prop_type_delete(prop_type)
+  cclose
+  bwipe!
+enddef
+
+func Test_text_prop_delete_updates()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      vim9script
+
+      setline(1, ['some text', 'more text', 'the end'])
+      prop_type_add('test', {highlight: 'DiffChange'})
+      prop_add(1, 0, {
+          type: 'test',
+          text: 'The quick brown fox jumps over the lazy dog',
+          text_align: 'below',
+          text_padding_left: 3,
+      })
+      prop_add(1, 0, {
+          type: 'test',
+          text: 'The quick brown fox jumps over the lazy dog',
+          text_align: 'below',
+          text_padding_left: 5,
+      })
+
+      normal! G
+  END
+  call writefile(lines, 'XtextPropDelete', 'D')
+  let buf = RunVimInTerminal('-S XtextPropDelete', #{rows: 10, cols: 60})
+  call VerifyScreenDump(buf, 'Test_prop_delete_updates_1', {})
+
+  " Check that after deleting the text prop type the text properties using
+  " this type no longer show and are not counted for cursor positioning.
+  call term_sendkeys(buf, ":call prop_type_delete('test')\<CR>")
+  call VerifyScreenDump(buf, 'Test_prop_delete_updates_2', {})
+
+  call term_sendkeys(buf, "ggj")
+  call VerifyScreenDump(buf, 'Test_prop_delete_updates_3', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -222,8 +222,12 @@ CPU = i386
 !  endif
 ! else  # !CPU
 CPU = i386
-!  if !defined(PLATFORM) && defined(TARGET_CPU)
+!  ifndef PLATFORM
+!   ifdef TARGET_CPU
 PLATFORM = $(TARGET_CPU)
+!   elseif defined(VSCMD_ARG_TGT_ARCH)
+PLATFORM = $(VSCMD_ARG_TGT_ARCH)
+!   endif
 !  endif
 !  ifdef PLATFORM
 !   if ("$(PLATFORM)" == "x64") || ("$(PLATFORM)" == "X64")
@@ -681,6 +685,7 @@ OBJ = \
 	$(OUTDIR)\json.obj \
 	$(OUTDIR)\list.obj \
 	$(OUTDIR)\locale.obj \
+	$(OUTDIR)\logfile.obj \
 	$(OUTDIR)\main.obj \
 	$(OUTDIR)\map.obj \
 	$(OUTDIR)\mark.obj \
@@ -730,6 +735,7 @@ OBJ = \
 	$(OUTDIR)\undo.obj \
 	$(OUTDIR)\usercmd.obj \
 	$(OUTDIR)\userfunc.obj \
+	$(OUTDIR)\vim9class.obj \
 	$(OUTDIR)\vim9cmds.obj \
 	$(OUTDIR)\vim9compile.obj \
 	$(OUTDIR)\vim9execute.obj \
@@ -1582,6 +1588,8 @@ $(OUTDIR)/list.obj:	$(OUTDIR) list.c  $(INCL)
 
 $(OUTDIR)/locale.obj:	$(OUTDIR) locale.c  $(INCL)
 
+$(OUTDIR)/logfile.obj:	$(OUTDIR) logfile.c  $(INCL)
+
 $(OUTDIR)/main.obj:	$(OUTDIR) main.c  $(INCL) $(CUI_INCL)
 
 $(OUTDIR)/map.obj:	$(OUTDIR) map.c  $(INCL)
@@ -1700,6 +1708,8 @@ $(OUTDIR)/usercmd.obj:	$(OUTDIR) usercmd.c  $(INCL)
 $(OUTDIR)/userfunc.obj:	$(OUTDIR) userfunc.c  $(INCL)
 
 $(OUTDIR)/version.obj:	$(OUTDIR) version.c  $(INCL) version.h
+
+$(OUTDIR)/vim9class.obj:	$(OUTDIR) vim9class.c  $(INCL) vim9.h
 
 $(OUTDIR)/vim9cmds.obj:	$(OUTDIR) vim9cmds.c  $(INCL) vim9.h
 
@@ -1858,6 +1868,7 @@ proto.h: \
 	proto/json.pro \
 	proto/list.pro \
 	proto/locale.pro \
+	proto/logfile.pro \
 	proto/main.pro \
 	proto/map.pro \
 	proto/mark.pro \
@@ -1907,6 +1918,7 @@ proto.h: \
 	proto/undo.pro \
 	proto/usercmd.pro \
 	proto/userfunc.pro \
+	proto/vim9class.pro \
 	proto/vim9cmds.pro \
 	proto/vim9compile.pro \
 	proto/vim9execute.pro \

@@ -226,8 +226,10 @@ CXX := $(CROSS_COMPILE)g++
 endif
 ifeq ($(UNDER_CYGWIN),yes)
 WINDRES := $(CROSS_COMPILE)windres
-else
+else ifeq ($(findstring clang,$(CC)),)
 WINDRES := windres
+else
+WINDRES := llvm-windres
 endif
 
 # Get the default ARCH.
@@ -798,6 +800,7 @@ OBJ = \
 	$(OUTDIR)/json.o \
 	$(OUTDIR)/list.o \
 	$(OUTDIR)/locale.o \
+	$(OUTDIR)/logfile.o \
 	$(OUTDIR)/main.o \
 	$(OUTDIR)/map.o \
 	$(OUTDIR)/mark.o \
@@ -848,6 +851,7 @@ OBJ = \
 	$(OUTDIR)/usercmd.o \
 	$(OUTDIR)/userfunc.o \
 	$(OUTDIR)/version.o \
+	$(OUTDIR)/vim9class.o \
 	$(OUTDIR)/vim9cmds.o \
 	$(OUTDIR)/vim9compile.o \
 	$(OUTDIR)/vim9execute.o \
@@ -1247,6 +1251,8 @@ $(OUTDIR)/normal.o: normal.c $(INCL) nv_cmdidxs.h nv_cmds.h
 $(OUTDIR)/netbeans.o: netbeans.c $(INCL) version.h
 
 $(OUTDIR)/version.o: version.c $(INCL) version.h
+
+$(OUTDIR)/vim9class.o: vim9class.c $(INCL) vim9.h
 
 $(OUTDIR)/vim9cmds.o: vim9cmds.c $(INCL) vim9.h
 

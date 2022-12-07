@@ -478,10 +478,24 @@ func Test_list_mappings()
         \ execute('nmap ,n')->trim()->split("\n"))
 
   " verbose map
-  " first line might be "seen modifyOtherKeys"
   let lines = execute('verbose map ,n')->trim()->split("\n")
+
+  " Remove "Seen modifyOtherKeys" and other optional info.
+  if lines[0] =~ 'Seen modifyOtherKeys'
+    call remove(lines, 0)
+  endif
+  if lines[0] =~ 'modifyOtherKeys detected:'
+    call remove(lines, 0)
+  endif
+  if lines[0] =~ 'Kitty keyboard protocol:'
+    call remove(lines, 0)
+  endif
+  if lines[0] == ''
+    call remove(lines, 0)
+  endif
+
   let index = indexof(lines, 'v:val =~ "Last set"')
-  call assert_inrange(1, 2, index)
+  call assert_equal(1, index)
   call assert_match("\tLast set from .*/test_mapping.vim line \\d\\+$",
         \ lines[index])
 
@@ -570,7 +584,7 @@ func Test_expr_map_restore_cursor()
   END
   call writefile(lines, 'XtestExprMap', 'D')
   let buf = RunVimInTerminal('-S XtestExprMap', #{rows: 10})
-  call term_sendkeys(buf, "\<C-B>")
+  call term_sendkeys(buf, GetEscCodeWithModifier('C', 'B'))
   call VerifyScreenDump(buf, 'Test_map_expr_1', {})
 
   " clean up
@@ -1772,6 +1786,30 @@ func Test_using_past_typeahead()
 
   exe "norm :set \x80\xfb0=\<CR>"
   nunmap :00
+endfunc
+
+func Test_mapclear_while_listing()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+      set nocompatible
+      mapclear
+      for i in range(1, 999)
+        exe 'map ' .. 'foo' .. i .. ' bar'
+      endfor
+      au CmdlineLeave : call timer_start(0, {-> execute('mapclear')})
+  END
+  call writefile(lines, 'Xmapclear', 'D')
+  let buf = RunVimInTerminal('-S Xmapclear', {'rows': 10})
+
+  " this was using freed memory
+  call term_sendkeys(buf, ":map\<CR>")
+  call TermWait(buf, 50)
+  call term_sendkeys(buf, "G")
+  call TermWait(buf, 50)
+  call term_sendkeys(buf, "\<CR>")
+
+  call StopVimInTerminal(buf)
 endfunc
 
 

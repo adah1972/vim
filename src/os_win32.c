@@ -202,23 +202,19 @@ static void vtp_sgr_bulk(int arg);
 static void vtp_sgr_bulks(int argc, int *argv);
 
 static int wt_working = 0;
-static void wt_init();
-
-static guicolor_T save_console_bg_rgb;
-static guicolor_T save_console_fg_rgb;
-static guicolor_T store_console_bg_rgb;
-static guicolor_T store_console_fg_rgb;
+static void wt_init(void);
 
 static int g_color_index_bg = 0;
 static int g_color_index_fg = 7;
 
 # ifdef FEAT_TERMGUICOLORS
+static guicolor_T save_console_bg_rgb;
+static guicolor_T save_console_fg_rgb;
+static guicolor_T store_console_bg_rgb;
+static guicolor_T store_console_fg_rgb;
 static int default_console_color_bg = 0x000000; // black
 static int default_console_color_fg = 0xc0c0c0; // white
-# endif
-
-# ifdef FEAT_TERMGUICOLORS
-#  define USE_VTP		(vtp_working && is_term_win32() && (p_tgc || (!p_tgc && t_colors >= 256)))
+#  define USE_VTP		(vtp_working && is_term_win32())
 #  define USE_WT		(wt_working)
 # else
 #  define USE_VTP		0
@@ -242,6 +238,7 @@ static int suppress_winsize = 1;	// don't fiddle with console
 static char_u *exe_path = NULL;
 
 static BOOL win8_or_later = FALSE;
+static BOOL win11_or_later = FALSE;
 
 /*
  * Get version number including build number
@@ -334,7 +331,7 @@ read_console_input(
 
     if (s_dwMax == 0)
     {
-	if (!USE_WT && nLength == -1)
+	if (!vtp_working && nLength == -1)
 	    return PeekConsoleInputW(hInput, lpBuffer, 1, lpEvents);
 	GetNumberOfConsoleInputEvents(hInput, &dwEvents);
 	if (dwEvents == 0 && nLength == -1)
@@ -897,6 +894,10 @@ PlatformId(void)
 		|| ovi.dwMajorVersion > 6)
 	    win8_or_later = TRUE;
 
+	if ((ovi.dwMajorVersion == 10 && ovi.dwBuildNumber >= 22000)
+		|| ovi.dwMajorVersion > 10)
+	    win11_or_later = TRUE;
+
 #ifdef HAVE_ACL
 	// Enable privilege for getting or setting SACLs.
 	win32_enable_privilege(SE_SECURITY_NAME, TRUE);
@@ -1255,17 +1256,16 @@ mch_bevalterm_changed(void)
     static void
 decode_mouse_wheel(MOUSE_EVENT_RECORD *pmer)
 {
-    win_T   *wp;
     int	    horizontal = (pmer->dwEventFlags == MOUSE_HWHEELED);
     int	    zDelta = pmer->dwButtonState;
 
     g_xMouse = pmer->dwMousePosition.X;
     g_yMouse = pmer->dwMousePosition.Y;
 
-#ifdef FEAT_PROP_POPUP
+# ifdef FEAT_PROP_POPUP
     int lcol = g_xMouse;
     int lrow = g_yMouse;
-    wp = mouse_find_win(&lrow, &lcol, FIND_POPUP);
+    win_T *wp = mouse_find_win(&lrow, &lcol, FIND_POPUP);
     if (wp != NULL && popup_is_popup(wp))
     {
 	g_nMouseClick = -1;
@@ -1294,7 +1294,7 @@ decode_mouse_wheel(MOUSE_EVENT_RECORD *pmer)
 	out_flush();
 	return;
     }
-#endif
+# endif
     mouse_col = g_xMouse;
     mouse_row = g_yMouse;
 
@@ -1605,7 +1605,7 @@ decode_mouse_event(
     static void
 mch_set_cursor_shape(int thickness)
 {
-    if (USE_VTP || USE_WT)
+    if (vtp_working)
     {
 	if (*T_CSI == NUL)
 	{
@@ -2047,24 +2047,31 @@ mch_inchar(
 	    {
 		if (modifiers > 0)
 		{
-		    typeahead[typeaheadlen++] = CSI;
+		    // use K_SPECIAL instead of CSI to make mappings work
+		    typeahead[typeaheadlen++] = K_SPECIAL;
 		    typeahead[typeaheadlen++] = KS_MODIFIER;
 		    typeahead[typeaheadlen++] = modifiers;
 		}
 		typeahead[typeaheadlen++] = CSI;
 		typeahead[typeaheadlen++] = KS_EXTRA;
 		typeahead[typeaheadlen++] = scroll_dir;
-		g_nMouseClick = -1;
 	    }
 	    else
 	    {
 		typeahead[typeaheadlen++] = ESC + 128;
 		typeahead[typeaheadlen++] = 'M';
 		typeahead[typeaheadlen++] = g_nMouseClick;
-		typeahead[typeaheadlen++] = g_xMouse + '!';
-		typeahead[typeaheadlen++] = g_yMouse + '!';
-		g_nMouseClick = -1;
 	    }
+
+	    // Pass the pointer coordinates of the mouse event in 2 bytes,
+	    // allowing for > 223 columns.  Both for click and scroll events.
+	    // This is the same as what is used for the GUI.
+	    typeahead[typeaheadlen++] = (char_u)(g_xMouse / 128 + ' ' + 1);
+	    typeahead[typeaheadlen++] = (char_u)(g_xMouse % 128 + ' ' + 1);
+	    typeahead[typeaheadlen++] = (char_u)(g_yMouse / 128 + ' ' + 1);
+	    typeahead[typeaheadlen++] = (char_u)(g_yMouse % 128 + ' ' + 1);
+
+	    g_nMouseClick = -1;
 	}
 	else
 	{
@@ -2215,7 +2222,7 @@ theend:
 	buf[len++] = typeahead[0];
 	mch_memmove(typeahead, typeahead + 1, --typeaheadlen);
     }
-# ifdef FEAT_JOB_CHANNEL
+# ifdef FEAT_EVAL
     if (len > 0)
     {
 	buf[len] = NUL;
@@ -2688,6 +2695,11 @@ SaveConsoleBuffer(
     }
     cb->IsValid = TRUE;
 
+    // VTP uses alternate screen buffer.
+    // No need to save buffer contents for restoration.
+    if (win11_or_later && vtp_working)
+	return TRUE;
+
     /*
      * Allocate a buffer large enough to hold the entire console screen
      * buffer.  If this ConsoleBuffer structure has already been initialized
@@ -2780,6 +2792,11 @@ RestoreConsoleBuffer(
     COORD BufferCoord;
     SMALL_RECT WriteRegion;
     int i;
+
+    // VTP uses alternate screen buffer.
+    // No need to restore buffer contents.
+    if (win11_or_later && vtp_working)
+	return TRUE;
 
     if (cb == NULL || !cb->IsValid)
 	return FALSE;
@@ -2977,6 +2994,9 @@ mch_init_c(void)
 	create_conin();
     g_hConOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
+    wt_init();
+    vtp_flag_init();
+    vtp_init();
 # ifdef FEAT_RESTORE_ORIG_SCREEN
     // Save the initial console buffer for later restoration
     SaveConsoleBuffer(&g_cbOrig);
@@ -3033,10 +3053,6 @@ mch_init_c(void)
 # ifdef FEAT_CLIPBOARD
     win_clip_init();
 # endif
-
-    vtp_flag_init();
-    vtp_init();
-    wt_init();
 }
 
 /*
@@ -4870,27 +4886,30 @@ mch_call_shell_terminal(
 
     // Find a window to make "buf" curbuf.
     aucmd_prepbuf(&aco, buf);
-
-    clear_oparg(&oa);
-    while (term_use_loop())
+    if (curbuf == buf)
     {
-	if (oa.op_type == OP_NOP && oa.regname == NUL && !VIsual_active)
+	// Only do this when a window was found for "buf".
+	clear_oparg(&oa);
+	while (term_use_loop())
 	{
-	    // If terminal_loop() returns OK we got a key that is handled
-	    // in Normal model. We don't do redrawing anyway.
-	    if (terminal_loop(TRUE) == OK)
+	    if (oa.op_type == OP_NOP && oa.regname == NUL && !VIsual_active)
+	    {
+		// If terminal_loop() returns OK we got a key that is handled
+		// in Normal model. We don't do redrawing anyway.
+		if (terminal_loop(TRUE) == OK)
+		    normal_cmd(&oa, TRUE);
+	    }
+	    else
 		normal_cmd(&oa, TRUE);
 	}
-	else
-	    normal_cmd(&oa, TRUE);
+	retval = job->jv_exitval;
+	ch_log(NULL, "system command finished");
+
+	job_unref(job);
+
+	// restore curwin/curbuf and a few other things
+	aucmd_restbuf(&aco);
     }
-    retval = job->jv_exitval;
-    ch_log(NULL, "system command finished");
-
-    job_unref(job);
-
-    // restore curwin/curbuf and a few other things
-    aucmd_restbuf(&aco);
 
     wait_return(TRUE);
     do_buffer(DOBUF_WIPE, DOBUF_FIRST, FORWARD, buf->b_fnum, TRUE);
@@ -4912,7 +4931,7 @@ mch_call_shell(
     int		tmode = cur_tmode;
     WCHAR	szShellTitle[512];
 
-#ifdef FEAT_JOB_CHANNEL
+#ifdef FEAT_EVAL
     ch_log(NULL, "executing shell command: %s", cmd);
 #endif
     // Change the title to reflect that we are in a subshell.
@@ -5750,7 +5769,9 @@ termcap_mode_start(void)
     if (g_fTermcapMode)
 	return;
 
-    if (!p_rs && USE_VTP)
+    // VTP uses alternate screen buffer.
+    // Switch to a new alternate screen buffer.
+    if (win11_or_later && p_rs && vtp_working)
 	vtp_printf("\033[?1049h");
 
     SaveConsoleBuffer(&g_cbNonTermcap);
@@ -5830,17 +5851,22 @@ termcap_mode_end(void)
 # endif
     RestoreConsoleBuffer(cb, p_rs);
     restore_console_color_rgb();
-    SetConsoleCursorInfo(g_hConOut, &g_cci);
 
-    if (p_rs || exiting)
+    // VTP uses alternate screen buffer.
+    // Switch back to main screen buffer.
+    if (exiting && win11_or_later && p_rs && vtp_working)
+	vtp_printf("\033[?1049l");
+
+    if (!USE_WT && (p_rs || exiting))
     {
 	/*
 	 * Clear anything that happens to be on the current line.
 	 */
 	coord.X = 0;
 	coord.Y = (SHORT) (p_rs ? cb->Info.dwCursorPosition.Y : (Rows - 1));
-	FillConsoleOutputCharacter(g_hConOut, ' ',
-		cb->Info.dwSize.X, coord, &dwDummy);
+	if (!vtp_working)
+	    FillConsoleOutputCharacter(g_hConOut, ' ',
+		    cb->Info.dwSize.X, coord, &dwDummy);
 	/*
 	 * The following is just for aesthetics.  If we are exiting without
 	 * restoring the screen, then we want to have a prompt string
@@ -5856,13 +5882,10 @@ termcap_mode_end(void)
 	 */
 	SetConsoleCursorPosition(g_hConOut, coord);
     }
-
-    if (!p_rs && USE_VTP)
-	vtp_printf("\033[?1049l");
-
+    SetConsoleCursorInfo(g_hConOut, &g_cci);
     g_fTermcapMode = FALSE;
 }
-#endif // FEAT_GUI_MSWIN
+#endif // !FEAT_GUI_MSWIN || VIMDLL
 
 
 #if defined(FEAT_GUI_MSWIN) && !defined(VIMDLL)
@@ -5884,7 +5907,7 @@ clear_chars(
     COORD coord,
     DWORD n)
 {
-    if (!USE_VTP)
+    if (!vtp_working)
     {
 	DWORD dwDummy;
 
@@ -5909,7 +5932,7 @@ clear_screen(void)
 {
     g_coord.X = g_coord.Y = 0;
 
-    if (!USE_VTP)
+    if (!vtp_working)
 	clear_chars(g_coord, Rows * Columns);
     else
     {
@@ -5928,7 +5951,7 @@ clear_to_end_of_display(void)
 {
     COORD save = g_coord;
 
-    if (!USE_VTP)
+    if (!vtp_working)
 	clear_chars(g_coord, (Rows - g_coord.Y - 1)
 					   * Columns + (Columns - g_coord.X));
     else
@@ -5951,7 +5974,7 @@ clear_to_end_of_line(void)
 {
     COORD save = g_coord;
 
-    if (!USE_VTP)
+    if (!vtp_working)
 	clear_chars(g_coord, Columns - g_coord.X);
     else
     {
@@ -6053,7 +6076,11 @@ insert_lines(unsigned cLines)
     clip.Bottom = g_srScrollRegion.Bottom;
 
     fill.Char.AsciiChar = ' ';
-    if (!USE_VTP)
+    if (!(vtp_working
+# ifdef FEAT_TERMGUICOLORS
+		&& (p_tgc || t_colors >= 256)
+# endif
+	 ))
 	fill.Attributes = g_attrCurrent;
     else
 	fill.Attributes = g_attrDefault;
@@ -6082,7 +6109,7 @@ insert_lines(unsigned cLines)
 	}
     }
 
-    if (USE_WT)
+    if (vtp_working)
     {
 	COORD coord;
 	int i;
@@ -6124,7 +6151,7 @@ delete_lines(unsigned cLines)
     clip.Bottom = g_srScrollRegion.Bottom;
 
     fill.Char.AsciiChar = ' ';
-    if (!USE_VTP)
+    if (!vtp_working)
 	fill.Attributes = g_attrCurrent;
     else
 	fill.Attributes = g_attrDefault;
@@ -6151,7 +6178,7 @@ delete_lines(unsigned cLines)
 	}
     }
 
-    if (USE_WT)
+    if (vtp_working)
     {
 	COORD coord;
 	int i;
@@ -6177,7 +6204,11 @@ gotoxy(
     if (x < 1 || x > (unsigned)Columns || y < 1 || y > (unsigned)Rows)
 	return;
 
-    if (!USE_VTP)
+    if (!(vtp_working
+# ifdef FEAT_TERMGUICOLORS
+		&& (p_tgc || t_colors >= 256)
+# endif
+	 ))
     {
 	// There are reports of double-width characters not displayed
 	// correctly.  This workaround should fix it, similar to how it's done
@@ -6223,7 +6254,7 @@ textcolor(WORD wAttr)
 {
     g_attrCurrent = (g_attrCurrent & 0xf0) + (wAttr & 0x0f);
 
-    if (!USE_VTP)
+    if (!vtp_working)
 	SetConsoleTextAttribute(g_hConOut, g_attrCurrent);
     else
 	vtp_sgr_bulk(wAttr);
@@ -6235,7 +6266,7 @@ textbackground(WORD wAttr)
 {
     g_attrCurrent = (g_attrCurrent & 0x0f) + ((wAttr & 0x0f) << 4);
 
-    if (!USE_VTP)
+    if (!vtp_working)
 	SetConsoleTextAttribute(g_hConOut, g_attrCurrent);
     else
 	vtp_sgr_bulk(wAttr);
@@ -6248,7 +6279,7 @@ textbackground(WORD wAttr)
     static void
 normvideo(void)
 {
-    if (!USE_VTP)
+    if (!vtp_working)
 	textattr(g_attrDefault);
     else
 	vtp_sgr_bulk(0);
@@ -6334,7 +6365,7 @@ visual_bell(void)
 			       coordOrigin, &dwDummy);
 
     Sleep(15);	    // wait for 15 msec
-    if (!USE_VTP)
+    if (!vtp_working)
 	WriteConsoleOutputAttribute(g_hConOut, oldattrs, Rows * Columns,
 				coordOrigin, &dwDummy);
     vim_free(oldattrs);
@@ -6349,7 +6380,7 @@ cursor_visible(BOOL fVisible)
 {
     s_cursor_visible = fVisible;
 
-    if (USE_VTP)
+    if (vtp_working)
 	vtp_printf("\033[?25%c", fVisible ? 'h' : 'l');
 
 # ifdef MCH_CURSOR_SHAPE
@@ -6421,7 +6452,11 @@ write_chars(
 	}
     }
 
-    if (!USE_VTP)
+    if (!(vtp_working
+# ifdef FEAT_TERMGUICOLORS
+	    && (p_tgc || t_colors >= 256)
+# endif
+	))
     {
 	FillConsoleOutputAttribute(g_hConOut, g_attrCurrent, cells,
 				    coord, &written);
@@ -6461,7 +6496,11 @@ write_chars(
     }
 
     // Cursor under VTP is always in the correct position, no need to reset.
-    if (!USE_VTP)
+    if (!(vtp_working
+# ifdef FEAT_TERMGUICOLORS
+		&& (p_tgc || t_colors >= 256)
+# endif
+	 ))
 	gotoxy(g_coord.X + 1, g_coord.Y + 1);
 
     return written;
@@ -6757,12 +6796,16 @@ notsgr:
 			normvideo();
 		    else if (argc == 1)
 		    {
-			if (USE_VTP)
-			    textcolor((WORD) arg1);
+			if (vtp_working
+# ifdef FEAT_TERMGUICOLORS
+				&& (p_tgc || t_colors >= 256)
+# endif
+			   )
+			    textcolor((WORD)arg1);
 			else
-			    textattr((WORD) arg1);
+			    textattr((WORD)arg1);
 		    }
-		    else if (USE_VTP)
+		    else if (vtp_working)
 			vtp_sgr_bulks(argc, args);
 		}
 		else if (argc == 2 && *p == 'H')
@@ -6901,7 +6944,7 @@ notsgr:
 	    if (s[l] == ' ' && s[l + 1] == 'q')
 	    {
 		// DECSCUSR (cursor style) sequences
-		if (USE_VTP || USE_WT)
+		if (vtp_working)
 		    vtp_printf("%.*s", l + 2, s);   // Pass through
 		s += l + 2;
 		len -= l + 1;
@@ -7940,6 +7983,12 @@ mch_setenv(char *var, char *value, int x UNUSED)
  * Not stable now.
  */
 #define CONPTY_STABLE_BUILD	    MAKE_VER(10, 0, 32767)  // T.B.D.
+// Notes:
+// Win 10 22H2 Final is build 19045, it's conpty is widely used.
+// Strangely, 19045 is newer but is a lower build number than the 2020 insider
+// preview which had a build 19587.  And, not sure how stable that was?
+// Win Server 2022 (May 10, 2022) is build 20348, its conpty is widely used.
+// Win 11 starts from build 22000, even though the major version says 10!
 
     static void
 vtp_flag_init(void)
@@ -7986,29 +8035,27 @@ vtp_flag_init(void)
     static void
 vtp_init(void)
 {
-    CONSOLE_SCREEN_BUFFER_INFOEX csbi;
 # ifdef FEAT_TERMGUICOLORS
-    COLORREF fg;
-# endif
-
-    csbi.cbSize = sizeof(csbi);
-    GetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
-    save_console_bg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_bg];
-    save_console_fg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_fg];
-    store_console_bg_rgb = save_console_bg_rgb;
-    store_console_fg_rgb = save_console_fg_rgb;
-
-# ifdef FEAT_TERMGUICOLORS
-    if (!USE_WT)
+    if (!vtp_working)
     {
+	CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+	csbi.cbSize = sizeof(csbi);
+	GetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	save_console_bg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_bg];
+	save_console_fg_rgb = (guicolor_T)csbi.ColorTable[g_color_index_fg];
+	store_console_bg_rgb = save_console_bg_rgb;
+	store_console_fg_rgb = save_console_fg_rgb;
+
 	COLORREF bg;
 	bg = (COLORREF)csbi.ColorTable[g_color_index_bg];
 	bg = (GetRValue(bg) << 16) | (GetGValue(bg) << 8) | GetBValue(bg);
 	default_console_color_bg = bg;
+
+	COLORREF fg;
+	fg = (COLORREF)csbi.ColorTable[g_color_index_fg];
+	fg = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
+	default_console_color_fg = fg;
     }
-    fg = (COLORREF)csbi.ColorTable[g_color_index_fg];
-    fg = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
-    default_console_color_fg = fg;
 # endif
 
     set_console_color_rgb();
@@ -8196,13 +8243,7 @@ vtp_sgr_bulks(
     static void
 wt_init(void)
 {
-    wt_working = (mch_getenv("WT_SESSION") != NULL);
-}
-
-    int
-use_wt(void)
-{
-    return USE_WT;
+    wt_working = mch_getenv("WT_SESSION") != NULL;
 }
 
 # ifdef FEAT_TERMGUICOLORS
@@ -8225,32 +8266,35 @@ set_console_color_rgb(void)
     guicolor_T	fg, bg;
     int		ctermfg, ctermbg;
 
-    if (!USE_VTP)
+    if (!vtp_working)
 	return;
 
     get_default_console_color(&ctermfg, &ctermbg, &fg, &bg);
 
-    if (USE_WT)
+    if (p_tgc || t_colors >= 256)
     {
 	term_fg_rgb_color(fg);
 	term_bg_rgb_color(bg);
 	return;
     }
 
-    fg = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
-    bg = (GetRValue(bg) << 16) | (GetGValue(bg) << 8) | GetBValue(bg);
+    if (!conpty_working)
+    {
+	fg = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
+	bg = (GetRValue(bg) << 16) | (GetGValue(bg) << 8) | GetBValue(bg);
 
-    csbi.cbSize = sizeof(csbi);
-    GetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	csbi.cbSize = sizeof(csbi);
+	GetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
 
-    csbi.cbSize = sizeof(csbi);
-    csbi.srWindow.Right += 1;
-    csbi.srWindow.Bottom += 1;
-    store_console_bg_rgb = csbi.ColorTable[g_color_index_bg];
-    store_console_fg_rgb = csbi.ColorTable[g_color_index_fg];
-    csbi.ColorTable[g_color_index_bg] = (COLORREF)bg;
-    csbi.ColorTable[g_color_index_fg] = (COLORREF)fg;
-    SetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+	csbi.cbSize = sizeof(csbi);
+	csbi.srWindow.Right += 1;
+	csbi.srWindow.Bottom += 1;
+	store_console_bg_rgb = csbi.ColorTable[g_color_index_bg];
+	store_console_fg_rgb = csbi.ColorTable[g_color_index_fg];
+	csbi.ColorTable[g_color_index_bg] = (COLORREF)bg;
+	csbi.ColorTable[g_color_index_fg] = (COLORREF)fg;
+	SetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
+    }
 # endif
 }
 
@@ -8267,6 +8311,7 @@ get_default_console_color(
     guicolor_T guibg = INVALCOLOR;
     int ctermfg = 0;
     int ctermbg = 0;
+    int dummynull = 0;
 
     id = syn_name2id((char_u *)"Normal");
     if (id > 0 && p_tgc)
@@ -8275,18 +8320,27 @@ get_default_console_color(
     {
 	ctermfg = -1;
 	if (id > 0)
-	    syn_id2cterm_bg(id, &ctermfg, &ctermbg);
-	guifg = ctermfg != -1 ? ctermtoxterm(ctermfg)
+	    syn_id2cterm_bg(id, &ctermfg, &dummynull);
+	if (vtp_working)
+	{
+	    cterm_normal_fg_gui_color = guifg =
+			    ctermfg != -1 ? ctermtoxterm(ctermfg) : INVALCOLOR;
+	    ctermfg = ctermfg < 0 ? 0 : ctermfg;
+	}
+	else
+	{
+	    guifg = ctermfg != -1 ? ctermtoxterm(ctermfg)
 						    : default_console_color_fg;
-	cterm_normal_fg_gui_color = guifg;
-	ctermfg = ctermfg < 0 ? 0 : ctermfg;
+	    cterm_normal_fg_gui_color = guifg;
+	    ctermfg = ctermfg < 0 ? 0 : ctermfg;
+	}
     }
     if (guibg == INVALCOLOR)
     {
 	ctermbg = -1;
 	if (id > 0)
-	    syn_id2cterm_bg(id, &ctermfg, &ctermbg);
-	if (USE_WT)
+	    syn_id2cterm_bg(id, &dummynull, &ctermbg);
+	if (vtp_working)
 	{
 	    cterm_normal_bg_gui_color = guibg =
 			    ctermbg != -1 ? ctermtoxterm(ctermbg) : INVALCOLOR;
@@ -8316,10 +8370,11 @@ get_default_console_color(
 reset_console_color_rgb(void)
 {
 # ifdef FEAT_TERMGUICOLORS
-    CONSOLE_SCREEN_BUFFER_INFOEX csbi;
 
-    if (USE_WT)
+    if (vtp_working)
 	return;
+
+    CONSOLE_SCREEN_BUFFER_INFOEX csbi;
 
     csbi.cbSize = sizeof(csbi);
     GetConsoleScreenBufferInfoEx(g_hConOut, &csbi);
@@ -8340,6 +8395,9 @@ reset_console_color_rgb(void)
 restore_console_color_rgb(void)
 {
 # ifdef FEAT_TERMGUICOLORS
+    if (vtp_working)
+	return;
+
     CONSOLE_SCREEN_BUFFER_INFOEX csbi;
 
     csbi.cbSize = sizeof(csbi);
@@ -8357,7 +8415,7 @@ restore_console_color_rgb(void)
     void
 control_console_color_rgb(void)
 {
-    if (USE_VTP)
+    if (vtp_working)
 	set_console_color_rgb();
     else
 	reset_console_color_rgb();

@@ -156,6 +156,22 @@ func Test_screenpos_fold()
   bwipe!
 endfunc
 
+func Test_screenpos_diff()
+  CheckFeature diff
+
+  enew!
+  call setline(1, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'])
+  vnew
+  call setline(1, ['a', 'b', 'c', 'g', 'h', 'i'])
+  windo diffthis
+  wincmd w
+  call assert_equal(#{col: 3, row: 7, endcol: 3, curscol: 3}, screenpos(0, 4, 1))
+
+  windo diffoff
+  bwipe!
+  bwipe!
+endfunc
+
 func Test_screenpos_number()
   rightbelow new
   rightbelow 73vsplit
@@ -167,6 +183,9 @@ func Test_screenpos_number()
   let pos = screenpos(winid, 1, 66)
   call assert_equal(winrow, pos.row)
   call assert_equal(wincol + 66 + 3, pos.col)
+
+  call assert_fails('echo screenpos(0, 2, 1)', 'E966:')
+
   close
   bwipe!
 endfunc
@@ -287,8 +306,9 @@ endfunc
 
 " Test for the charcol() function
 func Test_charcol()
-  call assert_fails('call charcol({})', 'E731:')
-  call assert_equal(0, charcol(0))
+  call assert_fails('call charcol({})', 'E1222:')
+  call assert_fails('call charcol(".", [])', 'E1210:')
+  call assert_fails('call charcol(0)', 'E1222:')
   new
   call setline(1, ['', "01\tà4è678", 'Ⅵ', '012345678'])
 
@@ -343,6 +363,25 @@ func Test_charcol()
   exe "normal 2G6li\<F3>"
   call assert_equal([1, 10, 2, 10, 7], g:InsertCurrentCol)
   iunmap <F3>
+
+  " Test for getting the column number in another window.
+  let winid = win_getid()
+  new
+  call win_execute(winid, 'normal 1G')
+  call assert_equal(1, charcol('.', winid))
+  call assert_equal(1, charcol('$', winid))
+  call win_execute(winid, 'normal 2G6l')
+  call assert_equal(7, charcol('.', winid))
+  call assert_equal(10, charcol('$', winid))
+
+  " calling from another tab page also works
+  tabnew
+  call assert_equal(7, charcol('.', winid))
+  call assert_equal(10, charcol('$', winid))
+  tabclose
+
+  " unknown window ID
+  call assert_equal(0, charcol('.', 10001))
 
   %bw!
 endfunc

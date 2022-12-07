@@ -437,10 +437,12 @@ $quote	eval.txt	/*$quote*
 'key'	options.txt	/*'key'*
 'keymap'	options.txt	/*'keymap'*
 'keymodel'	options.txt	/*'keymodel'*
+'keyprotocol'	options.txt	/*'keyprotocol'*
 'keywordprg'	options.txt	/*'keywordprg'*
 'km'	options.txt	/*'km'*
 'kmp'	options.txt	/*'kmp'*
 'kp'	options.txt	/*'kp'*
+'kpc'	options.txt	/*'kpc'*
 'langmap'	options.txt	/*'langmap'*
 'langmenu'	options.txt	/*'langmenu'*
 'langnoremap'	options.txt	/*'langnoremap'*
@@ -1059,6 +1061,7 @@ $quote	eval.txt	/*$quote*
 't_RC'	term.txt	/*'t_RC'*
 't_RF'	term.txt	/*'t_RF'*
 't_RI'	term.txt	/*'t_RI'*
+'t_RK'	term.txt	/*'t_RK'*
 't_RS'	term.txt	/*'t_RS'*
 't_RT'	term.txt	/*'t_RT'*
 't_RV'	term.txt	/*'t_RV'*
@@ -2162,7 +2165,7 @@ $quote	eval.txt	/*$quote*
 :abclear	map.txt	/*:abclear*
 :abo	windows.txt	/*:abo*
 :aboveleft	windows.txt	/*:aboveleft*
-:abstract	vim9.txt	/*:abstract*
+:abstract	vim9class.txt	/*:abstract*
 :addd	quickfix.txt	/*:addd*
 :al	windows.txt	/*:al*
 :all	windows.txt	/*:all*
@@ -2322,7 +2325,7 @@ $quote	eval.txt	/*$quote*
 :chistory	quickfix.txt	/*:chistory*
 :cl	quickfix.txt	/*:cl*
 :cla	quickfix.txt	/*:cla*
-:class	vim9.txt	/*:class*
+:class	vim9class.txt	/*:class*
 :clast	quickfix.txt	/*:clast*
 :cle	motion.txt	/*:cle*
 :clearjumps	motion.txt	/*:clearjumps*
@@ -2499,15 +2502,15 @@ $quote	eval.txt	/*$quote*
 :emenu	gui.txt	/*:emenu*
 :en	eval.txt	/*:en*
 :end	eval.txt	/*:end*
-:endclass	vim9.txt	/*:endclass*
+:endclass	vim9class.txt	/*:endclass*
 :enddef	vim9.txt	/*:enddef*
-:endenum	vim9.txt	/*:endenum*
+:endenum	vim9class.txt	/*:endenum*
 :endf	userfunc.txt	/*:endf*
 :endfo	eval.txt	/*:endfo*
 :endfor	eval.txt	/*:endfor*
 :endfunction	userfunc.txt	/*:endfunction*
 :endif	eval.txt	/*:endif*
-:endinterface	vim9.txt	/*:endinterface*
+:endinterface	vim9class.txt	/*:endinterface*
 :endt	eval.txt	/*:endt*
 :endtry	eval.txt	/*:endtry*
 :endw	eval.txt	/*:endw*
@@ -2516,7 +2519,7 @@ $quote	eval.txt	/*$quote*
 :ene!	editing.txt	/*:ene!*
 :enew	editing.txt	/*:enew*
 :enew!	editing.txt	/*:enew!*
-:enum	vim9.txt	/*:enum*
+:enum	vim9class.txt	/*:enum*
 :eval	eval.txt	/*:eval*
 :ex	editing.txt	/*:ex*
 :exe	eval.txt	/*:exe*
@@ -2646,7 +2649,7 @@ $quote	eval.txt	/*$quote*
 :inoreme	gui.txt	/*:inoreme*
 :inoremenu	gui.txt	/*:inoremenu*
 :insert	insert.txt	/*:insert*
-:interface	vim9.txt	/*:interface*
+:interface	vim9class.txt	/*:interface*
 :intro	starting.txt	/*:intro*
 :is	tagsrch.txt	/*:is*
 :isearch	tagsrch.txt	/*:isearch*
@@ -3042,6 +3045,9 @@ $quote	eval.txt	/*$quote*
 :r!	insert.txt	/*:r!*
 :range	cmdline.txt	/*:range*
 :range!	change.txt	/*:range!*
+:range-closed-fold	cmdline.txt	/*:range-closed-fold*
+:range-offset	cmdline.txt	/*:range-offset*
+:range-pattern	cmdline.txt	/*:range-pattern*
 :re	insert.txt	/*:re*
 :read	insert.txt	/*:read*
 :read!	insert.txt	/*:read!*
@@ -3280,7 +3286,7 @@ $quote	eval.txt	/*$quote*
 :startgreplace	insert.txt	/*:startgreplace*
 :startinsert	insert.txt	/*:startinsert*
 :startreplace	insert.txt	/*:startreplace*
-:static	vim9.txt	/*:static*
+:static	vim9class.txt	/*:static*
 :stj	tagsrch.txt	/*:stj*
 :stjump	tagsrch.txt	/*:stjump*
 :stop	starting.txt	/*:stop*
@@ -3458,7 +3464,7 @@ $quote	eval.txt	/*$quote*
 :tunma	map.txt	/*:tunma*
 :tunmap	map.txt	/*:tunmap*
 :tunmenu	gui.txt	/*:tunmenu*
-:type	vim9.txt	/*:type*
+:type	vim9class.txt	/*:type*
 :u	undo.txt	/*:u*
 :un	undo.txt	/*:un*
 :una	map.txt	/*:una*
@@ -4354,7 +4360,14 @@ E1304	vim9.txt	/*E1304*
 E1305	textprop.txt	/*E1305*
 E1306	vim9.txt	/*E1306*
 E1307	vim9.txt	/*E1307*
+E1308	builtin.txt	/*E1308*
+E1309	map.txt	/*E1309*
 E131	userfunc.txt	/*E131*
+E1310	gui.txt	/*E1310*
+E1311	map.txt	/*E1311*
+E1312	windows.txt	/*E1312*
+E1313	eval.txt	/*E1313*
+E1314	vim9class.txt	/*E1314*
 E132	userfunc.txt	/*E132*
 E133	userfunc.txt	/*E133*
 E134	change.txt	/*E134*
@@ -5573,7 +5586,14 @@ VMS	os_vms.txt	/*VMS*
 Vi	intro.txt	/*Vi*
 View	starting.txt	/*View*
 Vim9	vim9.txt	/*Vim9*
+Vim9-abstract-class	vim9class.txt	/*Vim9-abstract-class*
+Vim9-class	vim9class.txt	/*Vim9-class*
+Vim9-class-overview	vim9class.txt	/*Vim9-class-overview*
+Vim9-enum	vim9class.txt	/*Vim9-enum*
 Vim9-script	vim9.txt	/*Vim9-script*
+Vim9-simple-class	vim9class.txt	/*Vim9-simple-class*
+Vim9-type	vim9class.txt	/*Vim9-type*
+Vim9-using-interface	vim9class.txt	/*Vim9-using-interface*
 VimEnter	autocmd.txt	/*VimEnter*
 VimLeave	autocmd.txt	/*VimLeave*
 VimLeavePre	autocmd.txt	/*VimLeavePre*
@@ -5607,7 +5627,10 @@ WinClosed	autocmd.txt	/*WinClosed*
 WinEnter	autocmd.txt	/*WinEnter*
 WinLeave	autocmd.txt	/*WinLeave*
 WinNew	autocmd.txt	/*WinNew*
+WinResized	autocmd.txt	/*WinResized*
+WinResized-event	windows.txt	/*WinResized-event*
 WinScrolled	autocmd.txt	/*WinScrolled*
+WinScrolled-event	windows.txt	/*WinScrolled-event*
 X	change.txt	/*X*
 X11	options.txt	/*X11*
 X11-icon	gui_x11.txt	/*X11-icon*
@@ -6241,6 +6264,8 @@ cino-w	indent.txt	/*cino-w*
 cino-{	indent.txt	/*cino-{*
 cino-}	indent.txt	/*cino-}*
 cinoptions-values	indent.txt	/*cinoptions-values*
+class-member	vim9class.txt	/*class-member*
+class-method	vim9class.txt	/*class-method*
 clear-undo	undo.txt	/*clear-undo*
 clearmatches()	builtin.txt	/*clearmatches()*
 client-server	remote.txt	/*client-server*
@@ -6655,6 +6680,7 @@ end	intro.txt	/*end*
 end-of-file	pattern.txt	/*end-of-file*
 enlightened-terminal	syntax.txt	/*enlightened-terminal*
 environ()	builtin.txt	/*environ()*
+eol-and-eof	editing.txt	/*eol-and-eof*
 erlang.vim	syntax.txt	/*erlang.vim*
 err_buf	channel.txt	/*err_buf*
 err_cb	channel.txt	/*err_cb*
@@ -6684,6 +6710,8 @@ escape()	builtin.txt	/*escape()*
 escape-bar	version4.txt	/*escape-bar*
 euphoria3.vim	syntax.txt	/*euphoria3.vim*
 euphoria4.vim	syntax.txt	/*euphoria4.vim*
+euro	digraph.txt	/*euro*
+euro-digraph	digraph.txt	/*euro-digraph*
 eval	eval.txt	/*eval*
 eval()	builtin.txt	/*eval()*
 eval-examples	eval.txt	/*eval-examples*
@@ -6811,6 +6839,7 @@ expression-syntax	eval.txt	/*expression-syntax*
 exrc	starting.txt	/*exrc*
 extend()	builtin.txt	/*extend()*
 extendnew()	builtin.txt	/*extendnew()*
+extends	vim9class.txt	/*extends*
 extension-removal	cmdline.txt	/*extension-removal*
 extensions-improvements	todo.txt	/*extensions-improvements*
 f	motion.txt	/*f*
@@ -6952,6 +6981,7 @@ form.vim	syntax.txt	/*form.vim*
 format-bullet-list	tips.txt	/*format-bullet-list*
 format-comments	change.txt	/*format-comments*
 format-formatexpr	change.txt	/*format-formatexpr*
+formatOtherKeys	map.txt	/*formatOtherKeys*
 formatting	change.txt	/*formatting*
 forth.vim	syntax.txt	/*forth.vim*
 fortran.vim	syntax.txt	/*fortran.vim*
@@ -7479,6 +7509,7 @@ get()	builtin.txt	/*get()*
 get-ms-debuggers	debug.txt	/*get-ms-debuggers*
 getbufinfo()	builtin.txt	/*getbufinfo()*
 getbufline()	builtin.txt	/*getbufline()*
+getbufoneline()	builtin.txt	/*getbufoneline()*
 getbufvar()	builtin.txt	/*getbufvar()*
 getchangelist()	builtin.txt	/*getchangelist()*
 getchar()	builtin.txt	/*getchar()*
@@ -7510,6 +7541,7 @@ getloclist()	builtin.txt	/*getloclist()*
 getmarklist()	builtin.txt	/*getmarklist()*
 getmatches()	builtin.txt	/*getmatches()*
 getmousepos()	builtin.txt	/*getmousepos()*
+getmouseshape()	builtin.txt	/*getmouseshape()*
 getpid()	builtin.txt	/*getpid()*
 getpos()	builtin.txt	/*getpos()*
 getqflist()	builtin.txt	/*getqflist()*
@@ -7830,6 +7862,7 @@ howto.txt	howto.txt	/*howto.txt*
 hpterm	term.txt	/*hpterm*
 hpterm-color	syntax.txt	/*hpterm-color*
 html-flavor	insert.txt	/*html-flavor*
+html-folding	syntax.txt	/*html-folding*
 html-indent	indent.txt	/*html-indent*
 html-indenting	indent.txt	/*html-indenting*
 html.vim	syntax.txt	/*html.vim*
@@ -7981,6 +8014,7 @@ if_sniff.txt	if_sniff.txt	/*if_sniff.txt*
 if_tcl.txt	if_tcl.txt	/*if_tcl.txt*
 ignore-errors	eval.txt	/*ignore-errors*
 ignore-timestamp	editing.txt	/*ignore-timestamp*
+implements	vim9class.txt	/*implements*
 import-autoload	vim9.txt	/*import-autoload*
 import-legacy	vim9.txt	/*import-legacy*
 import-map	vim9.txt	/*import-map*
@@ -8056,7 +8090,7 @@ interfaces-5.2	version5.txt	/*interfaces-5.2*
 internal-variables	eval.txt	/*internal-variables*
 internal-wordlist	spell.txt	/*internal-wordlist*
 internet	intro.txt	/*internet*
-interp-string	eval.txt	/*interp-string*
+interpolated-string	eval.txt	/*interpolated-string*
 interrupt()	builtin.txt	/*interrupt()*
 intro	intro.txt	/*intro*
 intro.txt	intro.txt	/*intro.txt*
@@ -8148,6 +8182,7 @@ keypad-plus	intro.txt	/*keypad-plus*
 keypad-point	intro.txt	/*keypad-point*
 keys()	builtin.txt	/*keys()*
 keytrans()	builtin.txt	/*keytrans()*
+kitty-keyboard-protocol	map.txt	/*kitty-keyboard-protocol*
 known-bugs	todo.txt	/*known-bugs*
 l	motion.txt	/*l*
 l:	eval.txt	/*l:*
@@ -9566,6 +9601,7 @@ spec_chglog_format	pi_spec.txt	/*spec_chglog_format*
 spec_chglog_prepend	pi_spec.txt	/*spec_chglog_prepend*
 spec_chglog_release_info	pi_spec.txt	/*spec_chglog_release_info*
 special-buffers	windows.txt	/*special-buffers*
+specifies	vim9class.txt	/*specifies*
 speed-up	tips.txt	/*speed-up*
 spell	spell.txt	/*spell*
 spell-ACCENT	spell.txt	/*spell-ACCENT*
@@ -9780,6 +9816,7 @@ swap-file	recover.txt	/*swap-file*
 swapchoice-variable	eval.txt	/*swapchoice-variable*
 swapcommand-variable	eval.txt	/*swapcommand-variable*
 swapfile-changed	version4.txt	/*swapfile-changed*
+swapfilelist()	builtin.txt	/*swapfilelist()*
 swapinfo()	builtin.txt	/*swapinfo()*
 swapname()	builtin.txt	/*swapname()*
 swapname-variable	eval.txt	/*swapname-variable*
@@ -9890,6 +9927,7 @@ t_RB	term.txt	/*t_RB*
 t_RC	term.txt	/*t_RC*
 t_RF	term.txt	/*t_RF*
 t_RI	term.txt	/*t_RI*
+t_RK	term.txt	/*t_RK*
 t_RS	term.txt	/*t_RS*
 t_RT	term.txt	/*t_RT*
 t_RV	term.txt	/*t_RV*
@@ -10177,6 +10215,7 @@ termdebug_popup	terminal.txt	/*termdebug_popup*
 termdebug_shortcuts	terminal.txt	/*termdebug_shortcuts*
 termdebug_use_prompt	terminal.txt	/*termdebug_use_prompt*
 termdebug_wide	terminal.txt	/*termdebug_wide*
+termdebug_winbar	terminal.txt	/*termdebug_winbar*
 terminal	terminal.txt	/*terminal*
 terminal-api	terminal.txt	/*terminal-api*
 terminal-autoshelldir	terminal.txt	/*terminal-autoshelldir*
@@ -10753,6 +10792,7 @@ vim9-unpack-ignore	vim9.txt	/*vim9-unpack-ignore*
 vim9-user-command	vim9.txt	/*vim9-user-command*
 vim9-variable-arguments	vim9.txt	/*vim9-variable-arguments*
 vim9.txt	vim9.txt	/*vim9.txt*
+vim9class.txt	vim9class.txt	/*vim9class.txt*
 vim9script	vim9.txt	/*vim9script*
 vim:	options.txt	/*vim:*
 vim_announce	intro.txt	/*vim_announce*
@@ -10844,11 +10884,14 @@ w:quickfix_title	quickfix.txt	/*w:quickfix_title*
 w:var	eval.txt	/*w:var*
 waittime	channel.txt	/*waittime*
 warningmsg-variable	eval.txt	/*warningmsg-variable*
+wdl-syntax	syntax.txt	/*wdl-syntax*
+wdl.vim	syntax.txt	/*wdl.vim*
 white-space	pattern.txt	/*white-space*
 whitespace	pattern.txt	/*whitespace*
 wildcard	editing.txt	/*wildcard*
 wildcards	editing.txt	/*wildcards*
 wildmenumode()	builtin.txt	/*wildmenumode()*
+win-scrolled-resized	windows.txt	/*win-scrolled-resized*
 win16	os_win32.txt	/*win16*
 win32	os_win32.txt	/*win32*
 win32-!start	gui_w32.txt	/*win32-!start*
