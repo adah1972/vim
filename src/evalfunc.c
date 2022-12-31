@@ -215,7 +215,7 @@ check_arg_type(
 	type_T		*actual,
 	argcontext_T	*context)
 {
-    return need_type(actual, expected,
+    return need_type(actual, expected, FALSE,
 	    context->arg_idx - context->arg_count, context->arg_idx + 1,
 	    context->arg_cctx, FALSE, FALSE);
 }
@@ -229,7 +229,7 @@ check_arg_type_mod(
 	type_T		*actual,
 	argcontext_T	*context)
 {
-    if (need_type(actual, expected,
+    if (need_type(actual, expected, FALSE,
 	    context->arg_idx - context->arg_count, context->arg_idx + 1,
 	    context->arg_cctx, FALSE, FALSE) == FAIL)
 	return FAIL;
@@ -2694,6 +2694,8 @@ static funcentry_T global_functions[] =
 			ret_bool,	    f_test_gui_event},
     {"test_ignore_error", 1, 1, FEARG_1,    arg1_string,
 			ret_void,	    f_test_ignore_error},
+    {"test_mswin_event", 2, 2, FEARG_1,     arg2_string_dict,
+			ret_number,	    f_test_mswin_event},
     {"test_null_blob",	0, 0, 0,	    NULL,
 			ret_blob,	    f_test_null_blob},
     {"test_null_channel", 0, 0, 0,	    NULL,
@@ -3770,6 +3772,12 @@ f_empty(typval_T *argvars, typval_T *rettv)
 	case VAR_SPECIAL:
 	    n = argvars[0].vval.v_number != VVAL_TRUE;
 	    break;
+	case VAR_CLASS:
+	    n = argvars[0].vval.v_class != NULL;
+	    break;
+	case VAR_OBJECT:
+	    n = argvars[0].vval.v_object != NULL;
+	    break;
 
 	case VAR_BLOB:
 	    n = argvars[0].vval.v_blob == NULL
@@ -4381,7 +4389,12 @@ f_feedkeys(typval_T *argvars, typval_T *rettv UNUSED)
 
     if (*keys != NUL || execute)
     {
-	if (lowlevel)
+	if (lowlevel
+#ifdef FEAT_VTP
+		&& (!is_term_win32()
+		    || (keys[0] == 3 && ctrl_c_interrupts && typed))
+#endif
+	   )
 	{
 #ifdef USE_INPUT_BUF
 	    ch_log(NULL, "feedkeys() lowlevel: %s", keys);
@@ -7267,6 +7280,8 @@ f_len(typval_T *argvars, typval_T *rettv)
 	case VAR_JOB:
 	case VAR_CHANNEL:
 	case VAR_INSTR:
+	case VAR_CLASS:
+	case VAR_OBJECT:
 	    emsg(_(e_invalid_type_for_len));
 	    break;
     }
@@ -10183,7 +10198,9 @@ f_substitute(typval_T *argvars, typval_T *rettv)
 
     if (argvars[2].v_type == VAR_FUNC
 	    || argvars[2].v_type == VAR_PARTIAL
-	    || argvars[2].v_type == VAR_INSTR)
+	    || argvars[2].v_type == VAR_INSTR
+	    || argvars[2].v_type == VAR_CLASS
+	    || argvars[2].v_type == VAR_OBJECT)
 	expr = &argvars[2];
     else
 	sub = tv_get_string_buf_chk(&argvars[2], subbuf);
@@ -10617,6 +10634,8 @@ f_type(typval_T *argvars, typval_T *rettv)
 	case VAR_CHANNEL: n = VAR_TYPE_CHANNEL; break;
 	case VAR_BLOB:    n = VAR_TYPE_BLOB; break;
 	case VAR_INSTR:   n = VAR_TYPE_INSTR; break;
+	case VAR_CLASS:   n = VAR_TYPE_CLASS; break;
+	case VAR_OBJECT:  n = VAR_TYPE_OBJECT; break;
 	case VAR_UNKNOWN:
 	case VAR_ANY:
 	case VAR_VOID:

@@ -225,19 +225,19 @@ handle_foldcolumn(win_T *wp, winlinevars_T *wlv)
     // Allocate a buffer, "wlv->extra[]" may already be in use.
     vim_free(wlv->p_extra_free);
     wlv->p_extra_free = alloc(MAX_MCO * fdc + 1);
-    if (wlv->p_extra_free != NULL)
-    {
-	wlv->n_extra = (int)fill_foldcolumn(wlv->p_extra_free,
-							 wp, FALSE, wlv->lnum);
-	wlv->p_extra_free[wlv->n_extra] = NUL;
-	wlv->p_extra = wlv->p_extra_free;
-	wlv->c_extra = NUL;
-	wlv->c_final = NUL;
-	if (use_cursor_line_highlight(wp, wlv->lnum))
-	    wlv->char_attr = hl_combine_attr(wlv->wcr_attr, HL_ATTR(HLF_CLF));
-	else
-	    wlv->char_attr = hl_combine_attr(wlv->wcr_attr, HL_ATTR(HLF_FC));
-    }
+    if (wlv->p_extra_free == NULL)
+	return;
+
+    wlv->n_extra = (int)fill_foldcolumn(wlv->p_extra_free,
+	    wp, FALSE, wlv->lnum);
+    wlv->p_extra_free[wlv->n_extra] = NUL;
+    wlv->p_extra = wlv->p_extra_free;
+    wlv->c_extra = NUL;
+    wlv->c_final = NUL;
+    if (use_cursor_line_highlight(wp, wlv->lnum))
+	wlv->char_attr = hl_combine_attr(wlv->wcr_attr, HL_ATTR(HLF_CLF));
+    else
+	wlv->char_attr = hl_combine_attr(wlv->wcr_attr, HL_ATTR(HLF_FC));
 }
 #endif
 
@@ -985,6 +985,36 @@ win_line_continue(winlinevars_T *wlv)
 	wlv->char_attr = wlv->win_attr;
 }
 
+#ifdef FEAT_SYN_HL
+    static void
+apply_cursorline_highlight(
+	winlinevars_T *wlv,
+	int sign_present UNUSED)
+{
+    wlv->cul_attr = HL_ATTR(HLF_CUL);
+# ifdef FEAT_SIGNS
+    // Combine the 'cursorline' and sign highlighting, depending on
+    // the sign priority.
+    if (sign_present && wlv->sattr.sat_linehl > 0)
+    {
+	if (wlv->sattr.sat_priority >= 100)
+	    wlv->line_attr = hl_combine_attr(wlv->cul_attr, wlv->line_attr);
+	else
+	    wlv->line_attr = hl_combine_attr(wlv->line_attr, wlv->cul_attr);
+    }
+    else
+# endif
+# if defined(FEAT_QUICKFIX)
+	// let the line attribute overrule 'cursorline', otherwise
+	// it disappears when both have background set;
+	// 'cursorline' can use underline or bold to make it show
+	wlv->line_attr = hl_combine_attr(wlv->cul_attr, wlv->line_attr);
+# else
+	wlv->line_attr = wlv->cul_attr;
+# endif
+}
+#endif
+
 /*
  * Display line "lnum" of window 'wp' on the screen.
  * Start at row "startrow", stop when "endrow" is reached.
@@ -1728,35 +1758,10 @@ win_line(
 	    wlv.cul_screenline = (wp->w_p_wrap
 				   && (wp->w_p_culopt_flags & CULOPT_SCRLINE));
 
-	    // Only set wlv.line_attr here when "screenline" is not present in
-	    // 'cursorlineopt'.  Otherwise it's done later.
+	    // Only apply CursorLine highlight here when "screenline" is not
+	    // present in 'cursorlineopt'.  Otherwise it's done later.
 	    if (!wlv.cul_screenline)
-	    {
-		wlv.cul_attr = HL_ATTR(HLF_CUL);
-# ifdef FEAT_SIGNS
-		// Combine the 'cursorline' and sign highlighting, depending on
-		// the sign priority.
-		if (sign_present && wlv.sattr.sat_linehl > 0)
-		{
-		    if (wlv.sattr.sat_priority >= 100)
-			wlv.line_attr = hl_combine_attr(
-						  wlv.cul_attr, wlv.line_attr);
-		    else
-			wlv.line_attr = hl_combine_attr(
-						  wlv.line_attr, wlv.cul_attr);
-		}
-		else
-# endif
-# if defined(FEAT_QUICKFIX)
-		    // let the line attribute overrule 'cursorline', otherwise
-		    // it disappears when both have background set;
-		    // 'cursorline' can use underline or bold to make it show
-		    wlv.line_attr = hl_combine_attr(
-						  wlv.cul_attr, wlv.line_attr);
-# else
-		    wlv.line_attr = wlv.cul_attr;
-# endif
-	    }
+		apply_cursorline_highlight(&wlv, sign_present);
 	    else
 	    {
 		line_attr_save = wlv.line_attr;
@@ -1850,8 +1855,7 @@ win_line(
 		&& wlv.vcol >= left_curline_col
 		&& wlv.vcol < right_curline_col)
 	{
-	    wlv.cul_attr = HL_ATTR(HLF_CUL);
-	    wlv.line_attr = wlv.cul_attr;
+	    apply_cursorline_highlight(&wlv, sign_present);
 	}
 #endif
 
@@ -2202,11 +2206,14 @@ win_line(
 #ifdef FEAT_DIFF
 	    if (wlv.diff_hlf != (hlf_T)0)
 	    {
+		// When there is extra text (e.g. virtual text) it gets the
+		// diff highlighting for the line, but not for changed text.
 		if (wlv.diff_hlf == HLF_CHD && ptr - line >= change_start
 							   && wlv.n_extra == 0)
 		    wlv.diff_hlf = HLF_TXD;		// changed text
-		if (wlv.diff_hlf == HLF_TXD && ptr - line > change_end
-							   && wlv.n_extra == 0)
+		if (wlv.diff_hlf == HLF_TXD
+			&& ((ptr - line > change_end && wlv.n_extra == 0)
+			       || (wlv.n_extra > 0 && wlv.extra_for_textprop)))
 		    wlv.diff_hlf = HLF_CHD;		// changed line
 		wlv.line_attr = HL_ATTR(wlv.diff_hlf);
 		if (wp->w_p_cul && lnum == wp->w_cursor.lnum

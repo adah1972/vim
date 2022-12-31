@@ -393,8 +393,8 @@ func Test_WinScrolled()
 
   let event = readfile('XscrollEvent')[0]->json_decode()
   call assert_equal({
-        \ 'all': {'leftcol': 1, 'topline': 0, 'width': 0, 'height': 0, 'skipcol': 0},
-        \ '1000': {'leftcol': -1, 'topline': 0, 'width': 0, 'height': 0, 'skipcol': 0}
+        \ 'all': {'leftcol': 1, 'topline': 0, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1000': {'leftcol': -1, 'topline': 0, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0}
         \ }, event)
 
   " Scroll up/down in Normal mode.
@@ -403,8 +403,8 @@ func Test_WinScrolled()
 
   let event = readfile('XscrollEvent')[0]->json_decode()
   call assert_equal({
-        \ 'all': {'leftcol': 0, 'topline': 1, 'width': 0, 'height': 0, 'skipcol': 0},
-        \ '1000': {'leftcol': 0, 'topline': -1, 'width': 0, 'height': 0, 'skipcol': 0}
+        \ 'all': {'leftcol': 0, 'topline': 1, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1000': {'leftcol': 0, 'topline': -1, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0}
         \ }, event)
 
   " Scroll up/down in Insert mode.
@@ -414,8 +414,8 @@ func Test_WinScrolled()
 
   let event = readfile('XscrollEvent')[0]->json_decode()
   call assert_equal({
-        \ 'all': {'leftcol': 0, 'topline': 1, 'width': 0, 'height': 0, 'skipcol': 0},
-        \ '1000': {'leftcol': 0, 'topline': -1, 'width': 0, 'height': 0, 'skipcol': 0}
+        \ 'all': {'leftcol': 0, 'topline': 1, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1000': {'leftcol': 0, 'topline': -1, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0}
         \ }, event)
 
   " Scroll the window horizontally to focus the last letter of the third line
@@ -427,8 +427,8 @@ func Test_WinScrolled()
 
   let event = readfile('XscrollEvent')[0]->json_decode()
   call assert_equal({
-        \ 'all': {'leftcol': 5, 'topline': 0, 'width': 0, 'height': 0, 'skipcol': 0},
-        \ '1000': {'leftcol': -5, 'topline': 0, 'width': 0, 'height': 0, 'skipcol': 0}
+        \ 'all': {'leftcol': 5, 'topline': 0, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1000': {'leftcol': -5, 'topline': 0, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0}
         \ }, event)
 
   " Ensure the command was triggered for the specified window ID.
@@ -578,6 +578,66 @@ func Test_WinScrolled_long_wrapped()
   call term_sendkeys(buf, '$')
   call term_sendkeys(buf, ":echo g:scrolled\<CR>")
   call WaitForAssert({-> assert_match('^3 ', term_getline(buf, 6))}, 1000)
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_WinScrolled_diff()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    set diffopt+=foldcolumn:0
+    call setline(1, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'])
+    vnew
+    call setline(1, ['d', 'e', 'f', 'g', 'h', 'i'])
+    windo diffthis
+    func WriteScrollEvent()
+      call writefile([json_encode(v:event)], 'XscrollEvent')
+    endfunc
+    au WinScrolled * call WriteScrollEvent()
+  END
+  call writefile(lines, 'Xtest_winscrolled_diff', 'D')
+  let buf = RunVimInTerminal('-S Xtest_winscrolled_diff', {'rows': 8})
+
+  call term_sendkeys(buf, "\<C-E>")
+  call WaitForAssert({-> assert_match('^d', term_getline(buf, 3))}, 1000)
+
+  let event = readfile('XscrollEvent')[0]->json_decode()
+  call assert_equal({
+        \ 'all': {'leftcol': 0, 'topline': 1, 'topfill': 1, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1000': {'leftcol': 0, 'topline': 1, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1001': {'leftcol': 0, 'topline': 0, 'topfill': -1, 'width': 0, 'height': 0, 'skipcol': 0}
+        \ }, event)
+
+  call term_sendkeys(buf, "2\<C-E>")
+  call WaitForAssert({-> assert_match('^f', term_getline(buf, 3))}, 1000)
+
+  let event = readfile('XscrollEvent')[0]->json_decode()
+  call assert_equal({
+        \ 'all': {'leftcol': 0, 'topline': 2, 'topfill': 2, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1000': {'leftcol': 0, 'topline': 2, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1001': {'leftcol': 0, 'topline': 0, 'topfill': -2, 'width': 0, 'height': 0, 'skipcol': 0}
+        \ }, event)
+
+  call term_sendkeys(buf, "\<C-E>")
+  call WaitForAssert({-> assert_match('^g', term_getline(buf, 3))}, 1000)
+
+  let event = readfile('XscrollEvent')[0]->json_decode()
+  call assert_equal({
+        \ 'all': {'leftcol': 0, 'topline': 2, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1000': {'leftcol': 0, 'topline': 1, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1001': {'leftcol': 0, 'topline': 1, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0}
+        \ }, event)
+
+  call term_sendkeys(buf, "2\<C-Y>")
+  call WaitForAssert({-> assert_match('^e', term_getline(buf, 3))}, 1000)
+
+  let event = readfile('XscrollEvent')[0]->json_decode()
+  call assert_equal({
+        \ 'all': {'leftcol': 0, 'topline': 3, 'topfill': 1, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1000': {'leftcol': 0, 'topline': -2, 'topfill': 0, 'width': 0, 'height': 0, 'skipcol': 0},
+        \ '1001': {'leftcol': 0, 'topline': -1, 'topfill': 1, 'width': 0, 'height': 0, 'skipcol': 0}
+        \ }, event)
 
   call StopVimInTerminal(buf)
 endfunc
@@ -1847,6 +1907,15 @@ func Test_Cmdline()
   call feedkeys(":echom 'hello'\<CR>", 'xt')
   call assert_equal(':', g:entered)
   au! CmdlineChanged
+
+  let g:log = []
+  cnoremap <F1> <Cmd>call setcmdline('ls')<CR>
+  autocmd CmdlineChanged : let g:log += [getcmdline()]
+  call feedkeys(":\<F1>", 'xt')
+  call assert_equal(['ls'], g:log)
+  unlet g:log
+  au! CmdlineChanged
+  cunmap <F1>
 
   au! CmdlineEnter : let g:entered = expand('<afile>')
   au! CmdlineLeave : let g:left = expand('<afile>')
@@ -4092,5 +4161,60 @@ func Test_autocmd_nested_setbufvar()
   %bwipe!
 endfunc
 
+func SetupVimTest_shm()
+  let g:bwe = []
+  let g:brp = []
+  set shortmess+=F
+
+  let dirname='XVimTestSHM'
+  call mkdir(dirname, 'R')
+  call writefile(['test'], dirname .. '/1')
+  call writefile(['test'], dirname .. '/2')
+  call writefile(['test'], dirname .. '/3')
+
+  augroup test
+      autocmd!
+      autocmd BufWinEnter * call add(g:bwe, $'BufWinEnter: {expand('<amatch>')}')
+      autocmd BufReadPost * call add(g:brp,  $'BufReadPost: {expand('<amatch>')}')
+  augroup END
+
+  call setqflist([
+        \  {'filename': dirname .. '/1', 'lnum': 1, 'col': 1, 'text': 'test', 'vcol': 0},
+        \  {'filename': dirname .. '/2', 'lnum': 1, 'col': 1, 'text': 'test', 'vcol': 0},
+        \  {'filename': dirname .. '/3', 'lnum': 1, 'col': 1, 'text': 'test', 'vcol': 0}
+        \  ])
+  cdo! substitute/test/TEST
+
+  " clean up
+  noa enew!
+  set shortmess&vim
+  augroup test
+      autocmd!
+  augroup END
+  augroup! test
+endfunc
+
+func Test_autocmd_shortmess()
+  CheckNotMSWindows
+
+  call SetupVimTest_shm()
+  let output = execute(':mess')->split('\n')
+
+  let info = copy(output)->filter({idx, val -> val =~# '\d of 3'} )
+  let bytes = copy(output)->filter({idx, val -> val =~# 'bytes'} )
+
+  " We test the following here:
+  " BufReadPost should have been triggered 3 times, once per file
+  " BufWinEnter should have been triggered 3 times, once per file
+  " FileInfoMessage should have been shown 3 times, regardless of shm option
+  " "(x of 3)" message from :cnext has been shown 3 times
+
+  call assert_equal(3, g:brp->len())
+  call assert_equal(3, g:bwe->len())
+  call assert_equal(3, info->len())
+  call assert_equal(3, bytes->len())
+
+  delfunc SetupVimTest_shm
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab
