@@ -1,4 +1,4 @@
-*builtin.txt*	For Vim version 9.0.  Last change: 2022 Dec 05
+*builtin.txt*	For Vim version 9.0.  Last change: 2022 Dec 23
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -211,6 +211,7 @@ getbufline({buf}, {lnum} [, {end}])
 getbufoneline({buf}, {lnum})	String	line {lnum} of buffer {buf}
 getbufvar({buf}, {varname} [, {def}])
 				any	variable {varname} in buffer {buf}
+getcellwidths()			List	get character cell width overrides
 getchangelist([{buf}])		List	list of change list items
 getchar([expr])			Number or String
 					get one character from the user
@@ -3262,6 +3263,13 @@ getbufvar({buf}, {varname} [, {def}])				*getbufvar()*
 <		Can also be used as a |method|: >
 			GetBufnr()->getbufvar(varname)
 <
+getcellwidths()						*getcellwidths()*
+		Returns a |List| of cell widths of character ranges overridden
+		by |setcellwidths()|.  The format is equal to the argument of
+		|setcellwidths()|.  If no character ranges have their cell
+		widths overridden, an empty List is returned.
+
+
 getchangelist([{buf}])					*getchangelist()*
 		Returns the |changelist| for the buffer {buf}. For the use
 		of {buf}, see |bufname()| above. If buffer {buf} doesn't
@@ -4137,7 +4145,7 @@ getscriptinfo([{opts})					*getscriptinfo()*
 				this script name links to, if any, otherwise
 				zero
 		    variables   A dictionary with the script-local variables.
-				Present only when the a particular script is
+				Present only when a particular script is
 				specified using the "sid" item in {opts}.
 				Note that this is a copy, the value of
 				script-local variables cannot be changed using
@@ -9113,6 +9121,8 @@ string({expr})	Return {expr} converted to a String.  If {expr} is a Number,
 			Blob		0z00112233.44556677.8899
 			List		[item, item]
 			Dictionary	{key: value, key: value}
+			Class		class SomeName
+			Object		object of SomeName {lnum: 1, col: 3}
 
 		When a |List| or |Dictionary| has a recursive reference it is
 		replaced by "[...]" or "{...}".  Using eval() on the result
@@ -9945,6 +9955,8 @@ type({expr})	The result is a Number representing the type of {expr}.
 			Job:	    8  |v:t_job|
 			Channel:    9  |v:t_channel|
 			Blob:	   10  |v:t_blob|
+			Class	   12  |v:t_class|
+			Object	   13  |v:t_object|
 		For backward compatibility, this method can be used: >
 			:if type(myvar) == type(0)
 			:if type(myvar) == type("")
@@ -9965,7 +9977,7 @@ typename({expr})					*typename()*
 		Return a string representation of the type of {expr}.
 		Example: >
 			echo typename([1, 2, 3])
-			list<number>
+<			list<number> ~
 
 
 undofile({name})					*undofile()*

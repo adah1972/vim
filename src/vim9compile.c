@@ -43,16 +43,46 @@ lookup_local(char_u *name, size_t len, lvar_T *lvar, cctx_T *cctx)
     if (len == 0)
 	return FAIL;
 
-    if (len == 4 && STRNCMP(name, "this", 4) == 0
+    if (((len == 4 && STRNCMP(name, "this", 4) == 0)
+		|| (len == 5 && STRNCMP(name, "super", 5) == 0))
 	    && cctx->ctx_ufunc != NULL
-	    && (cctx->ctx_ufunc->uf_flags & FC_OBJECT))
+	    && (cctx->ctx_ufunc->uf_flags & (FC_OBJECT|FC_NEW)))
     {
+	int is_super = *name == 's';
+	if (is_super)
+	{
+	    if (name[5] != '.')
+	    {
+		emsg(_(e_super_must_be_followed_by_dot));
+		return FAIL;
+	    }
+	    if (cctx->ctx_ufunc->uf_class != NULL
+		    && cctx->ctx_ufunc->uf_class->class_extends == NULL)
+	    {
+		emsg(_(e_using_super_not_in_child_class));
+		return FAIL;
+	    }
+	}
 	if (lvar != NULL)
 	{
 	    CLEAR_POINTER(lvar);
-	    lvar->lv_name = (char_u *)"this";
+	    lvar->lv_loop_depth = -1;
+	    lvar->lv_name = (char_u *)(is_super ? "super" : "this");
 	    if (cctx->ctx_ufunc->uf_class != NULL)
+	    {
 		lvar->lv_type = &cctx->ctx_ufunc->uf_class->class_object_type;
+		if (is_super)
+		{
+		    type_T *type = get_type_ptr(cctx->ctx_type_list);
+
+		    if (type != NULL)
+		    {
+			*type = *lvar->lv_type;
+			lvar->lv_type = type;
+			type->tt_flags |= TTFLAG_SUPER;
+		    }
+		}
+	    }
 	}
 	return OK;
     }
@@ -302,28 +332,6 @@ script_var_exists(char_u *name, size_t len, cctx_T *cctx, cstack_T *cstack)
 }
 
 /*
- * If "name" is a class member in cctx->ctx_ufunc->uf_class return the index in
- * class.class_class_members[].
- * Otherwise return -1;
- */
-    static int
-class_member_index(char_u *name, size_t len, cctx_T *cctx)
-{
-    if (cctx == NULL || cctx->ctx_ufunc == NULL
-					  || cctx->ctx_ufunc->uf_class == NULL)
-	return -1;
-    class_T *cl = cctx->ctx_ufunc->uf_class;
-    for (int i = 0; i < cl->class_class_member_count; ++i)
-    {
-	ocmember_T *m = &cl->class_class_members[i];
-	if (STRNCMP(name, m->ocm_name, len) == 0
-		&& m->ocm_name[len] == NUL)
-	    return i;
-    }
-    return -1;
-}
-
-/*
  * Return TRUE if "name" is a local variable, argument, script variable or
  * imported.
  */
@@ -335,10 +343,10 @@ variable_exists(char_u *name, size_t len, cctx_T *cctx)
 		    || arg_exists(name, len, NULL, NULL, NULL, cctx) == OK
 		    || (len == 4
 			&& cctx->ctx_ufunc != NULL
-			&& (cctx->ctx_ufunc->uf_flags & FC_OBJECT)
+			&& (cctx->ctx_ufunc->uf_flags & (FC_OBJECT|FC_NEW))
 			&& STRNCMP(name, "this", 4) == 0)))
 	    || script_var_exists(name, len, cctx, NULL) == OK
-	    || class_member_index(name, len, cctx) >= 0
+	    || class_member_index(name, len, NULL, cctx) >= 0
 	    || find_imported(name, len, FALSE) != NULL;
 }
 
@@ -376,15 +384,21 @@ check_defined(
     if (len == 1 && *p == '_')
 	return OK;
 
-    if (class_member_index(p, len, cctx) >= 0)
-	return OK;
-
     if (script_var_exists(p, len, cctx, cstack) == OK)
     {
 	if (is_arg)
 	    semsg(_(e_argument_already_declared_in_script_str), p);
 	else
 	    semsg(_(e_variable_already_declared_in_script_str), p);
+	return FAIL;
+    }
+
+    if (class_member_index(p, len, NULL, cctx) >= 0)
+    {
+	if (is_arg)
+	    semsg(_(e_argument_already_declared_in_class_str), p);
+	else
+	    semsg(_(e_variable_already_declared_in_class_str), p);
 	return FAIL;
     }
 
@@ -1003,7 +1017,14 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
 	goto theend;
     }
 
-    ufunc = define_function(eap, lambda_name, lines_to_free, FALSE);
+    // Make sure "KeyTyped" is not set, it may cause indent to be written.
+    int save_KeyTyped = KeyTyped;
+    KeyTyped = FALSE;
+
+    ufunc = define_function(eap, lambda_name, lines_to_free, 0);
+
+    KeyTyped = save_KeyTyped;
+
     if (ufunc == NULL)
     {
 	r = eap->skip ? OK : FAIL;
@@ -1323,15 +1344,15 @@ vim9_declare_error(char_u *name)
 	case 'w': scope = _("window"); break;
 	case 't': scope = _("tab"); break;
 	case 'v': scope = "v:"; break;
-	case '$': semsg(_(e_cannot_declare_an_environment_variable), name);
+	case '$': semsg(_(e_cannot_declare_an_environment_variable_str), name);
 		  return;
-	case '&': semsg(_(e_cannot_declare_an_option), name);
+	case '&': semsg(_(e_cannot_declare_an_option_str), name);
 		  return;
 	case '@': semsg(_(e_cannot_declare_a_register_str), name);
 		  return;
 	default: return;
     }
-    semsg(_(e_cannot_declare_a_scope_variable), scope, name);
+    semsg(_(e_cannot_declare_a_scope_variable_str), scope, name);
 }
 
 /*
@@ -1587,13 +1608,19 @@ compile_lhs(
 	    {
 		if (is_decl)
 		{
-		    semsg(_(e_variable_already_declared), lhs->lhs_name);
+		    semsg(_(e_variable_already_declared_str), lhs->lhs_name);
 		    return FAIL;
 		}
 	    }
 	    else if ((lhs->lhs_classmember_idx = class_member_index(
-				       var_start, lhs->lhs_varlen, cctx)) >= 0)
+				 var_start, lhs->lhs_varlen, NULL, cctx)) >= 0)
 	    {
+		if (is_decl)
+		{
+		    semsg(_(e_variable_already_declared_in_class_str),
+								lhs->lhs_name);
+		    return FAIL;
+		}
 		lhs->lhs_dest = dest_class_member;
 		lhs->lhs_class = cctx->ctx_ufunc->uf_class;
 	    }
@@ -1751,7 +1778,7 @@ compile_lhs(
 	if (oplen > 1 && !heredoc)
 	{
 	    // +=, /=, etc. require an existing variable
-	    semsg(_(e_cannot_use_operator_on_new_variable), lhs->lhs_name);
+	    semsg(_(e_cannot_use_operator_on_new_variable_str), lhs->lhs_name);
 	    return FAIL;
 	}
 	if (!is_decl || (lhs->lhs_has_index && !has_cmd
@@ -1854,14 +1881,14 @@ compile_assign_lhs(
 
     if (!lhs->lhs_has_index && lhs->lhs_lvar == &lhs->lhs_arg_lvar)
     {
-	semsg(_(e_cannot_assign_to_argument), lhs->lhs_name);
+	semsg(_(e_cannot_assign_to_argument_str), lhs->lhs_name);
 	return FAIL;
     }
     if (!is_decl && lhs->lhs_lvar != NULL
 			   && lhs->lhs_lvar->lv_const != ASSIGN_VAR
 			   && !lhs->lhs_has_index)
     {
-	semsg(_(e_cannot_assign_to_constant), lhs->lhs_name);
+	semsg(_(e_cannot_assign_to_constant_str), lhs->lhs_name);
 	return FAIL;
     }
     return OK;
@@ -2018,6 +2045,23 @@ compile_load_lhs(
     int
 compile_load_lhs_with_index(lhs_T *lhs, char_u *var_start, cctx_T *cctx)
 {
+    if (lhs->lhs_type->tt_type == VAR_OBJECT)
+    {
+	// "this.value": load "this" object and get the value at index
+	// for an object or class member get the type of the member
+	class_T *cl = (class_T *)lhs->lhs_type->tt_member;
+	type_T *type = class_member_type(cl, var_start + 5,
+					   lhs->lhs_end, &lhs->lhs_member_idx);
+	if (lhs->lhs_member_idx < 0)
+	    return FAIL;
+
+	if (generate_LOAD(cctx, ISN_LOAD, 0, NULL, lhs->lhs_type) == FAIL)
+	    return FAIL;
+	if (cl->class_flags & CLASS_INTERFACE)
+	    return generate_GET_ITF_MEMBER(cctx, cl, lhs->lhs_member_idx, type);
+	return generate_GET_OBJ_MEMBER(cctx, lhs->lhs_member_idx, type);
+    }
+
     compile_load_lhs(lhs, var_start, NULL, cctx);
 
     if (lhs->lhs_has_index)
@@ -2135,7 +2179,22 @@ compile_assign_unlet(
 
 		if (isn == NULL)
 		    return FAIL;
-		isn->isn_arg.vartype = dest_type;
+		isn->isn_arg.storeindex.si_vartype = dest_type;
+		isn->isn_arg.storeindex.si_class = NULL;
+
+		if (dest_type == VAR_OBJECT)
+		{
+		    class_T *cl = (class_T *)lhs->lhs_type->tt_member;
+
+		    if (cl->class_flags & CLASS_INTERFACE)
+		    {
+			// "this.value": load "this" object and get the value
+			// at index for an object or class member get the type
+			// of the member
+			isn->isn_arg.storeindex.si_class = cl;
+			++cl->class_refcount;
+		    }
+		}
 	    }
 	}
 	else if (range)
@@ -2264,7 +2323,7 @@ compile_assignment(
     CLEAR_FIELD(lhs);
     long	start_lnum = SOURCING_LNUM;
 
-    int		has_arg_is_set_prefix = STRNCMP(arg, "ifargisset ", 11) == 0;
+    int	has_arg_is_set_prefix = STRNCMP(arg, "ifargisset ", 11) == 0;
     if (has_arg_is_set_prefix)
     {
 	arg += 11;
@@ -3021,7 +3080,7 @@ compile_def_function(
 	goto erret;
 
     // For an object method and constructor "this" is the first local variable.
-    if (ufunc->uf_flags & FC_OBJECT)
+    if (ufunc->uf_flags & (FC_OBJECT|FC_NEW))
     {
 	dfunc_T *dfunc = ((dfunc_T *)def_functions.ga_data)
 							 + ufunc->uf_dfunc_idx;

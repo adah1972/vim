@@ -489,6 +489,12 @@ func Test_getcompletion()
   let l = getcompletion('paint', 'function')
   call assert_equal([], l)
 
+  if !has('ruby')
+    " global_functions[] has an entry but it doesn't have an implemention
+    let l = getcompletion('ruby', 'function')
+    call assert_equal([], l)
+  endif
+
   let Flambda = {-> 'hello'}
   let l = getcompletion('', 'function')
   let l = filter(l, {i, v -> v =~ 'lambda'})
@@ -652,6 +658,20 @@ func Test_getcompletion()
   call assert_fails("call getcompletion('\\\\@!\\\\@=', 'buffer')", 'E871:')
   call assert_fails('call getcompletion("", "burp")', 'E475:')
   call assert_fails('call getcompletion("abc", [])', 'E1174:')
+endfunc
+
+func Test_multibyte_expression()
+  " Get a dialog in the GUI
+  CheckNotGui
+
+  " This was using uninitialized memory.
+  let lines =<< trim END
+      set verbose=6
+      norm @=ٷ
+      qall!
+  END
+  call writefile(lines, 'XmultiScript', 'D')
+  call RunVim('', '', '-u NONE -n -e -s -S XmultiScript')
 endfunc
 
 " Test for getcompletion() with "fuzzy" in 'wildoptions'

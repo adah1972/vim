@@ -146,19 +146,19 @@ read_buffer(
     void
 buffer_ensure_loaded(buf_T *buf)
 {
-    if (buf->b_ml.ml_mfp == NULL)
-    {
-	aco_save_T	aco;
+    if (buf->b_ml.ml_mfp != NULL)
+	return;
 
-	// Make sure the buffer is in a window.  If not then skip it.
-	aucmd_prepbuf(&aco, buf);
-	if (curbuf == buf)
-	{
-	    if (swap_exists_action != SEA_READONLY)
-		swap_exists_action = SEA_NONE;
-	    open_buffer(FALSE, NULL, 0);
-	    aucmd_restbuf(&aco);
-	}
+    aco_save_T	aco;
+
+    // Make sure the buffer is in a window.  If not then skip it.
+    aucmd_prepbuf(&aco, buf);
+    if (curbuf == buf)
+    {
+	if (swap_exists_action != SEA_READONLY)
+	    swap_exists_action = SEA_NONE;
+	open_buffer(FALSE, NULL, 0);
+	aucmd_restbuf(&aco);
     }
 }
 #endif
@@ -357,34 +357,34 @@ open_buffer(
     apply_autocmds(EVENT_BUFENTER, NULL, NULL, FALSE, curbuf);
 #endif
 
-    if (retval == OK)
+    if (retval != OK)
+	return retval;
+
+    // The autocommands may have changed the current buffer.  Apply the
+    // modelines to the correct buffer, if it still exists and is loaded.
+    if (bufref_valid(&old_curbuf) && old_curbuf.br_buf->b_ml.ml_mfp != NULL)
     {
-	// The autocommands may have changed the current buffer.  Apply the
-	// modelines to the correct buffer, if it still exists and is loaded.
-	if (bufref_valid(&old_curbuf) && old_curbuf.br_buf->b_ml.ml_mfp != NULL)
+	aco_save_T	aco;
+
+	// Go to the buffer that was opened, make sure it is in a window.
+	// If not then skip it.
+	aucmd_prepbuf(&aco, old_curbuf.br_buf);
+	if (curbuf == old_curbuf.br_buf)
 	{
-	    aco_save_T	aco;
+	    do_modelines(0);
+	    curbuf->b_flags &= ~(BF_CHECK_RO | BF_NEVERLOADED);
 
-	    // Go to the buffer that was opened, make sure it is in a window.
-	    // If not then skip it.
-	    aucmd_prepbuf(&aco, old_curbuf.br_buf);
-	    if (curbuf == old_curbuf.br_buf)
-	    {
-		do_modelines(0);
-		curbuf->b_flags &= ~(BF_CHECK_RO | BF_NEVERLOADED);
-
-		if ((flags & READ_NOWINENTER) == 0)
+	    if ((flags & READ_NOWINENTER) == 0)
 #ifdef FEAT_EVAL
-		    apply_autocmds_retval(EVENT_BUFWINENTER, NULL, NULL,
-						       FALSE, curbuf, &retval);
+		apply_autocmds_retval(EVENT_BUFWINENTER, NULL, NULL,
+			FALSE, curbuf, &retval);
 #else
-		    apply_autocmds(EVENT_BUFWINENTER, NULL, NULL,
-								FALSE, curbuf);
+	    apply_autocmds(EVENT_BUFWINENTER, NULL, NULL,
+		    FALSE, curbuf);
 #endif
 
-		// restore curwin/curbuf and a few other things
-		aucmd_restbuf(&aco);
-	    }
+	    // restore curwin/curbuf and a few other things
+	    aucmd_restbuf(&aco);
 	}
     }
 
@@ -1761,7 +1761,6 @@ do_bufdel(
 	}
     }
 
-
     return errormsg;
 }
 
@@ -3019,20 +3018,20 @@ fname_match(
     char_u	*p;
 
     // extra check for valid arguments
-    if (name != NULL && rmp->regprog != NULL)
+    if (name == NULL || rmp->regprog == NULL)
+	return NULL;
+
+    // Ignore case when 'fileignorecase' or the argument is set.
+    rmp->rm_ic = p_fic || ignore_case;
+    if (vim_regexec(rmp, name, (colnr_T)0))
+	match = name;
+    else if (rmp->regprog != NULL)
     {
-	// Ignore case when 'fileignorecase' or the argument is set.
-	rmp->rm_ic = p_fic || ignore_case;
-	if (vim_regexec(rmp, name, (colnr_T)0))
+	// Replace $(HOME) with '~' and try matching again.
+	p = home_replace_save(NULL, name);
+	if (p != NULL && vim_regexec(rmp, p, (colnr_T)0))
 	    match = name;
-	else if (rmp->regprog != NULL)
-	{
-	    // Replace $(HOME) with '~' and try matching again.
-	    p = home_replace_save(NULL, name);
-	    if (p != NULL && vim_regexec(rmp, p, (colnr_T)0))
-		match = name;
-	    vim_free(p);
-	}
+	vim_free(p);
     }
 
     return match;
@@ -3160,16 +3159,15 @@ wininfo_other_tab_diff(wininfo_T *wip)
 {
     win_T	*wp;
 
-    if (wip->wi_opt.wo_diff)
-    {
-	FOR_ALL_WINDOWS(wp)
-	    // return FALSE when it's a window in the current tab page, thus
-	    // the buffer was in diff mode here
-	    if (wip->wi_win == wp)
-		return FALSE;
-	return TRUE;
-    }
-    return FALSE;
+    if (!wip->wi_opt.wo_diff)
+	return FALSE;
+
+    FOR_ALL_WINDOWS(wp)
+	// return FALSE when it's a window in the current tab page, thus
+	// the buffer was in diff mode here
+	if (wip->wi_win == wp)
+	    return FALSE;
+    return TRUE;
 }
 #endif
 
@@ -3198,27 +3196,27 @@ find_wininfo(
 		&& (!need_options || wip->wi_optset))
 	    break;
 
+    if (wip != NULL)
+	return wip;
+
     // If no wininfo for curwin, use the first in the list (that doesn't have
     // 'diff' set and is in another tab page).
     // If "need_options" is TRUE skip entries that don't have options set,
     // unless the window is editing "buf", so we can copy from the window
     // itself.
-    if (wip == NULL)
-    {
 #ifdef FEAT_DIFF
-	if (skip_diff_buffer)
-	{
-	    FOR_ALL_BUF_WININFO(buf, wip)
-		if (!wininfo_other_tab_diff(wip)
-			&& (!need_options || wip->wi_optset
-			    || (wip->wi_win != NULL
-					     && wip->wi_win->w_buffer == buf)))
-		    break;
-	}
-	else
-#endif
-	    wip = buf->b_wininfo;
+    if (skip_diff_buffer)
+    {
+	FOR_ALL_BUF_WININFO(buf, wip)
+	    if (!wininfo_other_tab_diff(wip)
+		    && (!need_options || wip->wi_optset
+			|| (wip->wi_win != NULL
+			    && wip->wi_win->w_buffer == buf)))
+		break;
     }
+    else
+#endif
+	wip = buf->b_wininfo;
     return wip;
 }
 
@@ -3582,18 +3580,18 @@ buf_set_name(int fnum, char_u *name)
     buf_T	*buf;
 
     buf = buflist_findnr(fnum);
-    if (buf != NULL)
-    {
-	if (buf->b_sfname != buf->b_ffname)
-	    vim_free(buf->b_sfname);
-	vim_free(buf->b_ffname);
-	buf->b_ffname = vim_strsave(name);
-	buf->b_sfname = NULL;
-	// Allocate ffname and expand into full path.  Also resolves .lnk
-	// files on Win32.
-	fname_expand(buf, &buf->b_ffname, &buf->b_sfname);
-	buf->b_fname = buf->b_sfname;
-    }
+    if (buf == NULL)
+	return;
+
+    if (buf->b_sfname != buf->b_ffname)
+	vim_free(buf->b_sfname);
+    vim_free(buf->b_ffname);
+    buf->b_ffname = vim_strsave(name);
+    buf->b_sfname = NULL;
+    // Allocate ffname and expand into full path.  Also resolves .lnk
+    // files on Win32.
+    fname_expand(buf, &buf->b_ffname, &buf->b_sfname);
+    buf->b_fname = buf->b_sfname;
 }
 
 /*
@@ -4617,6 +4615,8 @@ build_stl_str_hl(
 #endif
 	if (vim_strchr(STL_ALL, *s) == NULL)
 	{
+	    if (*s == NUL)  // can happen with "%0"
+		break;
 	    s++;
 	    continue;
 	}
@@ -5921,14 +5921,14 @@ buf_get_fname(buf_T *buf)
     void
 set_buflisted(int on)
 {
-    if (on != curbuf->b_p_bl)
-    {
-	curbuf->b_p_bl = on;
-	if (on)
-	    apply_autocmds(EVENT_BUFADD, NULL, NULL, FALSE, curbuf);
-	else
-	    apply_autocmds(EVENT_BUFDELETE, NULL, NULL, FALSE, curbuf);
-    }
+    if (on == curbuf->b_p_bl)
+	return;
+
+    curbuf->b_p_bl = on;
+    if (on)
+	apply_autocmds(EVENT_BUFADD, NULL, NULL, FALSE, curbuf);
+    else
+	apply_autocmds(EVENT_BUFDELETE, NULL, NULL, FALSE, curbuf);
 }
 
 /*

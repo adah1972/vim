@@ -968,9 +968,9 @@ EXTERN char e_couldnt_find_pattern[]
 #ifdef FEAT_SYN_HL
 EXTERN char e_illegal_argument_str_2[]
 	INIT(= N_("E390: Illegal argument: %s"));
-EXTERN char e_no_such_syntax_cluster_1[]
+EXTERN char e_no_such_syntax_cluster_str_1[]
 	INIT(= N_("E391: No such syntax cluster: %s"));
-EXTERN char e_no_such_syntax_cluster_2[]
+EXTERN char e_no_such_syntax_cluster_str_2[]
 	INIT(= N_("E392: No such syntax cluster: %s"));
 EXTERN char e_groupthere_not_accepted_here[]
 	INIT(= N_("E393: group[t]here not accepted here"));
@@ -1028,7 +1028,7 @@ EXTERN char e_fg_color_unknown[]
 	INIT(= N_("E419: FG color unknown"));
 EXTERN char e_bg_color_unknown[]
 	INIT(= N_("E420: BG color unknown"));
-EXTERN char e_color_name_or_number_not_recognized[]
+EXTERN char e_color_name_or_number_not_recognized_str[]
 	INIT(= N_("E421: Color name or number not recognized: %s"));
 EXTERN char e_terminal_code_too_long_str[]
 	INIT(= N_("E422: Terminal code too long: %s"));
@@ -1796,7 +1796,7 @@ EXTERN char e_list_required[]
 	INIT(= N_("E714: List required"));
 EXTERN char e_dictionary_required[]
 	INIT(= N_("E715: Dictionary required"));
-EXTERN char e_key_not_present_in_dictionary[]
+EXTERN char e_key_not_present_in_dictionary_str[]
 	INIT(= N_("E716: Key not present in Dictionary: \"%s\""));
 EXTERN char e_dictionary_entry_already_exists[]
 	INIT(= N_("E717: Dictionary entry already exists"));
@@ -1804,13 +1804,13 @@ EXTERN char e_funcref_required[]
 	INIT(= N_("E718: Funcref required"));
 EXTERN char e_cannot_slice_dictionary[]
 	INIT(= N_("E719: Cannot slice a Dictionary"));
-EXTERN char e_missing_colon_in_dictionary[]
+EXTERN char e_missing_colon_in_dictionary_str[]
 	INIT(= N_("E720: Missing colon in Dictionary: %s"));
-EXTERN char e_duplicate_key_in_dictionary[]
+EXTERN char e_duplicate_key_in_dictionary_str[]
 	INIT(= N_("E721: Duplicate key in Dictionary: \"%s\""));
-EXTERN char e_missing_comma_in_dictionary[]
+EXTERN char e_missing_comma_in_dictionary_str[]
 	INIT(= N_("E722: Missing comma in Dictionary: %s"));
-EXTERN char e_missing_dict_end[]
+EXTERN char e_missing_dict_end_str[]
 	INIT(= N_("E723: Missing end of Dictionary '}': %s"));
 EXTERN char e_variable_nested_too_deep_for_displaying[]
 	INIT(= N_("E724: Variable nested too deep for displaying"));
@@ -2111,7 +2111,7 @@ EXTERN char e_undo_number_nr_not_found[]
 EXTERN char e_bf_key_init_called_with_empty_password[]
 	INIT(= N_("E831: bf_key_init() called with empty password"));
 # ifdef FEAT_PERSISTENT_UNDO
-EXTERN char e_non_encrypted_file_has_encrypted_undo_file[]
+EXTERN char e_non_encrypted_file_has_encrypted_undo_file_str[]
 	INIT(= N_("E832: Non-encrypted file has encrypted undo file: %s"));
 # endif
 #else
@@ -2397,7 +2397,7 @@ EXTERN char e_cannot_use_redir_inside_execute[]
 EXTERN char e_buffer_cannot_be_registered[]
 	INIT(= N_("E931: Buffer cannot be registered"));
 #ifdef FEAT_EVAL
-EXTERN char e_closure_function_should_not_be_at_top_level[]
+EXTERN char e_closure_function_should_not_be_at_top_level_str[]
 	INIT(= N_("E932: Closure function should not be at top level: %s"));
 EXTERN char e_function_was_deleted_str[]
 	INIT(= N_("E933: Function was deleted: %s"));
@@ -2513,7 +2513,7 @@ EXTERN char e_property_type_str_already_defined[]
 	INIT(= N_("E969: Property type %s already defined"));
 EXTERN char e_unknown_highlight_group_name_str[]
 	INIT(= N_("E970: Unknown highlight group name: '%s'"));
-EXTERN char e_type_not_exist[]
+EXTERN char e_property_type_str_does_not_exist[]
 	INIT(= N_("E971: Property type %s does not exist"));
 #endif
 #ifdef FEAT_EVAL
@@ -2634,17 +2634,17 @@ EXTERN char e_invalid_key_str[]
 	INIT(= N_("E1014: Invalid key: %s"));
 EXTERN char e_name_expected_str[]
 	INIT(= N_("E1015: Name expected: %s"));
-EXTERN char e_cannot_declare_a_scope_variable[]
+EXTERN char e_cannot_declare_a_scope_variable_str[]
 	INIT(= N_("E1016: Cannot declare a %s variable: %s"));
-EXTERN char e_cannot_declare_an_environment_variable[]
+EXTERN char e_cannot_declare_an_environment_variable_str[]
 	INIT(= N_("E1016: Cannot declare an environment variable: %s"));
-EXTERN char e_variable_already_declared[]
+EXTERN char e_variable_already_declared_str[]
 	INIT(= N_("E1017: Variable already declared: %s"));
-EXTERN char e_cannot_assign_to_constant[]
+EXTERN char e_cannot_assign_to_constant_str[]
 	INIT(= N_("E1018: Cannot assign to a constant: %s"));
 EXTERN char e_can_only_concatenate_to_string[]
 	INIT(= N_("E1019: Can only concatenate to string"));
-EXTERN char e_cannot_use_operator_on_new_variable[]
+EXTERN char e_cannot_use_operator_on_new_variable_str[]
 	INIT(= N_("E1020: Cannot use an operator on a new variable: %s"));
 EXTERN char e_const_requires_a_value[]
 	INIT(= N_("E1021: Const requires a value"));
@@ -2674,7 +2674,7 @@ EXTERN char e_missing_catch_or_finally[]
 	INIT(= N_("E1032: Missing :catch or :finally"));
 EXTERN char e_catch_unreachable_after_catch_all[]
 	INIT(= N_("E1033: Catch unreachable after catch-all"));
-EXTERN char e_cannot_use_reserved_name[]
+EXTERN char e_cannot_use_reserved_name_str[]
 	INIT(= N_("E1034: Cannot use reserved name %s"));
 EXTERN char e_percent_requires_number_arguments[]
 	// xgettext:no-c-format
@@ -2713,7 +2713,7 @@ EXTERN char e_colon_required_before_range_str[]
 #ifdef FEAT_EVAL
 EXTERN char e_wrong_argument_type_for_plus[]
 	INIT(= N_("E1051: Wrong argument type for +"));
-EXTERN char e_cannot_declare_an_option[]
+EXTERN char e_cannot_declare_an_option_str[]
 	INIT(= N_("E1052: Cannot declare an option: %s"));
 EXTERN char e_could_not_import_str[]
 	INIT(= N_("E1053: Could not import \"%s\""));
@@ -2791,7 +2791,7 @@ EXTERN char e_script_cannot_import_itself[]
 	INIT(= N_("E1088: Script cannot import itself"));
 EXTERN char e_unknown_variable_str[]
 	INIT(= N_("E1089: Unknown variable: %s"));
-EXTERN char e_cannot_assign_to_argument[]
+EXTERN char e_cannot_assign_to_argument_str[]
 	INIT(= N_("E1090: Cannot assign to argument %s"));
 EXTERN char e_function_is_not_compiled_str[]
 	INIT(= N_("E1091: Function is not compiled: %s"));
@@ -3346,8 +3346,8 @@ EXTERN char e_not_allowed_to_add_or_remove_entries_str[]
 #ifdef FEAT_EVAL
 EXTERN char e_class_name_must_start_with_uppercase_letter_str[]
 	INIT(= N_("E1314: Class name must start with an uppercase letter: %s"));
-EXTERN char e_white_space_required_after_class_name_str[]
-	INIT(= N_("E1315: White space required after class name: %s"));
+EXTERN char e_white_space_required_after_name_str[]
+	INIT(= N_("E1315: White space required after name: %s"));
 EXTERN char e_class_can_only_be_defined_in_vim9_script[]
 	INIT(= N_("E1316: Class can only be defined in Vim9 script"));
 EXTERN char e_invalid_object_member_declaration_str[]
@@ -3400,4 +3400,46 @@ EXTERN char e_member_not_found_on_class_str_str[]
 #ifdef FEAT_PROP_POPUP
 EXTERN char e_cannot_add_textprop_with_text_after_using_textprop_with_negative_id[]
 	INIT(= N_("E1339: Cannot add a textprop with text after using a textprop with a negative id"));
+#endif
+#ifdef FEAT_EVAL
+EXTERN char e_argument_already_declared_in_class_str[]
+	INIT(= N_("E1340: Argument already declared in the class: %s"));
+EXTERN char e_variable_already_declared_in_class_str[]
+	INIT(= N_("E1341: Variable already declared in the class: %s"));
+EXTERN char e_interface_can_only_be_defined_in_vim9_script[]
+	INIT(= N_("E1342: Interface can only be defined in Vim9 script"));
+EXTERN char e_interface_name_must_start_with_uppercase_letter_str[]
+	INIT(= N_("E1343: Interface name must start with an uppercase letter: %s"));
+EXTERN char e_cannot_initialize_member_in_interface[]
+	INIT(= N_("E1344: Cannot initialize a member in an interface"));
+EXTERN char e_not_valid_command_in_interface_str[]
+	INIT(= N_("E1345: Not a valid command in an interface: %s"));
+EXTERN char e_interface_name_not_found_str[]
+	INIT(= N_("E1346: Interface name not found: %s"));
+EXTERN char e_not_valid_interface_str[]
+	INIT(= N_("E1347: Not a valid interface: %s"));
+EXTERN char e_member_str_of_interface_str_not_implemented[]
+	INIT(= N_("E1348: Member \"%s\" of interface \"%s\" not implemented"));
+EXTERN char e_function_str_of_interface_str_not_implemented[]
+	INIT(= N_("E1349: Function \"%s\" of interface \"%s\" not implemented"));
+EXTERN char e_duplicate_implements[]
+	INIT(= N_("E1350: Duplicate \"implements\""));
+EXTERN char e_duplicate_interface_after_implements_str[]
+	INIT(= N_("E1351: Duplicate interface after \"implements\": %s"));
+EXTERN char e_duplicate_extends[]
+	INIT(= N_("E1352: Duplicate \"extends\""));
+EXTERN char e_class_name_not_found_str[]
+	INIT(= N_("E1353: Class name not found: %s"));
+EXTERN char e_cannot_extend_str[]
+	INIT(= N_("E1354: Cannot extend %s"));
+EXTERN char e_duplicate_function_str[]
+	INIT(= N_("E1355: Duplicate function: %s"));
+EXTERN char e_super_must_be_followed_by_dot[]
+	INIT(= N_("E1356: \"super\" must be followed by a dot"));
+EXTERN char e_using_super_not_in_class_function[]
+	INIT(= N_("E1357: Using \"super\" not in a class function"));
+EXTERN char e_using_super_not_in_child_class[]
+	INIT(= N_("E1358: Using \"super\" not in a child class"));
+EXTERN char e_cannot_define_new_function_in_abstract_class[]
+	INIT(= N_("E1359: Cannot define a \"new\" function in an abstract class"));
 #endif

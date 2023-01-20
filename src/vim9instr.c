@@ -150,6 +150,26 @@ generate_GET_OBJ_MEMBER(cctx_T *cctx, int idx, type_T *type)
 }
 
 /*
+ * Generate ISN_GET_ITF_MEMBER - access member of interface at bottom of stack
+ * by index.
+ */
+    int
+generate_GET_ITF_MEMBER(cctx_T *cctx, class_T *itf, int idx, type_T *type)
+{
+    RETURN_OK_IF_SKIP(cctx);
+
+    // drop the object type
+    isn_T *isn = generate_instr_drop(cctx, ISN_GET_ITF_MEMBER, 1);
+    if (isn == NULL)
+	return FAIL;
+
+    isn->isn_arg.classmember.cm_class = itf;
+    ++itf->class_refcount;
+    isn->isn_arg.classmember.cm_idx = idx;
+    return push_type_stack2(cctx, type, &t_any);
+}
+
+/*
  * Generate ISN_STORE_THIS - store value in member of "this" object with member
  * index "idx".
  */
@@ -254,11 +274,11 @@ check_number_or_float(vartype_T type1, vartype_T type2, char_u *op)
  */
     int
 generate_add_instr(
-	cctx_T *cctx,
-	vartype_T vartype,
-	type_T *type1,
-	type_T *type2,
-	exprtype_T expr_type)
+	cctx_T	    *cctx,
+	vartype_T   vartype,
+	type_T	    *type1,
+	type_T	    *type2,
+	exprtype_T  expr_type)
 {
     isn_T	*isn = generate_instr_drop(cctx,
 		      vartype == VAR_NUMBER ? ISN_OPNR
@@ -416,6 +436,8 @@ get_compare_isn(
 	    case VAR_LIST: isntype = ISN_COMPARELIST; break;
 	    case VAR_DICT: isntype = ISN_COMPAREDICT; break;
 	    case VAR_FUNC: isntype = ISN_COMPAREFUNC; break;
+	    case VAR_CLASS: isntype = ISN_COMPARECLASS; break;
+	    case VAR_OBJECT: isntype = ISN_COMPAREOBJECT; break;
 	    default: isntype = ISN_COMPAREANY; break;
 	}
     }
@@ -453,6 +475,13 @@ get_compare_isn(
     {
 	semsg(_(e_cannot_use_str_with_str),
 		exprtype == EXPR_IS ? "is" : "isnot" , vartype_name(vartype1));
+	return ISN_DROP;
+    }
+    if (!(exprtype == EXPR_IS || exprtype == EXPR_ISNOT
+		|| exprtype == EXPR_EQUAL || exprtype == EXPR_NEQUAL)
+	    && (isntype == ISN_COMPAREOBJECT || isntype == ISN_COMPARECLASS))
+    {
+	semsg(_(e_invalid_operation_for_str), vartype_name(vartype1));
 	return ISN_DROP;
     }
     if (isntype == ISN_DROP
@@ -1610,7 +1639,8 @@ generate_BCALL(cctx_T *cctx, int func_idx, int argcount, int method_call)
 
     // Drop the argument types and push the return type.
     stack->ga_len -= argcount;
-    type = internal_func_ret_type(func_idx, argcount, argtypes, &decl_type);
+    type = internal_func_ret_type(func_idx, argcount, argtypes, &decl_type,
+							  cctx->ctx_type_list);
     if (push_type_stack2(cctx, type, decl_type) == FAIL)
 	return FAIL;
 
@@ -1832,7 +1862,13 @@ check_func_args_from_type(
 		type_T	*expected;
 
 		if (varargs && i >= type->tt_argcount - 1)
-		    expected = type->tt_args[type->tt_argcount - 1]->tt_member;
+		{
+		    expected = type->tt_args[type->tt_argcount - 1];
+		    if (expected != NULL && expected->tt_type == VAR_LIST)
+			expected = expected->tt_member;
+		    if (expected == NULL)
+			expected = &t_any;
+		}
 		else if (i >= type->tt_min_argcount
 					     && actual->tt_type == VAR_SPECIAL)
 		    expected = &t_any;
@@ -2481,7 +2517,12 @@ delete_instr(isn_T *isn)
 
 	case ISN_LOAD_CLASSMEMBER:
 	case ISN_STORE_CLASSMEMBER:
+	case ISN_GET_ITF_MEMBER:
 	    class_unref(isn->isn_arg.classmember.cm_class);
+	    break;
+
+	case ISN_STOREINDEX:
+	    class_unref(isn->isn_arg.storeindex.si_class);
 	    break;
 
 	case ISN_TRY:
@@ -2512,12 +2553,14 @@ delete_instr(isn_T *isn)
 	case ISN_COMPAREANY:
 	case ISN_COMPAREBLOB:
 	case ISN_COMPAREBOOL:
+	case ISN_COMPARECLASS:
 	case ISN_COMPAREDICT:
 	case ISN_COMPAREFLOAT:
 	case ISN_COMPAREFUNC:
 	case ISN_COMPARELIST:
 	case ISN_COMPARENR:
 	case ISN_COMPARENULL:
+	case ISN_COMPAREOBJECT:
 	case ISN_COMPARESPECIAL:
 	case ISN_COMPARESTRING:
 	case ISN_CONCAT:
@@ -2583,7 +2626,6 @@ delete_instr(isn_T *isn)
 	case ISN_SLICE:
 	case ISN_SOURCE:
 	case ISN_STORE:
-	case ISN_STOREINDEX:
 	case ISN_STORENR:
 	case ISN_STOREOUTER:
 	case ISN_STORE_THIS:

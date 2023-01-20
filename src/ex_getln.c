@@ -4146,16 +4146,16 @@ get_cmdline_completion(void)
 	return NULL;
 
     p = get_ccline_ptr();
-    if (p != NULL && p->xpc != NULL)
-    {
-	char_u *cmd_compl;
+    if (p == NULL || p->xpc == NULL)
+	return NULL;
 
-	set_expand_context(p->xpc);
+    char_u *cmd_compl;
 
-	cmd_compl = cmdcomplete_type_to_str(p->xpc->xp_context);
-	if (cmd_compl != NULL)
-	    return vim_strsave(cmd_compl);
-    }
+    set_expand_context(p->xpc);
+
+    cmd_compl = cmdcomplete_type_to_str(p->xpc->xp_context);
+    if (cmd_compl != NULL)
+	return vim_strsave(cmd_compl);
 
     return NULL;
 }
@@ -4210,11 +4210,11 @@ f_getcmdtype(typval_T *argvars UNUSED, typval_T *rettv)
 {
     rettv->v_type = VAR_STRING;
     rettv->vval.v_string = alloc(2);
-    if (rettv->vval.v_string != NULL)
-    {
-	rettv->vval.v_string[0] = get_cmdline_type();
-	rettv->vval.v_string[1] = NUL;
-    }
+    if (rettv->vval.v_string == NULL)
+	return;
+
+    rettv->vval.v_string[0] = get_cmdline_type();
+    rettv->vval.v_string[1] = NUL;
 }
 
 // Set the command line str to "str".
