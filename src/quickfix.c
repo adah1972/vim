@@ -283,7 +283,7 @@ static struct fmtpattern
 	{'m', ".\\+"},		// 7
 #define FMT_PATTERN_R 8
 	{'r', ".*"},		// 8
-	{'p', "[- 	.]*"},	// 9
+	{'p', "[-	 .]*"},	// 9
 	{'v', "\\d\\+"},	// 10
 	{'s', ".\\+"},		// 11
 	{'o', ".\\+"}		// 12
@@ -3623,7 +3623,8 @@ qf_list_entry(qfline_T *qfp, int qf_idx, int cursel)
     if (qfp->qf_module != NULL && *qfp->qf_module != NUL)
 	vim_snprintf((char *)IObuff, IOSIZE, "%2d %s", qf_idx,
 						(char *)qfp->qf_module);
-    else {
+    else
+    {
 	if (qfp->qf_fnum != 0
 		&& (buf = buflist_findnr(qfp->qf_fnum)) != NULL)
 	{
@@ -4532,10 +4533,13 @@ qf_find_buf(qf_info_T *qi)
  * Process the 'quickfixtextfunc' option value.
  * Returns OK or FAIL.
  */
-    int
+    char *
 qf_process_qftf_option(void)
 {
-    return option_set_callback_func(p_qftf, &qftf_cb);
+    if (option_set_callback_func(p_qftf, &qftf_cb) == FAIL)
+	return e_invalid_argument;
+
+    return NULL;
 }
 
 /*

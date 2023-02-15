@@ -936,10 +936,10 @@ gui_x11_key_hit_cb(
     }
     else
     {
-	len = mb_char2bytes(key, string);
-
 	// Some keys need adjustment when the Ctrl modifier is used.
 	key = may_adjust_key_for_ctrl(modifiers, key);
+
+	len = mb_char2bytes(key, string);
 
 	// Remove the SHIFT modifier for keys where it's already included,
 	// e.g., '(', '!' and '*'.
@@ -3095,10 +3095,13 @@ gui_mch_getmouse(int *x, int *y)
     unsigned int mask;
 
     if (gui.wid && XQueryPointer(gui.dpy, gui.wid, &root, &child,
-					 &rootx, &rooty, &winx, &winy, &mask)) {
+					 &rootx, &rooty, &winx, &winy, &mask))
+    {
 	*x = winx;
 	*y = winy;
-    } else {
+    }
+    else
+    {
 	*x = -1;
 	*y = -1;
     }

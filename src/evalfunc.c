@@ -3966,7 +3966,7 @@ execute_redir_str(char_u *value, int value_len)
 	len = (int)STRLEN(value);	// Append the entire string
     else
 	len = value_len;		// Append only "value_len" characters
-    if (ga_grow(&redir_execute_ga, len) != OK)
+    if (ga_grow(&redir_execute_ga, len) == FAIL)
 	return;
 
     mch_memmove((char *)redir_execute_ga.ga_data
@@ -8794,7 +8794,8 @@ search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
 	if (subpatnum == FAIL || !use_skip)
 	    // didn't find it or no skip argument
 	    break;
-	firstpos = pos;
+	if (firstpos.lnum == 0)
+	    firstpos = pos;
 
 	// If the skip expression matches, ignore this match.
 	{

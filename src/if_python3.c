@@ -1509,7 +1509,8 @@ BufferSubscript(PyObject *self, PyObject* idx)
     {
 	long _idx = PyLong_AsLong(idx);
 	return BufferItem((BufferObject *)(self), _idx);
-    } else if (PySlice_Check(idx))
+    }
+    else if (PySlice_Check(idx))
     {
 	Py_ssize_t start, stop, step, slicelen;
 
@@ -1543,7 +1544,8 @@ BufferAsSubscript(PyObject *self, PyObject* idx, PyObject* val)
 	return RBAsItem((BufferObject *)(self), n, val, 1,
 		    (Py_ssize_t)((BufferObject *)(self))->buf->b_ml.ml_line_count,
 		    NULL);
-    } else if (PySlice_Check(idx))
+    }
+    else if (PySlice_Check(idx))
     {
 	Py_ssize_t start, stop, step, slicelen;
 
@@ -1627,7 +1629,8 @@ RangeSubscript(PyObject *self, PyObject* idx)
     {
 	long _idx = PyLong_AsLong(idx);
 	return RangeItem((RangeObject *)(self), _idx);
-    } else if (PySlice_Check(idx))
+    }
+    else if (PySlice_Check(idx))
     {
 	Py_ssize_t start, stop, step, slicelen;
 
