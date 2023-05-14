@@ -4152,11 +4152,11 @@ get_cmdline_completion(void)
     if (p == NULL || p->xpc == NULL)
 	return NULL;
 
-    char_u *cmd_compl;
-
     set_expand_context(p->xpc);
+    if (p->xpc->xp_context == EXPAND_UNSUCCESSFUL)
+	return NULL;
 
-    cmd_compl = cmdcomplete_type_to_str(p->xpc->xp_context);
+    char_u *cmd_compl = cmdcomplete_type_to_str(p->xpc->xp_context);
     if (cmd_compl != NULL)
 	return vim_strsave(cmd_compl);
 
@@ -4294,7 +4294,8 @@ f_setcmdline(typval_T *argvars, typval_T *rettv)
 	}
     }
 
-    rettv->vval.v_number = set_cmdline_str(argvars[0].vval.v_string, pos);
+    // Use tv_get_string() to handle a NULL string like an empty string.
+    rettv->vval.v_number = set_cmdline_str(tv_get_string(&argvars[0]), pos);
 }
 
 /*
@@ -4485,8 +4486,12 @@ open_cmdwin(void)
     {
 	if (p_wc == TAB)
 	{
+	    // Make Tab start command-line completion: CTRL-X CTRL-V
 	    add_map((char_u *)"<buffer> <Tab> <C-X><C-V>", MODE_INSERT, TRUE);
 	    add_map((char_u *)"<buffer> <Tab> a<C-X><C-V>", MODE_NORMAL, TRUE);
+
+	    // Make S-Tab work like CTRL-P in command-line completion
+	    add_map((char_u *)"<buffer> <S-Tab> <C-P>", MODE_INSERT, TRUE);
 	}
 	set_option_value_give_err((char_u *)"ft",
 					       0L, (char_u *)"vim", OPT_LOCAL);
