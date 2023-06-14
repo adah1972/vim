@@ -856,6 +856,27 @@ def Test_class_member()
   END
   v9.CheckScriptSuccess(lines)
 
+  # access private member in lambda body
+  lines =<< trim END
+      vim9script
+
+      class Foo
+        this._x: number = 6
+
+        def Add(n: number): number
+          var Lam = () => {
+            this._x = this._x + n
+          }
+          Lam()
+          return this._x
+        enddef
+      endclass
+
+      var foo = Foo.new()
+      assert_equal(13, foo.Add(7))
+  END
+  v9.CheckScriptSuccess(lines)
+
   # check shadowing
   lines =<< trim END
       vim9script
@@ -902,6 +923,33 @@ func Test_class_garbagecollect()
       echo Point.pl Point.pd
       call test_garbagecollect_now()
       echo Point.pl Point.pd
+  END
+  call v9.CheckScriptSuccess(lines)
+
+  let lines =<< trim END
+      vim9script
+
+      interface View
+      endinterface
+
+      class Widget
+        this.view: View
+      endclass
+
+      class MyView implements View
+        this.widget: Widget
+
+        def new()
+          # this will result in a circular reference to this object
+          this.widget = Widget.new(this)
+        enddef
+      endclass
+
+      var view = MyView.new()
+
+      # overwrite "view", will be garbage-collected next
+      view = MyView.new()
+      test_garbagecollect_now()
   END
   call v9.CheckScriptSuccess(lines)
 endfunc
@@ -1615,6 +1663,28 @@ def Test_using_base_class()
   END
   v9.CheckScriptSuccess(lines)
   unlet g:result
+
+  # Using super, Child invokes Base method which has optional arg. #12471
+  lines =<< trim END
+    vim9script
+
+    class Base
+        this.success: bool = false
+        def Method(arg = 0)
+            this.success = true
+        enddef
+    endclass
+
+    class Child extends Base
+        def new()
+            super.Method()
+        enddef
+    endclass
+
+    var obj = Child.new()
+    assert_equal(true, obj.success)
+  END
+  v9.CheckScriptSuccess(lines)
 enddef
 
 
@@ -1693,6 +1763,29 @@ def Test_closure_in_class()
 
       Foo.new()
       assert_equal(['A'], g:result)
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
+def Test_call_constructor_from_legacy()
+  var lines =<< trim END
+      vim9script
+
+      var newCalled = 'false'
+
+      class A
+        def new()
+          newCalled = 'true'
+        enddef
+      endclass
+
+      export def F(options = {}): any
+        return A
+      enddef
+
+      g:p = F()
+      legacy call p.new()
+      assert_equal('true', newCalled)
   END
   v9.CheckScriptSuccess(lines)
 enddef
