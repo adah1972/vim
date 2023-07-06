@@ -21,7 +21,7 @@ au BufNewFile,BufRead ?\+.orig,?\+.bak,?\+.old,?\+.new,?\+.dpkg-dist,?\+.dpkg-ol
 	\ exe "doau filetypedetect BufRead " . fnameescape(expand("<afile>:r"))
 au BufNewFile,BufRead *~
 	\ let s:name = expand("<afile>") |
-	\ let s:short = substitute(s:name, '\~$', '', '') |
+	\ let s:short = substitute(s:name, '\~\+$', '', '') |
 	\ if s:name != s:short && s:short != "" |
 	\   exe "doau filetypedetect BufRead " . fnameescape(s:short) |
 	\ endif |
@@ -266,11 +266,11 @@ au BufNewFile,BufRead */etc/blkid.tab,*/etc/blkid.tab.old   setf xml
 " BSDL
 au BufNewFile,BufRead *.bsd,*.bsdl			setf bsdl
 
-" Bazel (http://bazel.io)
+" Bazel (https://bazel.build) and Buck2 (https://buck2.build/)
 autocmd BufRead,BufNewFile *.bzl,*.bazel,WORKSPACE,WORKSPACE.bzlmod	setf bzl
 if has("fname_case")
-  " There is another check for BUILD further below.
-  autocmd BufRead,BufNewFile *.BUILD,BUILD		setf bzl
+  " There is another check for BUILD and BUCK further below.
+  autocmd BufRead,BufNewFile *.BUILD,BUILD,BUCK		setf bzl
 endif
 
 " Busted (Lua unit testing framework - configuration files)
@@ -784,7 +784,7 @@ au BufNewFile,BufRead */.config/git/config			setf gitconfig
 au BufNewFile,BufRead *.git/config.worktree			setf gitconfig
 au BufNewFile,BufRead *.git/worktrees/*/config.worktree		setf gitconfig
 au BufNewFile,BufRead .gitmodules,*.git/modules/*/config	setf gitconfig
-if !empty($XDG_CONFIG_HOME)
+if exists('$XDG_CONFIG_HOME')
   au BufNewFile,BufRead $XDG_CONFIG_HOME/git/config		setf gitconfig
   au BufNewFile,BufRead $XDG_CONFIG_HOME/git/attributes		setf gitattributes
   au BufNewFile,BufRead $XDG_CONFIG_HOME/git/ignore		setf gitignore
@@ -886,6 +886,10 @@ au BufNewFile,BufRead *.lhs			setf lhaskell
 au BufNewFile,BufRead *.chs			setf chaskell
 au BufNewFile,BufRead cabal.project		setf cabalproject
 au BufNewFile,BufRead $HOME/.cabal/config	setf cabalconfig
+if exists('$XDG_CONFIG_HOME')
+  au BufNewFile,BufRead $XDG_CONFIG_HOME/cabal/config setf cabalconfig
+endif
+au BufNewFile,BufRead $HOME/.config/cabal/config setf cabalconfig
 au BufNewFile,BufRead cabal.config		setf cabalconfig
 
 " Haste
@@ -1507,6 +1511,9 @@ au BufNewFile,BufRead *.pdf				setf pdf
 " PCMK - HAE - crm configure edit
 au BufNewFile,BufRead *.pcmk				setf pcmk
 
+" PEM (Privacy-Enhanced Mail)
+au BufNewFile,BufRead *.pem,*.cer,*.crt,*.csr		setf pem
+
 " Perl
 if has("fname_case")
   au BufNewFile,BufRead *.pl,*.PL			call dist#ft#FTpl()
@@ -1956,6 +1963,9 @@ au BufNewFile,BufRead .login,.cshrc,csh.cshrc,csh.login,csh.logout,*.csh,.alias 
 " Zig and Zir (Zig Intermediate Representation)
 au BufNewFile,BufRead *.zig			setf zig
 au BufNewFile,BufRead *.zir			setf zir
+
+" Zserio
+au BufNewFile,BufRead *.zs			setf zserio
 
 " Z-Shell script (patterns ending in a star further below)
 au BufNewFile,BufRead .zprofile,*/etc/zprofile,.zfbfmarks  setf zsh
@@ -2598,9 +2608,9 @@ au BufNewFile,BufRead *asterisk*/*voicemail.conf* call s:StarSetf('asteriskvm')
 " Bazaar version control
 au BufNewFile,BufRead bzr_log.*			setf bzr
 
-" Bazel build file
+" Bazel and Buck2 build file
 if !has("fname_case")
-  au BufNewFile,BufRead *.BUILD,BUILD		setf bzl
+  au BufNewFile,BufRead *.BUILD,BUILD,BUCK	setf bzl
 endif
 
 " BIND zone

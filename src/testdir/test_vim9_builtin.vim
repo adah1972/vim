@@ -2821,6 +2821,15 @@ def Test_matchfuzzy()
   v9.CheckDefAndScriptFailure(['matchfuzzy([], 1)'], ['E1013: Argument 2: type mismatch, expected string but got number', 'E1174: String required for argument 2'])
   v9.CheckDefAndScriptFailure(['matchfuzzy([], "a", [])'], ['E1013: Argument 3: type mismatch, expected dict<any> but got list<unknown>', 'E1206: Dictionary required for argument 3'])
   matchfuzzy(['abc', 'xyz'], '')->assert_equal([])
+  var lines =<< trim END
+    var items = [{name: 'xyz', id: 1}, {name: 'def', id: 2},
+                 {name: 'abc', id: 3}]
+    var l: list<dict<any>> = matchfuzzy(items, 'abc', {key: 'name'})
+    assert_equal([{name: 'abc', id: 3}], l)
+    var k: list<string> = matchfuzzy(['one', 'two', 'who'], 'o')
+    assert_equal(['one', 'two', 'who'], k)
+  END
+  v9.CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_matchfuzzypos()
@@ -2828,6 +2837,15 @@ def Test_matchfuzzypos()
   v9.CheckDefAndScriptFailure(['matchfuzzypos([], 1)'], ['E1013: Argument 2: type mismatch, expected string but got number', 'E1174: String required for argument 2'])
   v9.CheckDefAndScriptFailure(['matchfuzzypos([], "a", [])'], ['E1013: Argument 3: type mismatch, expected dict<any> but got list<unknown>', 'E1206: Dictionary required for argument 3'])
   matchfuzzypos(['abc', 'xyz'], '')->assert_equal([[], [], []])
+  var lines =<< trim END
+    var items = [{name: 'xyz', id: 1}, {name: 'def', id: 2},
+                 {name: 'abc', id: 3}]
+    var l: list<dict<any>> = matchfuzzypos(items, 'abc', {key: 'name'})[0]
+    assert_equal([{name: 'abc', id: 3}], l)
+    var k: list<string> = matchfuzzypos(['one', 'two', 'who'], 'o')[0]
+    assert_equal(['one', 'two', 'who'], k)
+  END
+  v9.CheckDefAndScriptSuccess(lines)
 enddef
 
 def Test_matchlist()
@@ -3944,7 +3962,7 @@ def Test_setwinvar()
   v9.CheckDefAndScriptFailure(['setwinvar("a", "b", 1)'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1210: Number required for argument 1'])
   v9.CheckDefAndScriptFailure(['setwinvar(1, 2, "c")'], ['E1013: Argument 2: type mismatch, expected string but got number', 'E1174: String required for argument 2'])
   assert_fails('setwinvar(1, "", 10)', 'E461: Illegal variable name')
-  assert_fails('setwinvar(0, "&rulerformat", true)', 'E928:')
+  assert_fails('setwinvar(0, "&rulerformat", true)', ['E928:', 'E928:'])
 enddef
 
 def Test_sha256()
