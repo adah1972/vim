@@ -252,6 +252,30 @@ compile_member(int is_slice, int *keeping_dict, cctx_T *cctx)
 }
 
 /*
+ * Returns TRUE if the current function is inside the class "cl" or one of the
+ * parent classes.
+ */
+    static int
+inside_class_hierarchy(cctx_T *cctx_arg, class_T *cl)
+{
+    for (cctx_T *cctx = cctx_arg; cctx != NULL; cctx = cctx->ctx_outer)
+    {
+	if (cctx->ctx_ufunc != NULL && cctx->ctx_ufunc->uf_class != NULL)
+	{
+	    class_T	*clp = cctx->ctx_ufunc->uf_class;
+	    while (clp != NULL)
+	    {
+		if (clp == cl)
+		    return TRUE;
+		clp = clp->class_extends;
+	    }
+	}
+    }
+
+    return FALSE;
+}
+
+/*
  * Compile ".member" coming after an object or class.
  */
     static int
@@ -348,6 +372,12 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 	    return FAIL;
 	}
 
+	if (ufunc->uf_private && !inside_class_hierarchy(cctx, cl))
+	{
+	    semsg(_(e_cannot_access_private_method_str), name);
+	    return FAIL;
+	}
+
 	// Compile the arguments and call the class function or object method.
 	// The object method will know that the object is on the stack, just
 	// before the arguments.
@@ -358,8 +388,8 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 
 	if (type->tt_type == VAR_OBJECT
 		     && (cl->class_flags & (CLASS_INTERFACE | CLASS_EXTENDED)))
-	    return generate_CALL(cctx, ufunc, cl, fi, argcount);
-	return generate_CALL(cctx, ufunc, NULL, 0, argcount);
+	    return generate_CALL(cctx, ufunc, cl, fi, type, argcount);
+	return generate_CALL(cctx, ufunc, NULL, 0, type, argcount);
     }
 
     if (type->tt_type == VAR_OBJECT)
@@ -932,6 +962,7 @@ compile_call(
     int		has_g_namespace;
     ca_special_T special_fn;
     imported_T	*import;
+    type_T	*type;
 
     if (varlen >= sizeof(namebuf))
     {
@@ -1015,6 +1046,7 @@ compile_call(
     if (compile_arguments(arg, cctx, &argcount, special_fn) == FAIL)
 	goto theend;
 
+    type = get_decl_type_on_stack(cctx, 1);
     is_autoload = vim_strchr(name, AUTOLOAD_CHAR) != NULL;
     if (ASCII_ISLOWER(*name) && name[1] != ':' && !is_autoload)
     {
@@ -1032,8 +1064,6 @@ compile_call(
 
 	    if (STRCMP(name, "add") == 0 && argcount == 2)
 	    {
-		type_T	    *type = get_decl_type_on_stack(cctx, 1);
-
 		// add() can be compiled to instructions if we know the type
 		if (type->tt_type == VAR_LIST)
 		{
@@ -1080,7 +1110,7 @@ compile_call(
 	{
 	    if (!func_is_global(ufunc))
 	    {
-		res = generate_CALL(cctx, ufunc, NULL, 0, argcount);
+		res = generate_CALL(cctx, ufunc, NULL, 0, type, argcount);
 		goto theend;
 	    }
 	    if (!has_g_namespace
@@ -1100,16 +1130,16 @@ compile_call(
     if (!has_g_namespace && !is_autoload
 	    && compile_load(&p, namebuf + varlen, cctx, FALSE, FALSE) == OK)
     {
-	type_T	    *type = get_type_on_stack(cctx, 0);
+	type_T	    *s_type = get_type_on_stack(cctx, 0);
 
-	res = generate_PCALL(cctx, argcount, namebuf, type, FALSE);
+	res = generate_PCALL(cctx, argcount, namebuf, s_type, FALSE);
 	goto theend;
     }
 
     // If we can find a global function by name generate the right call.
     if (ufunc != NULL)
     {
-	res = generate_CALL(cctx, ufunc, NULL, 0, argcount);
+	res = generate_CALL(cctx, ufunc, NULL, 0, type, argcount);
 	goto theend;
     }
 

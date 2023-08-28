@@ -277,6 +277,19 @@ arg_number(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
 }
 
 /*
+ * Check "type" is an object.
+ */
+    static int
+arg_object(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
+{
+    if (type->tt_type == VAR_OBJECT
+	    || type_any_or_unknown(type))
+	return OK;
+    arg_type_mismatch(&t_object, type, context->arg_idx + 1);
+    return FAIL;
+}
+
+/*
  * Check "type" is a dict of 'any'.
  */
     static int
@@ -647,6 +660,7 @@ check_map_filter_arg2(type_T *type, argcontext_T *context, int is_map)
 	    t_func_exp.tt_argcount = -1;
 
 	where.wt_index = 2;
+	where.wt_kind = WT_ARGUMENT;
 	return check_type(&t_func_exp, type, TRUE, where);
     }
     return OK;
@@ -714,6 +728,7 @@ arg_sort_how(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
 	    if (type->tt_argcount == -1)
 		t_func_exp.tt_argcount = -1;
 	    where.wt_index = 2;
+	    where.wt_kind = WT_ARGUMENT;
 	    return check_type(&t_func_exp, type, TRUE, where);
 	}
 
@@ -739,6 +754,20 @@ arg_string_or_func(type_T *type, type_T *decl_type UNUSED, argcontext_T *context
 	    || type_any_or_unknown(type))
 	return OK;
     arg_type_mismatch(&t_func_any, type, context->arg_idx + 1);
+    return FAIL;
+}
+
+/*
+ * Check "type" is a list of 'any' or a class.
+ */
+    static int
+arg_class_or_list(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
+{
+    if (type->tt_type == VAR_CLASS
+	    || type->tt_type == VAR_LIST
+	    || type_any_or_unknown(type))
+	return OK;
+    arg_type_mismatch(&t_class, type, context->arg_idx + 1);
     return FAIL;
 }
 
@@ -1070,7 +1099,6 @@ static argcheck_T arg2_string_dict[] = {arg_string, arg_dict_any};
 static argcheck_T arg2_string_list_number[] = {arg_string, arg_list_number};
 static argcheck_T arg2_string_number[] = {arg_string, arg_number};
 static argcheck_T arg2_string_or_list_dict[] = {arg_string_or_list_any, arg_dict_any};
-static argcheck_T arg2_string_or_list_bool[] = {arg_string_or_list_any, arg_bool};
 static argcheck_T arg2_string_or_list_number[] = {arg_string_or_list_any, arg_number};
 static argcheck_T arg2_string_string_or_number[] = {arg_string, arg_string_or_nr};
 static argcheck_T arg3_any_list_dict[] = {NULL, arg_list_any, arg_dict_any};
@@ -1094,6 +1122,7 @@ static argcheck_T arg3_string_bool_bool[] = {arg_string, arg_bool, arg_bool};
 static argcheck_T arg3_string_number_bool[] = {arg_string, arg_number, arg_bool};
 static argcheck_T arg3_string_number_number[] = {arg_string, arg_number, arg_number};
 static argcheck_T arg3_string_or_dict_bool_dict[] = {arg_string_or_dict_any, arg_bool, arg_dict_any};
+static argcheck_T arg3_string_or_list_bool_number[] = {arg_string_or_list_any, arg_bool, arg_number};
 static argcheck_T arg3_string_string_bool[] = {arg_string, arg_string, arg_bool};
 static argcheck_T arg3_string_string_dict[] = {arg_string, arg_string, arg_dict_any};
 static argcheck_T arg3_string_string_number[] = {arg_string, arg_string, arg_number};
@@ -1123,6 +1152,7 @@ static argcheck_T arg1_len[] = {arg_len1};
 static argcheck_T arg3_libcall[] = {arg_string, arg_string, arg_string_or_nr};
 static argcheck_T arg14_maparg[] = {arg_string, arg_string, arg_bool, arg_bool};
 static argcheck_T arg2_filter[] = {arg_list_or_dict_or_blob_or_string_mod, arg_filter_func};
+static argcheck_T arg2_instanceof[] = {arg_object, arg_class_or_list};
 static argcheck_T arg2_map[] = {arg_list_or_dict_or_blob_or_string_mod, arg_map_func};
 static argcheck_T arg2_mapnew[] = {arg_list_or_dict_or_blob_or_string, NULL};
 static argcheck_T arg25_matchadd[] = {arg_string, arg_string, arg_number, arg_number, arg_dict_any};
@@ -1569,7 +1599,7 @@ ret_virtcol(int argcount,
 	type_T	**decl_type)
 {
     // Assume that if the second argument is passed it's non-zero
-    if (argcount == 2)
+    if (argcount > 1)
     {
 	*decl_type = &t_list_any;
 	return &t_list_number;
@@ -2122,6 +2152,8 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_inputsecret},
     {"insert",		2, 3, FEARG_1,	    arg23_insert,
 			ret_first_arg,	    f_insert},
+    {"instanceof",	2, 2, FEARG_1,	    arg2_instanceof,
+			ret_bool,	    f_instanceof},
     {"interrupt",	0, 0, 0,	    NULL,
 			ret_void,	    f_interrupt},
     {"invert",		1, 1, FEARG_1,	    arg1_number,
@@ -2798,7 +2830,7 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_typename},
     {"undofile",	1, 1, FEARG_1,	    arg1_string,
 			ret_string,	    f_undofile},
-    {"undotree",	0, 0, 0,	    NULL,
+    {"undotree",	0, 1, FEARG_1,	    arg1_buffer,
 			ret_dict_any,	    f_undotree},
     {"uniq",		1, 3, FEARG_1,	    arg13_sortuniq,
 			ret_first_arg,	    f_uniq},
@@ -2806,7 +2838,7 @@ static funcentry_T global_functions[] =
 			ret_number,	    f_utf16idx},
     {"values",		1, 1, FEARG_1,	    arg1_dict_any,
 			ret_list_member,    f_values},
-    {"virtcol",		1, 2, FEARG_1,	    arg2_string_or_list_bool,
+    {"virtcol",		1, 3, FEARG_1,	    arg3_string_or_list_bool_number,
 			ret_virtcol,	    f_virtcol},
     {"virtcol2col",	3, 3, FEARG_1,	    arg3_number,
 			ret_number,	    f_virtcol2col},
@@ -3936,7 +3968,7 @@ f_err_teapot(typval_T *argvars, typval_T *rettv UNUSED)
 	if (argvars[0].v_type == VAR_STRING)
 	{
 	    char_u *s = tv_get_string_strict(&argvars[0]);
-	    if (s == NULL || *skipwhite(s) == NUL)
+	    if (*skipwhite(s) == NUL)
 		return;
 	}
 
@@ -6165,6 +6197,13 @@ f_has(typval_T *argvars, typval_T *rettv)
 		0
 #endif
 		},
+	{"python3_stable",
+#if defined(FEAT_PYTHON3) && defined(DYNAMIC_PYTHON3_STABLE_ABI)
+		1
+#else
+		0
+#endif
+		},
 	{"python3",
 #if defined(FEAT_PYTHON3) && !defined(DYNAMIC_PYTHON3)
 		1
@@ -6938,7 +6977,7 @@ indexof_eval_expr(typval_T *expr)
     argv[1] = *get_vim_var_tv(VV_VAL);
     newtv.v_type = VAR_UNKNOWN;
 
-    if (eval_expr_typval(expr, argv, 2, NULL, &newtv) == FAIL)
+    if (eval_expr_typval(expr, FALSE, argv, 2, NULL, &newtv) == FAIL)
 	return FALSE;
 
     found = tv_get_bool_chk(&newtv, &error);
@@ -10737,7 +10776,7 @@ f_type(typval_T *argvars, typval_T *rettv)
 }
 
 /*
- * "virtcol(string, bool)" function
+ * "virtcol({expr}, [, {list} [, {winid}]])" function
  */
     static void
 f_virtcol(typval_T *argvars, typval_T *rettv)
@@ -10745,15 +10784,35 @@ f_virtcol(typval_T *argvars, typval_T *rettv)
     colnr_T	vcol_start = 0;
     colnr_T	vcol_end = 0;
     pos_T	*fp;
-    int		fnum = curbuf->b_fnum;
+    switchwin_T	switchwin;
+    int		winchanged = FALSE;
     int		len;
 
     if (in_vim9script()
 	    && (check_for_string_or_list_arg(argvars, 0) == FAIL
 		|| (argvars[1].v_type != VAR_UNKNOWN
-		    && check_for_bool_arg(argvars, 1) == FAIL)))
+		    && (check_for_bool_arg(argvars, 1) == FAIL
+			|| check_for_opt_number_arg(argvars, 2) == FAIL))))
 	return;
 
+    if (argvars[1].v_type != VAR_UNKNOWN && argvars[2].v_type != VAR_UNKNOWN)
+    {
+	tabpage_T	*tp;
+	win_T		*wp;
+
+	// use the window specified in the third argument
+	wp = win_id2wp_tp((int)tv_get_number(&argvars[2]), &tp);
+	if (wp == NULL || tp == NULL)
+	    goto theend;
+
+	if (switch_win_noblock(&switchwin, wp, tp, TRUE) != OK)
+	    goto theend;
+
+	check_cursor();
+	winchanged = TRUE;
+    }
+
+    int fnum = curbuf->b_fnum;
     fp = var2fpos(&argvars[0], FALSE, &fnum, FALSE);
     if (fp != NULL && fp->lnum <= curbuf->b_ml.ml_line_count
 	    && fnum == curbuf->b_fnum)
@@ -10772,6 +10831,7 @@ f_virtcol(typval_T *argvars, typval_T *rettv)
 	++vcol_end;
     }
 
+theend:
     if (argvars[1].v_type != VAR_UNKNOWN && tv_get_bool(&argvars[1]))
     {
 	if (rettv_list_alloc(rettv) == OK)
@@ -10784,6 +10844,9 @@ f_virtcol(typval_T *argvars, typval_T *rettv)
     }
     else
 	rettv->vval.v_number = vcol_end;
+
+    if (winchanged)
+	restore_win_noblock(&switchwin, TRUE);
 }
 
 /*

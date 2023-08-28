@@ -28,6 +28,7 @@ int generate_PUSHCHANNEL(cctx_T *cctx);
 int generate_PUSHJOB(cctx_T *cctx);
 int generate_PUSHBLOB(cctx_T *cctx, blob_T *blob);
 int generate_PUSHFUNC(cctx_T *cctx, char_u *name, type_T *type, int may_prefix);
+int generate_PUSHOBJ(cctx_T *cctx);
 int generate_AUTOLOAD(cctx_T *cctx, char_u *name, type_T *type);
 int generate_GETITEM(cctx_T *cctx, int index, int with_op);
 int generate_SLICE(cctx_T *cctx, int count);
@@ -57,7 +58,7 @@ int check_internal_func_args(cctx_T *cctx, int func_idx, int argcount, int metho
 int generate_BCALL(cctx_T *cctx, int func_idx, int argcount, int method_call);
 int generate_LISTAPPEND(cctx_T *cctx);
 int generate_BLOBAPPEND(cctx_T *cctx);
-int generate_CALL(cctx_T *cctx, ufunc_T *ufunc, class_T *cl, int mi, int pushed_argcount);
+int generate_CALL(cctx_T *cctx, ufunc_T *ufunc, class_T *cl, int mi, type_T *mtype, int pushed_argcount);
 int generate_UCALL(cctx_T *cctx, char_u *name, int argcount);
 int check_func_args_from_type(cctx_T *cctx, type_T *type, int argcount, int at_top, char_u *name);
 int generate_PCALL(cctx_T *cctx, int argcount, char_u *name, type_T *type, int at_top);

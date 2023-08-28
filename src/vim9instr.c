@@ -662,11 +662,11 @@ generate_SETTYPE(
 /*
  * Generate an ISN_PUSHOBJ instruction.  Object is always NULL.
  */
-    static int
+    int
 generate_PUSHOBJ(cctx_T *cctx)
 {
     RETURN_OK_IF_SKIP(cctx);
-    if (generate_instr_type(cctx, ISN_PUSHOBJ, &t_any) == NULL)
+    if (generate_instr_type(cctx, ISN_PUSHOBJ, &t_object) == NULL)
 	return FAIL;
     return OK;
 }
@@ -1780,6 +1780,7 @@ generate_CALL(
 	ufunc_T	    *ufunc,
 	class_T	    *cl,
 	int	    mi,
+	type_T	    *mtype,	// method type
 	int	    pushed_argcount)
 {
     isn_T	*isn;
@@ -1805,6 +1806,8 @@ generate_CALL(
     {
 	int		i;
 	compiletype_T	compile_type;
+	int		class_constructor = (mtype->tt_type == VAR_CLASS
+				    && STRNCMP(ufunc->uf_name, "new", 3) == 0);
 
 	for (i = 0; i < argcount; ++i)
 	{
@@ -1823,6 +1826,25 @@ generate_CALL(
 		if (ufunc->uf_arg_types == NULL)
 		    continue;
 		expected = ufunc->uf_arg_types[i];
+
+		// When the method is a class constructor and the formal
+		// argument is an object member, the type check is performed on
+		// the object member type.
+		if (class_constructor && expected->tt_type == VAR_ANY)
+		{
+		    class_T *clp = mtype->tt_class;
+		    char_u *aname = ((char_u **)ufunc->uf_args.ga_data)[i];
+		    for (int om = 0; om < clp->class_obj_member_count; ++om)
+		    {
+			if (STRCMP(aname, clp->class_obj_members[om].ocm_name)
+									== 0)
+			{
+			    expected = clp->class_obj_members[om].ocm_type;
+			    break;
+			}
+		    }
+
+		}
 	    }
 	    else if (ufunc->uf_va_type == NULL
 					   || ufunc->uf_va_type == &t_list_any)
@@ -1879,6 +1901,10 @@ generate_CALL(
 
     // drop the argument types
     cctx->ctx_type_stack.ga_len -= argcount;
+
+    // For an object or class method call, drop the object/class type
+    if (ufunc->uf_class != NULL)
+	cctx->ctx_type_stack.ga_len--;
 
     // add return type
     return push_type_stack(cctx, ufunc->uf_ret_type);

@@ -1570,9 +1570,12 @@ EXTERN char e_too_many_signs_defined[]
 EXTERN char e_unknown_printer_font_str[]
 	INIT(= N_("E613: Unknown printer font: %s"));
 #endif
-// E614 unused
-// E615 unused
-// E616 unused
+EXTERN char e_class_required[]
+	INIT(= N_("E614: Class required"));
+EXTERN char e_object_required[]
+	INIT(= N_("E615: Object required"));
+EXTERN char e_object_required_for_argument_nr[]
+	INIT(= N_("E616: Object required for argument %d"));
 #ifdef FEAT_GUI_GTK
 EXTERN char e_cannot_be_changed_in_gtk_GUI[]
 	INIT(= N_("E617: Cannot be changed in the GTK GUI"));
@@ -1777,7 +1780,8 @@ EXTERN char e_can_only_compare_list_with_list[]
 	INIT(= N_("E691: Can only compare List with List"));
 EXTERN char e_invalid_operation_for_list[]
 	INIT(= N_("E692: Invalid operation for List"));
-// E693 unused
+EXTERN char e_list_or_class_required_for_argument_nr[]
+	INIT(= N_("E693: List or Class required for argument %d"));
 EXTERN char e_invalid_operation_for_funcrefs[]
 	INIT(= N_("E694: Invalid operation for Funcrefs"));
 EXTERN char e_cannot_index_a_funcref[]
@@ -1802,7 +1806,8 @@ EXTERN char e_funcref_variable_name_must_start_with_capital_str[]
 	INIT(= N_("E704: Funcref variable name must start with a capital: %s"));
 EXTERN char e_variable_name_conflicts_with_existing_function_str[]
 	INIT(= N_("E705: Variable name conflicts with existing function: %s"));
-// E706 unused
+EXTERN char e_argument_of_str_must_be_list_string_or_dictionary[]
+	INIT(= N_("E706: Argument of %s must be a List, String or Dictionary"));
 EXTERN char e_function_name_conflicts_with_variable_str[]
 	INIT(= N_("E707: Function name conflicts with variable: %s"));
 EXTERN char e_slice_must_come_last[]
@@ -3477,3 +3482,28 @@ EXTERN char e_incomplete_type[]
 #endif
 EXTERN char e_warning_pointer_block_corrupted[]
 	INIT(= N_("E1364: Warning: Pointer block corrupted"));
+EXTERN char e_cannot_use_a_return_type_with_new[]
+	INIT(= N_("E1365: Cannot use a return type with the \"new\" function"));
+EXTERN char e_cannot_access_private_method_str[]
+	INIT(= N_("E1366: Cannot access private method: %s"));
+
+EXTERN char e_interface_str_and_class_str_function_access_not_same[]
+	INIT(= N_("E1367: Access type of class method %s differs from interface method %s"));
+EXTERN char e_cannot_mix_positional_and_non_positional_str[]
+	INIT(= N_("E1400: Cannot mix positional and non-positional arguments: %s"));
+EXTERN char e_fmt_arg_nr_unused_str[]
+	INIT(= N_("E1401: format argument %d unused in $-style format: %s"));
+EXTERN char e_positional_num_field_spec_reused_str_str[]
+	INIT(= N_("E1402: Positional argument %d used as field width reused as different type: %s/%s"));
+EXTERN char e_positional_nr_out_of_bounds_str[]
+	INIT(= N_("E1403: Positional argument %d out of bounds: %s"));
+EXTERN char e_positional_arg_num_type_inconsistent_str_str[]
+	INIT(= N_("E1404: Positional argument %d type used inconsistently: %s/%s"));
+EXTERN char e_invalid_format_specifier_str[]
+	INIT(= N_("E1405: Invalid format specifier: %s"));
+EXTERN char e_member_str_type_mismatch_expected_str_but_got_str[]
+	INIT(= N_("E1406: Member \"%s\": type mismatch, expected %s but got %s"));
+EXTERN char e_method_str_type_mismatch_expected_str_but_got_str[]
+	INIT(= N_("E1407: Member \"%s\": type mismatch, expected %s but got %s"));
+
+// E1368 - E1399 unused

@@ -3,8 +3,9 @@ vim9script
 # Vim function for detecting a filetype from the file contents.
 # Invoked from "scripts.vim" in 'runtimepath'
 #
-# Maintainer:	Bram Moolenaar <Bram@vim.org>
-# Last Change:	2023 Jun 09
+# Maintainer:	The Vim Project <https://github.com/vim/vim>
+# Last Change:	2023 Aug 10
+# Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 export def DetectFiletype()
   var line1 = getline(1)
@@ -207,6 +208,10 @@ export def Exe2filetype(name: string, line1: string): string
     # Nix
   elseif name =~ 'nix-shell'
     return 'nix'
+
+    # Crystal
+  elseif name =~ '^crystal\>'
+    return 'crystal'
 
   endif
 

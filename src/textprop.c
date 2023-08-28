@@ -308,6 +308,7 @@ prop_add_one(
 			    | (lnum < end_lnum ? TP_FLAG_CONT_NEXT : 0)
 			    | ((type->pt_flags & PT_FLAG_INS_START_INCL)
 						     ? TP_FLAG_START_INCL : 0);
+	tmp_prop.tp_padleft = text_padding_left;
 	mch_memmove(newprops + i * sizeof(textprop_T), &tmp_prop,
 							   sizeof(textprop_T));
 
@@ -969,10 +970,14 @@ prop_fill_dict(dict_T *dict, textprop_T *prop, buf_T *buf)
 {
     proptype_T *pt;
     int buflocal = TRUE;
+    int virtualtext_prop = prop->tp_id < 0;
 
-    dict_add_number(dict, "col", prop->tp_col);
-    dict_add_number(dict, "length", prop->tp_len);
-    dict_add_number(dict, "id", prop->tp_id);
+    dict_add_number(dict, "col", (prop->tp_col == MAXCOL) ? 0 : prop->tp_col);
+    if (!virtualtext_prop)
+    {
+	dict_add_number(dict, "length", prop->tp_len);
+	dict_add_number(dict, "id", prop->tp_id);
+    }
     dict_add_number(dict, "start", !(prop->tp_flags & TP_FLAG_CONT_PREV));
     dict_add_number(dict, "end", !(prop->tp_flags & TP_FLAG_CONT_NEXT));
 
@@ -990,6 +995,33 @@ prop_fill_dict(dict_T *dict, textprop_T *prop, buf_T *buf)
 	dict_add_number(dict, "type_bufnr", buf->b_fnum);
     else
 	dict_add_number(dict, "type_bufnr", 0);
+    if (virtualtext_prop)
+    {
+	// virtual text property
+	garray_T    *gap = &buf->b_textprop_text;
+	char_u	    *text;
+
+	// negate the property id to get the string index
+	text = ((char_u **)gap->ga_data)[-prop->tp_id - 1];
+	dict_add_string(dict, "text", text);
+
+	// text_align
+	char_u	    *text_align = NULL;
+	if (prop->tp_flags & TP_FLAG_ALIGN_RIGHT)
+	    text_align = (char_u *)"right";
+	else if (prop->tp_flags & TP_FLAG_ALIGN_ABOVE)
+	    text_align = (char_u *)"above";
+	else if (prop->tp_flags & TP_FLAG_ALIGN_BELOW)
+	    text_align = (char_u *)"below";
+	if (text_align != NULL)
+	    dict_add_string(dict, "text_align", text_align);
+
+	// text_wrap
+	if (prop->tp_flags & TP_FLAG_WRAP)
+	    dict_add_string(dict, "text_wrap", (char_u *)"wrap");
+	if (prop->tp_padleft != 0)
+	    dict_add_number(dict, "text_padding_left", prop->tp_padleft);
+    }
 }
 
 /*

@@ -312,6 +312,10 @@ typedef struct
     char_u	*wo_scl;
 # define w_p_scl w_onebuf_opt.wo_scl	// 'signcolumn'
 #endif
+    long	wo_siso;
+# define w_p_siso w_onebuf_opt.wo_siso	// 'sidescrolloff' local value
+    long	wo_so;
+# define w_p_so w_onebuf_opt.wo_so	// 'scrolloff' local value
 #ifdef FEAT_TERMINAL
     char_u	*wo_twk;
 # define w_p_twk w_onebuf_opt.wo_twk	// 'termwinkey'
@@ -605,6 +609,7 @@ typedef struct expand
     int		xp_numfiles;		// number of files found by
 					// file name completion
     int		xp_col;			// cursor position in line
+    int		xp_selected;		// selected index in completion
     char_u	**xp_files;		// list of files
     char_u	*xp_line;		// text being completed
 #define EXPAND_BUF_LEN 256
@@ -822,6 +827,8 @@ typedef struct textprop_S
     int		tp_id;		// identifier
     int		tp_type;	// property type
     int		tp_flags;	// TP_FLAG_ values
+    int		tp_padleft;	// left padding between text line and virtual
+				// text
 } textprop_T;
 
 #define TP_FLAG_CONT_NEXT	0x1	// property continues in next line
@@ -1482,8 +1489,8 @@ typedef struct {
 #define TTFLAG_SUPER	    0x40    // object from "super".
 
 typedef enum {
-    VIM_ACCESS_PRIVATE,	// read/write only inside th class
-    VIM_ACCESS_READ,	// read everywhere, write only inside th class
+    VIM_ACCESS_PRIVATE,	// read/write only inside the class
+    VIM_ACCESS_READ,	// read everywhere, write only inside the class
     VIM_ACCESS_ALL	// read/write everywhere
 } omacc_T;
 
@@ -1783,6 +1790,7 @@ struct ufunc_S
 
     class_T	*uf_class;	// for object method and constructor; does not
 				// count for class_refcount
+    int		uf_private;	// TRUE if class or object private method
 
     garray_T	uf_args;	// arguments, including optional arguments
     garray_T	uf_def_args;	// default argument expressions
@@ -3773,6 +3781,7 @@ struct window_S
     int		w_vsep_width;	    // Number of separator columns (0 or 1).
 
     pos_save_T	w_save_cursor;	    // backup of cursor pos and topline
+    int		w_do_win_fix_cursor;// if TRUE cursor may be invalid
 
 #ifdef FEAT_PROP_POPUP
     int		w_popup_flags;	    // POPF_ values
@@ -3977,8 +3986,6 @@ struct window_S
     int		*w_p_cc_cols;	    // array of columns to highlight or NULL
     char_u	w_p_culopt_flags;   // flags for cursorline highlighting
 #endif
-    long	w_p_siso;	    // 'sidescrolloff' local value
-    long	w_p_so;		    // 'scrolloff' local value
 
 #ifdef FEAT_LINEBREAK
     int		w_briopt_min;	    // minimum width for breakindent
@@ -4761,14 +4768,22 @@ typedef enum {
     MAGIC_ALL = 4		// "\v" very magic
 } magic_T;
 
+typedef enum {
+    WT_UNKNOWN = 0,	// Unknown or unspecified location
+    WT_ARGUMENT,
+    WT_VARIABLE,
+    WT_MEMBER,
+    WT_METHOD,
+} wherekind_T;
+
 // Struct used to pass to error messages about where the error happened.
 typedef struct {
-    char    *wt_func_name;  // function name or NULL
-    char    wt_index;	    // argument or variable index, 0 means unknown
-    char    wt_variable;    // "variable" when TRUE, "argument" otherwise
+    char	*wt_func_name;  // function name or NULL
+    char	wt_index;	// argument or variable index, 0 means unknown
+    wherekind_T	wt_kind;	// "variable" when TRUE, "argument" otherwise
 } where_T;
 
-#define WHERE_INIT {NULL, 0, 0}
+#define WHERE_INIT {NULL, 0, WT_UNKNOWN}
 
 // Struct passed to get_v_event() and restore_v_event().
 typedef struct {
@@ -4802,21 +4817,22 @@ typedef struct {
 // Argument for lbr_chartabsize().
 typedef struct {
     win_T	*cts_win;
-    char_u	*cts_line;	    // start of the line
-    char_u	*cts_ptr;	    // current position in line
+    char_u	*cts_line;		// start of the line
+    char_u	*cts_ptr;		// current position in line
 #ifdef FEAT_PROP_POPUP
     int		cts_text_prop_count;	// number of text props; when zero
 					// cts_text_props is not used
     textprop_T	*cts_text_props;	// text props (allocated)
-    char	cts_has_prop_with_text; // TRUE if a property inserts text
-    int		cts_cur_text_width;     // width of current inserted text
+    char	cts_has_prop_with_text;	// TRUE if a property inserts text
+    int		cts_cur_text_width;	// width of current inserted text
     int		cts_prop_lines;		// nr of properties above or below
     int		cts_first_char;		// width text props above the line
     int		cts_with_trailing;	// include size of trailing props with
 					// last character
     int		cts_start_incl;		// prop has true "start_incl" arg
 #endif
-    int		cts_vcol;	    // virtual column at current position
+    int		cts_vcol;		// virtual column at current position
+    int		cts_max_head_vcol;	// see win_lbr_chartabsize()
 } chartabsize_T;
 
 /*
