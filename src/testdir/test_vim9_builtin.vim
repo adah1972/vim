@@ -2339,6 +2339,25 @@ def Test_instanceof()
     Bar()
   END
   v9.CheckScriptFailure(lines, 'E1013: Argument 2: type mismatch, expected class<Unknown> but got number')
+
+  lines =<< trim END
+    vim9script
+    class Foo
+    endclass
+    instanceof(Foo.new(), [{}])
+  END
+  v9.CheckSourceFailure(lines, 'E614: Class required')
+
+  lines =<< trim END
+    vim9script
+    class Foo
+    endclass
+    def Bar()
+      instanceof(Foo.new(), [{}])
+    enddef
+    Bar()
+  END
+  v9.CheckSourceFailure(lines, 'E614: Class required')
 enddef
 
 def Test_invert()
@@ -4343,10 +4362,13 @@ enddef
 
 def Test_strptime()
   CheckFunction strptime
+  CheckNotBSD
   if exists_compiled('*strptime')
     v9.CheckDefAndScriptFailure(['strptime(10, "2021")'], ['E1013: Argument 1: type mismatch, expected string but got number', 'E1174: String required for argument 1'])
     v9.CheckDefAndScriptFailure(['strptime("%Y", 2021)'], ['E1013: Argument 2: type mismatch, expected string but got number', 'E1174: String required for argument 2'])
     assert_notequal(0, strptime('%Y', '2021'))
+    # This fails on BSD 14 and returns
+    # -2209078800 instead of 0
     assert_equal(0, strptime('%Y', ''))
   endif
 enddef

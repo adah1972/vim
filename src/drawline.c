@@ -1650,6 +1650,18 @@ win_line(
     }
 #endif
 
+#if defined(FEAT_LINEBREAK) || defined(FEAT_PROP_POPUP)
+    colnr_T vcol_first_char = 0;
+    if (wp->w_p_lbr && !number_only)
+    {
+	chartabsize_T cts;
+	init_chartabsize_arg(&cts, wp, lnum, 0, line, line);
+	(void)win_lbr_chartabsize(&cts, NULL);
+	vcol_first_char = cts.cts_first_char;
+	clear_chartabsize_arg(&cts);
+    }
+#endif
+
     // 'nowrap' or 'wrap' and a single line that doesn't fit: Advance to the
     // first character to be displayed.
     if (wp->w_p_wrap)
@@ -1999,10 +2011,8 @@ win_line(
 
 		if (wlv.n_extra == 0 ||
 			(!wlv.extra_for_textprop
-#ifdef FEAT_PROP_POPUP
 			 && !(text_prop_type != NULL &&
 			     text_prop_flags & PT_FLAG_OVERRIDE)
-#endif
 		    ))
 		{
 		    text_prop_attr = 0;
@@ -2100,7 +2110,8 @@ win_line(
 							& TP_FLAG_ALIGN_RIGHT);
 			    int	    below = (tp->tp_flags
 							& TP_FLAG_ALIGN_BELOW);
-			    int	    wrap = (tp->tp_flags & TP_FLAG_WRAP);
+			    int	    wrap = tp->tp_col < MAXCOL
+					      || (tp->tp_flags & TP_FLAG_WRAP);
 			    int	    padding = tp->tp_col == MAXCOL
 						 && tp->tp_len > 1
 							  ? tp->tp_len - 1 : 0;
@@ -2121,7 +2132,7 @@ win_line(
 			    if (*ptr == NUL)
 				// don't combine char attr after EOL
 				text_prop_flags &= ~PT_FLAG_COMBINE;
-#ifdef FEAT_LINEBREAK
+# ifdef FEAT_LINEBREAK
 			    if (above || below || right || !wrap)
 			    {
 				// no 'showbreak' before "below" text property
@@ -2129,7 +2140,7 @@ win_line(
 				wlv.need_showbreak = FALSE;
 				wlv.dont_use_showbreak = TRUE;
 			    }
-#endif
+# endif
 			    if ((right || above || below || !wrap
 					    || padding > 0) && wp->w_width > 2)
 			    {
@@ -2142,6 +2153,11 @@ win_line(
 				// exactly the same.
 				start_line = text_prop_position(wp, tp,
 						    wlv.vcol,
+# ifdef FEAT_RIGHTLEFT
+						    wp->w_p_rl
+						    ? wp->w_width - wlv.col - 1
+						    :
+# endif
 						    wlv.col,
 						    &wlv.n_extra, &wlv.p_extra,
 						    &n_attr, &wlv.n_attr_skip,
@@ -2879,7 +2895,11 @@ win_line(
 		    char_u  *p = ptr - (mb_off + 1);
 		    chartabsize_T cts;
 
-		    init_chartabsize_arg(&cts, wp, lnum, wlv.vcol, line, p);
+		    init_chartabsize_arg(&cts, wp, lnum, wlv.vcol
+# ifdef FEAT_PROP_POPUP
+							     - vcol_first_char,
+# endif
+								      line, p);
 # ifdef FEAT_PROP_POPUP
 		    // do not want virtual text counted here
 		    cts.cts_has_prop_with_text = FALSE;
@@ -2887,14 +2907,6 @@ win_line(
 		    wlv.n_extra = win_lbr_chartabsize(&cts, NULL) - 1;
 		    clear_chartabsize_arg(&cts);
 
-		    // We have just drawn the showbreak value, no need to add
-		    // space for it again.
-		    if (wlv.vcol == wlv.vcol_sbr)
-		    {
-			wlv.n_extra -= MB_CHARLEN(get_showbreak_value(wp));
-			if (wlv.n_extra < 0)
-			    wlv.n_extra = 0;
-		    }
 		    if (on_last_col && c != TAB)
 			// Do not continue search/match highlighting over the
 			// line break, but for TABs the highlighting should

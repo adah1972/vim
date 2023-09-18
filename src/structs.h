@@ -1515,6 +1515,7 @@ struct itf2class_S {
 
 #define CLASS_INTERFACE	    1
 #define CLASS_EXTENDED	    2	    // another class extends this one
+#define CLASS_ABSTRACT	    4	    // abstract class
 
 // "class_T": used for v_class of typval of VAR_CLASS
 // Also used for an interface (class_flags has CLASS_INTERFACE).
@@ -1525,6 +1526,8 @@ struct class_S
 
     int		class_refcount;
     int		class_copyID;		// used by garbage collection
+    class_T	*class_next_used;	// for list headed by "first_class"
+    class_T	*class_prev_used;	// for list headed by "first_class"
 
     class_T	*class_extends;		// parent class or NULL
 
@@ -1788,9 +1791,11 @@ struct ufunc_S
     def_status_T uf_def_status; // UF_NOT_COMPILED, UF_TO_BE_COMPILED, etc.
     int		uf_dfunc_idx;	// only valid if uf_def_status is UF_COMPILED
 
-    class_T	*uf_class;	// for object method and constructor; does not
-				// count for class_refcount
-    int		uf_private;	// TRUE if class or object private method
+    class_T	*uf_class;	// for class/object method and constructor;
+				// does not count for class_refcount.
+				// class of the object which is invoking this
+				// function.
+    class_T	*uf_defclass;	// class where this function is defined.
 
     garray_T	uf_args;	// arguments, including optional arguments
     garray_T	uf_def_args;	// default argument expressions
@@ -1824,6 +1829,7 @@ struct ufunc_S
 # ifdef FEAT_PROFILE
     int		uf_profiling;	// TRUE when func is being profiled
     int		uf_prof_initialized;
+    hash_T	uf_hash;	// hash for uf_name when profiling
     // profiling the function as a whole
     int		uf_tm_count;	// nr of calls
     proftime_T	uf_tm_total;	// time spent in function + children
@@ -1873,6 +1879,7 @@ struct ufunc_S
 
 #define FC_OBJECT   0x4000	// object method
 #define FC_NEW	    0x8000	// constructor
+#define FC_ABSTRACT 0x10000	// abstract method
 
 #define MAX_FUNC_ARGS	20	// maximum number of function arguments
 #define VAR_SHORT_LEN	20	// short variable name length

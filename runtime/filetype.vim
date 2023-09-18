@@ -1181,6 +1181,9 @@ endif
 " SBCL implementation of Common Lisp
 au BufNewFile,BufRead sbclrc,.sbclrc		setf lisp
 
+" Liquidsoap
+au BufNewFile,BufRead *.liq			setf liquidsoap
+
 " Liquid
 au BufNewFile,BufRead *.liquid			setf liquid
 
@@ -1367,6 +1370,10 @@ au BufNewFile,BufRead *.rc,*.rch
 	\ if expand("<afile>") !~ "/etc/Muttrc.d/" |
 	\   setf rc |
 	\ endif
+
+" Mojo
+" Mojo files use either .mojo or .🔥 as extension
+au BufNewFile,BufRead *.mojo,*.🔥		setf mojo
 
 " MuPAD source
 au BufRead,BufNewFile *.mu			setf mupad

@@ -1025,7 +1025,7 @@ get_lval(
     int		len;
     hashtab_T	*ht = NULL;
     int		quiet = flags & GLV_QUIET;
-    int		writing;
+    int		writing = 0;
     int		vim9script = in_vim9script();
 
     // Clear everything in "lp".
@@ -1179,6 +1179,14 @@ get_lval(
 	if (v == NULL)
 	    return NULL;
 	lp->ll_tv = &v->di_tv;
+    }
+    if (vim9script && writing && lp->ll_tv->v_type == VAR_CLASS
+	    && (lp->ll_tv->vval.v_class->class_flags & CLASS_INTERFACE) != 0)
+    {
+	if (!quiet)
+	    semsg(_(e_interface_static_direct_access_str),
+			    lp->ll_tv->vval.v_class->class_name, lp->ll_name);
+	return NULL;
     }
 
     if (vim9script && (flags & GLV_NO_DECL) == 0)
@@ -1532,69 +1540,18 @@ get_lval(
 		    // round 1: class functions (skipped for an object)
 		    // round 2: object methods
 		    for (int round = v_type == VAR_OBJECT ? 2 : 1;
-							   round <= 2; ++round)
+							round <= 2; ++round)
 		    {
-			int count = round == 1
-					    ? cl->class_class_function_count
-					    : cl->class_obj_method_count;
-			ufunc_T **funcs = round == 1
-					    ? cl->class_class_functions
-					    : cl->class_obj_methods;
-			for (int i = 0; i < count; ++i)
+			int	m_idx;
+			ufunc_T	*fp;
+
+			fp = method_lookup(cl,
+				round == 1 ? VAR_CLASS : VAR_OBJECT,
+				key, p - key, &m_idx);
+			if (fp != NULL)
 			{
-			    ufunc_T *fp = funcs[i];
-			    char_u *ufname = (char_u *)fp->uf_name;
-			    if (STRNCMP(ufname, key, p - key) == 0
-						     && ufname[p - key] == NUL)
-			    {
-				lp->ll_ufunc = fp;
-				lp->ll_valtype = fp->uf_func_type;
-				round = 3;
-				break;
-			    }
-			}
-		    }
-		}
-
-		if (lp->ll_valtype == NULL)
-		{
-		    int count = v_type == VAR_OBJECT
-					    ? cl->class_obj_member_count
-					    : cl->class_class_member_count;
-		    ocmember_T *members = v_type == VAR_OBJECT
-					    ? cl->class_obj_members
-					    : cl->class_class_members;
-		    for (int i = 0; i < count; ++i)
-		    {
-			ocmember_T *om = members + i;
-			if (STRNCMP(om->ocm_name, key, p - key) == 0
-					       && om->ocm_name[p - key] == NUL)
-			{
-			    switch (om->ocm_access)
-			    {
-				case VIM_ACCESS_PRIVATE:
-					semsg(_(e_cannot_access_private_member_str),
-								 om->ocm_name);
-					return NULL;
-				case VIM_ACCESS_READ:
-					if ((flags & GLV_READ_ONLY) == 0)
-					{
-					    semsg(_(e_member_is_not_writable_str),
-								 om->ocm_name);
-					    return NULL;
-					}
-					break;
-				case VIM_ACCESS_ALL:
-					break;
-			    }
-
-			    lp->ll_valtype = om->ocm_type;
-
-			    if (v_type == VAR_OBJECT)
-				lp->ll_tv = ((typval_T *)(
-					    lp->ll_tv->vval.v_object + 1)) + i;
-			    else
-				lp->ll_tv = &cl->class_members_tv[i];
+			    lp->ll_ufunc = fp;
+			    lp->ll_valtype = fp->uf_func_type;
 			    break;
 			}
 		    }
@@ -1602,10 +1559,44 @@ get_lval(
 
 		if (lp->ll_valtype == NULL)
 		{
-		    if (v_type == VAR_OBJECT)
-			semsg(_(e_object_member_not_found_str), key);
-		    else
-			semsg(_(e_class_member_not_found_str), key);
+		    int		m_idx;
+		    ocmember_T	*om;
+
+		    om = member_lookup(cl, v_type, key, p - key, &m_idx);
+		    if (om != NULL)
+		    {
+			switch (om->ocm_access)
+			{
+			    case VIM_ACCESS_PRIVATE:
+				semsg(_(e_cannot_access_private_member_str),
+					om->ocm_name);
+				return NULL;
+			    case VIM_ACCESS_READ:
+				if ((flags & GLV_READ_ONLY) == 0)
+				{
+				    semsg(_(e_member_is_not_writable_str),
+					    om->ocm_name);
+				    return NULL;
+				}
+				break;
+			    case VIM_ACCESS_ALL:
+				break;
+			}
+
+			lp->ll_valtype = om->ocm_type;
+
+			if (v_type == VAR_OBJECT)
+			    lp->ll_tv = ((typval_T *)(
+					lp->ll_tv->vval.v_object + 1)) + m_idx;
+			else
+			    lp->ll_tv = &cl->class_members_tv[m_idx];
+			break;
+		    }
+		}
+
+		if (lp->ll_valtype == NULL)
+		{
+		    member_not_found_msg(cl, v_type, key, p - key);
 		    return NULL;
 		}
 	    }
@@ -5305,6 +5296,8 @@ garbage_collect(int testing)
     abort = abort || set_ref_in_popups(copyID);
 #endif
 
+    abort = abort || set_ref_in_classes(copyID);
+
     if (!abort)
     {
 	/*
@@ -5352,6 +5345,9 @@ free_unref_items(int copyID)
 
     // Go through the list of objects and free items without this copyID.
     did_free |= object_free_nonref(copyID);
+
+    // Go through the list of classes and free items without this copyID.
+    did_free |= class_free_nonref(copyID);
 
 #ifdef FEAT_JOB_CHANNEL
     // Go through the list of jobs and free items without the copyID. This
@@ -5707,7 +5703,7 @@ set_ref_in_item_channel(
  * Mark the class "cl" with "copyID".
  * Also see set_ref_in_item().
  */
-    static int
+    int
 set_ref_in_item_class(
     class_T		*cl,
     int			copyID,
@@ -5716,15 +5712,19 @@ set_ref_in_item_class(
 {
     int abort = FALSE;
 
-    if (cl == NULL || cl->class_copyID == copyID
-				|| (cl->class_flags & CLASS_INTERFACE) != 0)
+    if (cl == NULL || cl->class_copyID == copyID)
 	return FALSE;
 
     cl->class_copyID = copyID;
-    for (int i = 0; !abort && i < cl->class_class_member_count; ++i)
-	abort = abort || set_ref_in_item(
-		&cl->class_members_tv[i],
-		copyID, ht_stack, list_stack);
+    if (cl->class_members_tv != NULL)
+    {
+	// The "class_members_tv" table is allocated only for regular classes
+	// and not for interfaces.
+	for (int i = 0; !abort && i < cl->class_class_member_count; ++i)
+	    abort = abort || set_ref_in_item(
+		    &cl->class_members_tv[i],
+		    copyID, ht_stack, list_stack);
+    }
 
     for (int i = 0; !abort && i < cl->class_class_function_count; ++i)
 	abort = abort || set_ref_in_func(NULL,

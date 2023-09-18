@@ -4002,8 +4002,8 @@ gui_mch_init(void)
     }
 
     // Real windows can get focus ... GtkPlug, being a mere container can't,
-    // only its widgets.  Arguably, this could be common code and we not use
-    // the window focus at all, but let's be safe.
+    // only its widgets.  Arguably, this could be common code and we do not
+    // use the window focus at all, but let's be safe.
     if (gtk_socket_id == 0)
     {
 	g_signal_connect(G_OBJECT(gui.mainwin), "focus-out-event",
@@ -4845,7 +4845,11 @@ is_cjk_font(PangoFontDescription *font_desc)
 	{
 	    uc = (cjk_langs[i][0] == 'k') ? 0xAC00 : 0x4E00;
 	    is_cjk = (pango_coverage_get(coverage, uc) == PANGO_COVERAGE_EXACT);
+#if PANGO_VERSION_CHECK(1, 52, 0)
+	    g_object_unref(coverage);
+#else
 	    pango_coverage_unref(coverage);
+#endif
 	}
     }
 

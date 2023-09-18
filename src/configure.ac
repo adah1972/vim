@@ -1,8 +1,6 @@
 dnl configure.ac: autoconf script for Vim
 
-dnl Process this file with autoconf 2.69 to produce "configure".
-dnl This should also work with other versions of autoconf, but 2.70 and later
-dnl generate lots of hard to fix "obsolete" warnings.
+dnl Process this file with autoconf 2.71 to produce "configure".
 
 AC_INIT
 AC_CONFIG_SRCDIR([vim.h])
@@ -13,7 +11,7 @@ AC_DEFINE(UNIX)
 AC_PROG_MAKE_SET
 
 dnl Checks for programs.
-AC_PROG_CC_C99		dnl required by almost everything
+AC_PROG_CC		dnl required by almost everything
 AC_PROG_CPP		dnl required by header file checks
 AC_PROG_EGREP		dnl required by AC_EGREP_CPP
 AC_PROG_FGREP		dnl finds working grep -F
@@ -25,9 +23,6 @@ AC_CHECK_PROG(STRIP, strip, strip, :)
 dnl Check for extension of executables
 AC_EXEEXT
 
-dnl Check for standard headers.  We don't use this in Vim but other stuff
-dnl in autoconf needs it, where it uses STDC_HEADERS.
-AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
 
 dnl Check that the C99 features that Vim uses are supported:
@@ -638,7 +633,7 @@ if test "$enable_luainterp" = "yes" -o "$enable_luainterp" = "dynamic"; then
       if test "X$vi_cv_path_luajit" != "X"; then
 	dnl -- find LuaJIT version
 	AC_CACHE_CHECK(LuaJIT version, vi_cv_version_luajit,
-       [ vi_cv_version_luajit=`${vi_cv_path_luajit} -v 2>&1 | sed 's/LuaJIT \([[0-9.]]*\)\.[[0-9]]\(-\?[[a-z0-9]]*\)* .*/\1/'` ])
+       [ vi_cv_version_luajit=`${vi_cv_path_luajit} -v 2>&1 | sed 's/LuaJIT \([[0-9.]]*\)\.[[0-9]]\(-*[[a-z0-9]]*\)* .*/\1/'` ])
 	AC_CACHE_CHECK(Lua version of LuaJIT, vi_cv_version_lua_luajit,
 	[ vi_cv_version_lua_luajit=`${vi_cv_path_luajit} -e "print(_VERSION)" | sed 's/.* //'` ])
 	vi_cv_path_lua="$vi_cv_path_luajit"
@@ -1218,6 +1213,7 @@ if test "$enable_perlinterp" = "yes" -o "$enable_perlinterp" = "dynamic"; then
     if test "$perl_ok" = "yes" -a "X$libperl" != "X"; then
       AC_DEFINE(DYNAMIC_PERL)
       PERL_CFLAGS="-DDYNAMIC_PERL_DLL=\\\"$libperl\\\" $PERL_CFLAGS"
+      PERL_LIBS=""
     fi
   fi
 
@@ -1515,7 +1511,7 @@ if test "$enable_python3interp" = "yes" -o "$enable_python3interp" = "dynamic"; 
          vi_cv_var_python3_stable_abi_hex=`
          ${vi_cv_path_python3} -c \
          "major_minor='${vi_cv_var_python3_stable_abi}'.split('.'); print('0x{0:X}'.format( (int(major_minor.__getitem__(0))<<24) + (int(major_minor.__getitem__(1))<<16) ))"` ])
-        if test "X$vi_cv_var_python3_stable_abi_hex" == "X"; then
+        if test "X$vi_cv_var_python3_stable_abi_hex" = "X"; then
           AC_MSG_ERROR([can't parse Python 3 stable ABI version. It should be "<major>.<minor>"])
         fi
       fi

@@ -32,7 +32,7 @@ typedef enum {
 
     ISN_SOURCE,	    // source autoload script, isn_arg.number is the script ID
     ISN_INSTR,	    // instructions compiled from expression
-    ISN_CONSTRUCT,  // construct an object, using contstruct_T
+    ISN_CONSTRUCT,  // construct an object, using construct_T
     ISN_GET_OBJ_MEMBER, // object member, index is isn_arg.number
     ISN_GET_ITF_MEMBER, // interface member, index is isn_arg.classmember
     ISN_STORE_THIS, // store value in "this" object member, index is
@@ -498,6 +498,7 @@ typedef struct {
 typedef struct {
     class_T	*cm_class;
     int		cm_idx;
+    int		cm_static;
 } classmember_T;
 // arguments to ISN_STOREINDEX
 typedef struct {

@@ -332,6 +332,82 @@ script_var_exists(char_u *name, size_t len, cctx_T *cctx, cstack_T *cstack)
 }
 
 /*
+ * Returns the index of a class method or class variable with name "name"
+ * accessible in the currently compiled function.
+ * If "cl_ret" is not NULL set it to the class.
+ * Otherwise return -1.
+ */
+    static int
+cctx_class_midx(
+    cctx_T  *cctx,
+    int	    is_method,
+    char_u  *name,
+    size_t  len,
+    class_T **cl_ret)
+{
+    if (cctx == NULL || cctx->ctx_ufunc == NULL
+	    || cctx->ctx_ufunc->uf_class == NULL
+	    || cctx->ctx_ufunc->uf_defclass == NULL)
+	return -1;
+
+    // Search for the class method or variable in the class where the calling
+    // function is defined.
+    class_T *cl = cctx->ctx_ufunc->uf_defclass;
+    int m_idx = is_method ? class_method_idx(cl, name, len)
+					: class_member_idx(cl, name, len);
+    if (m_idx < 0)
+    {
+	cl = cl->class_extends;
+	while (cl != NULL)
+	{
+	    m_idx = is_method ? class_method_idx(cl, name, len)
+					: class_member_idx(cl, name, len);
+	    if (m_idx >= 0)
+		break;
+	    cl = cl->class_extends;
+	}
+    }
+
+    if (m_idx >= 0)
+    {
+	if (cl_ret != NULL)
+	    *cl_ret = cl;
+    }
+
+    return m_idx;
+}
+
+/*
+ * Returns the index of a class method with name "name" accessible in the
+ * currently compiled function.  Returns -1 if not found.  The class where the
+ * method is defined is returned in "cl_ret".
+ */
+    int
+cctx_class_method_idx(
+    cctx_T  *cctx,
+    char_u  *name,
+    size_t  len,
+    class_T **cl_ret)
+{
+    return cctx_class_midx(cctx, TRUE, name, len, cl_ret);
+}
+
+/*
+ * Returns the index of a class variable with name "name" accessible in the
+ * currently compiled function.  Returns -1 if not found.  The class where the
+ * variable is defined is returned in "cl_ret".
+ */
+    int
+cctx_class_member_idx(
+    cctx_T  *cctx,
+    char_u  *name,
+    size_t  len,
+    class_T **cl_ret)
+{
+    return cctx_class_midx(cctx, FALSE, name, len, cl_ret);
+}
+
+/*
  * Return TRUE if "name" is a local variable, argument, script variable or
  * imported.  Also if "name" is "this" and in a class method.
  */
@@ -346,7 +422,7 @@ variable_exists(char_u *name, size_t len, cctx_T *cctx)
 			&& (cctx->ctx_ufunc->uf_flags & (FC_OBJECT|FC_NEW))
 			&& STRNCMP(name, "this", 4) == 0)))
 	    || script_var_exists(name, len, cctx, NULL) == OK
-	    || class_member_index(name, len, NULL, cctx) >= 0
+	    || cctx_class_member_idx(cctx, name, len, NULL) >= 0
 	    || find_imported(name, len, FALSE) != NULL;
 }
 
@@ -393,7 +469,7 @@ check_defined(
 	return FAIL;
     }
 
-    if (class_member_index(p, len, NULL, cctx) >= 0)
+    if (cctx_class_member_idx(cctx, p, len, NULL) >= 0)
     {
 	if (is_arg)
 	    semsg(_(e_argument_already_declared_in_class_str), p);
@@ -1583,6 +1659,8 @@ compile_lhs(
 	}
 	else
 	{
+	    class_T	*defcl;
+
 	    // No specific kind of variable recognized, just a name.
 	    if (check_reserved_name(lhs->lhs_name, lhs->lhs_has_index
 						&& *var_end == '.') == FAIL)
@@ -1613,13 +1691,28 @@ compile_lhs(
 	    {
 		if (is_decl)
 		{
-		    semsg(_(e_variable_already_declared_str), lhs->lhs_name);
+		    // if we come here with what looks like an assignment like .=
+		    // but which has been reject by assignment_len() from may_compile_assignment
+		    // give a better error message
+		    char_u *p = skipwhite(lhs->lhs_end);
+		    if (p[0] == '.' && p[1] == '=')
+			emsg(_(e_dot_equal_not_supported_with_script_version_two));
+		    else
+			semsg(_(e_variable_already_declared_str), lhs->lhs_name);
 		    return FAIL;
 		}
 	    }
-	    else if ((lhs->lhs_classmember_idx = class_member_index(
-				 var_start, lhs->lhs_varlen, NULL, cctx)) >= 0)
+	    else if ((lhs->lhs_classmember_idx = cctx_class_member_idx(
+			    cctx, var_start, lhs->lhs_varlen, &defcl)) >= 0)
 	    {
+		if (cctx->ctx_ufunc->uf_defclass != defcl)
+		{
+		    // A class variable can be accessed without the class name
+		    // only inside a class.
+		    semsg(_(e_class_member_str_accessible_only_inside_class_str),
+			    lhs->lhs_name, defcl->class_name);
+		    return FAIL;
+		}
 		if (is_decl)
 		{
 		    semsg(_(e_variable_already_declared_in_class_str),
@@ -1855,21 +1948,47 @@ compile_lhs(
 
 	int use_class = lhs->lhs_type != NULL
 			    && (lhs->lhs_type->tt_type == VAR_CLASS
-				       || lhs->lhs_type->tt_type == VAR_OBJECT);
+				    || lhs->lhs_type->tt_type == VAR_OBJECT);
 	if (lhs->lhs_type == NULL
 		|| (use_class ? lhs->lhs_type->tt_class == NULL
-					   : lhs->lhs_type->tt_member == NULL))
+		    : lhs->lhs_type->tt_member == NULL))
 	{
 	    lhs->lhs_member_type = &t_any;
 	}
 	else if (use_class)
 	{
 	    // for an object or class member get the type of the member
-	    class_T *cl = lhs->lhs_type->tt_class;
-	    lhs->lhs_member_type = class_member_type(cl, after + 1,
-					   lhs->lhs_end, &lhs->lhs_member_idx);
+	    class_T	*cl = lhs->lhs_type->tt_class;
+	    ocmember_T	*m;
+	    int		is_object = lhs->lhs_type->tt_type == VAR_OBJECT;
+
+	    lhs->lhs_member_type = class_member_type(cl,
+					is_object,
+					after + 1, lhs->lhs_end,
+					&lhs->lhs_member_idx, &m);
 	    if (lhs->lhs_member_idx < 0)
 		return FAIL;
+	    if ((cl->class_flags & CLASS_INTERFACE) != 0
+					&& lhs->lhs_type->tt_type == VAR_CLASS)
+	    {
+		semsg(_(e_interface_static_direct_access_str),
+						cl->class_name, m->ocm_name);
+		return FAIL;
+	    }
+	    // If it is private member variable, then accessing it outside the
+	    // class is not allowed.
+	    // If it is a read only class variable, then it can be modified
+	    // only inside the class where it is defined.
+	    if ((m->ocm_access != VIM_ACCESS_ALL) &&
+		    ((is_object && !inside_class(cctx, cl))
+		     || (!is_object && cctx->ctx_ufunc->uf_class != cl)))
+	    {
+		char *msg = (m->ocm_access == VIM_ACCESS_PRIVATE)
+				? e_cannot_access_private_member_str
+				: e_cannot_change_readonly_variable_str;
+		semsg(_(msg), m->ocm_name);
+		return FAIL;
+	    }
 	}
 	else
 	{
@@ -2077,9 +2196,10 @@ compile_load_lhs_with_index(lhs_T *lhs, char_u *var_start, cctx_T *cctx)
        if (dot == NULL)
 	   return FAIL;
 
-	class_T *cl = lhs->lhs_type->tt_class;
-	type_T *type = class_member_type(cl, dot + 1,
-					   lhs->lhs_end, &lhs->lhs_member_idx);
+	class_T	*cl = lhs->lhs_type->tt_class;
+	type_T	*type = class_member_type(cl, TRUE, dot + 1,
+					   lhs->lhs_end, &lhs->lhs_member_idx,
+					   NULL);
 	if (lhs->lhs_member_idx < 0)
 	    return FAIL;
 
@@ -2096,8 +2216,9 @@ compile_load_lhs_with_index(lhs_T *lhs, char_u *var_start, cctx_T *cctx)
 		return FAIL;
 	}
 	if (cl->class_flags & CLASS_INTERFACE)
-	    return generate_GET_ITF_MEMBER(cctx, cl, lhs->lhs_member_idx, type);
-	return generate_GET_OBJ_MEMBER(cctx, lhs->lhs_member_idx, type);
+	    return generate_GET_ITF_MEMBER(cctx, cl, lhs->lhs_member_idx, type,
+									FALSE);
+	return generate_GET_OBJ_MEMBER(cctx, lhs->lhs_member_idx, type, FALSE);
     }
 
     compile_load_lhs(lhs, var_start, NULL, cctx);
@@ -2967,7 +3088,8 @@ get_compile_type(ufunc_T *ufunc)
 #ifdef FEAT_PROFILE
     if (do_profiling == PROF_YES)
     {
-	if (!ufunc->uf_profiling && has_profiling(FALSE, ufunc->uf_name, NULL))
+	if (!ufunc->uf_profiling && has_profiling(FALSE, ufunc->uf_name, NULL,
+							    &ufunc->uf_hash))
 	    func_do_profile(ufunc);
 	if (ufunc->uf_profiling)
 	    return CT_PROFILE;

@@ -300,6 +300,7 @@ endfunc
 
 func Test_strptime()
   CheckFunction strptime
+  CheckNotBSD
 
   if exists('$TZ')
     let tz = $TZ
@@ -314,6 +315,8 @@ func Test_strptime()
 
   call assert_fails('call strptime()', 'E119:')
   call assert_fails('call strptime("xxx")', 'E119:')
+  " This fails on BSD 14 and returns
+  " -2209078800 instead of 0
   call assert_equal(0, strptime("%Y", ''))
   call assert_equal(0, strptime("%Y", "xxx"))
 
@@ -935,9 +938,19 @@ func Test_mode()
 
   if has('terminal')
     term
+    " Terminal-Job mode
+    call assert_equal('t', mode())
+    call assert_equal('t', mode(1))
+    call feedkeys("\<C-W>:echo \<C-R>=Save_mode()\<C-U>\<CR>", 'xt')
+    call assert_equal("c-ct", g:current_modes)
+    call feedkeys("\<Esc>", 'xt')
+
+    " Terminal-Normal mode
     call feedkeys("\<C-W>N", 'xt')
     call assert_equal('n', mode())
     call assert_equal('nt', mode(1))
+    call feedkeys(":echo \<C-R>=Save_mode()\<C-U>\<CR>", 'xt')
+    call assert_equal("c-c", g:current_modes)
     call feedkeys("aexit\<CR>", 'xt')
   endif
 
@@ -2901,7 +2914,7 @@ func Test_state()
   call term_sendkeys(buf, getstate)
   call WaitForAssert({-> assert_match('state: mSc; mode: n', term_getline(buf, 6))}, 1000)
 
-  " A operator is pending
+  " An operator is pending
   call term_sendkeys(buf, ":call RunTimer()\<CR>y")
   call TermWait(buf, 25)
   call term_sendkeys(buf, "y")
@@ -3605,6 +3618,11 @@ func Test_string_reverse()
   set encoding=latin1
   call assert_equal('dcba', reverse('abcd'))
   let &encoding = save_enc
+endfunc
+
+func Test_fullcommand()
+  " this used to crash vim
+  call assert_equal('', fullcommand(10))
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -17,6 +17,9 @@
 static void shift_block(oparg_T *oap, int amount);
 static void	mb_adjust_opend(oparg_T *oap);
 static int	do_addsub(int op_type, pos_T *pos, int length, linenr_T Prenum1);
+static void	pbyte(pos_T lp, int c);
+#define PBYTE(lp, c) pbyte(lp, c)
+
 
 // Flags for third item in "opchars".
 #define OPF_LINES  1	// operator always works on lines
@@ -2919,7 +2922,7 @@ do_addsub(
 	    for (bit = bits; bit > 0; bit--)
 		if ((n >> (bit - 1)) & 0x1) break;
 
-	    for (i = 0; bit > 0; bit--)
+	    for (i = 0; bit > 0 && i < (NUMBUFLEN - 1); bit--)
 		buf2[i++] = ((n >> (bit - 1)) & 0x1) ? '1' : '0';
 
 	    buf2[i] = '\0';
@@ -4348,4 +4351,19 @@ do_pending_operator(cmdarg_T *cap, int old_col, int gui_yank)
 #ifdef FEAT_LINEBREAK
     restore_lbr(lbr_saved);
 #endif
+}
+
+// put byte 'c' at position 'lp', but
+// verify, that the position to place
+// is actually safe
+    static void
+pbyte(pos_T lp, int c)
+{
+    char_u *p = ml_get_buf(curbuf, lp.lnum, TRUE);
+    int	len = curbuf->b_ml.ml_line_len;
+
+    // safety check
+    if (lp.col >= len)
+	lp.col = (len > 1 ? len - 2 : 0);
+    *(p + lp.col) = c;
 }

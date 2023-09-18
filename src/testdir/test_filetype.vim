@@ -372,6 +372,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     lilo: ['lilo.conf', 'lilo.conf-file'],
     lilypond: ['file.ly', 'file.ily'],
     limits: ['/etc/limits', '/etc/anylimits.conf', '/etc/anylimits.d/file.conf', '/etc/limits.conf', '/etc/limits.d/file.conf', '/etc/some-limits.conf', '/etc/some-limits.d/file.conf', 'any/etc/limits', 'any/etc/limits.conf', 'any/etc/limits.d/file.conf', 'any/etc/some-limits.conf', 'any/etc/some-limits.d/file.conf'],
+    liquidsoap: ['file.liq'],
     liquid: ['file.liquid'],
     lisp: ['file.lsp', 'file.lisp', 'file.asd', 'file.el', 'file.cl', '.emacs', '.sawfishrc', 'sbclrc', '.sbclrc'],
     lite: ['file.lite', 'file.lt'],
@@ -456,6 +457,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     mrxvtrc: ['mrxvtrc', '.mrxvtrc'],
     msidl: ['file.odl', 'file.mof'],
     msql: ['file.msql'],
+    mojo: ['file.mojo', 'file.🔥'],
     mupad: ['file.mu'],
     mush: ['file.mush'],
     muttrc: ['Muttngrc', 'Muttrc', '.muttngrc', '.muttngrc-file', '.muttrc',
@@ -945,6 +947,8 @@ def s:GetScriptChecks(): dict<list<list<string>>>
     forth:  [['#!/path/gforth']],
     icon:   [['#!/path/icon']],
     crystal: [['#!/path/crystal']],
+    rexx:   [['#!/path/rexx'],
+            ['#!/path/regina']],
   }
 enddef
 
@@ -2045,7 +2049,22 @@ func Test_cls_file()
 
   " Rexx
 
-  call writefile(['# rexx'], 'Xfile.cls')
+  call writefile(['#!/usr/bin/rexx'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('rexx', &filetype)
+  bwipe!
+
+  call writefile(['#!/usr/bin/regina'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('rexx', &filetype)
+  bwipe!
+
+  call writefile(['/* Comment */'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('rexx', &filetype)
+  bwipe!
+
+  call writefile(['::class Foo subclass Bar public'], 'Xfile.cls')
   split Xfile.cls
   call assert_equal('rexx', &filetype)
   bwipe!
