@@ -293,7 +293,7 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
     {
 	if (cctx->ctx_ufunc == NULL || cctx->ctx_ufunc->uf_class == NULL)
 	{
-	    emsg(_(e_using_super_not_in_class_function));
+	    emsg(_(e_using_super_not_in_class_method));
 	    return FAIL;
 	}
 	is_super = TRUE;
@@ -395,8 +395,8 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 
 	if (type->tt_type == VAR_OBJECT
 		     && (cl->class_flags & (CLASS_INTERFACE | CLASS_EXTENDED)))
-	    return generate_CALL(cctx, ufunc, cl, fi, type, argcount);
-	return generate_CALL(cctx, ufunc, NULL, 0, type, argcount);
+	    return generate_CALL(cctx, ufunc, cl, fi, argcount);
+	return generate_CALL(cctx, ufunc, NULL, 0, argcount);
     }
 
     if (type->tt_type == VAR_OBJECT)
@@ -407,15 +407,15 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 	{
 	    if (*name == '_' && !inside_class(cctx, cl))
 	    {
-		semsg(_(e_cannot_access_private_member_str), m->ocm_name);
+		emsg_var_cl_define(e_cannot_access_private_variable_str,
+							m->ocm_name, 0, cl);
 		return FAIL;
 	    }
 
 	    *arg = name_end;
 	    if (cl->class_flags & (CLASS_INTERFACE | CLASS_EXTENDED))
-		return generate_GET_ITF_MEMBER(cctx, cl, m_idx, m->ocm_type,
-									FALSE);
-	    return generate_GET_OBJ_MEMBER(cctx, m_idx, m->ocm_type, FALSE);
+		return generate_GET_ITF_MEMBER(cctx, cl, m_idx, m->ocm_type);
+	    return generate_GET_OBJ_MEMBER(cctx, m_idx, m->ocm_type);
 	}
 
 	// Could be a function reference: "obj.Func".
@@ -439,17 +439,12 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 	if (m != NULL)
 	{
 	    // Note: type->tt_type = VAR_CLASS
-	    if ((cl->class_flags & CLASS_INTERFACE) != 0)
-	    {
-		semsg(_(e_interface_static_direct_access_str),
-			cl->class_name, m->ocm_name);
-		return FAIL;
-	    }
 	    // A private class variable can be accessed only in the class where
 	    // it is defined.
 	    if (*name == '_' && cctx->ctx_ufunc->uf_class != cl)
 	    {
-		semsg(_(e_cannot_access_private_member_str), m->ocm_name);
+		emsg_var_cl_define(e_cannot_access_private_variable_str,
+							m->ocm_name, 0, cl);
 		return FAIL;
 	    }
 
@@ -778,7 +773,7 @@ compile_load(
 		    res = generate_CLASSMEMBER(cctx, TRUE, cl, idx);
 		else
 		{
-		    semsg(_(e_class_member_str_accessible_only_inside_class_str),
+		    semsg(_(e_class_variable_str_accessible_only_inside_class_str),
 			    name, cl->class_name);
 		    res = FAIL;
 		}
@@ -983,7 +978,6 @@ compile_call(
     int		has_g_namespace;
     ca_special_T special_fn;
     imported_T	*import;
-    type_T	*type;
 
     if (varlen >= sizeof(namebuf))
     {
@@ -1067,7 +1061,6 @@ compile_call(
     if (compile_arguments(arg, cctx, &argcount, special_fn) == FAIL)
 	goto theend;
 
-    type = get_decl_type_on_stack(cctx, 1);
     is_autoload = vim_strchr(name, AUTOLOAD_CHAR) != NULL;
     if (ASCII_ISLOWER(*name) && name[1] != ':' && !is_autoload)
     {
@@ -1085,6 +1078,8 @@ compile_call(
 
 	    if (STRCMP(name, "add") == 0 && argcount == 2)
 	    {
+		type_T	    *type = get_decl_type_on_stack(cctx, 1);
+
 		// add() can be compiled to instructions if we know the type
 		if (type->tt_type == VAR_LIST)
 		{
@@ -1134,7 +1129,7 @@ compile_call(
 	{
 	    if (!func_is_global(ufunc))
 	    {
-		res = generate_CALL(cctx, ufunc, NULL, 0, type, argcount);
+		res = generate_CALL(cctx, ufunc, NULL, 0, argcount);
 		goto theend;
 	    }
 	    if (!has_g_namespace
@@ -1152,15 +1147,12 @@ compile_call(
 	    // the class where the function is defined.
 	    if (cctx->ctx_ufunc->uf_defclass == cl)
 	    {
-		// The generate_CALL() function expects the class type at the
-		// top of the stack.  So push the class type to the stack.
-		push_type_stack(cctx, &t_class);
 		res = generate_CALL(cctx, cl->class_class_functions[mi], NULL,
-							0, type, argcount);
+							0, argcount);
 	    }
 	    else
 	    {
-		semsg(_(e_class_member_str_accessible_only_inside_class_str),
+		semsg(_(e_class_method_str_accessible_only_inside_class_str),
 			name, cl->class_name);
 		res = FAIL;
 	    }
@@ -1184,7 +1176,7 @@ compile_call(
     // If we can find a global function by name generate the right call.
     if (ufunc != NULL)
     {
-	res = generate_CALL(cctx, ufunc, NULL, 0, type, argcount);
+	res = generate_CALL(cctx, ufunc, NULL, 0, argcount);
 	goto theend;
     }
 

@@ -6464,6 +6464,13 @@ f_has(typval_T *argvars, typval_T *rettv)
 		0
 #endif
 		},
+	{"xattr",
+#ifdef FEAT_XATTR
+		1
+#else
+		0
+#endif
+		},
 	{"xim",
 #ifdef FEAT_XIM
 		1
@@ -7339,6 +7346,22 @@ f_islocked(typval_T *argvars, typval_T *rettv)
 		    rettv->vval.v_number = ((di->di_flags & DI_FLAGS_LOCK)
 						   || tv_islocked(&di->di_tv));
 		}
+	    }
+	    else if (lv.ll_object != NULL)
+	    {
+		typval_T *tv = ((typval_T *)(lv.ll_object + 1)) + lv.ll_oi;
+		rettv->vval.v_number = tv_islocked(tv);
+#ifdef LOG_LOCKVAR
+		ch_log(NULL, "LKVAR: f_islocked(): name %s (obj)", lv.ll_name);
+#endif
+	    }
+	    else if (lv.ll_class != NULL)
+	    {
+		typval_T *tv = &lv.ll_class->class_members_tv[lv.ll_oi];
+		rettv->vval.v_number = tv_islocked(tv);
+#ifdef LOG_LOCKVAR
+		ch_log(NULL, "LKVAR: f_islocked(): name %s (cl)", lv.ll_name);
+#endif
 	    }
 	    else if (lv.ll_range)
 		emsg(_(e_range_not_allowed));

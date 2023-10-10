@@ -968,7 +968,7 @@ eval_foldexpr(win_T *wp, int *cp)
 	    // If the result is a string, check if there is a non-digit before
 	    // the number.
 	    s = tv.vval.v_string;
-	    if (!VIM_ISDIGIT(*s) && *s != '-')
+	    if (*s != NUL && !VIM_ISDIGIT(*s) && *s != '-')
 		*cp = *s++;
 	    retval = atol((char *)s);
 	}
@@ -984,6 +984,152 @@ eval_foldexpr(win_T *wp, int *cp)
     return (int)retval;
 }
 #endif
+
+#ifdef LOG_LOCKVAR
+typedef struct flag_string_S
+{
+    int	    flag;
+    char    *str;
+} flag_string_T;
+
+    static char *
+flags_tostring(int flags, flag_string_T *_fstring, char *buf, size_t n)
+{
+    char *p = buf;
+    *p = NUL;
+    for (flag_string_T *fstring = _fstring; fstring->flag; ++fstring)
+    {
+	if ((fstring->flag & flags) != 0)
+	{
+	    size_t len = STRLEN(fstring->str);
+	    if (n > p - buf + len + 7)
+	    {
+		STRCAT(p, fstring->str);
+		p += len;
+		STRCAT(p, " ");
+		++p;
+	    }
+	    else
+	    {
+		STRCAT(buf, "...");
+		break;
+	    }
+	}
+    }
+    return buf;
+}
+
+flag_string_T glv_flag_strings[] = {
+    { GLV_QUIET,		"QUIET" },
+    { GLV_NO_AUTOLOAD,		"NO_AUTOLOAD" },
+    { GLV_READ_ONLY,		"READ_ONLY" },
+    { GLV_NO_DECL,		"NO_DECL" },
+    { GLV_COMPILING,		"COMPILING" },
+    { GLV_ASSIGN_WITH_OP,	"ASSIGN_WITH_OP" },
+    { GLV_PREFER_FUNC,		"PREFER_FUNC" },
+    { 0,			NULL }
+};
+#endif
+
+/*
+ * Fill in "lp" using "root". This is used in a special case when
+ * "get_lval()" parses a bare word when "lval_root" is not NULL.
+ *
+ * This is typically called with "lval_root" as "root". For a class, find
+ * the name from lp in the class from root, fill in lval_T if found. For a
+ * complex type, list/dict use it as the result; just put the root into
+ * ll_tv.
+ *
+ * "lval_root" is a hack used during run-time/instr-execution to provide the
+ * starting point for "get_lval()" to traverse a chain of indexes. In some
+ * cases get_lval sees a bare name and uses this function to populate the
+ * lval_T.
+ *
+ * For setting up "lval_root" (currently only used with lockvar)
+ *	compile_lock_unlock - pushes object on stack (which becomes lval_root)
+ *	execute_instructions: ISN_LOCKUNLOCK - sets lval_root from stack.
+ */
+    static void
+get_lval_root(lval_T *lp, lval_root_T *lr)
+{
+#ifdef LOG_LOCKVAR
+    ch_log(NULL, "LKVAR: get_lval_root(): name %s", lp->ll_name);
+#endif
+    if (!lr->lr_is_arg && lr->lr_tv->v_type == VAR_CLASS)
+    {
+	if (lr->lr_tv->vval.v_class != NULL)
+	{
+	    // Special special case. Look for a bare class variable reference.
+	    class_T	*cl = lr->lr_tv->vval.v_class;
+	    int		m_idx;
+	    ocmember_T	*m = class_member_lookup(cl, lp->ll_name,
+					lp->ll_name_end - lp->ll_name, &m_idx);
+	    if (m != NULL)
+	    {
+		// Assuming "inside class" since bare reference.
+		lp->ll_class = lr->lr_tv->vval.v_class;
+		lp->ll_oi = m_idx;
+		lp->ll_valtype = m->ocm_type;
+		lp->ll_tv = &lp->ll_class->class_members_tv[m_idx];
+#ifdef LOG_LOCKVAR
+		ch_log(NULL, "LKVAR:    ... class member %s.%s",
+					lp->ll_class->class_name, lp->ll_name);
+#endif
+		return;
+	    }
+	}
+    }
+
+#ifdef LOG_LOCKVAR
+    ch_log(NULL, "LKVAR:    ... type: %s", vartype_name(lr->lr_tv->v_type));
+#endif
+    lp->ll_tv = lr->lr_tv;
+    lp->ll_is_root = TRUE;
+}
+
+/*
+ * Check if the class has permission to access the member.
+ * Returns OK or FAIL.
+ */
+    static int
+get_lval_check_access(
+    class_T	*cl_exec,   // executing class, NULL if :def or script level
+    class_T	*cl,	    // class which contains the member
+    ocmember_T	*om,	    // member being accessed
+    char_u	*p,	    // char after member name
+    int		flags)	    // GLV flags to check if writing to lval
+{
+#ifdef LOG_LOCKVAR
+    ch_log(NULL, "LKVAR: get_lval_check_access(), cl_exec %p, cl %p, %c",
+						(void*)cl_exec, (void*)cl, *p);
+#endif
+    if (cl_exec == NULL || cl_exec != cl)
+    {
+	char *msg = NULL;
+	switch (om->ocm_access)
+	{
+	    case VIM_ACCESS_PRIVATE:
+		msg = e_cannot_access_private_variable_str;
+		break;
+	    case VIM_ACCESS_READ:
+		// If [idx] or .key following, read only OK.
+		if (*p == '[' || *p == '.')
+		    break;
+		if ((flags & GLV_READ_ONLY) == 0)
+		    msg = e_variable_is_not_writable_str;
+		break;
+	    case VIM_ACCESS_ALL:
+		break;
+	}
+	if (msg != NULL)
+	{
+	    emsg_var_cl_define(msg, om->ocm_name, 0, cl);
+	    return FAIL;
+	}
+
+    }
+    return OK;
+}
 
 /*
  * Get an lval: variable, Dict item or List item that can be assigned a value
@@ -1027,6 +1173,20 @@ get_lval(
     int		quiet = flags & GLV_QUIET;
     int		writing = 0;
     int		vim9script = in_vim9script();
+    class_T	*cl_exec = NULL;    // class that is executing, or NULL.
+
+#ifdef LOG_LOCKVAR
+    if (lval_root == NULL)
+	ch_log(NULL,
+	       "LKVAR: get_lval(): name %s, lval_root (nil)", name);
+    else
+	ch_log(NULL,
+	   "LKVAR: get_lval(): name %s, lr_tv %p lr_is_arg %d",
+	    name, (void*)lval_root->lr_tv, lval_root->lr_is_arg);
+    char buf[80];
+    ch_log(NULL, "LKVAR:    ...: GLV flags %s",
+		    flags_tostring(flags, glv_flag_strings, buf, sizeof(buf)));
+#endif
 
     // Clear everything in "lp".
     CLEAR_POINTER(lp);
@@ -1113,6 +1273,14 @@ get_lval(
 		    semsg(_(e_using_type_not_in_script_context_str), p);
 		    return NULL;
 		}
+		if (vim9script && (flags & GLV_NO_DECL) &&
+			!(flags & GLV_FOR_LOOP))
+		{
+		    // Using a type and not in a "var" declaration.
+		    semsg(_(e_trailing_characters_str), p);
+		    return NULL;
+		}
+
 
 		// parse the type after the name
 		lp->ll_type = parse_type(&tp,
@@ -1122,6 +1290,7 @@ get_lval(
 		    return NULL;
 		lp->ll_name_end = tp;
 	    }
+	    // TODO: check inside class?
 	}
     }
     if (lp->ll_name == NULL)
@@ -1157,13 +1326,18 @@ get_lval(
 
     // Without [idx] or .key we are done.
     if ((*p != '[' && *p != '.'))
+    {
+	if (lval_root != NULL)
+	    get_lval_root(lp, lval_root);
 	return p;
+    }
 
     if (vim9script && lval_root != NULL)
     {
 	// using local variable
-	lp->ll_tv = lval_root;
+	lp->ll_tv = lval_root->lr_tv;
 	v = NULL;
+	cl_exec = lval_root->lr_cl_exec;
     }
     else
     {
@@ -1179,14 +1353,6 @@ get_lval(
 	if (v == NULL)
 	    return NULL;
 	lp->ll_tv = &v->di_tv;
-    }
-    if (vim9script && writing && lp->ll_tv->v_type == VAR_CLASS
-	    && (lp->ll_tv->vval.v_class->class_flags & CLASS_INTERFACE) != 0)
-    {
-	if (!quiet)
-	    semsg(_(e_interface_static_direct_access_str),
-			    lp->ll_tv->vval.v_class->class_name, lp->ll_name);
-	return NULL;
     }
 
     if (vim9script && (flags & GLV_NO_DECL) == 0)
@@ -1209,6 +1375,7 @@ get_lval(
 		      && v_type != VAR_OBJECT
 		      && v_type != VAR_CLASS)
 	{
+	    // TODO: have a message with obj/class, not just dict,
 	    if (!quiet)
 		semsg(_(e_dot_can_only_be_used_on_dictionary_str), name);
 	    return NULL;
@@ -1219,6 +1386,7 @@ get_lval(
 		&& v_type != VAR_OBJECT
 		&& v_type != VAR_CLASS)
 	{
+	    // TODO: have a message with obj/class, not just dict/list/blob,
 	    if (!quiet)
 		emsg(_(e_can_only_index_list_dictionary_or_blob));
 	    return NULL;
@@ -1228,8 +1396,7 @@ get_lval(
 	int r = OK;
 	if (v_type == VAR_LIST && lp->ll_tv->vval.v_list == NULL)
 	    r = rettv_list_alloc(lp->ll_tv);
-	else if (v_type == VAR_BLOB
-					     && lp->ll_tv->vval.v_blob == NULL)
+	else if (v_type == VAR_BLOB && lp->ll_tv->vval.v_blob == NULL)
 	    r = rettv_blob_alloc(lp->ll_tv);
 	if (r == FAIL)
 	    return NULL;
@@ -1359,6 +1526,8 @@ get_lval(
 		}
 	    }
 	    lp->ll_list = NULL;
+	    lp->ll_object = NULL;
+	    lp->ll_class = NULL;
 
 	    // a NULL dict is equivalent with an empty dict
 	    if (lp->ll_tv->vval.v_dict == NULL)
@@ -1491,6 +1660,8 @@ get_lval(
 	    clear_tv(&var1);
 
 	    lp->ll_dict = NULL;
+	    lp->ll_object = NULL;
+	    lp->ll_class = NULL;
 	    lp->ll_list = lp->ll_tv->vval.v_list;
 	    lp->ll_li = check_range_index_one(lp->ll_list, &lp->ll_n1,
 				     (flags & GLV_ASSIGN_WITH_OP) == 0, quiet);
@@ -1525,10 +1696,22 @@ get_lval(
 	}
 	else  // v_type == VAR_CLASS || v_type == VAR_OBJECT
 	{
-	    class_T *cl = (v_type == VAR_OBJECT
-					   && lp->ll_tv->vval.v_object != NULL)
-			    ? lp->ll_tv->vval.v_object->obj_class
-			    : lp->ll_tv->vval.v_class;
+	    lp->ll_dict = NULL;
+	    lp->ll_list = NULL;
+
+	    class_T *cl;
+	    if (v_type == VAR_OBJECT && lp->ll_tv->vval.v_object != NULL)
+	    {
+	        cl = lp->ll_tv->vval.v_object->obj_class;
+	        lp->ll_object = lp->ll_tv->vval.v_object;
+	    }
+	    else
+	    {
+	        cl = lp->ll_tv->vval.v_class;
+	        lp->ll_object = NULL;
+	    }
+	    lp->ll_class = cl;
+
 	    // TODO: what if class is NULL?
 	    if (cl != NULL)
 	    {
@@ -1548,6 +1731,7 @@ get_lval(
 			fp = method_lookup(cl,
 				round == 1 ? VAR_CLASS : VAR_OBJECT,
 				key, p - key, &m_idx);
+			lp->ll_oi = m_idx;
 			if (fp != NULL)
 			{
 			    lp->ll_ufunc = fp;
@@ -1560,28 +1744,14 @@ get_lval(
 		if (lp->ll_valtype == NULL)
 		{
 		    int		m_idx;
-		    ocmember_T	*om;
-
-		    om = member_lookup(cl, v_type, key, p - key, &m_idx);
+		    ocmember_T	*om
+			    = member_lookup(cl, v_type, key, p - key, &m_idx);
+		    lp->ll_oi = m_idx;
 		    if (om != NULL)
 		    {
-			switch (om->ocm_access)
-			{
-			    case VIM_ACCESS_PRIVATE:
-				semsg(_(e_cannot_access_private_member_str),
-					om->ocm_name);
-				return NULL;
-			    case VIM_ACCESS_READ:
-				if ((flags & GLV_READ_ONLY) == 0)
-				{
-				    semsg(_(e_member_is_not_writable_str),
-					    om->ocm_name);
-				    return NULL;
-				}
-				break;
-			    case VIM_ACCESS_ALL:
-				break;
-			}
+			if (get_lval_check_access(cl_exec, cl, om,
+							  p, flags) == FAIL)
+			    return NULL;
 
 			lp->ll_valtype = om->ocm_type;
 
@@ -1590,7 +1760,6 @@ get_lval(
 					lp->ll_tv->vval.v_object + 1)) + m_idx;
 			else
 			    lp->ll_tv = &cl->class_members_tv[m_idx];
-			break;
 		    }
 		}
 

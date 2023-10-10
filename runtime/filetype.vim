@@ -184,6 +184,9 @@ au BufNewFile,BufRead *.atl,*.as		setf atlas
 " Atom is based on XML
 au BufNewFile,BufRead *.atom			setf xml
 
+" Authzed
+au BufNewFile,BufRead *.zed			setf authzed
+
 " Autoit v3
 au BufNewFile,BufRead *.au3			setf autoit
 
@@ -1089,6 +1092,9 @@ au BufNewFile,BufRead *.jsonnet,*.libsonnet	setf jsonnet
 
 " Julia
 au BufNewFile,BufRead *.jl			setf julia
+
+" Just
+au BufNewFile,BufRead [jJ]ustfile,.justfile,*.just setf just
 
 " KDL
 au BufNewFile,BufRead *.kdl			setf kdl

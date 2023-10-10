@@ -22,7 +22,7 @@ jobs:
     env:
       CC: ${{ matrix.compiler }}
       GCC_VER: 13
-      CLANG_VER: 16
+      CLANG_VER: 17
       TEST: test
       SRCDIR: ./src
       LEAK_CFLAGS: -DEXITFREE
@@ -110,6 +110,8 @@ jobs:
               tcl-dev \
               cscope \
               libsodium-dev \
+              attr \
+              libattr1-dev
             )
           fi
           sudo apt-get update && sudo apt-get install -y "${PKGS[@]}"
