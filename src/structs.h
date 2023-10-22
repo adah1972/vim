@@ -603,7 +603,8 @@ typedef enum {
  */
 typedef struct expand
 {
-    char_u	*xp_pattern;		// start of item to expand
+    char_u	*xp_pattern;		// start of item to expand, guaranteed
+					// to be part of xp_line
     int		xp_context;		// type of expansion
     int		xp_pattern_len;		// bytes in xp_pattern before cursor
     xp_prefix_T	xp_prefix;
@@ -1085,6 +1086,20 @@ struct cleanup_stuff
 {
     int pending;		// error/interrupt/exception state
     except_T *exception;	// exception value
+};
+
+/*
+ * Exception state that is saved and restored when calling timer callback
+ * functions and deferred functions.
+ */
+typedef struct exception_state_S exception_state_T;
+struct exception_state_S
+{
+    except_T	*estate_current_exception;
+    int		estate_did_throw;
+    int		estate_need_rethrow;
+    int		estate_trylevel;
+    int		estate_did_emsg;
 };
 
 #ifdef FEAT_SYN_HL
@@ -2316,6 +2331,7 @@ struct partial_S
 
     int		pt_copyID;	// funcstack may contain pointer to partial
     dict_T	*pt_dict;	// dict for "self"
+    object_T	*pt_obj;	// object method
 };
 
 typedef struct {
@@ -4604,13 +4620,12 @@ typedef struct lval_S
 } lval_T;
 
 /**
- * This may be used to specify the base type that get_lval() uses when
- * following a chain, for example a[idx1][idx2].
+ * This specifies optional parameters for get_lval(). Arguments may be NULL.
  */
 typedef struct lval_root_S {
-    typval_T	*lr_tv;
-    class_T	*lr_cl_exec;	// executing class for access checking
-    int		lr_is_arg;
+    typval_T	*lr_tv;		// Base typval.
+    class_T	*lr_cl_exec;	// Executing class for access checking.
+    int		lr_is_arg;	// name is an arg (not a member).
 } lval_root_T;
 
 // Structure used to save the current state.  Used when executing Normal mode

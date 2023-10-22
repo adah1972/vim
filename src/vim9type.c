@@ -144,7 +144,7 @@ alloc_type(type_T *type)
     if (ret->tt_member != NULL)
 	ret->tt_member = alloc_type(ret->tt_member);
 
-    if (type->tt_args != NULL)
+    if (type->tt_argcount > 0 && type->tt_args != NULL)
     {
 	int i;
 
@@ -153,6 +153,8 @@ alloc_type(type_T *type)
 	    for (i = 0; i < type->tt_argcount; ++i)
 		ret->tt_args[i] = alloc_type(type->tt_args[i]);
     }
+    else
+	ret->tt_args = NULL;
 
     return ret;
 }
@@ -882,6 +884,11 @@ check_type_maybe(
 		else
 		    ret = MAYBE;
 	    }
+	    if (ret != FAIL
+		    && ((expected->tt_flags & TTFLAG_VARARGS)
+			!= (actual->tt_flags & TTFLAG_VARARGS))
+		    && expected->tt_argcount != -1)
+		ret = FAIL;
 	    if (ret != FAIL && expected->tt_argcount != -1
 		    && actual->tt_min_argcount != -1
 		    && (actual->tt_argcount == -1
@@ -1224,6 +1231,15 @@ parse_type(char_u **arg, garray_T *type_gap, int give_error)
 			type = parse_type(&p, type_gap, give_error);
 			if (type == NULL)
 			    return NULL;
+			if ((flags & TTFLAG_VARARGS) != 0
+				&& type->tt_type != VAR_LIST)
+			{
+			    char *tofree;
+			    semsg(_(e_variable_arguments_type_must_be_list_str),
+				  type_name(type, &tofree));
+			    vim_free(tofree);
+			    return NULL;
+			}
 			arg_type[argcount++] = type;
 
 			// Nothing comes after "...{type}".

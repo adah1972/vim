@@ -24,17 +24,6 @@
 # define _USE_32BIT_TIME_T
 #endif
 
-/*
- * Prevent including winsock.h.  perl.h tries to detect whether winsock.h is
- * already included before including winsock2.h, because winsock2.h isn't
- * compatible with winsock.h.  However the detection doesn't work with some
- * versions of MinGW.  If WIN32_LEAN_AND_MEAN is defined, windows.h will not
- * include winsock.h.
- */
-#ifdef WIN32
-# define WIN32_LEAN_AND_MEAN
-#endif
-
 #include "vim.h"
 
 #ifdef _MSC_VER
@@ -44,6 +33,11 @@
 # define __builtin_expect(expr, val) (expr)
 // Work around for using MSVC and Strawberry Perl 5.32.
 # define NO_THREAD_SAFE_LOCALE
+#endif
+
+#if defined(MSWIN) && defined(DYNAMIC_PERL)
+// Work around for warning C4273 (inconsistent DLL linkage).
+# define PERL_EXT_RE_BUILD
 #endif
 
 #ifdef __GNUC__
@@ -166,7 +160,13 @@ typedef int XSUBADDR_t;
 typedef int perl_key;
 # endif
 
-# ifndef MSWIN
+# ifdef MSWIN
+#  define PERL_PROC FARPROC
+#  define load_dll vimLoadLib
+#  define symbol_from_dll GetProcAddress
+#  define close_dll FreeLibrary
+#  define load_dll_error GetWin32Error
+# else
 #  include <dlfcn.h>
 #  define HANDLE void*
 #  define PERL_PROC void*
@@ -174,12 +174,6 @@ typedef int perl_key;
 #  define symbol_from_dll dlsym
 #  define close_dll dlclose
 #  define load_dll_error dlerror
-# else
-#  define PERL_PROC FARPROC
-#  define load_dll vimLoadLib
-#  define symbol_from_dll GetProcAddress
-#  define close_dll FreeLibrary
-#  define load_dll_error GetWin32Error
 # endif
 /*
  * Wrapper defines
@@ -1483,7 +1477,7 @@ vim_IOLayer_init(void)
 
 # if (PERL_REVISION == 5) && (PERL_VERSION >= 18)
 #  undef Perl_sv_free2
-void Perl_sv_free2(pTHX_ SV* sv, const U32 refcnt)
+void Perl_sv_free2(pTHX_ SV *const sv, const U32 refcnt)
 {
     (*dll_Perl_sv_free2)(aTHX_ sv, refcnt);
 }
@@ -1519,7 +1513,7 @@ NV Perl_sv_2nv_flags(pTHX_ SV *const sv, const I32 flags)
 
 # ifdef PERL589_OR_LATER
 #  undef Perl_sv_2iv_flags
-IV Perl_sv_2iv_flags(pTHX_ SV* sv, I32 flags)
+IV Perl_sv_2iv_flags(pTHX_ SV *const sv, const I32 flags)
 {
     return (*dll_Perl_sv_2iv_flags)(aTHX_ sv, flags);
 }

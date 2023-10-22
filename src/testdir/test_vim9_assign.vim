@@ -1278,7 +1278,7 @@ def Test_assignment_dict()
     var n: any
     n.key = 5
   END
-  v9.CheckDefExecAndScriptFailure(lines, ['E1148:', 'E1203: Dot can only be used on a dictionary: n.key = 5'], 2)
+  v9.CheckDefExecAndScriptFailure(lines, ['E1148:', 'E1203: Dot not allowed after a number: n.key = 5'], 2)
 enddef
 
 def Test_assignment_local()
@@ -1861,6 +1861,62 @@ def Test_assign_lambda()
       echo filter([1, 2, 3], (_, v: string) => v + 1)
   END
   v9.CheckDefAndScriptFailure(lines, 'E1051:')
+enddef
+
+def Test_assign_funcref_args()
+  # unspecified arguments match everything, including varargs
+  var lines =<< trim END
+    vim9script
+
+    var FuncUnknown: func: number
+
+    FuncUnknown = (v): number => v
+    assert_equal(5, FuncUnknown(5))
+
+    FuncUnknown = (v1, v2): number => v1 + v2
+    assert_equal(7, FuncUnknown(3, 4))
+
+    FuncUnknown = (...v1): number => v1[0] + v1[1] + len(v1) * 1000
+    assert_equal(4007, FuncUnknown(3, 4, 5, 6))
+
+    FuncUnknown = (v: list<any>): number => v[0] + v[1] + len(v) * 1000
+    assert_equal(5009, FuncUnknown([4, 5, 6, 7, 8]))
+  END
+  v9.CheckScriptSuccess(lines)
+
+  # varargs must match
+  lines =<< trim END
+    vim9script
+    var FuncAnyVA: func(...any): number
+    FuncAnyVA = (v): number => v
+  END
+  v9.CheckScriptFailure(lines, 'E1180: Variable arguments type must be a list: any')
+
+  # varargs must match
+  lines =<< trim END
+    vim9script
+    var FuncAnyVA: func(...any): number
+    FuncAnyVA = (v1, v2): number => v1 + v2
+  END
+  v9.CheckScriptFailure(lines, 'E1180: Variable arguments type must be a list: any')
+
+  # varargs must match
+  lines =<< trim END
+    vim9script
+    var FuncAnyVA: func(...any): number
+    FuncAnyVA = (v1: list<any>): number => 3
+  END
+  v9.CheckScriptFailure(lines, 'E1180: Variable arguments type must be a list: any')
+enddef
+
+def Test_assign_funcref_arg_any()
+  var lines =<< trim END
+    vim9script
+    var FuncAnyVA: func(any): number
+    FuncAnyVA = (v): number => v
+  END
+  # TODO: Verify this should succeed.
+  v9.CheckScriptSuccess(lines)
 enddef
 
 def Test_heredoc()
