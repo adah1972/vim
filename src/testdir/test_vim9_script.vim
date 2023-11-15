@@ -4722,7 +4722,7 @@ def Test_defer_after_exception()
 
     assert_equal([2, 3, 1, 4, 5, 6, 7], callTrace)
   END
-  v9.CheckScriptSuccess(lines)
+  v9.CheckSourceSuccess(lines)
 enddef
 
 " Test for multiple deferred function which throw exceptions.
@@ -4780,7 +4780,7 @@ def Test_multidefer_with_exception()
     assert_equal('E605: Exception not caught: InnerException', v:errmsg)
     assert_equal([11, 9, 10, 7, 8, 5, 1, 3, 4, 12, 15, 16], callTrace)
   END
-  v9.CheckScriptSuccess(lines)
+  v9.CheckSourceSuccess(lines)
 enddef
 
 " Keep this last, it messes up highlighting.

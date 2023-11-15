@@ -2248,7 +2248,7 @@ execute_storeindex(isn_T *iptr, ectx_T *ectx)
 	    {
 		if (*member == '_')
 		{
-		    emsg_var_cl_define(e_cannot_access_private_variable_str,
+		    emsg_var_cl_define(e_cannot_access_protected_variable_str,
 							m->ocm_name, 0, cl);
 		    status = FAIL;
 		}
@@ -3807,6 +3807,13 @@ exec_instructions(ectx_T *ectx)
 	    case ISN_STORE:
 		--ectx->ec_stack.ga_len;
 		tv = STACK_TV_VAR(iptr->isn_arg.number);
+		if (STACK_TV_BOT(0)->v_type == VAR_TYPEALIAS)
+		{
+		    semsg(_(e_using_typealias_as_value),
+				STACK_TV_BOT(0)->vval.v_typealias->ta_name);
+		    clear_tv(STACK_TV_BOT(0));
+		    goto on_error;
+		}
 		clear_tv(tv);
 		*tv = *STACK_TV_BOT(0);
 		break;
@@ -7517,6 +7524,7 @@ tv2bool(typval_T *tv)
 	case VAR_INSTR:
 	case VAR_CLASS:
 	case VAR_OBJECT:
+	case VAR_TYPEALIAS:
 	    break;
     }
     return FALSE;

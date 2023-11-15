@@ -186,6 +186,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     cvs: ['cvs123'],
     cvsrc: ['.cvsrc'],
     cynpp: ['file.cyn'],
+    cypher: ['file.cypher'],
     d: ['file.d'],
     dart: ['file.dart', 'file.drt'],
     datascript: ['file.ds'],
@@ -277,6 +278,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     gkrellmrc: ['gkrellmrc', 'gkrellmrc_x'],
     gleam: ['file.gleam'],
     glsl: ['file.glsl'],
+    gn: ['file.gn', 'file.gni'],
     gnash: ['gnashrc', '.gnashrc', 'gnashpluginrc', '.gnashpluginrc'],
     gnuplot: ['file.gpi', '.gnuplot'],
     go: ['file.go'],
@@ -334,6 +336,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     j: ['file.ijs'],
     jal: ['file.jal', 'file.JAL'],
     jam: ['file.jpl', 'file.jpr', 'JAM-file.file', 'JAM.file', 'Prl-file.file', 'Prl.file'],
+    janet: ['file.janet'],
     java: ['file.java', 'file.jav'],
     javacc: ['file.jj', 'file.jjt'],
     javascript: ['file.js', 'file.jsm', 'file.javascript', 'file.es', 'file.mjs', 'file.cjs'],
@@ -493,6 +496,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     nsis: ['file.nsi', 'file.nsh'],
     nu: ['env.nu', 'config.nu'],
     obj: ['file.obj'],
+    objdump: ['file.objdump', 'file.cppobjdump'],
     obse: ['file.obl', 'file.obse', 'file.oblivion', 'file.obscript'],
     ocaml: ['file.ml', 'file.mli', 'file.mll', 'file.mly', '.ocamlinit', 'file.mlt', 'file.mlp', 'file.mlip', 'file.mli.cppo', 'file.ml.cppo'],
     occam: ['file.occ'],
@@ -782,8 +786,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     vrml: ['file.wrl'],
     vroom: ['file.vroom'],
     vue: ['file.vue'],
-    wat: ['file.wat'],
-    wast: ['file.wast'],
+    wat: ['file.wat', 'file.wast'],
     wdl: ['file.wdl'],
     webmacro: ['file.wm'],
     wget: ['.wgetrc', 'wgetrc'],
@@ -795,10 +798,12 @@ def s:GetFilenameChecks(): dict<list<string>>
     wsh: ['file.wsf', 'file.wsc'],
     wsml: ['file.wsml'],
     wvdial: ['wvdial.conf', '.wvdialrc'],
+    xcompose: ['.XCompose', 'Compose'],
     xdefaults: ['.Xdefaults', '.Xpdefaults', '.Xresources', 'xdm-config', 'file.ad', '/Xresources/file', '/app-defaults/file', 'Xresources', 'Xresources-file', 'any/Xresources/file', 'any/app-defaults/file'],
     xf86conf: ['xorg.conf', 'xorg.conf-4'],
     xhtml: ['file.xhtml', 'file.xht'],
     xinetd: ['/etc/xinetd.conf', '/etc/xinetd.d/file', 'any/etc/xinetd.conf', 'any/etc/xinetd.d/file'],
+    xkb: ['/usr/share/X11/xkb/compat/pc', '/usr/share/X11/xkb/geometry/pc', '/usr/share/X11/xkb/keycodes/evdev', '/usr/share/X11/xkb/symbols/pc', '/usr/share/X11/xkb/types/pc'],
     xmath: ['file.msc', 'file.msf'],
     xml: ['/etc/blkid.tab', '/etc/blkid.tab.old', 'file.xmi', 'file.csproj', 'file.csproj.user', 'file.fsproj', 'file.fsproj.user', 'file.vbproj', 'file.vbproj.user', 'file.ui', 'file.tpm', '/etc/xdg/menus/file.menu', 'fglrxrc', 'file.xlf', 'file.xliff', 'file.xul', 'file.wsdl', 'file.wpl', 'any/etc/blkid.tab', 'any/etc/blkid.tab.old', 'any/etc/xdg/menus/file.menu', 'file.atom', 'file.rss', 'file.cdxml', 'file.psc1', 'file.mpd'],
     xmodmap: ['anyXmodmap', 'Xmodmap', 'some-Xmodmap', 'some-xmodmap', 'some-xmodmap-file', 'xmodmap', 'xmodmap-file'],
@@ -951,6 +956,8 @@ def s:GetScriptChecks(): dict<list<list<string>>>
     crystal: [['#!/path/crystal']],
     rexx:   [['#!/path/rexx'],
             ['#!/path/regina']],
+    janet:  [['#!/path/janet']],
+    dart:   [['#!/path/dart']],
   }
 enddef
 
@@ -1476,12 +1483,12 @@ func Test_hook_file()
 
   call writefile(['[Trigger]', 'this is pacman config'], 'Xfile.hook', 'D')
   split Xfile.hook
-  call assert_equal('conf', &filetype)
+  call assert_equal('confini', &filetype)
   bwipe!
 
   call writefile(['not pacman'], 'Xfile.hook')
   split Xfile.hook
-  call assert_notequal('conf', &filetype)
+  call assert_notequal('confini', &filetype)
   bwipe!
 
   filetype off

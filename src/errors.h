@@ -3384,17 +3384,17 @@ EXTERN char e_invalid_object_variable_declaration_str[]
 EXTERN char e_not_valid_command_in_class_str[]
 	INIT(= N_("E1318: Not a valid command in a class: %s"));
 EXTERN char e_using_class_as_number[]
-	INIT(= N_("E1319: Using a class as a Number"));
+	INIT(= N_("E1319: Using a Class as a Number"));
 EXTERN char e_using_object_as_number[]
-	INIT(= N_("E1320: Using an object as a Number"));
+	INIT(= N_("E1320: Using an Object as a Number"));
 EXTERN char e_using_class_as_float[]
-	INIT(= N_("E1321: Using a class as a Float"));
+	INIT(= N_("E1321: Using a Class as a Float"));
 EXTERN char e_using_object_as_float[]
-	INIT(= N_("E1322: Using an object as a Float"));
+	INIT(= N_("E1322: Using an Object as a Float"));
 EXTERN char e_using_class_as_string[]
-	INIT(= N_("E1323: Using a class as a String"));
+	INIT(= N_("E1323: Using a Class as a String"));
 EXTERN char e_using_object_as_string[]
-	INIT(= N_("E1324: Using an object as a String"));
+	INIT(= N_("E1324: Using an Object as a String"));
 EXTERN char e_method_not_found_on_class_str_str[]
 	INIT(= N_("E1325: Method \"%s\" not found in class \"%s\""));
 EXTERN char e_variable_not_found_on_object_str_str[]
@@ -3410,8 +3410,8 @@ EXTERN char e_public_must_be_followed_by_this_or_static[]
 	INIT(= N_("E1331: Public must be followed by \"this\" or \"static\""));
 EXTERN char e_public_variable_name_cannot_start_with_underscore_str[]
 	INIT(= N_("E1332: Public variable name cannot start with underscore: %s"));
-EXTERN char e_cannot_access_private_variable_str[]
-	INIT(= N_("E1333: Cannot access private variable \"%s\" in class \"%s\""));
+EXTERN char e_cannot_access_protected_variable_str[]
+	INIT(= N_("E1333: Cannot access protected variable \"%s\" in class \"%s\""));
 // E1334 unused
 EXTERN char e_variable_is_not_writable_str[]
 	INIT(= N_("E1335: Variable \"%s\" in class \"%s\" is not writable"));
@@ -3484,8 +3484,8 @@ EXTERN char e_warning_pointer_block_corrupted[]
 #ifdef FEAT_EVAL
 EXTERN char e_cannot_use_a_return_type_with_new_method[]
 	INIT(= N_("E1365: Cannot use a return type with the \"new\" method"));
-EXTERN char e_cannot_access_private_method_str[]
-	INIT(= N_("E1366: Cannot access private method: %s"));
+EXTERN char e_cannot_access_protected_method_str[]
+	INIT(= N_("E1366: Cannot access protected method: %s"));
 EXTERN char e_variable_str_of_interface_str_has_different_access[]
 	INIT(= N_("E1367: Access level of variable \"%s\" of interface \"%s\" is different"));
 EXTERN char e_static_cannot_be_followed_by_this[]
@@ -3494,8 +3494,8 @@ EXTERN char e_duplicate_variable_str[]
 	INIT(= N_("E1369: Duplicate variable: %s"));
 EXTERN char e_cannot_define_new_method_as_static[]
 	INIT(= N_("E1370: Cannot define a \"new\" method as static"));
-EXTERN char e_abstract_must_be_followed_by_def_or_static[]
-	INIT(= N_("E1371: Abstract must be followed by \"def\" or \"static\""));
+EXTERN char e_abstract_must_be_followed_by_def[]
+	INIT(= N_("E1371: Abstract must be followed by \"def\""));
 EXTERN char e_abstract_method_in_concrete_class[]
 	INIT(= N_("E1372: Abstract method \"%s\" cannot be defined in a concrete class"));
 EXTERN char e_abstract_method_str_not_found[]
@@ -3510,10 +3510,10 @@ EXTERN char e_method_str_of_class_str_has_different_access[]
 	INIT(= N_("E1377: Access level of method \"%s\" is different in class \"%s\""));
 EXTERN char e_static_member_not_supported_in_interface[]
 	INIT(= N_("E1378: Static member not supported in an interface"));
-EXTERN char e_private_variable_not_supported_in_interface[]
-	INIT(= N_("E1379: Private variable not supported in an interface"));
-EXTERN char e_private_method_not_supported_in_interface[]
-	INIT(= N_("E1380: Private method not supported in an interface"));
+EXTERN char e_protected_variable_not_supported_in_interface[]
+	INIT(= N_("E1379: Protected variable not supported in an interface"));
+EXTERN char e_protected_method_not_supported_in_interface[]
+	INIT(= N_("E1380: Protected method not supported in an interface"));
 EXTERN char e_interface_cannot_use_implements[]
 	INIT(= N_("E1381: Interface cannot use \"implements\""));
 EXTERN char e_variable_str_type_mismatch_expected_str_but_got_str[]
@@ -3538,8 +3538,32 @@ EXTERN char e_cannot_lock_object_variable_str[]
 	INIT(= N_("E1391: Cannot (un)lock variable \"%s\" in class \"%s\""));
 EXTERN char e_cannot_lock_class_variable_str[]
 	INIT(= N_("E1392: Cannot (un)lock class variable \"%s\" in class \"%s\""));
+EXTERN char e_type_can_only_be_defined_in_vim9_script[]
+	INIT(= N_("E1393: Type can only be defined in Vim9 script"));
+EXTERN char e_type_name_must_start_with_uppercase_letter_str[]
+	INIT(= N_("E1394: Type name must start with an uppercase letter: %s"));
+EXTERN char e_cannot_modify_typealias[]
+	INIT(= N_("E1395: Type alias \"%s\" cannot be modified"));
+EXTERN char e_typealias_already_exists_for_str[]
+	INIT(= N_("E1396: Type alias \"%s\" already exists"));
+EXTERN char e_missing_typealias_name[]
+	INIT(= N_("E1397: Missing type alias name"));
+EXTERN char e_missing_typealias_type[]
+	INIT(= N_("E1398: Missing type alias type"));
+EXTERN char e_type_can_only_be_used_in_script[]
+	INIT(= N_("E1399: Type can only be used in a script"));
+EXTERN char e_using_typealias_as_number[]
+	INIT(= N_("E1400: Using type alias \"%s\" as a Number"));
+EXTERN char e_using_typealias_as_float[]
+	INIT(= N_("E1401: Using type alias \"%s\" as a Float"));
+EXTERN char e_using_typealias_as_string[]
+	INIT(= N_("E1402: Using type alias \"%s\" as a String"));
+EXTERN char e_using_typealias_as_value[]
+	INIT(= N_("E1403: Type alias \"%s\" cannot be used as a value"));
+EXTERN char e_abstract_cannot_be_used_in_interface[]
+	INIT(= N_("E1404: Abstract cannot be used in an interface"));
 #endif
-// E1393 - E1499 unused (reserved for Vim9 class support)
+// E1405 - E1499 unused (reserved for Vim9 class support)
 EXTERN char e_cannot_mix_positional_and_non_positional_str[]
 	INIT(= N_("E1500: Cannot mix positional and non-positional arguments: %s"));
 EXTERN char e_fmt_arg_nr_unused_str[]
@@ -3560,3 +3584,5 @@ EXTERN char e_xattr_e2big[]
 	INIT(= N_("E1508: Size of the extended attribute value is larger than the maximum size allowed"));
 EXTERN char e_xattr_other[]
 	INIT(= N_("E1509: Error occurred when reading or writing extended attribute"));
+EXTERN char e_val_too_large[]
+	INIT(= N_("E1510: Value too large: %s"));
