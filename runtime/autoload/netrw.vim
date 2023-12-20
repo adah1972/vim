@@ -1,7 +1,10 @@
 " netrw.vim: Handles file transfer and remote directory listing across
 "            AUTOLOAD SECTION
 " Date:		May 03, 2023
-" Version:	173
+" Version:	173a
+" Last Change:
+" 	2023 Nov 21 by Vim Project: ignore wildignore when expanding $COMSPEC	(v173a)
+" 	2023 Nov 22 by Vim Project: fix handling of very long filename on longlist style	(v173a)
 " Maintainer:	Charles E Campbell <NcampObell@SdrPchip.AorgM-NOSPAM>
 " GetLatestVimScripts: 1075 1 :AutoInstall: netrw.vim
 " Copyright:    Copyright (C) 2016 Charles E. Campbell {{{1
@@ -400,7 +403,7 @@ if !exists("g:netrw_localcopycmd")
   if g:netrw_cygwin
    let g:netrw_localcopycmd= "cp"
   else
-   let g:netrw_localcopycmd   = expand("$COMSPEC")
+   let g:netrw_localcopycmd   = expand("$COMSPEC", v:true)
    let g:netrw_localcopycmdopt= " /c copy"
   endif
  elseif has("unix") || has("macunix")
@@ -415,7 +418,7 @@ if !exists("g:netrw_localcopydircmd")
    let g:netrw_localcopydircmd   = "cp"
    let g:netrw_localcopydircmdopt= " -R"
   else
-   let g:netrw_localcopydircmd   = expand("$COMSPEC")
+   let g:netrw_localcopydircmd   = expand("$COMSPEC", v:true)
    let g:netrw_localcopydircmdopt= " /c xcopy /e /c /h /i /k"
   endif
  elseif has("unix")
@@ -436,7 +439,7 @@ if has("win32") || has("win95") || has("win64") || has("win16")
   if g:netrw_cygwin
    call s:NetrwInit("g:netrw_localmkdir","mkdir")
   else
-   let g:netrw_localmkdir   = expand("$COMSPEC")
+   let g:netrw_localmkdir   = expand("$COMSPEC", v:true)
    let g:netrw_localmkdiropt= " /c mkdir"
   endif
 else
@@ -452,7 +455,7 @@ if !exists("g:netrw_localmovecmd")
   if g:netrw_cygwin
    let g:netrw_localmovecmd= "mv"
   else
-   let g:netrw_localmovecmd   = expand("$COMSPEC")
+   let g:netrw_localmovecmd   = expand("$COMSPEC", v:true)
    let g:netrw_localmovecmdopt= " /c move"
   endif
  elseif has("unix") || has("macunix")
@@ -5312,7 +5315,8 @@ fun! s:NetrwBrowseUpDir(islocal)
    endif
    call s:RestorePosn(s:netrw_posn)
    let curdir= substitute(curdir,'^.*[\/]','','')
-   call search('\<'.curdir.'/','wc')
+   let curdir= '\<'. escape(curdir, '~'). '/'
+   call search(curdir,'wc')
   endif
 "  call Dret("s:NetrwBrowseUpDir")
 endfun
@@ -10377,7 +10381,7 @@ fun! s:NetrwRemoteListing()
    let w:netrw_bannercnt= s:bannercnt
   endif
   if !exists("w:netrw_bannercnt") && exists("b:bannercnt")
-   let w:netrw_bannercnt= s:bannercnt
+   let w:netrw_bannercnt= b:bannercnt
   endif
 
   call s:RemotePathAnalysis(b:netrw_curdir)
@@ -10959,6 +10963,10 @@ fun! s:LocalBrowseRefresh()
 "   call Dret("s:LocalBrowseRefresh : don't refresh when focus not on netrw window")
    return
   endif
+  if !empty(getcmdwintype())
+    " cannot move away from cmdline window, see :h E11
+    return
+  endif
   if exists("s:netrw_events") && s:netrw_events == 1
    " s:LocalFastBrowser gets called (indirectly) from a
    let s:netrw_events= 2
@@ -11185,16 +11193,16 @@ fun! s:LocalListing()
 "   call Decho("pfile   <".pfile.">",'~'.expand("<slnum>"))
 
    if w:netrw_liststyle == s:LONGLIST
+    let longfile= printf("%-".g:netrw_maxfilenamelen."S",pfile)
     let sz   = getfsize(filename)
 	let szlen = 15 - (strdisplaywidth(longfile) - g:netrw_maxfilenamelen)
     let szlen = (szlen > 0) ? szlen : 0
-    let fsz  = printf("%".szlen."S",sz)
 
     if g:netrw_sizestyle =~# "[hH]"
      let sz= s:NetrwHumanReadable(sz)
     endif
-	let longfile= printf("%-".g:netrw_maxfilenamelen."S",pfile)
-    let pfile   = longfile."  ".sz." ".strftime(g:netrw_timefmt,getftime(filename))
+    let fsz  = printf("%".szlen."S",sz)
+    let pfile   = longfile."  ".fsz." ".strftime(g:netrw_timefmt,getftime(filename))
 "    call Decho("longlist support: sz=".sz." fsz=".fsz,'~'.expand("<slnum>"))
    endif
 
@@ -11204,7 +11212,7 @@ fun! s:LocalListing()
 "    call Decho("implementing g:netrw_sort_by=".g:netrw_sort_by." (time)")
 "    call Decho("getftime(".filename.")=".getftime(filename),'~'.expand("<slnum>"))
     let t  = getftime(filename)
-    let ft = strpart("000000000000000000",1,18-strlen(t)).t
+    let ft = printf("%018d",t)
 "    call Decho("exe NetrwKeepj put ='".ft.'/'.pfile."'",'~'.expand("<slnum>"))
     let ftpfile= ft.'/'.pfile
     sil! NetrwKeepj put=ftpfile
@@ -11214,10 +11222,7 @@ fun! s:LocalListing()
 "    call Decho("implementing g:netrw_sort_by=".g:netrw_sort_by." (size)")
 "    call Decho("getfsize(".filename.")=".getfsize(filename),'~'.expand("<slnum>"))
     let sz   = getfsize(filename)
-    if g:netrw_sizestyle =~# "[hH]"
-     let sz= s:NetrwHumanReadable(sz)
-    endif
-    let fsz  = strpart("000000000000000000",1,18-strlen(sz)).sz
+    let fsz  = printf("%018d",sz)
 "    call Decho("exe NetrwKeepj put ='".fsz.'/'.filename."'",'~'.expand("<slnum>"))
     let fszpfile= fsz.'/'.pfile
     sil! NetrwKeepj put =fszpfile
@@ -11273,6 +11278,10 @@ endfun
 " s:NetrwLocalRename: rename a local file or directory {{{2
 fun! s:NetrwLocalRename(path) range
 "  call Dfunc("NetrwLocalRename(path<".a:path.">)")
+
+  if !exists("w:netrw_bannercnt")
+   let w:netrw_bannercnt= b:netrw_bannercnt
+  endif
 
   " preparation for removing multiple files/directories
   let ykeep     = @@
@@ -11374,6 +11383,10 @@ endfun
 fun! s:NetrwLocalRm(path) range
 "  call Dfunc("s:NetrwLocalRm(path<".a:path.">)")
 "  call Decho("firstline=".a:firstline." lastline=".a:lastline,'~'.expand("<slnum>"))
+
+  if !exists("w:netrw_bannercnt")
+   let w:netrw_bannercnt= b:netrw_bannercnt
+  endif
 
   " preparation for removing multiple files/directories
   let ykeep = @@

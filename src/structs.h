@@ -1523,14 +1523,18 @@ typedef enum {
     VIM_ACCESS_ALL	// read/write everywhere
 } omacc_T;
 
+#define OCMFLAG_HAS_TYPE	0x01	// type specified explicitly
+#define OCMFLAG_FINAL		0x02	// "final" object/class member
+#define OCMFLAG_CONST		0x04	// "const" object/class member
+
 /*
  * Entry for an object or class member variable.
  */
 typedef struct {
     char_u	*ocm_name;	// allocated
     omacc_T	ocm_access;
-    int		ocm_has_type;	// type specified explicitly
     type_T	*ocm_type;
+    int		ocm_flags;
     char_u	*ocm_init;	// allocated
 } ocmember_T;
 
@@ -4968,6 +4972,8 @@ typedef struct
     // is parameterized, then the "os_errbuf" buffer is used to store the error
     // message (when it is not NULL).
     char	*os_errbuf;
+    // length of the error buffer
+    size_t	os_errbuflen;
 } optset_T;
 
 /*

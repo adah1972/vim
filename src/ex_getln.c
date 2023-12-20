@@ -2050,6 +2050,9 @@ getcmdline_int(
 #ifdef CURSOR_SHAPE
 		ui_cursor_shape();	// may show different cursor shape
 #endif
+		may_trigger_modechanged();
+		status_redraw_curbuf();
+		redraw_statuslines();
 		goto cmdline_not_changed;
 
 	case Ctrl_HAT:
@@ -3169,8 +3172,6 @@ redraw:
     return (char_u *)line_ga.ga_data;
 }
 
-# if defined(MCH_CURSOR_SHAPE) || defined(FEAT_GUI) \
-	|| defined(FEAT_MOUSESHAPE) || defined(PROTO)
 /*
  * Return TRUE if ccline.overstrike is on.
  */
@@ -3180,6 +3181,8 @@ cmdline_overstrike(void)
     return ccline.overstrike;
 }
 
+# if defined(MCH_CURSOR_SHAPE) || defined(FEAT_GUI) \
+	 || defined(FEAT_MOUSESHAPE) || defined(PROTO)
 /*
  * Return TRUE if the cursor is at the end of the cmdline.
  */
@@ -4750,7 +4753,7 @@ script_get(exarg_T *eap UNUSED, char_u *cmd UNUSED)
     char_u	*s;
     garray_T	ga;
 
-    if (cmd[0] != '<' || cmd[1] != '<' || eap->getline == NULL)
+    if (cmd[0] != '<' || cmd[1] != '<' || eap->ea_getline == NULL)
 	return NULL;
     cmd += 2;
 

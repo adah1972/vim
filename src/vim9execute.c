@@ -398,6 +398,9 @@ check_ufunc_arg_types(ufunc_T *ufunc, int argcount, int off, ectx_T *ectx)
 	if (argv[i].v_type == VAR_SPECIAL
 		&& argv[i].vval.v_number == VVAL_NONE)
 	    continue;
+	// only pass values to user functions, never types
+	if (check_typval_is_value(&argv[i]) == FAIL)
+	    return FAIL;
 
 	if (i < ufunc->uf_args.ga_len && ufunc->uf_arg_types != NULL)
 	    type = ufunc->uf_arg_types[i];
@@ -547,6 +550,12 @@ call_dfunc(
     // Check the argument types.
     if (check_ufunc_arg_types(ufunc, argcount, vararg_count, ectx) == FAIL)
 	return FAIL;
+
+    // While check_ufunc_arg_types call, def function compilation process may
+    // run.  If so many def functions are compiled, def_functions array may be
+    // reallocated and dfunc may no longer have valid pointer.  Get the object
+    // pointer from def_functions again here.
+    dfunc = ((dfunc_T *)def_functions.ga_data) + cdf_idx;
 
     // Reserve space for:
     // - missing arguments
@@ -3807,10 +3816,8 @@ exec_instructions(ectx_T *ectx)
 	    case ISN_STORE:
 		--ectx->ec_stack.ga_len;
 		tv = STACK_TV_VAR(iptr->isn_arg.number);
-		if (STACK_TV_BOT(0)->v_type == VAR_TYPEALIAS)
+		if (check_typval_is_value(STACK_TV_BOT(0)) == FAIL)
 		{
-		    semsg(_(e_using_typealias_as_value),
-				STACK_TV_BOT(0)->vval.v_typealias->ta_name);
 		    clear_tv(STACK_TV_BOT(0));
 		    goto on_error;
 		}
@@ -4117,8 +4124,22 @@ exec_instructions(ectx_T *ectx)
 				      + iptr->isn_arg.outer.outer_idx;
 		    if (iptr->isn_type == ISN_LOADOUTER)
 		    {
+			typval_T *copy;
 			if (GA_GROW_FAILS(&ectx->ec_stack, 1))
 			    goto theend;
+			// careful: ga_grow_inner may re-alloc the stack
+			if (depth < 0)
+			    copy = ((typval_T *)outer->out_loop[-depth - 1]
+								   .stack->ga_data)
+					      + outer->out_loop[-depth - 1].var_idx
+					      + iptr->isn_arg.outer.outer_idx;
+			else
+			    copy = ((typval_T *)outer->out_stack->ga_data)
+					  + outer->out_frame_idx + STACK_FRAME_SIZE
+					  + iptr->isn_arg.outer.outer_idx;
+			// memory was freed, get tv again
+			if (copy != tv)
+			    tv = copy;
 			copy_tv(tv, STACK_TV_BOT(0));
 			++ectx->ec_stack.ga_len;
 		    }
@@ -4434,7 +4455,11 @@ exec_instructions(ectx_T *ectx)
 		else
 		{
 		    *tv = *STACK_TV_VAR(0);
-		    ++tv->vval.v_object->obj_refcount;
+		    object_T *obj = tv->vval.v_object;
+		    ++obj->obj_refcount;
+
+		    // Lock all the constant object variables
+		    obj_lock_const_vars(obj);
 		}
 		// FALLTHROUGH
 
@@ -4443,6 +4468,12 @@ exec_instructions(ectx_T *ectx)
 		{
 		    garray_T	*trystack = &ectx->ec_trystack;
 		    trycmd_T    *trycmd = NULL;
+
+		    ///////////////////////////////////////////////////
+		    // TODO: If FAIL, line number in output not correct
+		    ///////////////////////////////////////////////////
+		    if (check_typval_is_value(STACK_TV_BOT(-1)) == FAIL)
+			goto theend;
 
 		    if (trystack->ga_len > 0)
 			trycmd = ((trycmd_T *)trystack->ga_data)

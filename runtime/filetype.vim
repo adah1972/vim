@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last Change:	2023 Aug 10
+" Last Change:	2023 Dec 06
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " Listen very carefully, I will say this only once
@@ -348,7 +348,7 @@ au BufNewFile,BufRead *.cypher			setf cypher
 " C++
 au BufNewFile,BufRead *.cxx,*.c++,*.hh,*.hxx,*.hpp,*.ipp,*.moc,*.tcc,*.inl setf cpp
 if has("fname_case")
-  au BufNewFile,BufRead *.C,*.H setf cpp
+	au BufNewFile,BufRead *.C,*.H if !&fileignorecase | setf cpp | endif
 endif
 
 " C++ 20 modules (clang)
@@ -496,6 +496,10 @@ au BufNewFile,BufRead *.eu,*.ew,*.exu,*.exw  call dist#ft#EuphoriaCheck()
 if has("fname_case")
    au BufNewFile,BufRead *.EU,*.EW,*.EX,*.EXU,*.EXW  call dist#ft#EuphoriaCheck()
 endif
+
+" Execline (s6) scripts
+au BufNewFile,BufRead *s6*/\(up\|down\|run\|finish\)    setf execline
+au BufNewFile,BufRead s6-*                              setf execline
 
 " Lynx config files
 au BufNewFile,BufRead lynx.cfg			setf lynx
@@ -1397,6 +1401,9 @@ au BufRead,BufNewFile *.mu			setf mupad
 " Mush
 au BufNewFile,BufRead *.mush			setf mush
 
+" Mustache
+au BufNewFile,BufRead *.mustache		setf mustache
+
 " Mutt setup file (also for Muttng)
 au BufNewFile,BufRead Mutt{ng,}rc		setf muttrc
 
@@ -1460,7 +1467,7 @@ au BufNewFile,BufRead *.nse			setf lua
 au BufNewFile,BufRead *.nsi,*.nsh		setf nsis
 
 " Nu
-au BufNewFile,BufRead {env,config}.nu		setf nu
+au BufNewFile,BufRead *.nu		setf nu
 
 " Oblivion Language and Oblivion Script Extender
 au BufNewFile,BufRead *.obl,*.obse,*.oblivion,*.obscript  setf obse
@@ -1517,6 +1524,9 @@ au BufNewFile,BufRead *.hook
 	\ if getline(1) == '[Trigger]' |
 	\   setf confini |
 	\ endif
+
+" Pacman log
+au BufNewFile,BufRead pacman.log			setf pacmanlog
 
 " Pam conf
 au BufNewFile,BufRead */etc/pam.conf			setf pamconf
@@ -1688,8 +1698,8 @@ au BufNewFile,BufRead .procmail,.procmailrc	setf procmail
 " Progress or CWEB
 au BufNewFile,BufRead *.w			call dist#ft#FTprogress_cweb()
 
-" Progress or assembly
-au BufNewFile,BufRead *.i			call dist#ft#FTprogress_asm()
+" Progress or assembly or Swig
+au BufNewFile,BufRead *.i			call dist#ft#FTi()
 
 " Progress or Pascal
 au BufNewFile,BufRead *.p			call dist#ft#FTprogress_pascal()
@@ -2182,6 +2192,9 @@ au BufNewFile,BufRead *.swift.gyb		setf swiftgyb
 
 " Swift Intermediate Language or SILE
 au BufNewFile,BufRead *.sil			call dist#ft#FTsil()
+
+" Swig
+au BufNewFile,BufRead *.swg,*.swig setf swig
 
 " Sysctl
 au BufNewFile,BufRead */etc/sysctl.conf,*/etc/sysctl.d/*.conf	setf sysctl

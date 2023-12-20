@@ -236,6 +236,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     esqlc: ['file.ec', 'file.EC'],
     esterel: ['file.strl'],
     eterm: ['anyEterm/file.cfg', 'Eterm/file.cfg', 'some-Eterm/file.cfg'],
+    execline: ['/etc/s6-rc/run', './s6-rc/src/dbus-srv/up', '/sbin/s6-shutdown'],
     exim: ['exim.conf'],
     expect: ['file.exp'],
     exports: ['exports'],
@@ -318,7 +319,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     hoon: ['file.hoon'],
     hostconf: ['/etc/host.conf', 'any/etc/host.conf'],
     hostsaccess: ['/etc/hosts.allow', '/etc/hosts.deny', 'any/etc/hosts.allow', 'any/etc/hosts.deny'],
-    html: ['file.html', 'file.htm', 'file.cshtml'],
+    html: ['file.html', 'file.htm', 'file.cshtml', 'file.component.html'],
     htmlm4: ['file.html.m4'],
     httest: ['file.htt', 'file.htb'],
     hurl: ['file.hurl'],
@@ -466,6 +467,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     mojo: ['file.mojo', 'file.🔥'],
     mupad: ['file.mu'],
     mush: ['file.mush'],
+    mustache: ['file.mustache'],
     muttrc: ['Muttngrc', 'Muttrc', '.muttngrc', '.muttngrc-file', '.muttrc',
              '.muttrc-file', '/.mutt/muttngrc', '/.mutt/muttngrc-file',
              '/.mutt/muttrc', '/.mutt/muttrc-file', '/.muttng/muttngrc',
@@ -494,7 +496,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     nqc: ['file.nqc'],
     nroff: ['file.tr', 'file.nr', 'file.roff', 'file.tmac', 'file.mom', 'tmac.file'],
     nsis: ['file.nsi', 'file.nsh'],
-    nu: ['env.nu', 'config.nu'],
+    nu: ['file.nu'],
     obj: ['file.obj'],
     objdump: ['file.objdump', 'file.cppobjdump'],
     obse: ['file.obl', 'file.obse', 'file.oblivion', 'file.obscript'],
@@ -510,6 +512,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     opl: ['file.OPL', 'file.OPl', 'file.OpL', 'file.Opl', 'file.oPL', 'file.oPl', 'file.opL', 'file.opl'],
     ora: ['file.ora'],
     org: ['file.org', 'file.org_archive'],
+    pacmanlog: ['pacman.log'],
     pamconf: ['/etc/pam.conf', '/etc/pam.d/file', 'any/etc/pam.conf', 'any/etc/pam.d/file'],
     pamenv: ['/etc/security/pam_env.conf', '/home/user/.pam_environment', '.pam_environment', 'pam_env.conf'],
     papp: ['file.papp', 'file.pxml', 'file.pxsl'],
@@ -673,6 +676,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     swayconfig: ['/home/user/.sway/config', '/home/user/.config/sway/config', '/etc/sway/config', '/etc/xdg/sway/config'],
     swift: ['file.swift'],
     swiftgyb: ['file.swift.gyb'],
+    swig: ['file.swg', 'file.swig'],
     sysctl: ['/etc/sysctl.conf', '/etc/sysctl.d/file.conf', 'any/etc/sysctl.conf', 'any/etc/sysctl.d/file.conf'],
     systemd: ['any/systemd/file.automount', 'any/systemd/file.dnssd',
               'any/systemd/file.link', 'any/systemd/file.mount',
@@ -912,6 +916,7 @@ def s:GetScriptChecks(): dict<list<list<string>>>
             ['#!/path/itclsh'],
             ['#!/path/itkwish']],
     expect: [['#!/path/expect']],
+    execline: [['#!/sbin/execlineb -S0'], ['#!/usr/bin/execlineb']],
     gnuplot: [['#!/path/gnuplot']],
     make:   [['#!/path/make']],
     nix:    [['#!/path/nix-shell']],
@@ -967,6 +972,7 @@ def s:GetScriptEnvChecks(): dict<list<list<string>>>
     perl: [['#!/usr/bin/env VAR=val perl']],
     scala: [['#!/usr/bin/env VAR=val VVAR=vval scala']],
     awk: [['#!/usr/bin/env VAR=val -i awk']],
+    execline: [['#!/usr/bin/env execlineb']],
     scheme: [['#!/usr/bin/env VAR=val --ignore-environment scheme']],
     python: [['#!/usr/bin/env VAR=val -S python -w -T']],
     wml: [['#!/usr/bin/env VAR=val --split-string wml']],
@@ -2335,6 +2341,36 @@ func Test_vba_file()
   call writefile(['" Vimball Archiver by Charles E. Campbell, Ph.D.', 'UseVimball', 'finish'], 'Xfile.vba', 'D')
   split Xfile.vba
   call assert_equal('vim', &filetype)
+  bwipe!
+
+  filetype off
+endfunc
+
+func Test_i_file()
+  filetype on
+
+  " Swig: keyword
+  call writefile(['%module mymodule', '/* a comment */'], 'Xfile.i', 'D')
+  split Xfile.i
+  call assert_equal('swig', &filetype)
+  bwipe!
+
+  " Swig: verbatim block
+  call writefile(['%{', '#include <header.hpp>', '%}'], 'Xfile.i', 'D')
+  split Xfile.i
+  call assert_equal('swig', &filetype)
+  bwipe!
+
+  " ASM
+  call writefile(['; comment', ';'], 'Xfile.i', 'D')
+  split Xfile.i
+  call assert_equal('asm', &filetype)
+  bwipe!
+
+  " *.i defaults to progress
+  call writefile(['looks like progress'], 'Xfile.i', 'D')
+  split Xfile.i
+  call assert_equal('progress', &filetype)
   bwipe!
 
   filetype off

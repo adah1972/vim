@@ -1405,7 +1405,6 @@ do_source_buffer_init(source_cookie_T *sp, exarg_T *eap)
 	    goto errret;
 	if (ga_add_string(&sp->buflines, line) == FAIL)
 	    goto errret;
-	line = NULL;
     }
     sp->buf_lnum = 0;
     sp->source_from_buf = TRUE;
@@ -2470,7 +2469,7 @@ getsourceline(
     int
 sourcing_a_script(exarg_T *eap)
 {
-    return (getline_equal(eap->getline, eap->cookie, getsourceline));
+    return (getline_equal(eap->ea_getline, eap->cookie, getsourceline));
 }
 
 /*
@@ -2498,7 +2497,7 @@ ex_scriptencoding(exarg_T *eap)
 	name = eap->arg;
 
     // Setup for conversion from the specified encoding to 'encoding'.
-    sp = (source_cookie_T *)getline_cookie(eap->getline, eap->cookie);
+    sp = (source_cookie_T *)getline_cookie(eap->ea_getline, eap->cookie);
     convert_setup(&sp->conv, name, p_enc);
 
     if (name != eap->arg)
@@ -2562,7 +2561,7 @@ do_finish(exarg_T *eap, int reanimate)
     int		idx;
 
     if (reanimate)
-	((source_cookie_T *)getline_cookie(eap->getline,
+	((source_cookie_T *)getline_cookie(eap->ea_getline,
 					      eap->cookie))->finished = FALSE;
 
     // Cleanup (and inactivate) conditionals, but stop when a try conditional
@@ -2576,7 +2575,7 @@ do_finish(exarg_T *eap, int reanimate)
 	report_make_pending(CSTP_FINISH, NULL);
     }
     else
-	((source_cookie_T *)getline_cookie(eap->getline,
+	((source_cookie_T *)getline_cookie(eap->ea_getline,
 					       eap->cookie))->finished = TRUE;
 }
 

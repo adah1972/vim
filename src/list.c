@@ -415,6 +415,10 @@ list_find(list_T *l, long n)
 
     CHECK_LIST_MATERIALIZE(l);
 
+    // range_list_materialize may reset l->lv_len
+    if (n >= l->lv_len)
+	return NULL;
+
     // When there is a cached index may start search from there.
     if (l->lv_u.mat.lv_idx_item != NULL)
     {
@@ -1572,6 +1576,12 @@ eval_list(char_u **arg, typval_T *rettv, evalarg_T *evalarg, int do_error)
     {
 	if (eval1(arg, &tv, evalarg) == FAIL)	// recursive!
 	    goto failret;
+	if (check_typval_is_value(&tv) == FAIL)
+	{
+	    if (evaluate)
+		clear_tv(&tv);
+	    goto failret;
+	}
 	if (evaluate)
 	{
 	    item = listitem_alloc();

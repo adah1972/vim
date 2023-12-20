@@ -776,7 +776,7 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get, int vim9compile)
     cctx_T	*cctx = vim9compile ? eap->cookie : NULL;
     int		count = 0;
 
-    if (eap->getline == NULL)
+    if (eap->ea_getline == NULL)
     {
 	emsg(_(e_cannot_use_heredoc_here));
 	return NULL;
@@ -856,7 +856,7 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get, int vim9compile)
 	int	ti = 0;
 
 	vim_free(theline);
-	theline = eap->getline(NUL, eap->cookie, 0, FALSE);
+	theline = eap->ea_getline(NUL, eap->cookie, 0, FALSE);
 	if (theline == NULL)
 	{
 	    semsg(_(e_missing_end_marker_str), marker);
@@ -1836,11 +1836,8 @@ ex_let_one(
 	return NULL;
     }
 
-    if (tv->v_type == VAR_TYPEALIAS)
-    {
-	semsg(_(e_using_typealias_as_value), tv->vval.v_typealias->ta_name);
+    if (check_typval_is_value(tv) == FAIL)
 	return NULL;
-    }
 
     if (*arg == '$')
     {
@@ -3981,7 +3978,6 @@ set_var_const(
 	    {
 		semsg(_(e_cannot_modify_typealias),
 					    di->di_tv.vval.v_typealias->ta_name);
-		clear_tv(&di->di_tv);
 		goto failed;
 	    }
 

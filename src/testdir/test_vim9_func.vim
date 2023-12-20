@@ -862,6 +862,13 @@ def Test_func_with_comments()
   v9.CheckScriptFailure(lines, 'E125:', 1)
 
   lines =<< trim END
+      def Func(f=
+      )
+      enddef
+  END
+  v9.CheckScriptFailure(lines, 'E125:', 2)
+
+  lines =<< trim END
       def Func(
         arg: string# comment
         )
@@ -1313,7 +1320,7 @@ def Test_call_wrong_args()
     enddef
     Func([])
   END
-  v9.CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected string but got list<unknown>', 5)
+  v9.CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected string but got list<any>', 5)
 
   # argument name declared earlier is found when declaring a function
   lines =<< trim END

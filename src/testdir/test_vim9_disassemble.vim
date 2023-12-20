@@ -552,7 +552,7 @@ def Test_disassemble_store_index()
         '\d PUSHS "dd"\_s*' ..
         '\d NEWDICT size 0\_s*' ..
         '\d NEWDICT size 1\_s*' ..
-        '\d SETTYPE dict<dict<unknown>>\_s*' ..
+        '\d SETTYPE dict<dict<any>>\_s*' ..
         '\d STORE $0\_s*' ..
         'd.dd\[0\] = 0\_s*' ..
         '\d PUSHNR 0\_s*' ..
@@ -3062,15 +3062,15 @@ def Test_disassemble_interface_static_member()
   var lines =<< trim END
     vim9script
     interface I
-      this.o_var: number
-      this.o_var2: number
+      var o_var: number
+      var o_var2: number
     endinterface
 
     class C implements I
-      public static s_var: number
-      this.o_var: number
-      public static s_var2: number
-      this.o_var2: number
+      public static var s_var: number
+      var o_var: number
+      public static var s_var2: number
+      var o_var2: number
     endclass
 
     def F1(i: I)
@@ -3124,7 +3124,7 @@ def Test_disassemble_class_variable()
     vim9script
 
     class A
-      public static val = 10
+      public static var val = 10
       def Foo(): number
         val = 20
         return val
@@ -3173,7 +3173,7 @@ def Test_disassemble_ifargnotset()
   var lines =<< trim END
     vim9script
     class A
-      this.val: number = 10
+      var val: number = 10
     endclass
     g:instr = execute('disassemble A.new')
   END
