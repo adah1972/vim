@@ -1,4 +1,4 @@
-*syntax.txt*	For Vim version 9.0.  Last change: 2023 Dec 27
+*syntax.txt*	For Vim version 9.1.  Last change: 2024 Jan 06
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -270,6 +270,10 @@ you can see the actual color, except for "Ignore"):
 
 	*Todo		anything that needs extra attention; mostly the
 			keywords TODO FIXME and XXX
+
+	*Added		added line in a diff
+	*Changed	changed line in a diff
+	*Removed	removed line in a diff
 
 The names marked with * are the preferred groups; the others are minor groups.
 For the preferred groups, the "syntax.vim" file contains default highlighting.
@@ -1270,7 +1274,6 @@ there are very long lines in the file.  To disable translations: >
 
 Also see |diff-slow|.
 
-
 DIRCOLORS			       *dircolors.vim* *ft-dircolors-syntax*
 
 The dircolors utility highlighting definition has one option.  It exists to
@@ -1669,27 +1672,19 @@ placed prior to the :syntax on command.  Unfortunately, the use of tabs will
 mean that the syntax file will not be able to detect incorrect margins.
 
 Syntax folding of Fortran files ~
-If you wish to use foldmethod=syntax, then you must first set the variable
-fortran_fold with a command such as >
+Vim will fold your file using foldmethod=syntax, if you set the variable
+fortran_fold in your .vimrc with a command such as >
     :let fortran_fold=1
 to instruct the syntax script to define fold regions for program units, that
 is main programs starting with a program statement, subroutines, function
-subprograms, modules, submodules, and block data units. Block, interface,
-associate, critical, type definition, and change team constructs will also be
-folded.  If you also set the variable fortran_fold_conditionals with a command
-such as >
+subprograms, modules, submodules, blocks of comment lines, and block data
+units. Block, interface, associate, critical, type definition, and change team
+constructs will also be folded.  If you also set the variable
+fortran_fold_conditionals with a command such as >
     :let fortran_fold_conditionals=1
 then fold regions will also be defined for do loops, if blocks, select case,
-select type, and select rank constructs.  If you also set the variable
-fortran_fold_multilinecomments with a command such as >
-    :let fortran_fold_multilinecomments=1
-then fold regions will also be defined for three or more consecutive comment
-lines.  Note that defining fold regions can be slow for large files.
-
-If fortran_fold, and possibly fortran_fold_conditionals and/or
-fortran_fold_multilinecomments, have been set, then vim will fold your file.
-Comments or blank lines placed between two program units are not folded
-because they are seen as not belonging to any program unit.
+select type, and select rank constructs.  Note that defining fold regions can
+be slow for large files.
 
 The syntax/fortran.vim script contains embedded comments that tell you how to
 comment and/or uncomment some lines to (a) activate recognition of some
@@ -2250,6 +2245,56 @@ have the following in your .vimrc: >
 
 	let filetype_m = "mma"
 
+
+MODULA2					*modula2.vim* *ft-modula2-syntax*
+
+Vim will recognise comments with dialect tags to automatically select a given
+dialect.
+
+The syntax for a dialect tag comment is: >
+
+	taggedComment :=
+	  '(*!' dialectTag '*)'
+	  ;
+
+	dialectTag :=
+	  m2pim | m2iso | m2r10
+	  ;
+
+	reserved words
+	  m2pim = 'm2pim', m2iso = 'm2iso', m2r10 = 'm2r10'
+
+A dialect tag comment is recognised by Vim if it occurs within the first 200
+lines of the source file. Only the very first such comment is recognised, any
+additional dialect tag comments are ignored.
+
+Example: >
+
+	DEFINITION MODULE FooLib; (*!m2pim*)
+	...
+
+Variable g:modula2_default_dialect sets the default Modula-2 dialect when the
+dialect cannot be determined from the contents of the Modula-2 file: if
+defined and set to 'm2pim', the default dialect is PIM.
+
+Example: >
+
+	let g:modula2_default_dialect = 'm2pim'
+
+
+Highlighting is further configurable for each dialect via the following
+variables.
+
+Variable			Highlight ~
+*modula2_iso_allow_lowline*	allow low line in identifiers
+*modula2_iso_disallow_octals*	disallow octal integer literals
+*modula2_iso_disallow_synonyms*	disallow "@", "&" and "~" synonyms
+
+*modula2_pim_allow_lowline*	allow low line in identifiers
+*modula2_pim_disallow_octals*	disallow octal integer literals
+*modula2_pim_disallow_synonyms*	disallow "&" and "~" synonyms
+
+*modula2_r10_allow_lowline*	allow low line in identifiers
 
 MOO						*moo.vim* *ft-moo-syntax*
 
@@ -5259,6 +5304,14 @@ ctermul={color-nr}				*highlight-ctermul*
 	command is given.  If the Normal group colors are changed later, the
 	"fg" and "bg" colors will not be adjusted.
 
+ctermfont={font-nr}				*highlight-ctermfont*
+	This gives the alternative font number to use in the terminal. The
+	available fonts depend on the terminal, and if the terminal is not set
+	up for alternative fonts this simply won't do anything. The range of
+	{font-nr} is 0-10 where 0 resets the font to the default font, 1-9
+	selects one of the 9 alternate fonts, and 10 selects the Fraktur font.
+	For more information see your terminal's handling of SGR parameters
+	10-20. |t_CF|
 
 3. highlight arguments for the GUI
 

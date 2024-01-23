@@ -265,7 +265,13 @@ jobs:
         if: contains(matrix.extra, 'vimtags')
         run: |
           # This will exit with an error code if the generated vim tags differs from source.
-          git diff --exit-code -- runtime/doc/tags
+          (
+            cd runtime/doc
+            git diff --exit-code -- tags
+            make html; rm *.html tags.ref;
+            test -f errors.log && exit 3;
+            true
+          )
 
       - name: Generate gcov files
         if: matrix.coverage
@@ -477,7 +483,7 @@ jobs:
           echo %SODIUM_VER%>> urls.txt
 
       - name: Cache downloaded files
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: downloads
           key: ${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('urls.txt') }}

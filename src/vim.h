@@ -841,6 +841,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define EXPAND_SETTING_SUBTRACT	55
 #define EXPAND_ARGOPT		56
 #define EXPAND_TERMINALOPT	57
+#define EXPAND_KEYMAP		58
 
 // Values for exmode_active (0 is no exmode)
 #define EXMODE_NORMAL		1
@@ -1421,6 +1422,7 @@ enum auto_event
     EVENT_TERMINALWINOPEN,	// after a terminal buffer was created and
 				// entering its window
     EVENT_TERMRESPONSE,		// after setting "v:termresponse"
+    EVENT_TERMRESPONSEALL,	// after setting terminal response vars
     EVENT_TEXTCHANGED,		// text was modified not in Insert mode
     EVENT_TEXTCHANGEDI,		// text was modified in Insert mode
     EVENT_TEXTCHANGEDP,		// TextChangedI with popup menu visible

@@ -2235,7 +2235,7 @@ func Test_normal29_brace()
   [DATA]
   call assert_equal(expected, getline(1, '$'))
 
-  " Test with { in cpooptions
+  " Test with { in cpoptions
   %d
   call append(0, text)
   set cpo+={
@@ -4181,4 +4181,4 @@ func Test_brace_single_line()
   bw!
 endfunc
 
-" vim: shiftwidth=2 sts=2 expandtab
+" vim: shiftwidth=2 sts=2 expandtab nofoldenable
