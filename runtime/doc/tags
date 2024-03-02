@@ -2873,6 +2873,7 @@ $quote	eval.txt	/*$quote*
 :map-arguments	map.txt	/*:map-arguments*
 :map-buffer	map.txt	/*:map-buffer*
 :map-cmd	map.txt	/*:map-cmd*
+:map-cmd-key	map.txt	/*:map-cmd-key*
 :map-commands	map.txt	/*:map-commands*
 :map-expression	map.txt	/*:map-expression*
 :map-local	map.txt	/*:map-local*
@@ -2885,6 +2886,7 @@ $quote	eval.txt	/*$quote*
 :map-special	map.txt	/*:map-special*
 :map-special-chars	map.txt	/*:map-special-chars*
 :map-special-keys	map.txt	/*:map-special-keys*
+:map-super-keys	map.txt	/*:map-super-keys*
 :map-undo	map.txt	/*:map-undo*
 :map-unique	map.txt	/*:map-unique*
 :map-verbose	map.txt	/*:map-verbose*
@@ -4135,6 +4137,7 @@ E1056	vim9.txt	/*E1056*
 E1057	vim9.txt	/*E1057*
 E1058	vim9.txt	/*E1058*
 E1059	vim9.txt	/*E1059*
+E106	builtin.txt	/*E106*
 E1060	vim9.txt	/*E1060*
 E1061	vim9.txt	/*E1061*
 E1062	eval.txt	/*E1062*
@@ -5783,6 +5786,7 @@ WinClosed	autocmd.txt	/*WinClosed*
 WinEnter	autocmd.txt	/*WinEnter*
 WinLeave	autocmd.txt	/*WinLeave*
 WinNew	autocmd.txt	/*WinNew*
+WinNewPre	autocmd.txt	/*WinNewPre*
 WinResized	autocmd.txt	/*WinResized*
 WinResized-event	windows.txt	/*WinResized-event*
 WinScrolled	autocmd.txt	/*WinScrolled*
@@ -5968,6 +5972,7 @@ added-7.4	version7.txt	/*added-7.4*
 added-8.1	version8.txt	/*added-8.1*
 added-8.2	version8.txt	/*added-8.2*
 added-9.1	version9.txt	/*added-9.1*
+added-9.2	version9.txt	/*added-9.2*
 added-BeOS	version5.txt	/*added-BeOS*
 added-Mac	version5.txt	/*added-Mac*
 added-VMS	version5.txt	/*added-VMS*
@@ -6120,6 +6125,7 @@ binary-number	eval.txt	/*binary-number*
 bitwise-function	usr_41.txt	/*bitwise-function*
 bitwise-shift	eval.txt	/*bitwise-shift*
 blob	eval.txt	/*blob*
+blob-concatenation	eval.txt	/*blob-concatenation*
 blob-functions	usr_41.txt	/*blob-functions*
 blob-identity	eval.txt	/*blob-identity*
 blob-index	eval.txt	/*blob-index*
@@ -6168,6 +6174,7 @@ bug-fixes-7	version7.txt	/*bug-fixes-7*
 bug-fixes-8	version8.txt	/*bug-fixes-8*
 bug-fixes-9	version9.txt	/*bug-fixes-9*
 bug-fixes-9.1	version9.txt	/*bug-fixes-9.1*
+bug-fixes-9.2	version9.txt	/*bug-fixes-9.2*
 bug-reports	intro.txt	/*bug-reports*
 bugreport.vim	intro.txt	/*bugreport.vim*
 bugs	intro.txt	/*bugs*
@@ -6282,6 +6289,8 @@ c_ansi_typedefs	syntax.txt	/*c_ansi_typedefs*
 c_comment_strings	syntax.txt	/*c_comment_strings*
 c_curly_error	syntax.txt	/*c_curly_error*
 c_digraph	cmdline.txt	/*c_digraph*
+c_function_pointers	syntax.txt	/*c_function_pointers*
+c_functions	syntax.txt	/*c_functions*
 c_gnu	syntax.txt	/*c_gnu*
 c_no_ansi	syntax.txt	/*c_no_ansi*
 c_no_bracket_error	syntax.txt	/*c_no_bracket_error*
@@ -6350,6 +6359,7 @@ changed-7.4	version7.txt	/*changed-7.4*
 changed-8.1	version8.txt	/*changed-8.1*
 changed-8.2	version8.txt	/*changed-8.2*
 changed-9.1	version9.txt	/*changed-9.1*
+changed-9.2	version9.txt	/*changed-9.2*
 changelist	motion.txt	/*changelist*
 changelog.vim	syntax.txt	/*changelog.vim*
 changenr()	builtin.txt	/*changenr()*
@@ -6488,6 +6498,7 @@ compile-changes-6	version6.txt	/*compile-changes-6*
 compile-changes-7	version7.txt	/*compile-changes-7*
 compile-changes-8	version8.txt	/*compile-changes-8*
 compile-changes-9	version9.txt	/*compile-changes-9*
+compile-changes-9.2	version9.txt	/*compile-changes-9.2*
 compiler-compaqada	ft_ada.txt	/*compiler-compaqada*
 compiler-decada	ft_ada.txt	/*compiler-decada*
 compiler-dotnet	quickfix.txt	/*compiler-dotnet*
@@ -6754,7 +6765,9 @@ dict-identity	eval.txt	/*dict-identity*
 dict-modification	eval.txt	/*dict-modification*
 did_filetype()	builtin.txt	/*did_filetype()*
 diff	diff.txt	/*diff*
+diff()	builtin.txt	/*diff()*
 diff-diffexpr	diff.txt	/*diff-diffexpr*
+diff-func-examples	diff.txt	/*diff-func-examples*
 diff-mode	diff.txt	/*diff-mode*
 diff-options	diff.txt	/*diff-options*
 diff-original-file	diff.txt	/*diff-original-file*
@@ -7182,6 +7195,7 @@ ft-ada-syntax	ft_ada.txt	/*ft-ada-syntax*
 ft-ada-variables	ft_ada.txt	/*ft-ada-variables*
 ft-ant-syntax	syntax.txt	/*ft-ant-syntax*
 ft-apache-syntax	syntax.txt	/*ft-apache-syntax*
+ft-asciidoc-plugin	filetype.txt	/*ft-asciidoc-plugin*
 ft-asm-syntax	syntax.txt	/*ft-asm-syntax*
 ft-asm68k-syntax	syntax.txt	/*ft-asm68k-syntax*
 ft-asmh8300-syntax	syntax.txt	/*ft-asmh8300-syntax*
@@ -7350,6 +7364,7 @@ ft-xhtml-omni	insert.txt	/*ft-xhtml-omni*
 ft-xml-omni	insert.txt	/*ft-xml-omni*
 ft-xml-syntax	syntax.txt	/*ft-xml-syntax*
 ft-xpm-syntax	syntax.txt	/*ft-xpm-syntax*
+ft-yaml-indent	indent.txt	/*ft-yaml-indent*
 ft-yaml-syntax	syntax.txt	/*ft-yaml-syntax*
 ft-zimbu-plugin	filetype.txt	/*ft-zimbu-plugin*
 ft-zsh-syntax	syntax.txt	/*ft-zsh-syntax*
@@ -7746,6 +7761,7 @@ getqflist()	builtin.txt	/*getqflist()*
 getqflist-examples	quickfix.txt	/*getqflist-examples*
 getreg()	builtin.txt	/*getreg()*
 getreginfo()	builtin.txt	/*getreginfo()*
+getregion()	builtin.txt	/*getregion()*
 getregtype()	builtin.txt	/*getregtype()*
 getscript	pi_getscript.txt	/*getscript*
 getscript-autoinstall	pi_getscript.txt	/*getscript-autoinstall*
@@ -7864,6 +7880,7 @@ gui-w32-start	gui_w32.txt	/*gui-w32-start*
 gui-w32-various	gui_w32.txt	/*gui-w32-various*
 gui-w32-windowid	gui_w32.txt	/*gui-w32-windowid*
 gui-w32s	os_win32.txt	/*gui-w32s*
+gui-wayland	gui_x11.txt	/*gui-wayland*
 gui-win32-maximized	gui_w32.txt	/*gui-win32-maximized*
 gui-x11	gui_x11.txt	/*gui-x11*
 gui-x11-athena	gui_x11.txt	/*gui-x11-athena*
@@ -8234,6 +8251,7 @@ improvements-6	version6.txt	/*improvements-6*
 improvements-7	version7.txt	/*improvements-7*
 improvements-8	version8.txt	/*improvements-8*
 improvements-9	version9.txt	/*improvements-9*
+improvements-9.2	version9.txt	/*improvements-9.2*
 in_bot	channel.txt	/*in_bot*
 in_buf	channel.txt	/*in_buf*
 in_io-buffer	channel.txt	/*in_io-buffer*
@@ -8250,6 +8268,7 @@ incompatible-6	version6.txt	/*incompatible-6*
 incompatible-7	version7.txt	/*incompatible-7*
 incompatible-8	version8.txt	/*incompatible-8*
 incompatible-9	version9.txt	/*incompatible-9*
+incompatible-9.2	version9.txt	/*incompatible-9.2*
 indent()	builtin.txt	/*indent()*
 indent-expression	indent.txt	/*indent-expression*
 indent.txt	indent.txt	/*indent.txt*
@@ -8597,6 +8616,7 @@ masm.vim	syntax.txt	/*masm.vim*
 match()	builtin.txt	/*match()*
 match-highlight	pattern.txt	/*match-highlight*
 match-parens	tips.txt	/*match-parens*
+match-pattern	builtin.txt	/*match-pattern*
 matchadd()	builtin.txt	/*matchadd()*
 matchaddpos()	builtin.txt	/*matchaddpos()*
 matcharg()	builtin.txt	/*matcharg()*
@@ -9048,6 +9068,7 @@ new-options-5.2	version5.txt	/*new-options-5.2*
 new-options-5.4	version5.txt	/*new-options-5.4*
 new-other-8.2	version8.txt	/*new-other-8.2*
 new-other-9.1	version9.txt	/*new-other-9.1*
+new-other-9.2	version9.txt	/*new-other-9.2*
 new-perl-python	version5.txt	/*new-perl-python*
 new-persistent-undo	version7.txt	/*new-persistent-undo*
 new-plugins	version6.txt	/*new-plugins*
@@ -9217,8 +9238,10 @@ patches-8.1	version8.txt	/*patches-8.1*
 patches-8.2	version8.txt	/*patches-8.2*
 patches-9	version9.txt	/*patches-9*
 patches-9.1	version9.txt	/*patches-9.1*
+patches-9.2	version9.txt	/*patches-9.2*
 patches-after-8.2	version9.txt	/*patches-after-8.2*
 patches-after-9.0	version9.txt	/*patches-after-9.0*
+patches-after-9.1	version9.txt	/*patches-after-9.1*
 pathshorten()	builtin.txt	/*pathshorten()*
 pattern	pattern.txt	/*pattern*
 pattern-atoms	pattern.txt	/*pattern-atoms*
@@ -10510,6 +10533,7 @@ termdebug_winbar	terminal.txt	/*termdebug_winbar*
 terminal	terminal.txt	/*terminal*
 terminal-api	terminal.txt	/*terminal-api*
 terminal-autoshelldir	terminal.txt	/*terminal-autoshelldir*
+terminal-bufname	terminal.txt	/*terminal-bufname*
 terminal-client-server	terminal.txt	/*terminal-client-server*
 terminal-close	terminal.txt	/*terminal-close*
 terminal-colors	os_unix.txt	/*terminal-colors*
@@ -11006,6 +11030,7 @@ version-8.1	version8.txt	/*version-8.1*
 version-8.2	version8.txt	/*version-8.2*
 version-9.0	version9.txt	/*version-9.0*
 version-9.1	version9.txt	/*version-9.1*
+version-9.2	version9.txt	/*version-9.2*
 version-variable	eval.txt	/*version-variable*
 version4.txt	version4.txt	/*version4.txt*
 version5.txt	version5.txt	/*version5.txt*
@@ -11022,6 +11047,7 @@ version8.2	version8.txt	/*version8.2*
 version8.txt	version8.txt	/*version8.txt*
 version9.0	version9.txt	/*version9.0*
 version9.1	version9.txt	/*version9.1*
+version9.2	version9.txt	/*version9.2*
 version9.txt	version9.txt	/*version9.txt*
 versionlong-variable	eval.txt	/*versionlong-variable*
 vi	intro.txt	/*vi*
@@ -11041,6 +11067,7 @@ vim-8.2	version8.txt	/*vim-8.2*
 vim-9	version9.txt	/*vim-9*
 vim-9.0	version9.txt	/*vim-9.0*
 vim-9.1	version9.txt	/*vim-9.1*
+vim-9.2	version9.txt	/*vim-9.2*
 vim-additions	vi_diff.txt	/*vim-additions*
 vim-announce	intro.txt	/*vim-announce*
 vim-arguments	starting.txt	/*vim-arguments*
@@ -11187,6 +11214,7 @@ vt100-cursor-keys	term.txt	/*vt100-cursor-keys*
 vt100-function-keys	term.txt	/*vt100-function-keys*
 w	motion.txt	/*w*
 w32-clientserver	remote.txt	/*w32-clientserver*
+w32-experimental-keycode-trans-strategy	gui_w32.txt	/*w32-experimental-keycode-trans-strategy*
 w32-xpm-support	gui_w32.txt	/*w32-xpm-support*
 w:	eval.txt	/*w:*
 w:current_syntax	syntax.txt	/*w:current_syntax*

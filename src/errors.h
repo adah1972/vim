@@ -258,8 +258,9 @@ EXTERN char e_escape_not_allowed_in_digraph[]
 EXTERN char e_using_loadkeymap_not_in_sourced_file[]
 	INIT(= N_("E105: Using :loadkeymap not in a sourced file"));
 #endif
-// E106 unused
 #ifdef FEAT_EVAL
+EXTERN char e_unsupported_diff_output_format_str[]
+	INIT(= N_("E106: Unsupported diff output format: %s"));
 EXTERN char e_missing_parenthesis_str[]
 	INIT(= N_("E107: Missing parentheses: %s"));
 EXTERN char e_no_such_variable_str[]
@@ -471,8 +472,8 @@ EXTERN char e_no_digraphs_version[]
 EXTERN char e_cannot_set_language_to_str[]
 	INIT(= N_("E197: Cannot set language to \"%s\""));
 // E198 unused
-EXTERN char e_active_window_or_buffer_deleted[]
-	INIT(= N_("E199: Active window or buffer deleted"));
+EXTERN char e_active_window_or_buffer_changed_or_deleted[]
+	INIT(= N_("E199: Active window or buffer changed or deleted"));
 EXTERN char e_readpre_autocommands_made_file_unreadable[]
 	INIT(= N_("E200: *ReadPre autocommands made the file unreadable"));
 EXTERN char e_readpre_autocommands_must_not_change_current_buffer[]
@@ -3184,7 +3185,7 @@ EXTERN char e_separator_not_supported_str[]
 EXTERN char e_no_white_space_allowed_before_separator_str[]
 	INIT(= N_("E1242: No white space allowed before separator: %s"));
 #endif
-#ifdef FEAT_GUI_GTK
+#if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MSWIN)
 EXTERN char e_ascii_code_not_in_range[]
 	INIT(= N_("E1243: ASCII code not in 32-127 range"));
 #endif

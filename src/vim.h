@@ -1255,6 +1255,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define WSP_BELOW	0x40	// put new window below/right
 #define WSP_ABOVE	0x80	// put new window above/left
 #define WSP_NEWLOC	0x100	// don't copy location list
+#define WSP_FORCE_ROOM	0x200	// ignore "not enough room" errors
 
 /*
  * arguments for gui_set_shellsize()
@@ -1435,7 +1436,8 @@ enum auto_event
     EVENT_VIMRESIZED,		// after Vim window was resized
     EVENT_WINENTER,		// after entering a window
     EVENT_WINLEAVE,		// before leaving a window
-    EVENT_WINNEW,		// when entering a new window
+    EVENT_WINNEWPRE,		// before creating a new window
+    EVENT_WINNEW,		// after creating a new window
     EVENT_WINCLOSED,		// after closing a window
     EVENT_VIMSUSPEND,		// before Vim is suspended
     EVENT_VIMRESUME,		// after Vim is resumed
@@ -2378,6 +2380,7 @@ typedef int (*opt_expand_cb_T)(optexpand_T *args, int *numMatches, char_u ***mat
 #define ASSIGN_FOR_LOOP 0x40 // assigning to loop variable
 #define ASSIGN_INIT	0x80 // not assigning a value, just a declaration
 #define ASSIGN_UPDATE_BLOCK_ID 0x100  // update sav_block_id
+#define ASSIGN_COMPOUND_OP 0x200  // compound operator e.g. "+="
 
 #include "ex_cmds.h"	    // Ex command defines
 #include "spell.h"	    // spell checking stuff

@@ -63,15 +63,16 @@ static void f_get(typval_T *argvars, typval_T *rettv);
 static void f_getchangelist(typval_T *argvars, typval_T *rettv);
 static void f_getcharpos(typval_T *argvars, typval_T *rettv);
 static void f_getcharsearch(typval_T *argvars, typval_T *rettv);
+static void f_getcurpos(typval_T *argvars, typval_T *rettv);
+static void f_getcursorcharpos(typval_T *argvars, typval_T *rettv);
 static void f_getenv(typval_T *argvars, typval_T *rettv);
 static void f_getfontname(typval_T *argvars, typval_T *rettv);
 static void f_getjumplist(typval_T *argvars, typval_T *rettv);
 static void f_getpid(typval_T *argvars, typval_T *rettv);
-static void f_getcurpos(typval_T *argvars, typval_T *rettv);
-static void f_getcursorcharpos(typval_T *argvars, typval_T *rettv);
 static void f_getpos(typval_T *argvars, typval_T *rettv);
 static void f_getreg(typval_T *argvars, typval_T *rettv);
 static void f_getreginfo(typval_T *argvars, typval_T *rettv);
+static void f_getregion(typval_T *argvars, typval_T *rettv);
 static void f_getregtype(typval_T *argvars, typval_T *rettv);
 static void f_gettagstack(typval_T *argvars, typval_T *rettv);
 static void f_gettext(typval_T *argvars, typval_T *rettv);
@@ -1148,7 +1149,9 @@ static argcheck_T arg3_buffer_number_number[] = {arg_buffer, arg_number, arg_num
 static argcheck_T arg3_buffer_string_any[] = {arg_buffer, arg_string, arg_any};
 static argcheck_T arg3_buffer_string_dict[] = {arg_buffer, arg_string, arg_dict_any};
 static argcheck_T arg3_dict_number_number[] = {arg_dict_any, arg_number, arg_number};
+static argcheck_T arg3_diff[] = {arg_list_string, arg_list_string, arg_dict_any};
 static argcheck_T arg3_list_string_dict[] = {arg_list_any, arg_string, arg_dict_any};
+static argcheck_T arg3_list_list_dict[] = {arg_list_any, arg_list_any, arg_dict_any};
 static argcheck_T arg3_lnum_number_bool[] = {arg_lnum, arg_number, arg_bool};
 static argcheck_T arg3_number[] = {arg_number, arg_number, arg_number};
 static argcheck_T arg3_number_any_dict[] = {arg_number, arg_any, arg_dict_any};
@@ -1950,6 +1953,8 @@ static funcentry_T global_functions[] =
 			ret_number_bool,    f_deletebufline},
     {"did_filetype",	0, 0, 0,	    NULL,
 			ret_number_bool,    f_did_filetype},
+    {"diff",		2, 3, FEARG_1,	    arg3_diff,
+			ret_any,  f_diff},
     {"diff_filler",	1, 1, FEARG_1,	    arg1_lnum,
 			ret_number,	    f_diff_filler},
     {"diff_hlID",	2, 2, FEARG_1,	    arg2_lnum_number,
@@ -2128,6 +2133,8 @@ static funcentry_T global_functions[] =
 			ret_getreg,	    f_getreg},
     {"getreginfo",	0, 1, FEARG_1,	    arg1_string,
 			ret_dict_any,	    f_getreginfo},
+    {"getregion",	2, 3, FEARG_1,	    arg3_list_list_dict,
+			ret_list_string,    f_getregion},
     {"getregtype",	0, 1, FEARG_1,	    arg1_string,
 			ret_string,	    f_getregtype},
     {"getscriptinfo",	0, 1, 0,	    arg1_dict_any,
@@ -5447,6 +5454,194 @@ f_getpos(typval_T *argvars, typval_T *rettv)
 	return;
 
     getpos_both(argvars, rettv, FALSE, FALSE);
+}
+
+/*
+ * Convert from block_def to string
+ */
+   static char_u *
+block_def2str(struct block_def *bd)
+{
+    char_u *p, *ret;
+    size_t size = bd->startspaces + bd->endspaces + bd->textlen;
+
+    ret = alloc(size + 1);
+    if (ret != NULL)
+    {
+	p = ret;
+	vim_memset(p, ' ', bd->startspaces);
+	p += bd->startspaces;
+	mch_memmove(p, bd->textstart, bd->textlen);
+	p += bd->textlen;
+	vim_memset(p, ' ', bd->endspaces);
+	*(p + bd->endspaces) = NUL;
+    }
+    return ret;
+}
+
+/*
+ * "getregion()" function
+ */
+    static void
+f_getregion(typval_T *argvars, typval_T *rettv)
+{
+    linenr_T		lnum;
+    oparg_T		oa;
+    struct block_def	bd;
+    char_u		*akt = NULL;
+    int			inclusive = TRUE;
+    int			fnum = -1;
+    pos_T		p1, p2;
+    char_u		*type;
+    char_u		default_type[] = "v";
+    int			save_virtual = -1;
+    int			l;
+    int			region_type = -1;
+    int			is_select_exclusive;
+
+    if (rettv_list_alloc(rettv) == FAIL)
+	return;
+
+    if (check_for_list_arg(argvars, 0) == FAIL
+	    || check_for_list_arg(argvars, 1) == FAIL
+	    || check_for_opt_dict_arg(argvars, 2) == FAIL)
+	return;
+
+    if (list2fpos(&argvars[0], &p1, &fnum, NULL, FALSE) != OK
+	    || (fnum >= 0 && fnum != curbuf->b_fnum))
+	return;
+
+    if (list2fpos(&argvars[1], &p2, &fnum, NULL, FALSE) != OK
+	    || (fnum >= 0 && fnum != curbuf->b_fnum))
+	return;
+
+    if (argvars[2].v_type == VAR_DICT)
+    {
+	is_select_exclusive = dict_get_bool(
+		argvars[2].vval.v_dict, "exclusive", *p_sel == 'e');
+	type = dict_get_string(
+		argvars[2].vval.v_dict, "type", FALSE);
+	if (type == NULL)
+	    type = default_type;
+    }
+    else
+    {
+	is_select_exclusive = *p_sel == 'e';
+	type = default_type;
+    }
+
+    if (type[0] == 'v' && type[1] == NUL)
+	region_type = MCHAR;
+    else if (type[0] == 'V' && type[1] == NUL)
+	region_type = MLINE;
+    else if (type[0] == Ctrl_V && type[1] == NUL)
+	region_type = MBLOCK;
+    else
+	return;
+
+    save_virtual = virtual_op;
+    virtual_op = virtual_active();
+
+    // NOTE: Adjust is needed.
+    p1.col--;
+    p2.col--;
+
+    if (!LT_POS(p1, p2))
+    {
+	// swap position
+	pos_T p;
+
+	p = p1;
+	p1 = p2;
+	p2 = p;
+    }
+
+    if (region_type == MCHAR)
+    {
+	// handle 'selection' == "exclusive"
+	if (is_select_exclusive && !EQUAL_POS(p1, p2))
+	{
+	    if (p2.coladd > 0)
+		p2.coladd--;
+	    else if (p2.col > 0)
+	    {
+		p2.col--;
+
+		mb_adjustpos(curbuf, &p2);
+	    }
+	    else if (p2.lnum > 1)
+	    {
+		p2.lnum--;
+		p2.col = (colnr_T)STRLEN(ml_get(p2.lnum));
+		if (p2.col > 0)
+		{
+		    p2.col--;
+
+		    mb_adjustpos(curbuf, &p2);
+		}
+	    }
+	}
+	// if fp2 is on NUL (empty line) inclusive becomes false
+	if (*ml_get_pos(&p2) == NUL && !virtual_op)
+	    inclusive = FALSE;
+    }
+    else if (region_type == MBLOCK)
+    {
+	colnr_T sc1, ec1, sc2, ec2;
+
+	getvvcol(curwin, &p1, &sc1, NULL, &ec1);
+	getvvcol(curwin, &p2, &sc2, NULL, &ec2);
+	oa.motion_type = MBLOCK;
+	oa.inclusive = TRUE;
+	oa.op_type = OP_NOP;
+	oa.start = p1;
+	oa.end = p2;
+	oa.start_vcol = MIN(sc1, sc2);
+	if (is_select_exclusive && ec1 < sc2 && 0 < sc2 && ec2 > ec1)
+	    oa.end_vcol = sc2 - 1;
+	else
+	    oa.end_vcol = MAX(ec1, ec2);
+    }
+
+    // Include the trailing byte of a multi-byte char.
+    l = utfc_ptr2len((char_u *)ml_get_pos(&p2));
+    if (l > 1)
+	p2.col += l - 1;
+
+    for (lnum = p1.lnum; lnum <= p2.lnum; lnum++)
+    {
+	int ret = 0;
+
+	if (region_type == MLINE)
+	    akt = vim_strsave(ml_get(lnum));
+	else if (region_type == MBLOCK)
+	{
+	    block_prep(&oa, &bd, lnum, FALSE);
+	    akt = block_def2str(&bd);
+	}
+	else if (p1.lnum < lnum && lnum < p2.lnum)
+	    akt = vim_strsave(ml_get(lnum));
+	else
+	{
+	    charwise_block_prep(p1, p2, &bd, lnum, inclusive);
+	    akt = block_def2str(&bd);
+	}
+
+	if (akt)
+	{
+	    ret = list_append_string(rettv->vval.v_list, akt, -1);
+	    vim_free(akt);
+	}
+
+	if (akt == NULL || ret == FAIL)
+	{
+	    clear_tv(rettv);
+	    (void)rettv_list_alloc(rettv);
+	    break;
+	}
+    }
+
+    virtual_op = save_virtual;
 }
 
 /*

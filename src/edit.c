@@ -843,7 +843,12 @@ doESCkey:
 		if (cmdchar != 'r' && cmdchar != 'v' && c != Ctrl_C)
 		    ins_apply_autocmds(EVENT_INSERTLEAVE);
 		did_cursorhold = FALSE;
-		curbuf->b_last_changedtick = CHANGEDTICK(curbuf);
+
+		// ins_redraw() triggers TextChangedI only when no characters
+		// are in the typeahead buffer, so only reset curbuf->b_last_changedtick
+		// if the TextChangedI was not blocked by char_avail() (e.g. using :norm!)
+		if (!char_avail())
+		    curbuf->b_last_changedtick = CHANGEDTICK(curbuf);
 		return (c == Ctrl_O);
 	    }
 	    continue;
@@ -2023,7 +2028,7 @@ insert_special(
      * Only use mod_mask for special keys, to avoid things like <S-Space>,
      * unless 'allow_modmask' is TRUE.
      */
-#ifdef MACOS_X
+#if defined(MACOS_X) || defined(FEAT_GUI_GTK)
     // Command-key never produces a normal key
     if (mod_mask & MOD_MASK_CMD)
 	allow_modmask = TRUE;
