@@ -36,7 +36,7 @@
 #  error configure did not run properly.  Check auto/config.log.
 # endif
 
-# if (defined(__linux__) && !defined(__ANDROID__)) || defined(__CYGWIN__)
+# if (defined(__linux__) && !defined(__ANDROID__)) || defined(__CYGWIN__) || defined(__GNU__)
 // Needed for strptime().  Needs to be done early, since header files can
 // include other header files and end up including time.h, where these symbols
 // matter for Vim.
@@ -627,6 +627,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 // flags for screen_line()
 #define SLF_RIGHTLEFT	1
 #define SLF_POPUP	2
+#define SLF_INC_VCOL	4
 
 #define MB_FILLER_CHAR '<'  // character used when a double-width character
 			    // doesn't fit.
@@ -1403,6 +1404,7 @@ enum auto_event
     EVENT_SAFESTATE,		// going to wait for a character
     EVENT_SAFESTATEAGAIN,	// still waiting for a character
     EVENT_SESSIONLOADPOST,	// after loading a session file
+    EVENT_SESSIONWRITEPOST,	// after writing a session file
     EVENT_SHELLCMDPOST,		// after ":!cmd"
     EVENT_SHELLFILTERPOST,	// after ":1,2!cmd", ":w !cmd", ":r !cmd".
     EVENT_SIGUSR1,		// after the SIGUSR1 signal
@@ -2162,7 +2164,9 @@ typedef int sock_T;
 #define VV_MAXCOL	105
 #define VV_PYTHON3_VERSION 106
 #define VV_TYPE_TYPEALIAS 107
-#define VV_LEN		108	// number of v: vars
+#define VV_TYPE_ENUM	  108
+#define VV_TYPE_ENUMVALUE 109
+#define VV_LEN		110	// number of v: vars
 
 // used for v_number in VAR_BOOL and VAR_SPECIAL
 #define VVAL_FALSE	0L	// VAR_BOOL
@@ -2186,6 +2190,8 @@ typedef int sock_T;
 #define VAR_TYPE_CLASS	    12
 #define VAR_TYPE_OBJECT	    13
 #define VAR_TYPE_TYPEALIAS  14
+#define VAR_TYPE_ENUM	    15
+#define VAR_TYPE_ENUMVALUE  16
 
 #define DICT_MAXNEST 100	// maximum nesting of lists and dicts
 

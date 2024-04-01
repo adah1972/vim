@@ -2268,7 +2268,7 @@ EXTERN char e_nfa_regexp_while_converting_from_postfix_to_nfa_too_many_stats_lef
 EXTERN char e_nfa_regexp_not_enough_space_to_store_whole_nfa[]
 	INIT(= N_("E876: (NFA regexp) Not enough space to store the whole NFA"));
 EXTERN char e_nfa_regexp_invalid_character_class_nr[]
-	INIT(= "E877: (NFA regexp) Invalid character class: %d");
+	INIT(= N_("E877: (NFA regexp) Invalid character class: %d"));
 EXTERN char e_nfa_regexp_could_not_allocate_memory_for_branch_traversal[]
 	INIT(= N_("E878: (NFA regexp) Could not allocate memory for branch traversal!"));
 #ifdef FEAT_SYN_HL
@@ -2526,9 +2526,11 @@ EXTERN char e_invalid_action_str_2[]
 EXTERN char e_setting_v_str_to_value_with_wrong_type[]
 	INIT(= N_("E963: Setting v:%s to value with wrong type"));
 #endif
-#ifdef FEAT_PROP_POPUP
+#if defined(FEAT_PROP_POPUP) || defined(FEAT_EVAL)
 EXTERN char_u e_invalid_column_number_nr[]
 	INIT(= N_("E964: Invalid column number: %ld"));
+#endif
+#ifdef FEAT_PROP_POPUP
 EXTERN char e_missing_property_type_name[]
 	INIT(= N_("E965: Missing property type name"));
 #endif
@@ -3579,8 +3581,42 @@ EXTERN char e_const_variable_not_supported_in_interface[]
 	INIT(= N_("E1410: Const variable not supported in an interface"));
 EXTERN char e_missing_dot_after_object_str[]
 	INIT(= N_("E1411: Missing dot after object \"%s\""));
+EXTERN char e_builtin_object_method_str_not_supported[]
+	INIT(= N_("E1412: Builtin object method \"%s\" not supported"));
+EXTERN char e_builtin_class_method_not_supported[]
+	INIT(= N_("E1413: Builtin class method not supported"));
+EXTERN char e_enum_can_only_be_defined_in_vim9_script[]
+       INIT(= N_("E1414: Enum can only be defined in Vim9 script"));
+EXTERN char e_enum_name_must_start_with_uppercase_letter_str[]
+	INIT(= N_("E1415: Enum name must start with an uppercase letter: %s"));
+EXTERN char e_enum_cannot_extend_class[]
+	INIT(= N_("E1416: Enum cannot extend a class or enum"));
+EXTERN char e_abstract_cannot_be_used_in_enum[]
+	INIT(= N_("E1417: Abstract cannot be used in an Enum"));
+EXTERN char e_invalid_enum_value_declaration_str[]
+	INIT(= N_("E1418: Invalid enum value declaration: %s"));
+EXTERN char e_not_valid_command_in_enum_str[]
+	INIT(= N_("E1419: Not a valid command in an Enum: %s"));
+EXTERN char e_missing_endenum[]
+	INIT(= N_("E1420: Missing :endenum"));
+EXTERN char e_using_enum_as_value_str[]
+	INIT(= N_("E1421: Enum \"%s\" cannot be used as a value"));
+EXTERN char e_enum_value_str_not_found_in_enum_str[]
+	INIT(= N_("E1422: Enum value \"%s\" not found in enum \"%s\""));
+EXTERN char e_enumvalue_str_cannot_be_modified[]
+	INIT(= N_("E1423: Enum value \"%s.%s\" cannot be modified"));
+EXTERN char e_using_enum_str_as_number[]
+	INIT(= N_("E1424: Using an Enum \"%s\" as a Number"));
+EXTERN char e_using_enum_str_as_string[]
+	INIT(= N_("E1425: Using an Enum \"%s\" as a String"));
+EXTERN char e_enum_str_ordinal_cannot_be_modified[]
+	INIT(= N_("E1426: Enum \"%s\" ordinal value cannot be modified"));
+EXTERN char e_enum_str_name_cannot_be_modified[]
+	INIT(= N_("E1427: Enum \"%s\" name cannot be modified"));
+EXTERN char e_duplicate_enum_str[]
+	INIT(= N_("E1428: Duplicate enum value: %s"));
 #endif
-// E1412 - E1499 unused (reserved for Vim9 class support)
+// E1429 - E1499 unused (reserved for Vim9 class support)
 EXTERN char e_cannot_mix_positional_and_non_positional_str[]
 	INIT(= N_("E1500: Cannot mix positional and non-positional arguments: %s"));
 EXTERN char e_fmt_arg_nr_unused_str[]
@@ -3607,3 +3643,5 @@ EXTERN char e_wrong_number_of_characters_for_field_str[]
 	INIT(= N_("E1511: Wrong number of characters for field \"%s\""));
 EXTERN char e_wrong_character_width_for_field_str[]
 	INIT(= N_("E1512: Wrong character width for field \"%s\""));
+EXTERN char e_winfixbuf_cannot_go_to_buffer[]
+	INIT(= N_("E1513: Cannot switch buffer. 'winfixbuf' is enabled"));

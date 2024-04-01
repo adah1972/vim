@@ -738,6 +738,7 @@ func Test_smoothscroll_mouse_pos()
   let &mouse = save_mouse
   let &term = save_term
   let &ttymouse = save_ttymouse
+  bwipe!
 endfunc
 
 " this was dividing by zero
@@ -829,7 +830,7 @@ func Test_smoothscroll_eob()
   call VerifyScreenDump(buf, 'Test_smooth_eob_1', {})
 
   " cursor is not placed below window
-  call term_sendkeys(buf, ":call setline(92, 'a'->repeat(100))\<CR>\<C-B>G")
+  call term_sendkeys(buf, ":call setline(92, 'a'->repeat(100))\<CR>\<C-L>\<C-B>G")
   call VerifyScreenDump(buf, 'Test_smooth_eob_2', {})
 
   call StopVimInTerminal(buf)
@@ -996,6 +997,48 @@ func Test_smoothscroll_textoff_small_winwidth()
 
   %bw!
   set smoothscroll& number&
+endfunc
+
+func Test_smoothscroll_page()
+  call NewWindow(10, 40)
+  setlocal smoothscroll
+  call setline(1, 'abcde '->repeat(150))
+
+  exe "norm! \<C-F>"
+  call assert_equal(400, winsaveview().skipcol)
+  exe "norm! \<C-F>"
+  call assert_equal(800, winsaveview().skipcol)
+  exe "norm! \<C-F>"
+  call assert_equal(880, winsaveview().skipcol)
+  exe "norm! \<C-B>"
+  call assert_equal(480, winsaveview().skipcol)
+  exe "norm! \<C-B>"
+  call assert_equal(80, winsaveview().skipcol)
+  exe "norm! \<C-B>"
+  call assert_equal(0, winsaveview().skipcol)
+
+  exe "norm! \<C-D>"
+  call assert_equal(200, winsaveview().skipcol)
+  exe "norm! \<C-D>"
+  call assert_equal(400, winsaveview().skipcol)
+  exe "norm! \<C-D>"
+  call assert_equal(600, winsaveview().skipcol)
+  exe "norm! \<C-D>"
+  call assert_equal(800, winsaveview().skipcol)
+  exe "norm! \<C-D>"
+  call assert_equal(880, winsaveview().skipcol)
+  exe "norm! \<C-U>"
+  call assert_equal(680, winsaveview().skipcol)
+  exe "norm! \<C-U>"
+  call assert_equal(480, winsaveview().skipcol)
+  exe "norm! \<C-U>"
+  call assert_equal(280, winsaveview().skipcol)
+  exe "norm! \<C-U>"
+  call assert_equal(80, winsaveview().skipcol)
+  exe "norm! \<C-U>"
+  call assert_equal(0, winsaveview().skipcol)
+
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

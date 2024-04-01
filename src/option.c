@@ -3678,7 +3678,7 @@ did_set_modified(optset_T *args)
     if (!args->os_newval.boolean)
 	save_file_ff(curbuf);	// Buffer is unchanged
     redraw_titles();
-    modified_was_set = args->os_newval.boolean;
+    curbuf->b_modified_was_set = args->os_newval.boolean;
     return NULL;
 }
 
@@ -6420,6 +6420,7 @@ get_varp(struct vimoption *p)
 #ifdef FEAT_LINEBREAK
 	case PV_NUW:	return (char_u *)&(curwin->w_p_nuw);
 #endif
+	case PV_WFB:	return (char_u *)&(curwin->w_p_wfb);
 	case PV_WFH:	return (char_u *)&(curwin->w_p_wfh);
 	case PV_WFW:	return (char_u *)&(curwin->w_p_wfw);
 #if defined(FEAT_QUICKFIX)

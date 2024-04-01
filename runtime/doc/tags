@@ -1294,6 +1294,7 @@ $quote	eval.txt	/*$quote*
 'winaltkeys'	options.txt	/*'winaltkeys'*
 'wincolor'	options.txt	/*'wincolor'*
 'window'	options.txt	/*'window'*
+'winfixbuf'	options.txt	/*'winfixbuf'*
 'winfixheight'	options.txt	/*'winfixheight'*
 'winfixwidth'	options.txt	/*'winfixwidth'*
 'winheight'	options.txt	/*'winheight'*
@@ -4517,7 +4518,22 @@ E1409	vim9class.txt	/*E1409*
 E141	message.txt	/*E141*
 E1410	vim9class.txt	/*E1410*
 E1411	vim9class.txt	/*E1411*
+E1412	vim9class.txt	/*E1412*
+E1413	vim9class.txt	/*E1413*
+E1414	vim9class.txt	/*E1414*
+E1415	vim9class.txt	/*E1415*
+E1416	vim9class.txt	/*E1416*
+E1417	vim9class.txt	/*E1417*
+E1418	vim9class.txt	/*E1418*
+E1419	vim9class.txt	/*E1419*
 E142	message.txt	/*E142*
+E1420	vim9class.txt	/*E1420*
+E1421	vim9class.txt	/*E1421*
+E1422	vim9class.txt	/*E1422*
+E1423	vim9class.txt	/*E1423*
+E1424	vim9class.txt	/*E1424*
+E1425	vim9class.txt	/*E1425*
+E1426	vim9class.txt	/*E1426*
 E143	autocmd.txt	/*E143*
 E144	various.txt	/*E144*
 E145	starting.txt	/*E145*
@@ -4541,6 +4557,7 @@ E151	helphelp.txt	/*E151*
 E1510	change.txt	/*E1510*
 E1511	options.txt	/*E1511*
 E1512	options.txt	/*E1512*
+E1513	message.txt	/*E1513*
 E152	helphelp.txt	/*E152*
 E153	helphelp.txt	/*E153*
 E154	helphelp.txt	/*E154*
@@ -5678,6 +5695,7 @@ Select-mode-mapping	visual.txt	/*Select-mode-mapping*
 Session	starting.txt	/*Session*
 SessionLoad-variable	starting.txt	/*SessionLoad-variable*
 SessionLoadPost	autocmd.txt	/*SessionLoadPost*
+SessionWritePost	autocmd.txt	/*SessionWritePost*
 ShellCmdPost	autocmd.txt	/*ShellCmdPost*
 ShellFilterPost	autocmd.txt	/*ShellFilterPost*
 SigUSR1	autocmd.txt	/*SigUSR1*
@@ -6181,6 +6199,7 @@ bugs	intro.txt	/*bugs*
 builtin-function-details	builtin.txt	/*builtin-function-details*
 builtin-function-list	builtin.txt	/*builtin-function-list*
 builtin-functions	builtin.txt	/*builtin-functions*
+builtin-object-methods	vim9class.txt	/*builtin-object-methods*
 builtin-terms	term.txt	/*builtin-terms*
 builtin-tools	gui.txt	/*builtin-tools*
 builtin.txt	builtin.txt	/*builtin.txt*
@@ -6868,6 +6887,12 @@ encryption	editing.txt	/*encryption*
 end	intro.txt	/*end*
 end-of-file	pattern.txt	/*end-of-file*
 enlightened-terminal	syntax.txt	/*enlightened-terminal*
+enum	vim9class.txt	/*enum*
+enum-constructor	vim9class.txt	/*enum-constructor*
+enum-name	vim9class.txt	/*enum-name*
+enum-ordinal	vim9class.txt	/*enum-ordinal*
+enum-values	vim9class.txt	/*enum-values*
+enumvalue	vim9class.txt	/*enumvalue*
 environ()	builtin.txt	/*environ()*
 eol-and-eof	editing.txt	/*eol-and-eof*
 erlang.vim	syntax.txt	/*erlang.vim*
@@ -7762,6 +7787,7 @@ getqflist-examples	quickfix.txt	/*getqflist-examples*
 getreg()	builtin.txt	/*getreg()*
 getreginfo()	builtin.txt	/*getreginfo()*
 getregion()	builtin.txt	/*getregion()*
+getregion-notes	builtin.txt	/*getregion-notes*
 getregtype()	builtin.txt	/*getregtype()*
 getscript	pi_getscript.txt	/*getscript*
 getscript-autoinstall	pi_getscript.txt	/*getscript-autoinstall*
@@ -9151,9 +9177,12 @@ o_object-select	motion.txt	/*o_object-select*
 o_v	motion.txt	/*o_v*
 object	vim9class.txt	/*object*
 object-const-variable	vim9class.txt	/*object-const-variable*
+object-empty()	vim9class.txt	/*object-empty()*
 object-final-variable	vim9class.txt	/*object-final-variable*
+object-len()	vim9class.txt	/*object-len()*
 object-motions	motion.txt	/*object-motions*
 object-select	motion.txt	/*object-select*
+object-string()	vim9class.txt	/*object-string()*
 objects	index.txt	/*objects*
 obtaining-exted	netbeans.txt	/*obtaining-exted*
 ocaml.vim	syntax.txt	/*ocaml.vim*
@@ -10280,6 +10309,8 @@ t_dl	term.txt	/*t_dl*
 t_ds	term.txt	/*t_ds*
 t_ed	version4.txt	/*t_ed*
 t_el	version4.txt	/*t_el*
+t_enum-variable	eval.txt	/*t_enum-variable*
+t_enumvalue-variable	eval.txt	/*t_enumvalue-variable*
 t_f1	version4.txt	/*t_f1*
 t_f10	version4.txt	/*t_f10*
 t_f2	version4.txt	/*t_f2*
@@ -10853,6 +10884,8 @@ v:t_bool	eval.txt	/*v:t_bool*
 v:t_channel	eval.txt	/*v:t_channel*
 v:t_class	eval.txt	/*v:t_class*
 v:t_dict	eval.txt	/*v:t_dict*
+v:t_enum	eval.txt	/*v:t_enum*
+v:t_enumvalue	eval.txt	/*v:t_enumvalue*
 v:t_float	eval.txt	/*v:t_float*
 v:t_func	eval.txt	/*v:t_func*
 v:t_job	eval.txt	/*v:t_job*

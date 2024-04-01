@@ -986,6 +986,7 @@ arg_len1(type_T *type, type_T *decl_type UNUSED, argcontext_T *context)
 	    || type->tt_type == VAR_BLOB
 	    || type->tt_type == VAR_LIST
 	    || type->tt_type == VAR_DICT
+	    || type->tt_type == VAR_OBJECT
 	    || type_any_or_unknown(type))
 	return OK;
 
@@ -3636,7 +3637,7 @@ get_col(typval_T *argvars, typval_T *rettv, int charcol)
 	{
 	    // '> can be MAXCOL, get the length of the line then
 	    if (fp->lnum <= curbuf->b_ml.ml_line_count)
-		col = (colnr_T)STRLEN(ml_get(fp->lnum)) + 1;
+		col = ml_get_len(fp->lnum) + 1;
 	    else
 		col = MAXCOL;
 	}
@@ -3919,7 +3920,7 @@ f_deepcopy(typval_T *argvars, typval_T *rettv)
     static void
 f_did_filetype(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
 {
-    rettv->vval.v_number = did_filetype;
+    rettv->vval.v_number = curbuf->b_did_filetype;
 }
 
 /*
@@ -3981,7 +3982,7 @@ f_empty(typval_T *argvars, typval_T *rettv)
 	    n = argvars[0].vval.v_class != NULL;
 	    break;
 	case VAR_OBJECT:
-	    n = argvars[0].vval.v_object != NULL;
+	    n = object_empty(argvars[0].vval.v_object);
 	    break;
 
 	case VAR_BLOB:
@@ -5490,11 +5491,13 @@ f_getregion(typval_T *argvars, typval_T *rettv)
     struct block_def	bd;
     char_u		*akt = NULL;
     int			inclusive = TRUE;
-    int			fnum = -1;
+    int			fnum1 = -1, fnum2 = -1;
     pos_T		p1, p2;
     char_u		*type;
+    buf_T		*save_curbuf;
+    buf_T		*findbuf;
     char_u		default_type[] = "v";
-    int			save_virtual = -1;
+    int			save_virtual;
     int			l;
     int			region_type = -1;
     int			is_select_exclusive;
@@ -5507,12 +5510,9 @@ f_getregion(typval_T *argvars, typval_T *rettv)
 	    || check_for_opt_dict_arg(argvars, 2) == FAIL)
 	return;
 
-    if (list2fpos(&argvars[0], &p1, &fnum, NULL, FALSE) != OK
-	    || (fnum >= 0 && fnum != curbuf->b_fnum))
-	return;
-
-    if (list2fpos(&argvars[1], &p2, &fnum, NULL, FALSE) != OK
-	    || (fnum >= 0 && fnum != curbuf->b_fnum))
+    if (list2fpos(&argvars[0], &p1, &fnum1, NULL, FALSE) != OK
+	    || list2fpos(&argvars[1], &p2, &fnum2, NULL, FALSE) != OK
+	    || fnum1 != fnum2)
 	return;
 
     if (argvars[2].v_type == VAR_DICT)
@@ -5537,8 +5537,42 @@ f_getregion(typval_T *argvars, typval_T *rettv)
     else if (type[0] == Ctrl_V && type[1] == NUL)
 	region_type = MBLOCK;
     else
+    {
+	semsg(_(e_invalid_value_for_argument_str_str), "type", type);
 	return;
+    }
 
+    findbuf = fnum1 != 0 ? buflist_findnr(fnum1) : curbuf;
+    if (findbuf == NULL || findbuf->b_ml.ml_mfp == NULL)
+    {
+	emsg(_(e_buffer_is_not_loaded));
+	return;
+    }
+
+    if (p1.lnum < 1 || p1.lnum > findbuf->b_ml.ml_line_count)
+    {
+	semsg(_(e_invalid_line_number_nr), p1.lnum);
+	return;
+    }
+    if (p1.col < 1 || p1.col > ml_get_buf_len(findbuf, p1.lnum) + 1)
+    {
+	semsg(_(e_invalid_column_number_nr), p1.col);
+	return;
+    }
+    if (p2.lnum < 1 || p2.lnum > findbuf->b_ml.ml_line_count)
+    {
+	semsg(_(e_invalid_line_number_nr), p2.lnum);
+	return;
+    }
+    if (p2.col < 1 || p2.col > ml_get_buf_len(findbuf, p2.lnum) + 1)
+    {
+	semsg(_(e_invalid_column_number_nr), p2.col);
+	return;
+    }
+
+    save_curbuf = curbuf;
+    curbuf = findbuf;
+    curwin->w_buffer = curbuf;
     save_virtual = virtual_op;
     virtual_op = virtual_active();
 
@@ -5572,7 +5606,7 @@ f_getregion(typval_T *argvars, typval_T *rettv)
 	    else if (p2.lnum > 1)
 	    {
 		p2.lnum--;
-		p2.col = (colnr_T)STRLEN(ml_get(p2.lnum));
+		p2.col = ml_get_len(p2.lnum);
 		if (p2.col > 0)
 		{
 		    p2.col--;
@@ -5641,6 +5675,8 @@ f_getregion(typval_T *argvars, typval_T *rettv)
 	}
     }
 
+    curbuf = save_curbuf;
+    curwin->w_buffer = curbuf;
     virtual_op = save_virtual;
 }
 
@@ -7831,6 +7867,9 @@ f_len(typval_T *argvars, typval_T *rettv)
 	case VAR_DICT:
 	    rettv->vval.v_number = dict_len(argvars[0].vval.v_dict);
 	    break;
+	case VAR_OBJECT:
+	    rettv->vval.v_number = object_len(argvars[0].vval.v_object);
+	    break;
 	case VAR_UNKNOWN:
 	case VAR_ANY:
 	case VAR_VOID:
@@ -7843,7 +7882,6 @@ f_len(typval_T *argvars, typval_T *rettv)
 	case VAR_CHANNEL:
 	case VAR_INSTR:
 	case VAR_CLASS:
-	case VAR_OBJECT:
 	case VAR_TYPEALIAS:
 	    emsg(_(e_invalid_type_for_len));
 	    break;
@@ -11096,7 +11134,7 @@ f_synID(typval_T *argvars UNUSED, typval_T *rettv)
     trans = (int)tv_get_bool_chk(&argvars[2], &transerr);
 
     if (!transerr && lnum >= 1 && lnum <= curbuf->b_ml.ml_line_count
-	    && col >= 0 && col < (long)STRLEN(ml_get(lnum)))
+	    && col >= 0 && col < (long)ml_get_len(lnum))
 	id = syn_get_id(curwin, lnum, col, trans, NULL, FALSE);
 #endif
 
@@ -11273,7 +11311,7 @@ f_synconcealed(typval_T *argvars UNUSED, typval_T *rettv)
     if (rettv_list_alloc(rettv) == OK)
     {
 	if (lnum >= 1 && lnum <= curbuf->b_ml.ml_line_count
-	    && col >= 0 && col <= (long)STRLEN(ml_get(lnum))
+	    && col >= 0 && col <= (long)ml_get_len(lnum)
 	    && curwin->w_p_cole > 0)
 	{
 	    (void)syn_get_id(curwin, lnum, col, FALSE, NULL, FALSE);
@@ -11330,7 +11368,7 @@ f_synstack(typval_T *argvars UNUSED, typval_T *rettv)
     col = (colnr_T)tv_get_number(&argvars[1]) - 1;	// -1 on type error
 
     if (lnum >= 1 && lnum <= curbuf->b_ml.ml_line_count
-	    && col >= 0 && col <= (long)STRLEN(ml_get(lnum))
+	    && col >= 0 && col <= (long)ml_get_len(lnum)
 	    && rettv_list_alloc(rettv) == OK)
     {
 	(void)syn_get_id(curwin, lnum, col, FALSE, NULL, TRUE);
@@ -11448,15 +11486,31 @@ f_type(typval_T *argvars, typval_T *rettv)
 	case VAR_CHANNEL: n = VAR_TYPE_CHANNEL; break;
 	case VAR_BLOB:    n = VAR_TYPE_BLOB; break;
 	case VAR_INSTR:   n = VAR_TYPE_INSTR; break;
-	case VAR_CLASS:   n = VAR_TYPE_CLASS; break;
-	case VAR_OBJECT:  n = VAR_TYPE_OBJECT; break;
 	case VAR_TYPEALIAS: n = VAR_TYPE_TYPEALIAS; break;
+	case VAR_CLASS:
+	    {
+		class_T *cl = argvars[0].vval.v_class;
+		if (IS_ENUM(cl))
+		    n = VAR_TYPE_ENUM;
+		else
+		    n = VAR_TYPE_CLASS;
+		break;
+	    }
+	case VAR_OBJECT:
+	    {
+		class_T *cl = argvars[0].vval.v_object->obj_class;
+		if (IS_ENUM(cl))
+		    n = VAR_TYPE_ENUMVALUE;
+		else
+		    n = VAR_TYPE_OBJECT;
+		break;
+	    }
 	case VAR_UNKNOWN:
 	case VAR_ANY:
 	case VAR_VOID:
-	     internal_error_no_abort("f_type(UNKNOWN)");
-	     n = -1;
-	     break;
+	    internal_error_no_abort("f_type(UNKNOWN)");
+	    n = -1;
+	    break;
     }
     rettv->vval.v_number = n;
 }
@@ -11508,7 +11562,7 @@ f_virtcol(typval_T *argvars, typval_T *rettv)
 	    fp->col = 0;
 	else
 	{
-	    len = (int)STRLEN(ml_get(fp->lnum));
+	    len = (int)ml_get_len(fp->lnum);
 	    if (fp->col > len)
 		fp->col = len;
 	}

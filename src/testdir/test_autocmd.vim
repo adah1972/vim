@@ -819,6 +819,27 @@ func Test_WinClosed_switch_tab()
   %bwipe!
 endfunc
 
+" This used to trigger WinClosed twice for the same window, and the window's
+" buffer was NULL in the second autocommand.
+func Test_WinClosed_BufUnload_close_other()
+  tabnew
+  let g:tab = tabpagenr()
+  let g:buf = bufnr()
+  new
+  setlocal bufhidden=wipe
+  augroup test-WinClosed
+    autocmd BufUnload * ++once exe g:buf .. 'bwipe!'
+    autocmd WinClosed * call tabpagebuflist(g:tab)
+  augroup END
+  close
+
+  unlet g:tab
+  unlet g:buf
+  autocmd! test-WinClosed
+  augroup! test-WinClosed
+  %bwipe!
+endfunc
+
 func s:AddAnAutocmd()
   augroup vimBarTest
     au BufReadCmd * echo 'hello'
@@ -4451,6 +4472,159 @@ func Test_autocmd_creates_new_buffer_on_bufleave()
   call assert_equal('a.txt', bufname('%'))
   bw a.txt
   bw c.txt
+endfunc
+
+" Ensure `expected` was just recently written as a Vim session
+func s:assert_session_path(expected)
+  call assert_equal(a:expected, v:this_session)
+endfunc
+
+" Check for `expected` after a session is written to-disk.
+func s:watch_for_session_path(expected)
+  execute 'autocmd SessionWritePost * ++once execute "call s:assert_session_path(\"'
+        \ . a:expected
+        \ . '\")"'
+endfunc
+
+" Ensure v:this_session gets the full session path, if explicitly stated
+func Test_explicit_session_absolute_path()
+  %bwipeout!
+
+  let directory = getcwd()
+
+  let v:this_session = ""
+  let name = "some_file.vim"
+  let expected = fnamemodify(name, ":p")
+  call s:watch_for_session_path(expected)
+  execute "mksession! " .. expected
+
+  call delete(expected)
+endfunc
+
+" Ensure v:this_session gets the full session path, if explicitly stated
+func Test_explicit_session_relative_path()
+  %bwipeout!
+
+  let directory = getcwd()
+
+  let v:this_session = ""
+  let name = "some_file.vim"
+  let expected = fnamemodify(name, ":p")
+  call s:watch_for_session_path(expected)
+  execute "mksession! " .. name
+
+  call delete(expected)
+endfunc
+
+" Ensure v:this_session gets the full session path, if not specified
+func Test_implicit_session()
+  %bwipeout!
+
+  let directory = getcwd()
+
+  let v:this_session = ""
+  let expected = fnamemodify("Session.vim", ":p")
+  call s:watch_for_session_path(expected)
+  mksession!
+
+  call delete(expected)
+endfunc
+
+" Test TextChangedI and TextChanged
+func Test_Changed_ChangedI_2()
+  CheckRunVimInTerminal
+  call writefile(['one', 'two', 'three'], 'XTextChangedI2', 'D')
+  let before =<< trim END
+      autocmd TextChanged,TextChangedI * call writefile([b:changedtick], 'XTextChangedI3')
+      nnoremap <CR> o<Esc>
+      call writefile([], 'XTextChangedI3')
+  END
+
+  call writefile(before, 'Xinit', 'D')
+  let buf = RunVimInTerminal('-S Xinit XtextChangedI2', {})
+  call term_sendkeys(buf, "\<cr>")
+  call term_wait(buf)
+  call StopVimInTerminal(buf)
+  call assert_equal(['4'], readfile('XTextChangedI3'))
+
+  call delete('XTextChangedI3')
+endfunc
+
+" Test that filetype detection still works when SwapExists autocommand sets
+" filetype in another buffer.
+func Test_SwapExists_set_other_buf_filetype()
+  let lines =<< trim END
+    set nocompatible directory=.
+    filetype on
+
+    let g:buf = bufnr()
+    new
+
+    func SwapExists()
+      let v:swapchoice = 'o'
+      call setbufvar(g:buf, '&filetype', 'text')
+    endfunc
+
+    func SafeState()
+      edit <script>
+      redir! > XftSwapExists.out
+        set readonly? filetype?
+      redir END
+      qall!
+    endfunc
+
+    autocmd SwapExists * ++nested call SwapExists()
+    autocmd SafeState * ++nested ++once call SafeState()
+  END
+  call writefile(lines, 'XftSwapExists.vim', 'D')
+
+  new XftSwapExists.vim
+  if RunVim('', '', ' -S XftSwapExists.vim')
+    call assert_equal(
+          \ ['', '  readonly', '  filetype=vim'],
+          \ readfile('XftSwapExists.out'))
+    call delete('XftSwapExists.out')
+  endif
+
+  bwipe!
+endfunc
+
+" Test that file is not marked as modified when SwapExists autocommand sets
+" 'modified' in another buffer.
+func Test_SwapExists_set_other_buf_modified()
+  let lines =<< trim END
+    set nocompatible directory=.
+
+    let g:buf = bufnr()
+    new
+
+    func SwapExists()
+      let v:swapchoice = 'o'
+      call setbufvar(g:buf, '&modified', 1)
+    endfunc
+
+    func SafeState()
+      edit <script>
+      redir! > XmodSwapExists.out
+        set readonly? modified?
+      redir END
+      qall!
+    endfunc
+
+    autocmd SwapExists * ++nested call SwapExists()
+    autocmd SafeState * ++nested ++once call SafeState()
+  END
+  call writefile(lines, 'XmodSwapExists.vim', 'D')
+
+  new XmodSwapExists.vim
+  if RunVim('', '', ' -S XmodSwapExists.vim')
+    call assert_equal(
+          \ ['', '  readonly', 'nomodified'],
+          \ readfile('XmodSwapExists.out'))
+    call delete('XmodSwapExists.out')
+  endif
+
+  bwipe!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

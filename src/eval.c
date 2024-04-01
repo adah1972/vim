@@ -1119,7 +1119,18 @@ get_lval_check_access(
 		if (*p == '[' || *p == '.')
 		    break;
 		if ((flags & GLV_READ_ONLY) == 0)
-		    msg = e_variable_is_not_writable_str;
+		{
+		    if (IS_ENUM(cl))
+		    {
+			if (om->ocm_type->tt_type == VAR_OBJECT)
+			    semsg(_(e_enumvalue_str_cannot_be_modified),
+				    cl->class_name, om->ocm_name);
+			else
+			    msg = e_variable_is_not_writable_str;
+		    }
+		    else
+			msg = e_variable_is_not_writable_str;
+		}
 		break;
 	    case VIM_ACCESS_ALL:
 		break;
@@ -6310,44 +6321,23 @@ echo_string_core(
 	case VAR_CLASS:
 	    {
 		class_T *cl = tv->vval.v_class;
-		size_t len = 6 + (cl == NULL ? 9 : STRLEN(cl->class_name)) + 1;
+		char *s = "class";
+		if (IS_INTERFACE(cl))
+		    s = "interface";
+		else if (IS_ENUM(cl))
+		    s = "enum";
+		size_t len = STRLEN(s) + 1 +
+		    (cl == NULL ? 9 : STRLEN(cl->class_name)) + 1;
 		r = *tofree = alloc(len);
-		vim_snprintf((char *)r, len, "class %s",
+		vim_snprintf((char *)r, len, "%s %s", s,
 			    cl == NULL ? "[unknown]" : (char *)cl->class_name);
 	    }
 	    break;
 
 	case VAR_OBJECT:
-	    {
-		garray_T ga;
-		ga_init2(&ga, 1, 50);
-		ga_concat(&ga, (char_u *)"object of ");
-		object_T *obj = tv->vval.v_object;
-		class_T *cl = obj == NULL ? NULL : obj->obj_class;
-		ga_concat(&ga, cl == NULL ? (char_u *)"[unknown]"
-							     : cl->class_name);
-		if (cl != NULL)
-		{
-		    ga_concat(&ga, (char_u *)" {");
-		    for (int i = 0; i < cl->class_obj_member_count; ++i)
-		    {
-			if (i > 0)
-			    ga_concat(&ga, (char_u *)", ");
-			ocmember_T *m = &cl->class_obj_members[i];
-			ga_concat(&ga, m->ocm_name);
-			ga_concat(&ga, (char_u *)": ");
-			char_u *tf = NULL;
-			ga_concat(&ga, echo_string_core(
-					       (typval_T *)(obj + 1) + i,
-					       &tf, numbuf, copyID, echo_style,
-					       restore_copyID, composite_val));
-			vim_free(tf);
-		    }
-		    ga_concat(&ga, (char_u *)"}");
-		}
-
-		*tofree = r = ga.ga_data;
-	    }
+	    *tofree = r = object_string(tv->vval.v_object, numbuf, copyID,
+					echo_style, restore_copyID,
+					composite_val);
 	    break;
 
 	case VAR_FLOAT:
@@ -6495,7 +6485,7 @@ var2fpos(
 	if (charcol)
 	    len = (long)mb_charlen(ml_get(pos.lnum));
 	else
-	    len = (long)STRLEN(ml_get(pos.lnum));
+	    len = (long)ml_get_len(pos.lnum);
 
 	// Get the column number
 	// We accept "$" for the column number: last column.
@@ -6601,7 +6591,7 @@ var2fpos(
 	    if (charcol)
 		pos.col = (colnr_T)mb_charlen(ml_get_curline());
 	    else
-		pos.col = (colnr_T)STRLEN(ml_get_curline());
+		pos.col = ml_get_curline_len();
 	}
 	return &pos;
     }

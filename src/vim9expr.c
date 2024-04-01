@@ -446,7 +446,7 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 	if (m_idx >= 0)
 	{
 	    ufunc_T *fp = cl->class_obj_methods[m_idx];
-	    // Private methods are not accessible outside the class
+	    // Private object methods are not accessible outside the class
 	    if (*name == '_' && !inside_class(cctx, cl))
 	    {
 		semsg(_(e_cannot_access_protected_method_str), fp->uf_name);
@@ -488,7 +488,7 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
 	if (m_idx >= 0)
 	{
 	    ufunc_T *fp = cl->class_class_functions[m_idx];
-	    // Private methods are not accessible outside the class
+	    // Private class methods are not accessible outside the class
 	    if (*name == '_' && !inside_class(cctx, cl))
 	    {
 		semsg(_(e_cannot_access_protected_method_str), fp->uf_name);
@@ -1014,6 +1014,32 @@ failret:
 }
 
 /*
+ * Compile a builtin method call of an object (e.g. string(), len(), empty(),
+ * etc.) if the class implements it.
+ */
+    static int
+compile_builtin_method_call(cctx_T *cctx, class_builtin_T builtin_method)
+{
+    type_T	*type = get_decl_type_on_stack(cctx, 0);
+    int		res = FAIL;
+
+    // If the built in function is invoked on an object and the class
+    // implements the corresponding built in method, then invoke the object
+    // method.
+    if (type->tt_type == VAR_OBJECT)
+    {
+	int	method_idx;
+	ufunc_T *uf = class_get_builtin_method(type->tt_class, builtin_method,
+							&method_idx);
+	if (uf != NULL)
+	    res = generate_CALL(cctx, uf, type->tt_class, method_idx, 0);
+    }
+
+    return res;
+}
+
+
+/*
  * Compile a function call:  name(arg1, arg2)
  * "arg" points to "name", "arg + varlen" to the "(".
  * "argcount_init" is 1 for "value->method()"
@@ -1167,6 +1193,20 @@ compile_call(
 		// May have the "D" or "R" flag, reserve a variable for a
 		// deferred function call.
 		if (get_defer_var_idx(cctx) == 0)
+		    idx = -1;
+	    }
+
+	    class_builtin_T	builtin_method = CLASS_BUILTIN_INVALID;
+	    if (STRCMP(name, "string") == 0)
+		builtin_method = CLASS_BUILTIN_STRING;
+	    else if (STRCMP(name, "empty") == 0)
+		builtin_method = CLASS_BUILTIN_EMPTY;
+	    else if (STRCMP(name, "len") == 0)
+		builtin_method = CLASS_BUILTIN_LEN;
+	    if (builtin_method != CLASS_BUILTIN_INVALID)
+	    {
+		res = compile_builtin_method_call(cctx, builtin_method);
+		if (res == OK)
 		    idx = -1;
 	    }
 
@@ -2422,7 +2462,8 @@ compile_subscript(
 		return FAIL;
 	    ppconst->pp_is_const = FALSE;
 
-	    if ((type = get_type_on_stack(cctx, 0)) != &t_unknown
+	    type = get_type_on_stack(cctx, 0);
+	    if (type != &t_unknown
 		    && (type->tt_type == VAR_CLASS
 					       || type->tt_type == VAR_OBJECT))
 	    {
@@ -2739,7 +2780,7 @@ compile_expr9(
     if (compile_subscript(arg, cctx, start_leader, &end_leader,
 							     ppconst) == FAIL)
 	return FAIL;
-    if (ppconst->pp_used > 0)
+    if ((ppconst->pp_used > 0) && (cctx->ctx_skip != SKIP_YES))
     {
 	// apply the '!', '-' and '+' before the constant
 	rettv = &ppconst->pp_tv[ppconst->pp_used - 1];

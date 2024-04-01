@@ -2066,7 +2066,7 @@ nv_page(cmdarg_T *cap)
 	    goto_tabpage((int)cap->count0);
     }
     else
-	(void)onepage(cap->arg, cap->count1);
+	(void)pagescroll(cap->arg, cap->count1, FALSE);
 }
 
 /*
@@ -2306,7 +2306,9 @@ find_decl(
     static int
 nv_screengo(oparg_T *oap, int dir, long dist)
 {
-    int		linelen = linetabsize(curwin, curwin->w_cursor.lnum);
+
+    int		linelen = linetabsize_no_outer(curwin, curwin->w_cursor.lnum);
+
     int		retval = OK;
     int		atend = FALSE;
     int		n;
@@ -2376,7 +2378,7 @@ nv_screengo(oparg_T *oap, int dir, long dist)
 		}
 		cursor_up_inner(curwin, 1);
 
-		linelen = linetabsize(curwin, curwin->w_cursor.lnum);
+		linelen = linetabsize_no_outer(curwin, curwin->w_cursor.lnum);
 		if (linelen > width1)
 		    curwin->w_curswant += (((linelen - width1 - 1) / width2)
 								+ 1) * width2;
@@ -2413,7 +2415,7 @@ nv_screengo(oparg_T *oap, int dir, long dist)
 		// clipped to column 0.
 		if (curwin->w_curswant >= width1)
 		    curwin->w_curswant -= width2;
-		linelen = linetabsize(curwin, curwin->w_cursor.lnum);
+		linelen = linetabsize_no_outer(curwin, curwin->w_cursor.lnum);
 	    }
 	}
       }
@@ -4073,6 +4075,9 @@ nv_gotofile(cmdarg_T *cap)
 	return;
 #endif
 
+    if (!check_can_set_curbuf_disabled())
+      return;
+
     ptr = grab_file_name(cap->count1, &lnum);
 
     if (ptr != NULL)
@@ -4475,7 +4480,8 @@ nv_brackets(cmdarg_T *cap)
 		SAFE_isupper(cap->nchar) ? ACTION_SHOW_ALL :
 			    SAFE_islower(cap->nchar) ? ACTION_SHOW : ACTION_GOTO,
 		cap->cmdchar == ']' ? curwin->w_cursor.lnum + 1 : (linenr_T)1,
-		(linenr_T)MAXLNUM);
+		(linenr_T)MAXLNUM,
+	        FALSE);
 	    vim_free(ptr);
 	    curwin->w_set_curswant = TRUE;
 	}
@@ -6060,7 +6066,7 @@ nv_g_cmd(cmdarg_T *cap)
 	{
 	    oap->motion_type = MCHAR;
 	    oap->inclusive = FALSE;
-	    i = linetabsize(curwin, curwin->w_cursor.lnum);
+	    i = linetabsize_no_outer(curwin, curwin->w_cursor.lnum);
 	    if (cap->count0 > 0 && cap->count0 <= 100)
 		coladvance((colnr_T)(i * cap->count0 / 100));
 	    else
@@ -7257,12 +7263,8 @@ nv_at(cmdarg_T *cap)
     static void
 nv_halfpage(cmdarg_T *cap)
 {
-    if ((cap->cmdchar == Ctrl_U && curwin->w_cursor.lnum == 1)
-	    || (cap->cmdchar == Ctrl_D
-		&& curwin->w_cursor.lnum == curbuf->b_ml.ml_line_count))
-	clearopbeep(cap->oap);
-    else if (!checkclearop(cap->oap))
-	halfpage(cap->cmdchar == Ctrl_D, cap->count0);
+    if (!checkclearop(cap->oap))
+	pagescroll(cap->cmdchar == Ctrl_D, cap->count0, TRUE);
 }
 
 /*

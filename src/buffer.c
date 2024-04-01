@@ -225,7 +225,7 @@ open_buffer(
     // The autocommands in readfile() may change the buffer, but only AFTER
     // reading the file.
     set_bufref(&old_curbuf, curbuf);
-    modified_was_set = FALSE;
+    curbuf->b_modified_was_set = FALSE;
 
     // mark cursor position as being invalid
     curwin->w_valid = 0;
@@ -322,7 +322,7 @@ open_buffer(
     // the changed flag.  Unless in readonly mode: "ls | gview -".
     // When interrupted and 'cpoptions' contains 'i' set changed flag.
     if ((got_int && vim_strchr(p_cpo, CPO_INTMOD) != NULL)
-		|| modified_was_set	// ":set modified" used in autocmd
+		|| curbuf->b_modified_was_set	// autocmd did ":set modified"
 #ifdef FEAT_EVAL
 		|| (aborting() && vim_strchr(p_cpo, CPO_INTMOD) != NULL)
 #endif
@@ -1370,6 +1370,13 @@ do_buffer_ext(
     if ((flags & DOBUF_NOPOPUP) && bt_popup(buf) && !bt_terminal(buf))
 	return OK;
 #endif
+    if (
+	action == DOBUF_GOTO
+	&& buf != curbuf
+	&& !check_can_set_curbuf_forceit((flags & DOBUF_FORCEIT) ? TRUE : FALSE))
+      // disallow navigating to another buffer when 'winfixbuf' is applied
+      return FAIL;
+
     if ((action == DOBUF_GOTO || action == DOBUF_SPLIT)
 						  && (buf->b_flags & BF_DUMMY))
     {
@@ -1937,7 +1944,7 @@ enter_buffer(buf_T *buf)
 	// ":ball" used in an autocommand.  If there already is a filetype we
 	// might prefer to keep it.
 	if (*curbuf->b_p_ft == NUL)
-	    did_filetype = FALSE;
+	    curbuf->b_did_filetype = FALSE;
 
 	open_buffer(FALSE, NULL, 0);
     }
@@ -4214,7 +4221,7 @@ build_stl_str_hl(
     stl_hlrec_T **tabtab)	// return: tab page nrs (can be NULL)
 {
     linenr_T	lnum;
-    size_t	len;
+    colnr_T	len;
     char_u	*p;
     char_u	*s;
     char_u	*t;
@@ -4321,12 +4328,12 @@ build_stl_str_hl(
 
     // Get the byte value now, in case we need it below. This is more efficient
     // than making a copy of the line.
-    len = STRLEN(p);
-    if (wp->w_cursor.col > (colnr_T)len)
+    len = ml_get_buf_len(wp->w_buffer, lnum);
+    if (wp->w_cursor.col > len)
     {
 	// Line may have changed since checking the cursor column, or the lnum
 	// was adjusted above.
-	wp->w_cursor.col = (colnr_T)len;
+	wp->w_cursor.col = len;
 	wp->w_cursor.coladd = 0;
 	byteval = 0;
     }

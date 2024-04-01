@@ -1404,9 +1404,6 @@ expand_env_esc(
     int		mustfree;	// var was allocated, need to free it later
     int		at_start = TRUE; // at start of a name
     int		startstr_len = 0;
-#if defined(BACKSLASH_IN_FILENAME) || defined(AMIGA)
-    char_u	*save_dst = dst;
-#endif
 
     if (startstr != NULL)
 	startstr_len = (int)STRLEN(startstr);
@@ -1631,7 +1628,7 @@ expand_env_esc(
 		// with it, skip a character
 		if (after_pathsep(dst, dst + c)
 #if defined(BACKSLASH_IN_FILENAME) || defined(AMIGA)
-			&& (dst == save_dst || dst[-1] != ':')
+			&& dst[c - 1] != ':'
 #endif
 			&& vim_ispathsep(*tail))
 		    ++tail;
@@ -2095,7 +2092,7 @@ add_user(char_u *user, int need_copy)
     if (user_copy == NULL || *user_copy == NUL || ga_grow(&ga_users, 1) == FAIL)
     {
 	if (need_copy)
-	    vim_free(user);
+	    vim_free(user_copy);
 	return;
     }
     ((char_u **)(ga_users.ga_data))[ga_users.ga_len++] = user_copy;
@@ -2175,7 +2172,7 @@ init_users(void)
 }
 
 /*
- * Function given to ExpandGeneric() to obtain an user names.
+ * Function given to ExpandGeneric() to obtain user names.
  */
     char_u*
 get_users(expand_T *xp UNUSED, int idx)
