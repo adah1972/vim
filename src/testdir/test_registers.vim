@@ -261,6 +261,19 @@ func Test_zz_recording_with_select_mode_utf8_gui()
   call Run_test_recording_with_select_mode_utf8()
 endfunc
 
+func Test_recording_with_super_mod()
+  if "\<D-j>"[-1:] == '>'
+    throw 'Skipped: <D- modifier not supported'
+  endif
+
+  nnoremap <D-j> <Ignore>
+  let s = repeat("\<D-j>", 1000)
+  " This used to crash Vim
+  call feedkeys($'qr{s}q', 'tx')
+  call assert_equal(s, @r)
+  nunmap <D-j>
+endfunc
+
 " Test for executing the last used register (@)
 func Test_last_used_exec_reg()
   " Test for the @: command
@@ -797,13 +810,13 @@ func Test_ve_blockpaste()
   call cursor(1,1)
   exe ":norm! \<C-V>3ljdP"
   call assert_equal(1, col('.'))
-  call assert_equal(getline(1, 2), ['QWERTZ', 'ASDFGH'])
+  call assert_equal(['QWERTZ', 'ASDFGH'], getline(1, 2))
   call cursor(1,1)
   exe ":norm! \<C-V>3ljd"
   call cursor(1,1)
   norm! $3lP
   call assert_equal(5, col('.'))
-  call assert_equal(getline(1, 2), ['TZ  QWER', 'GH  ASDF'])
+  call assert_equal(['TZ  QWER', 'GH  ASDF'], getline(1, 2))
   set ve&vim
   bwipe!
 endfunc

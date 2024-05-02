@@ -497,12 +497,17 @@ plines_win_col(win_T *wp, linenr_T lnum, long column)
     return lines;
 }
 
+/*
+ * Return number of window lines the physical line range from "first" until
+ * "last" will occupy in window "wp". Takes into account folding, 'wrap',
+ * topfill and filler lines beyond the end of the buffer. Limit to "max" lines.
+ */
     int
-plines_m_win(win_T *wp, linenr_T first, linenr_T last, int limit_winheight)
+plines_m_win(win_T *wp, linenr_T first, linenr_T last, int max)
 {
     int		count = 0;
 
-    while (first <= last)
+    while (first <= last && count < max)
     {
 #ifdef FEAT_FOLDING
 	int	x;
@@ -520,15 +525,18 @@ plines_m_win(win_T *wp, linenr_T first, linenr_T last, int limit_winheight)
 	{
 #ifdef FEAT_DIFF
 	    if (first == wp->w_topline)
-		count += plines_win_nofill(wp, first, limit_winheight)
-							       + wp->w_topfill;
+		count += plines_win_nofill(wp, first, FALSE) + wp->w_topfill;
 	    else
 #endif
-		count += plines_win(wp, first, limit_winheight);
+		count += plines_win(wp, first, FALSE);
 	    ++first;
 	}
     }
-    return (count);
+#ifdef FEAT_DIFF
+    if (first == wp->w_buffer->b_ml.ml_line_count + 1)
+	count += diff_check_fill(wp, first);
+#endif
+    return MIN(max, count);
 }
 
     int

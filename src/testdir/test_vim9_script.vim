@@ -458,7 +458,7 @@ func s:InvokeSomeCommand()
   SomeCommand
 endfunc
 
-def Test_autocommand_block()
+def Test_command_block()
   com SomeCommand {
       g:someVar = 'some'
     }
@@ -469,7 +469,121 @@ def Test_autocommand_block()
   unlet g:someVar
 enddef
 
-def Test_command_block()
+" Test for using heredoc in a :command command block
+def Test_command_block_heredoc()
+  var lines =<< trim CODE
+    vim9script
+    com SomeCommand {
+        g:someVar =<< trim END
+          aaa
+          bbb
+        END
+      }
+    SomeCommand
+    assert_equal(['aaa', 'bbb'], g:someVar)
+    def Foo()
+      g:someVar = []
+      SomeCommand
+      assert_equal(['aaa', 'bbb'], g:someVar)
+    enddef
+    Foo()
+    delcommand SomeCommand
+    unlet g:someVar
+  CODE
+  v9.CheckSourceSuccess( lines)
+
+  # Execute a command with heredoc in a block
+  lines =<< trim CODE
+    vim9script
+    com SomeCommand {
+        g:someVar =<< trim END
+          aaa
+          bbb
+        END
+      }
+    execute('SomeCommand')
+    assert_equal(['aaa', 'bbb'], g:someVar)
+    delcommand SomeCommand
+    unlet g:someVar
+  CODE
+  v9.CheckSourceSuccess(lines)
+
+  # Heredoc with comment
+  lines =<< trim CODE
+    vim9script
+    com SomeCommand {
+        g:someVar =<< trim END # comment
+          aaa
+          bbb
+        END
+      }
+    execute('SomeCommand')
+    assert_equal(['aaa', 'bbb'], g:someVar)
+    delcommand SomeCommand
+    unlet g:someVar
+  CODE
+  v9.CheckSourceSuccess(lines)
+
+  # heredoc evaluation
+  lines =<< trim CODE
+    vim9script
+    com SomeCommand {
+        var suffix = '---'
+        g:someVar =<< trim eval END
+          ccc{suffix}
+          ddd
+        END
+      }
+    SomeCommand
+    assert_equal(['ccc---', 'ddd'], g:someVar)
+    def Foo()
+      g:someVar = []
+      SomeCommand
+      assert_equal(['ccc---', 'ddd'], g:someVar)
+    enddef
+    Foo()
+    delcommand SomeCommand
+    unlet g:someVar
+  CODE
+  v9.CheckSourceSuccess(lines)
+
+  # command following heredoc
+  lines =<< trim CODE
+    vim9script
+    com SomeCommand {
+        var l =<< trim END
+          eee
+          fff
+        END
+        g:someVar = l
+      }
+    SomeCommand
+    assert_equal(['eee', 'fff'], g:someVar)
+    delcommand SomeCommand
+    unlet g:someVar
+  CODE
+  v9.CheckSourceSuccess(lines)
+
+  # Error in heredoc
+  lines =<< trim CODE
+    vim9script
+    com SomeCommand {
+        g:someVar =<< trim END
+          eee
+          fff
+      }
+    try
+      SomeCommand
+    catch
+      assert_match("E990: Missing end marker 'END'", v:exception)
+    endtry
+    delcommand SomeCommand
+    unlet g:someVar
+  CODE
+  v9.CheckSourceSuccess(lines)
+enddef
+
+def Test_autocommand_block()
   au BufNew *.xml {
       g:otherVar = 'other'
     }
@@ -4929,6 +5043,44 @@ def Test_for_empty_line_after_lambda()
     assert_equal('[1, 1] [2, 2]', v:statusmsg)
   END
   v9.CheckSourceSuccess(lines)
+enddef
+
+" Test for evaluating a lambda block from a string
+def Test_eval_lambda_block()
+  var lines =<< trim END
+    vim9script
+    var Fn = eval("(x: number): number => {\nreturn x * 2\n}")
+    assert_equal(6, Fn(3))
+  END
+  v9.CheckSourceSuccess(lines)
+enddef
+
+" Test for using various null values
+def Test_null_values()
+  var lines =<< trim END
+    var nullValues = [
+      [null, 1, 'null', 7, 'special'],
+      [null_blob, 1, '0z', 10, 'blob'],
+      [null_channel, 1, 'channel fail', 9, 'channel'],
+      [null_dict, 1, '{}', 4, 'dict<any>'],
+      [null_function, 1, "function('')", 2, 'func(...): unknown'],
+      [null_job, 1, 'no process', 8, 'job'],
+      [null_list, 1, '[]', 3, 'list<any>'],
+      [null_object, 1, 'object of [unknown]', 13, 'object<Unknown>'],
+      [null_partial, 1, "function('')", 2, 'func(...): unknown'],
+      [null_string, 1, "''", 1, 'string']
+    ]
+
+    for [Val, emptyExp, stringExp, typeExp, typenameExp] in nullValues
+      assert_equal(emptyExp, empty(Val))
+      assert_equal(stringExp, string(Val))
+      assert_equal(typeExp, type(Val))
+      assert_equal(typenameExp, typename(Val))
+      assert_equal(Val, copy(Val))
+      assert_equal(-1, test_refcount(Val))
+    endfor
+  END
+  v9.CheckSourceDefAndScriptSuccess(lines)
 enddef
 
 " Keep this last, it messes up highlighting.

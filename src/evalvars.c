@@ -662,7 +662,7 @@ eval_one_expr_in_str(char_u *p, garray_T *gap, int evaluate)
     if (evaluate)
     {
 	*block_end = NUL;
-	expr_val = eval_to_string(block_start, TRUE, FALSE);
+	expr_val = eval_to_string(block_start, FALSE, FALSE);
 	*block_end = '}';
 	if (expr_val == NULL)
 	    return NULL;
@@ -779,8 +779,17 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get, int vim9compile)
     int		eval_failed = FALSE;
     cctx_T	*cctx = vim9compile ? eap->cookie : NULL;
     int		count = 0;
+    int		heredoc_in_string = FALSE;
+    char_u	*line_arg = NULL;
+    char_u	*nl_ptr = vim_strchr(cmd, '\n');
 
-    if (eap->ea_getline == NULL)
+    if (nl_ptr != NULL)
+    {
+	heredoc_in_string = TRUE;
+	line_arg = nl_ptr + 1;
+	*nl_ptr = NUL;
+    }
+    else if (eap->ea_getline == NULL)
     {
 	emsg(_(e_cannot_use_heredoc_here));
 	return NULL;
@@ -859,12 +868,38 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get, int vim9compile)
 	int	mi = 0;
 	int	ti = 0;
 
-	vim_free(theline);
-	theline = eap->ea_getline(NUL, eap->cookie, 0, FALSE);
-	if (theline == NULL)
+	if (heredoc_in_string)
 	{
-	    semsg(_(e_missing_end_marker_str), marker);
-	    break;
+	    char_u	*next_line;
+
+	    // heredoc in a string separated by newlines.  Get the next line
+	    // from the string.
+
+	    if (*line_arg == NUL)
+	    {
+		semsg(_(e_missing_end_marker_str), marker);
+		break;
+	    }
+
+	    theline = line_arg;
+	    next_line = vim_strchr(theline, '\n');
+	    if (next_line == NULL)
+		line_arg += STRLEN(line_arg);
+	    else
+	    {
+		*next_line = NUL;
+		line_arg = next_line + 1;
+	    }
+	}
+	else
+	{
+	    vim_free(theline);
+	    theline = eap->ea_getline(NUL, eap->cookie, 0, FALSE);
+	    if (theline == NULL)
+	    {
+		semsg(_(e_missing_end_marker_str), marker);
+		break;
+	    }
 	}
 
 	// with "trim": skip the indent matching the :let line to find the
@@ -911,6 +946,8 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get, int vim9compile)
 	}
 	else
 	{
+	    int	    free_str = FALSE;
+
 	    if (evalstr && !eap->skip)
 	    {
 		str = eval_all_expr_in_str(str);
@@ -920,15 +957,20 @@ heredoc_get(exarg_T *eap, char_u *cmd, int script_get, int vim9compile)
 		    eval_failed = TRUE;
 		    continue;
 		}
-		vim_free(theline);
-		theline = str;
+		free_str = TRUE;
 	    }
 
 	    if (list_append_string(l, str, -1) == FAIL)
 		break;
+	    if (free_str)
+		vim_free(str);
 	}
     }
-    vim_free(theline);
+    if (heredoc_in_string)
+	// Next command follows the heredoc in the string.
+	eap->nextcmd = line_arg;
+    else
+	vim_free(theline);
     vim_free(text_indent);
 
     if (vim9compile && cctx->ctx_skip != SKIP_YES && !eval_failed)
@@ -3298,12 +3340,31 @@ find_var(char_u *name, hashtab_T **htp, int no_autoload)
 	}
     }
 
+    // and finally try
+    return find_var_autoload_prefix(name, 0, htp, NULL);
+}
+
+/*
+ * Find variable "name" with sn_autoload_prefix.
+ * Return a pointer to it if found, NULL if not found.
+ * When "sid" > 0, use it otherwise use "current_sctx.sc_sid".
+ * When "htp" is not NULL  set "htp" to the hashtab_T used.
+ * When "namep" is not NULL set "namep" to the generated name, and
+ * then the caller gets ownership and is responsible for freeing the name.
+ */
+    dictitem_T *
+find_var_autoload_prefix(char_u *name, int sid, hashtab_T **htp,
+							    char_u **namep)
+{
+    hashtab_T	*ht;
+    dictitem_T	*ret = NULL;
     // When using "vim9script autoload" script-local items are prefixed but can
     // be used with s:name.
-    if (SCRIPT_ID_VALID(current_sctx.sc_sid)
+    int check_sid = sid > 0 ? sid : current_sctx.sc_sid;
+    if (SCRIPT_ID_VALID(check_sid)
 		   && (in_vim9script() || (name[0] == 's' && name[1] == ':')))
     {
-	scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
+	scriptitem_T *si = SCRIPT_ITEM(check_sid);
 
 	if (si->sn_autoload_prefix != NULL)
 	{
@@ -3313,20 +3374,26 @@ find_var(char_u *name, hashtab_T **htp, int no_autoload)
 
 	    if (auto_name != NULL)
 	    {
+		int free_auto_name = TRUE;
 		ht = &globvarht;
 		ret = find_var_in_ht(ht, 'g', auto_name, TRUE);
-		vim_free(auto_name);
 		if (ret != NULL)
 		{
 		    if (htp != NULL)
 			*htp = ht;
-		    return ret;
+		    if (namep != NULL)
+		    {
+			free_auto_name = FALSE;
+			*namep = auto_name;
+		    }
 		}
+		if (free_auto_name)
+		    vim_free(auto_name);
 	    }
 	}
     }
 
-    return NULL;
+    return ret;
 }
 
 /*
@@ -3466,7 +3533,11 @@ lookup_scriptitem(
     hi = hash_find(ht, p);
     res = HASHITEM_EMPTY(hi) ? FAIL : OK;
 
-    // if not script-local, then perhaps imported
+    // if not script-local, then perhaps autoload-exported
+    if (res == FAIL && find_var_autoload_prefix(p, 0, NULL, NULL) != NULL)
+	res = OK;
+
+    // if not script-local or autoload, then perhaps imported
     if (res == FAIL && find_imported(p, 0, FALSE) != NULL)
 	res = OK;
     if (p != buffer)
@@ -3862,23 +3933,40 @@ set_var_const(
 
     if (sid != 0)
     {
+	varname = NULL;
 	if (SCRIPT_ID_VALID(sid))
-	    ht = &SCRIPT_VARS(sid);
-	varname = name;
+	{
+	    char_u	*auto_name = NULL;
+	    if (find_var_autoload_prefix(name, sid, &ht, &auto_name) != NULL)
+	    {
+		var_in_autoload = TRUE;
+		varname = auto_name;
+		name_tofree = varname;
+	    }
+	    else
+		ht = &SCRIPT_VARS(sid);
+	}
+	if (varname == NULL)
+	    varname = name;
     }
     else
     {
-	scriptitem_T *si;
+	scriptitem_T	*si;
+	char_u		*auto_name = NULL;
 
-	if (in_vim9script() && is_export
-		&& SCRIPT_ID_VALID(current_sctx.sc_sid)
-		&& (si = SCRIPT_ITEM(current_sctx.sc_sid))
-						  ->sn_autoload_prefix != NULL)
+	if (in_vim9script()
+	    && SCRIPT_ID_VALID(current_sctx.sc_sid)
+	    && (si = SCRIPT_ITEM(current_sctx.sc_sid))
+					      ->sn_autoload_prefix != NULL
+	    && (is_export
+		|| find_var_autoload_prefix(name, 0, NULL, &auto_name)
+								    != NULL))
 	{
 	    // In a vim9 autoload script an exported variable is put in the
 	    // global namespace with the autoload prefix.
 	    var_in_autoload = TRUE;
-	    varname = concat_str(si->sn_autoload_prefix, name);
+	    varname = auto_name != NULL ? auto_name
+		      : concat_str(si->sn_autoload_prefix, name);
 	    if (varname == NULL)
 		goto failed;
 	    name_tofree = varname;
@@ -4147,6 +4235,7 @@ failed:
  * - Whether the variable is read-only
  * - Whether the variable value is locked
  * - Whether the variable is locked
+ * NOTE: "name" is only used for error messages.
  */
     int
 var_check_permission(dictitem_T *di, char_u *name)

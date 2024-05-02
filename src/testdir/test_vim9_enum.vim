@@ -97,7 +97,16 @@ def Test_enum_parse()
     vim9script
     enum Something | endenum
   END
-  v9.CheckSourceFailure(lines, 'E1420: Missing :endenum', 3)
+  v9.CheckSourceFailure(lines, 'E488: Trailing characters: | endenum', 2)
+
+  # another command follows the enum name
+  lines =<< trim END
+    vim9script
+    enum Something | var x = 10
+      Foo
+    endenum
+  END
+  v9.CheckSourceFailure(lines, 'E488: Trailing characters: | var x = 10', 2)
 
   # Try to define an enum with the same name as an existing variable
   lines =<< trim END
@@ -1501,6 +1510,37 @@ def Test_use_enum_values_in_class_variable()
     assert_equal([Dir.North, Dir.South], Dir.dirs)
   END
   v9.CheckSourceSuccess(lines)
+enddef
+
+" Test for using lambda block in enums
+def Test_lambda_block_in_enum()
+  # This used to crash Vim
+  var lines =<< trim END
+    vim9script
+    enum IdEnum1
+      ID1
+      const Id: func(number): number = (num: number): number => {
+        # Return a ID
+        return num / 2
+      }
+    endenum
+    assert_equal(5, IdEnum1.ID1.Id(10))
+  END
+  v9.CheckScriptSuccess(lines)
+
+  # This used to crash Vim
+  lines =<< trim END
+    vim9script
+    enum IdEnum2
+      ID1
+      static const Id: func(number): number = (num: number): number => {
+        # Return a ID
+        return num + 2
+      }
+    endenum
+    assert_equal(12, IdEnum2.Id(10))
+  END
+  v9.CheckScriptSuccess(lines)
 enddef
 
 " vim: ts=8 sw=2 sts=2 expandtab tw=80 fdm=marker

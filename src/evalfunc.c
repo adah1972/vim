@@ -3840,8 +3840,9 @@ set_cursorpos(typval_T *argvars, typval_T *rettv, int charcol)
 	return;		// type error; errmsg already given
     if (lnum > 0)
 	curwin->w_cursor.lnum = lnum;
-    if (col > 0)
-	curwin->w_cursor.col = col - 1;
+    if (col != MAXCOL && --col < 0)
+	col = 0;
+    curwin->w_cursor.col = col;
     curwin->w_cursor.coladd = coladd;
 
     // Make sure the cursor is in a valid position.
@@ -3958,7 +3959,7 @@ f_empty(typval_T *argvars, typval_T *rettv)
 					  || *argvars[0].vval.v_string == NUL;
 	    break;
 	case VAR_PARTIAL:
-	    n = FALSE;
+	    n = argvars[0].vval.v_partial == NULL;
 	    break;
 	case VAR_NUMBER:
 	    n = argvars[0].vval.v_number == 0;
@@ -5554,17 +5555,22 @@ f_getregion(typval_T *argvars, typval_T *rettv)
 	semsg(_(e_invalid_line_number_nr), p1.lnum);
 	return;
     }
-    if (p1.col < 1 || p1.col > ml_get_buf_len(findbuf, p1.lnum) + 1)
+    if (p1.col == MAXCOL)
+	p1.col = ml_get_buf_len(findbuf, p1.lnum) + 1;
+    else if (p1.col < 1 || p1.col > ml_get_buf_len(findbuf, p1.lnum) + 1)
     {
 	semsg(_(e_invalid_column_number_nr), p1.col);
 	return;
     }
+
     if (p2.lnum < 1 || p2.lnum > findbuf->b_ml.ml_line_count)
     {
 	semsg(_(e_invalid_line_number_nr), p2.lnum);
 	return;
     }
-    if (p2.col < 1 || p2.col > ml_get_buf_len(findbuf, p2.lnum) + 1)
+    if (p2.col == MAXCOL)
+	p2.col = ml_get_buf_len(findbuf, p2.lnum) + 1;
+    else if (p2.col < 1 || p2.col > ml_get_buf_len(findbuf, p2.lnum) + 1)
     {
 	semsg(_(e_invalid_column_number_nr), p2.col);
 	return;
@@ -6124,6 +6130,13 @@ f_has(typval_T *argvars, typval_T *rettv)
 		},
 	{"dialog_con",
 #ifdef FEAT_CON_DIALOG
+		1
+#else
+		0
+#endif
+		},
+	{"dialog_con_gui",
+#if defined(FEAT_CON_DIALOG) && defined(FEAT_GUI_DIALOG)
 		1
 #else
 		0
@@ -11490,7 +11503,7 @@ f_type(typval_T *argvars, typval_T *rettv)
 	case VAR_CLASS:
 	    {
 		class_T *cl = argvars[0].vval.v_class;
-		if (IS_ENUM(cl))
+		if (cl != NULL && IS_ENUM(cl))
 		    n = VAR_TYPE_ENUM;
 		else
 		    n = VAR_TYPE_CLASS;
@@ -11498,11 +11511,18 @@ f_type(typval_T *argvars, typval_T *rettv)
 	    }
 	case VAR_OBJECT:
 	    {
-		class_T *cl = argvars[0].vval.v_object->obj_class;
-		if (IS_ENUM(cl))
-		    n = VAR_TYPE_ENUMVALUE;
-		else
+		object_T *obj = argvars[0].vval.v_object;
+
+		if (obj == NULL)
 		    n = VAR_TYPE_OBJECT;
+		else
+		{
+		    class_T *cl = argvars[0].vval.v_object->obj_class;
+		    if (IS_ENUM(cl))
+			n = VAR_TYPE_ENUMVALUE;
+		    else
+			n = VAR_TYPE_OBJECT;
+		}
 		break;
 	    }
 	case VAR_UNKNOWN:

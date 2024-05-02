@@ -2475,6 +2475,7 @@ win_init_empty(win_T *wp)
     wp->w_topfill = 0;
 #endif
     wp->w_botline = 2;
+    wp->w_valid = 0;
 #if defined(FEAT_SYN_HL) || defined(FEAT_SPELL)
     wp->w_s = &wp->w_buffer->b_s;
 #endif
@@ -4437,8 +4438,7 @@ win_init_popup_win(win_T *wp, buf_T *buf)
     ++buf->b_nwindows;
     win_init_empty(wp); // set cursor and topline to safe values
 
-    // Make sure w_localdir and globaldir are NULL to avoid a chdir() in
-    // win_enter_ext().
+    // Make sure w_localdir is NULL to avoid a chdir() in win_enter_ext().
     VIM_CLEAR(wp->w_localdir);
 }
 
@@ -5445,8 +5445,8 @@ win_enter(win_T *wp, int undo_sync)
  * Used after making another window the current one: change directory if
  * needed.
  */
-    static void
-fix_current_dir(void)
+    void
+win_fix_current_dir(void)
 {
     if (curwin->w_localdir != NULL || curtab->tp_localdir != NULL)
     {
@@ -5567,7 +5567,7 @@ win_enter_ext(win_T *wp, int flags)
     }
 #endif
 
-    fix_current_dir();
+    win_fix_current_dir();
 
 #ifdef FEAT_JOB_CHANNEL
     entering_window(curwin);

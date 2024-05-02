@@ -1,8 +1,9 @@
 " Vim syntax file
-" Language:	Java
-" Maintainer:	Claudio Fleiner <claudio@fleiner.com>
-" URL:          https://github.com/fleiner/vim/blob/master/runtime/syntax/java.vim
-" Last Change:	2024 Mar 25
+" Language:		Java
+" Maintainer:		Aliaksei Budavei <0x000c70 AT gmail DOT com>
+" Former Maintainer:	Claudio Fleiner <claudio@fleiner.com>
+" Repository:		https://github.com/zzzyxwvut/java-vim.git
+" Last Change:		2024 Apr 28
 
 " Please check :help java.vim for comments on some of the options available.
 
@@ -19,6 +20,9 @@ endif
 let s:cpo_save = &cpo
 set cpo&vim
 
+" Admit the ASCII dollar sign to keyword characters (JLS-17, §3.8):
+execute printf('syntax iskeyword %s,$', &l:iskeyword)
+
 " some characters that cannot be in a java program (outside a string)
 syn match javaError "[\\@`]"
 syn match javaError "<<<\|\.\.\|=>\|||=\|&&=\|\*\/"
@@ -27,16 +31,17 @@ syn match javaError "<<<\|\.\.\|=>\|||=\|&&=\|\*\/"
 syn match   javaError2 "#\|=<"
 hi def link javaError2 javaError
 
-" keyword definitions
+" Keywords (JLS-17, §3.9):
 syn keyword javaExternal	native package
-syn match javaExternal		"\<import\>\(\s\+static\>\)\?"
+syn match   javaExternal	"\<import\>\%(\s\+static\>\)\="
 syn keyword javaError		goto const
 syn keyword javaConditional	if else switch
 syn keyword javaRepeat		while for do
 syn keyword javaBoolean		true false
 syn keyword javaConstant	null
 syn keyword javaTypedef		this super
-syn keyword javaOperator	var new instanceof
+syn keyword javaOperator	new instanceof
+syn match   javaOperator	"\<var\>\%(\s*(\)\@!"
 " Since the yield statement, which could take a parenthesised operand,
 " and _qualified_ yield methods get along within the switch block
 " (JLS-17, §3.8), it seems futile to make a region definition for this
@@ -48,34 +53,44 @@ syn match   javaOperator	"\%(\%(::\|\.\)[[:space:]\n]*\)\@80<!\<yield\>"
 syn keyword javaType		boolean char byte short int long float double
 syn keyword javaType		void
 syn keyword javaStatement	return
-syn keyword javaStorageClass	static synchronized transient volatile final strictfp serializable
+syn keyword javaStorageClass	static synchronized transient volatile strictfp serializable
 syn keyword javaExceptions	throw try catch finally
 syn keyword javaAssert		assert
-syn keyword javaMethodDecl	synchronized throws
-syn keyword javaClassDecl	extends implements interface
-" to differentiate the keyword class from MyClass.class we use a match here
+syn keyword javaMethodDecl	throws
+" Differentiate a "MyClass.class" literal from the keyword "class".
 syn match   javaTypedef		"\.\s*\<class\>"ms=s+1
-syn keyword javaClassDecl	enum
+syn keyword javaClassDecl	enum extends implements interface
+syn match   javaClassDecl	"\<permits\>\%(\s*(\)\@!"
+syn match   javaClassDecl	"\<record\>\%(\s*(\)\@!"
 syn match   javaClassDecl	"^class\>"
 syn match   javaClassDecl	"[^.]\s*\<class\>"ms=s+1
-syn match   javaAnnotation	"@\([_$a-zA-Z][_$a-zA-Z0-9]*\.\)*[_$a-zA-Z][_$a-zA-Z0-9]*\>" contains=javaString
+syn match   javaAnnotation	"@\%(\K\k*\.\)*\K\k*\>"
 syn match   javaClassDecl	"@interface\>"
 syn keyword javaBranch		break continue nextgroup=javaUserLabelRef skipwhite
 syn match   javaUserLabelRef	"\k\+" contained
 syn match   javaVarArg		"\.\.\."
-syn keyword javaScopeDecl	public protected private abstract
+syn keyword javaScopeDecl	public protected private
+syn keyword javaConceptKind	abstract final
+syn match   javaConceptKind	"\<non-sealed\>"
+syn match   javaConceptKind	"\<sealed\>\%(\s*(\)\@!"
 syn match   javaConceptKind	"\<default\>\%(\s*\%(:\|->\)\)\@!"
 
-function s:isModuleInfoDeclarationCurrentBuffer() abort
-    return fnamemodify(bufname("%"), ":t") =~ '^module-info\%(\.class\>\)\@!'
-endfunction
+" Note that a "module-info" file will be recognised with an arbitrary
+" file extension (or no extension at all) so that more than one such
+" declaration for the same Java module can be maintained for modular
+" testing in a project without attendant confusion for IDEs, with the
+" ".java\=" extension used for a production version and an arbitrary
+" extension used for a testing version.
+let s:module_info_cur_buf = fnamemodify(bufname("%"), ":t") =~ '^module-info\%(\.class\>\)\@!'
+let s:selectable_regexp_engine = !(v:version < 704)
+lockvar s:selectable_regexp_engine s:module_info_cur_buf
 
-" Java Modules(Since Java 9, for "module-info.java" file)
-if s:isModuleInfoDeclarationCurrentBuffer()
-    syn keyword javaModuleStorageClass	module transitive
-    syn keyword javaModuleStmt		open requires exports opens uses provides
-    syn keyword javaModuleExternal	to with
-    syn cluster javaTop add=javaModuleStorageClass,javaModuleStmt,javaModuleExternal
+" Java modules (since Java 9, for "module-info.java" file).
+if s:module_info_cur_buf
+  syn keyword javaModuleStorageClass	module transitive
+  syn keyword javaModuleStmt		open requires exports opens uses provides
+  syn keyword javaModuleExternal	to with
+  syn cluster javaTop add=javaModuleStorageClass,javaModuleStmt,javaModuleExternal
 endif
 
 if exists("java_highlight_java_lang_ids")
@@ -111,7 +126,7 @@ if exists("java_highlight_all")  || exists("java_highlight_java")  || exists("ja
   syn match   javaC_JavaLang "\%(\<Enum\.\)\@<=\<EnumDesc\>"
   syn keyword javaC_JavaLang Boolean Character Class ClassLoader Compiler Double Float Integer Long Math Number Object Process Runtime SecurityManager String StringBuffer Thread ThreadGroup Byte Short Void InheritableThreadLocal Package RuntimePermission ThreadLocal StrictMath StackTraceElement Enum ProcessBuilder StringBuilder ClassValue Module ModuleLayer StackWalker Record
   syn match   javaC_JavaLang "\<System\>"	" See javaDebug.
-  " As of Java 21, java.lang.Compiler is no more (deprecated in Java 9).
+  " As of JDK 21, java.lang.Compiler is no more (deprecated in JDK 9).
   syn keyword javaLangDeprecated Compiler
   syn cluster javaTop add=javaC_JavaLang
   syn cluster javaClasses add=javaC_JavaLang
@@ -273,20 +288,44 @@ syn match   javaSpecial "\\u\x\x\x\x"
 
 syn cluster javaTop add=javaString,javaStrTempl,javaCharacter,javaNumber,javaSpecial,javaStringError,javaTextBlockError
 
+" Method declarations (JLS-17, §8.4.3, §8.4.4, §9.4).
 if exists("java_highlight_functions")
-  if java_highlight_functions == "indent"
-    syn match  javaFuncDef "^\(\t\| \{8\}\)[_$a-zA-Z][_$a-zA-Z0-9_. \[\]<>]*([^-+*/]*)" contains=javaScopeDecl,javaType,javaStorageClass,@javaClasses,javaAnnotation
-    syn region javaFuncDef start=+^\(\t\| \{8\}\)[$_a-zA-Z][$_a-zA-Z0-9_. \[\]<>]*([^-+*/]*,\s*+ end=+)+ contains=javaScopeDecl,javaType,javaStorageClass,@javaClasses,javaAnnotation
-    syn match  javaFuncDef "^  [$_a-zA-Z][$_a-zA-Z0-9_. \[\]<>]*([^-+*/]*)" contains=javaScopeDecl,javaType,javaStorageClass,@javaClasses,javaAnnotation
-    syn region javaFuncDef start=+^  [$_a-zA-Z][$_a-zA-Z0-9_. \[\]<>]*([^-+*/]*,\s*+ end=+)+ contains=javaScopeDecl,javaType,javaStorageClass,@javaClasses,javaAnnotation
+  syn cluster javaFuncParams contains=javaAnnotation,@javaClasses,javaType,javaVarArg,javaComment,javaLineComment
+
+  if java_highlight_functions =~# '^indent[1-8]\=$'
+    let s:last = java_highlight_functions[-1 :]
+    let s:indent = s:last != 't' ? repeat("\x20", s:last) : "\t"
+    syn cluster javaFuncParams add=javaScopeDecl,javaConceptKind,javaStorageClass,javaExternal
+    " Try to not match other type members, initialiser blocks, enum
+    " constants (JLS-17, §8.9.1), and constructors (JLS-17, §8.1.7):
+    " at any _conventional_ indentation, skip over all fields with
+    " "[^=]*", all records with "\<record\s", and let the "*Skip*"
+    " definitions take care of constructor declarations and enum
+    " constants (with no support for @Foo(value = "bar")).
+    exec 'syn region javaFuncDef start=+^' . s:indent . '\%(<[^>]\+>\+\s\+\|\%(\%(@\%(\K\k*\.\)*\K\k*\>\)\s\+\)\+\)\=\%(\<\K\k*\>\.\)*\K\k*\>[^=]*\%(\<record\)\@6<!\s\K\k*\s*(+ end=+)+ contains=@javaFuncParams'
+    " As long as package-private constructors cannot be matched with
+    " javaFuncDef, do not look with javaConstructorSkipDeclarator for
+    " them.
+    exec 'syn match javaConstructorSkipDeclarator transparent +^' . s:indent . '\%(\%(@\%(\K\k*\.\)*\K\k*\>\)\s\+\)*p\%(ublic\|rotected\|rivate\)\s\+\%(<[^>]\+>\+\s\+\)\=\K\k*\s*\ze(+ contains=javaAnnotation,javaScopeDecl'
+    exec 'syn match javaEnumSkipArgumentativeConstant transparent +^' . s:indent . '\%(\%(@\%(\K\k*\.\)*\K\k*\>\)\s\+\)*\K\k*\s*\ze(+ contains=javaAnnotation'
+    unlet s:indent s:last
   else
-    " This line catches method declarations at any indentation>0, but it assumes
-    " two things:
-    "	1. class names are always capitalized (ie: Button)
-    "	2. method names are never capitalized (except constructors, of course)
-    "syn region javaFuncDef start=+^\s\+\(\(public\|protected\|private\|static\|abstract\|final\|native\|synchronized\)\s\+\)*\(\(void\|boolean\|char\|byte\|short\|int\|long\|float\|double\|\([A-Za-z_][A-Za-z0-9_$]*\.\)*[A-Z][A-Za-z0-9_$]*\)\(<[^>]*>\)\=\(\[\]\)*\s\+[a-z][A-Za-z0-9_$]*\|[A-Z][A-Za-z0-9_$]*\)\s*([^0-9]+ end=+)+ contains=javaScopeDecl,javaType,javaStorageClass,javaComment,javaLineComment,@javaClasses
-    syn region javaFuncDef start=+^\s\+\%(\%(public\|protected\|private\|static\|\%(abstract\|default\)\|final\|native\|synchronized\)\s\+\)*\%(<.*>\s\+\)\?\%(\%(void\|boolean\|char\|byte\|short\|int\|long\|float\|double\|\%([A-Za-z_][A-Za-z0-9_$]*\.\)*[A-Z][A-Za-z0-9_$]*\)\%(<[^(){}]*>\)\=\%(\[\]\)*\s\+[a-z][A-Za-z0-9_$]*\|[A-Z][A-Za-z0-9_$]*\)\s*(+ end=+)+ contains=javaScopeDecl,javaType,javaStorageClass,javaComment,javaLineComment,@javaClasses,javaAnnotation
+    " This is the "style" variant (:help ft-java-syntax).
+    syn cluster javaFuncParams add=javaScopeDecl,javaConceptKind,javaStorageClass,javaExternal
+
+    " Match arbitrarily indented camelCasedName method declarations.
+    " Match: [@ɐ] [abstract] [<α, β>] Τʬ[<γ>][[][]] μʭʭ(/* ... */);
+
+    if s:selectable_regexp_engine
+      " Request the new regexp engine for [:upper:] and [:lower:].
+      syn region javaFuncDef start=/\%#=2^\s\+\%(\%(@\%(\K\k*\.\)*\K\k*\>\)\s\+\)*\%(p\%(ublic\|rotected\|rivate\)\s\+\)\=\%(\%(abstract\|default\)\s\+\|\%(\%(final\|\%(native\|strictfp\)\|s\%(tatic\|ynchronized\)\)\s\+\)*\)\=\%(<.*[[:space:]-]\@1<!>\s\+\)\=\%(void\|\%(b\%(oolean\|yte\)\|char\|short\|int\|long\|float\|double\|\%(\<\K\k*\>\.\)*\<[$_[:upper:]]\k*\>\%(<[^(){}]*[[:space:]-]\@1<!>\)\=\)\%(\[\]\)*\)\s\+\<[$_[:lower:]]\k*\>\s*(/ end=/)/ skip=/\/\*.\{-}\*\/\|\/\/.*$/ contains=@javaFuncParams
+    else
+      " XXX: \C\<[^a-z0-9]\k*\> rejects "type", but matches "τύπος".
+      " XXX: \C\<[^A-Z0-9]\k*\> rejects "Method", but matches "Μέθοδος".
+      syn region javaFuncDef start=/^\s\+\%(\%(@\%(\K\k*\.\)*\K\k*\>\)\s\+\)*\%(p\%(ublic\|rotected\|rivate\)\s\+\)\=\%(\%(abstract\|default\)\s\+\|\%(\%(final\|\%(native\|strictfp\)\|s\%(tatic\|ynchronized\)\)\s\+\)*\)\=\%(<.*[[:space:]-]\@1<!>\s\+\)\=\%(void\|\%(b\%(oolean\|yte\)\|char\|short\|int\|long\|float\|double\|\%(\<\K\k*\>\.\)*\<[^a-z0-9]\k*\>\%(<[^(){}]*[[:space:]-]\@1<!>\)\=\)\%(\[\]\)*\)\s\+\<[^A-Z0-9]\k*\>\s*(/ end=/)/ skip=/\/\*.\{-}\*\/\|\/\/.*$/ contains=@javaFuncParams
+    endif
   endif
+
   syn match   javaLambdaDef "\<\K\k*\>\%(\<default\>\)\@<!\s*->"
   syn match  javaBraces  "[{}]"
   syn cluster javaTop add=javaFuncDef,javaBraces,javaLambdaDef
@@ -319,11 +358,13 @@ if exists("java_highlight_debug")
   syn keyword javaDebugType		contained null this super
   syn region javaDebugParen  start=+(+ end=+)+ contained contains=javaDebug.*,javaDebugParen
 
-  " to make this work you must define the highlighting for these groups
-  syn match javaDebug "\<System\.\(out\|err\)\.print\(ln\)*\s*("me=e-1 contains=javaDebug.* nextgroup=javaDebugParen
-  syn match javaDebug "\<p\s*("me=e-1 contains=javaDebug.* nextgroup=javaDebugParen
-  syn match javaDebug "[A-Za-z][a-zA-Z0-9_]*\.printStackTrace\s*("me=e-1 contains=javaDebug.* nextgroup=javaDebugParen
-  syn match javaDebug "\<trace[SL]\=\s*("me=e-1 contains=javaDebug.* nextgroup=javaDebugParen
+  " To make this work, define the highlighting for these groups.
+  syn match javaDebug "\<System\.\%(out\|err\)\.print\%(ln\)\=\s*("me=e-1 contains=javaDebug.* nextgroup=javaDebugParen
+" FIXME: What API does "p" belong to?
+" syn match javaDebug "\<p\s*("me=e-1 contains=javaDebug.* nextgroup=javaDebugParen
+  syn match javaDebug "\<\K\k*\.printStackTrace\s*("me=e-1 contains=javaDebug.* nextgroup=javaDebugParen
+" FIXME: What API do "trace*" belong to?
+" syn match javaDebug "\<trace[SL]\=\s*("me=e-1 contains=javaDebug.* nextgroup=javaDebugParen
 
   syn cluster javaTop add=javaDebug
 
@@ -366,8 +407,8 @@ syn match   javaParenError	 "\]"
 hi def link javaParenError	javaError
 
 if exists("java_highlight_functions")
-   syn match javaLambdaDef "([a-zA-Z0-9_<>\[\], \t]*)\s*->"
-   " needs to be defined after the parenthesis error catcher to work
+  " Make ()-matching definitions after the parenthesis error catcher.
+  syn match javaLambdaDef "\k\@4<!(\%(\k\|[[:space:]<>?\[\]@,.]\)*)\s*->"
 endif
 
 if !exists("java_minlines")
@@ -440,10 +481,10 @@ hi def link htmlArg			Type
 hi def link htmlString			String
 hi def link javaSpaceError		Error
 
-if s:isModuleInfoDeclarationCurrentBuffer()
-    hi def link javaModuleStorageClass	StorageClass
-    hi def link javaModuleStmt		Statement
-    hi def link javaModuleExternal	Include
+if s:module_info_cur_buf
+  hi def link javaModuleStorageClass	StorageClass
+  hi def link javaModuleStmt		Statement
+  hi def link javaModuleExternal	Include
 endif
 
 let b:current_syntax = "java"
@@ -452,9 +493,8 @@ if main_syntax == 'java'
   unlet main_syntax
 endif
 
-delfunction! s:isModuleInfoDeclarationCurrentBuffer
-let b:spell_options="contained"
+let b:spell_options = "contained"
 let &cpo = s:cpo_save
-unlet s:cpo_save
+unlet s:selectable_regexp_engine s:module_info_cur_buf s:cpo_save
 
 " vim: ts=8

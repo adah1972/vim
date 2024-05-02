@@ -1638,7 +1638,7 @@ store_var(char_u *name, typval_T *tv)
  * Return FAIL if not allowed.
  */
     static int
-do_2string(typval_T *tv, int is_2string_any, int tolerant)
+do_2string(typval_T *tv, int is_2string_any, int tostring_flags)
 {
     if (tv->v_type == VAR_STRING)
 	return OK;
@@ -1653,10 +1653,11 @@ do_2string(typval_T *tv, int is_2string_any, int tolerant)
 	    case VAR_BOOL:
 	    case VAR_NUMBER:
 	    case VAR_FLOAT:
+	    case VAR_DICT:
 	    case VAR_BLOB:	break;
 
 	    case VAR_LIST:
-				if (tolerant)
+				if (tostring_flags & TOSTRING_TOLERANT)
 				{
 				    char_u	*s, *e, *p;
 				    garray_T	ga;
@@ -1689,6 +1690,8 @@ do_2string(typval_T *tv, int is_2string_any, int tolerant)
 				    tv->vval.v_string = ga.ga_data;
 				    return OK;
 				}
+				if (tostring_flags & TOSTRING_INTERPOLATE)
+				    break;
 				// FALLTHROUGH
 	    default:	to_string_error(tv->v_type);
 			return FAIL;
@@ -3839,11 +3842,19 @@ exec_instructions(ectx_T *ectx)
 	    case ISN_STOREEXPORT:
 		{
 		    int		sid = iptr->isn_arg.loadstore.ls_sid;
-		    hashtab_T	*ht = &SCRIPT_VARS(sid);
 		    char_u	*name = iptr->isn_arg.loadstore.ls_name;
-		    dictitem_T	*di = find_var_in_ht(ht, 0,
-					    iptr->isn_type == ISN_STORES
+		    dictitem_T	*di = NULL;
+		    // First check for a variable from an exported autoload
+		    // with an autoload_prefix; it would be in globals.
+		    if (iptr->isn_type == ISN_STOREEXPORT)
+			di = find_var_autoload_prefix(name, sid, NULL, NULL);
+		    // Then look for a variable in the script's variables.
+		    if (di == NULL)
+		    {
+			hashtab_T	*ht = &SCRIPT_VARS(sid);
+			di = find_var_in_ht(ht, 0, STRNCMP("s:", name, 2) == 0
 						     ? name + 2 : name, TRUE);
+		    }
 
 		    --ectx->ec_stack.ga_len;
 		    SOURCING_LNUM = iptr->isn_lnum;
@@ -4573,6 +4584,7 @@ exec_instructions(ectx_T *ectx)
 		    {
 			SOURCING_LNUM = iptr->isn_lnum;
 			iemsg("ufunc unexpectedly NULL for FUNCREF");
+			vim_free(pt);
 			goto theend;
 		    }
 		    if (fill_partial_and_closure(pt, ufunc,
@@ -5683,7 +5695,7 @@ exec_instructions(ectx_T *ectx)
 		SOURCING_LNUM = iptr->isn_lnum;
 		if (do_2string(STACK_TV_BOT(iptr->isn_arg.tostring.offset),
 				iptr->isn_type == ISN_2STRING_ANY,
-				      iptr->isn_arg.tostring.tolerant) == FAIL)
+				      iptr->isn_arg.tostring.flags) == FAIL)
 			    goto on_error;
 		break;
 

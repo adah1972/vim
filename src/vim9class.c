@@ -136,6 +136,13 @@ parse_member(
 	fill_evalarg_from_eap(&evalarg, eap, FALSE);
 	(void)skip_expr_concatenate(&init_arg, &expr_start, &expr_end, &evalarg);
 
+	init_arg = skipwhite(init_arg);
+	if (*init_arg != NUL && !vim9_comment_start(init_arg))
+	{
+	    semsg(_(e_trailing_characters_str), init_arg);
+	    return FAIL;
+	}
+
 	// No type specified for the member.  Set it to "any" and the correct
 	// type will be set when the object is instantiated.
 	if (type == NULL)
@@ -2080,6 +2087,12 @@ early_ret:
 	    has_public = TRUE;
 	    p = skipwhite(line + 6);
 
+	    if (STRNCMP(p, "def", 3) == 0)
+	    {
+		emsg(_(e_public_keyword_not_supported_for_method));
+		break;
+	    }
+
 	    if (STRNCMP(p, "var", 3) != 0 && STRNCMP(p, "static", 6) != 0
 		&& STRNCMP(p, "final", 5) != 0 && STRNCMP(p, "const", 5) != 0)
 	    {
@@ -2832,6 +2845,14 @@ call_oc_method(
 	if (ocm == NULL || ocm->ocm_type->tt_type != VAR_FUNC)
 	{
 	    method_not_found_msg(cl, rettv->v_type, name, len);
+	    return FAIL;
+	}
+
+	if (*name == '_')
+	{
+	    // Protected object or class funcref variable
+	    semsg(_(e_cannot_access_protected_variable_str), ocm->ocm_name,
+		    cl->class_name);
 	    return FAIL;
 	}
 
@@ -3715,7 +3736,9 @@ defcompile_class(class_T *cl)
 	{
 	    ufunc_T *ufunc = loop == 1 ? cl->class_class_functions[i]
 						: cl->class_obj_methods[i];
-	    defcompile_function(ufunc, cl);
+	    // Don't compile abstract methods
+	    if (!IS_ABSTRACT_METHOD(ufunc))
+		defcompile_function(ufunc, cl);
 	}
     }
 }
