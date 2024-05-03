@@ -37,7 +37,7 @@ foreach (@lines) {
         $need_update = 0;
         last;
     }
-    if (/VIM_VERSION_PATCHLEVEL/) {
+    if (/define VIM_VERSION_PATCHLEVEL/) {
         s/[0-9]+/$ver/;
     }
 }
