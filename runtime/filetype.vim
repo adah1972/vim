@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last Change:	2023 Dec 06
+" Last Change:	2024 May 31
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " Listen very carefully, I will say this only once
@@ -972,6 +972,7 @@ au BufNewFile,BufRead *.hbs			setf handlebars
 
 " Hare
 au BufNewFile,BufRead *.ha			setf hare
+au BufNewFile,BufRead README			call dist#ft#FTharedoc()
 
 " Haskell
 au BufNewFile,BufRead *.hs,*.hsc,*.hs-boot,*.hsig setf haskell
@@ -1044,6 +1045,9 @@ au BufRead,BufNewFile *.hurl			setf hurl
 " Hyper Builder
 au BufNewFile,BufRead *.hb			setf hb
 
+" Hyprlang
+au BufNewFile,BufRead hypr\(land\|paper\|idle\|lock\).conf	setf hyprlang
+
 " Httest
 au BufNewFile,BufRead *.htt,*.htb		setf httest
 
@@ -1072,7 +1076,7 @@ au BufNewFile,BufRead */.icewm/menu		setf icemenu
 au BufNewFile,BufRead .indent.pro		setf indent
 au BufNewFile,BufRead indent.pro		call dist#ft#ProtoCheck('indent')
 
-" IDL (Interactive Data Language)
+" IDL (Interactive Data Language), Prolog, Cproto or zsh module C
 au BufNewFile,BufRead *.pro			call dist#ft#ProtoCheck('idlang')
 
 " Indent RC
@@ -1148,6 +1152,9 @@ au BufNewFile,BufRead *.clp			setf jess
 " Jgraph
 au BufNewFile,BufRead *.jgr			setf jgraph
 
+" Jujutsu
+au BufNewFile,BufRead *.jjdescription		setf jj
+
 " Jovial
 au BufNewFile,BufRead *.jov,*.j73,*.jovial	setf jovial
 
@@ -1170,7 +1177,7 @@ au BufNewFile,BufRead *.ipynb,*.jupyterlab-settings	setf json
 au BufNewFile,BufRead *.sublime-project,*.sublime-settings,*.sublime-workspace	setf json
 
 " Other files that look like json
-au BufNewFile,BufRead .prettierrc,.firebaserc,.stylelintrc,flake.lock	setf json
+au BufNewFile,BufRead .prettierrc,.firebaserc,.stylelintrc,.lintstagedrc,flake.lock	setf json
 
 " JSONC (JSON with comments)
 au BufNewFile,BufRead *.jsonc,.babelrc,.eslintrc,.jsfmtrc	setf jsonc
@@ -1860,6 +1867,9 @@ au BufNewFile,BufRead *.pk			setf poke
 " Protocols
 au BufNewFile,BufRead */etc/protocols		setf protocols
 
+" Purescript
+au BufNewFile,BufRead *.purs			setf purescript
+
 " PyPA manifest files
 au BufNewFile,BufRead MANIFEST.in		setf pymanifest
 
@@ -2054,6 +2064,9 @@ au BufNewFile,BufRead *.scala			setf scala
 " SBT - Scala Build Tool
 au BufNewFile,BufRead *.sbt			setf sbt
 
+" Slint
+au BufNewFile,BufRead *.slint			setf slint
+
 " SuperCollider
 au BufNewFile,BufRead *.sc			call dist#ft#FTsc()
 
@@ -2137,7 +2150,7 @@ au BufNewFile,BufRead catalog			setf catalog
 " Gentoo ebuilds, Arch Linux PKGBUILDs and Alpine Linux APKBUILDs are actually
 " bash scripts.
 " NOTE: Patterns ending in a star are further down, these have lower priority.
-au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,.bash[_-]history,bash-fc[-.],*.ebuild,*.bash,*.eclass,PKGBUILD,APKBUILD,*.bats call dist#ft#SetFileTypeSH("bash")
+au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,.bash[_-]history,bash-fc[-.],*.ebuild,*.bash,*.eclass,PKGBUILD,APKBUILD,*.bats,*.cygport call dist#ft#SetFileTypeSH("bash")
 au BufNewFile,BufRead .kshrc,*.ksh call dist#ft#SetFileTypeSH("ksh")
 au BufNewFile,BufRead */etc/profile,.profile,*.sh,*.env call dist#ft#SetFileTypeSH(getline(1))
 
@@ -3090,6 +3103,15 @@ au BufNewFile,BufRead */etc/yum.repos.d/*	call s:StarSetf('dosini')
 au BufNewFile,BufRead .zsh*,.zlog*,.zcompdump*  call s:StarSetf('zsh')
 au BufNewFile,BufRead zsh*,zlog*		call s:StarSetf('zsh')
 
+" Zsh module
+" mdd: https://github.com/zsh-users/zsh/blob/57248b88830ce56adc243a40c7773fb3825cab34/Etc/zsh-development-guide#L285-L288
+" mdh, pro: https://github.com/zsh-users/zsh/blob/57248b88830ce56adc243a40c7773fb3825cab34/Etc/zsh-development-guide#L268-L271
+" *.mdd will generate *.mdh, *.pro and *.epro.
+" module's *.c will #include *.mdh containing module dependency information and
+" *.pro containing all static declarations of *.c
+" *.epro contains all external declarations of *.c
+au BufNewFile,BufRead *.mdh,*.epro		setf c
+au BufNewFile,BufRead *.mdd			setf sh
 
 " Help files match *.txt but should have a last line that is a modeline.
 au BufNewFile,BufRead *.txt
@@ -3127,6 +3149,9 @@ au BufNewFile,BufRead yarn.lock			setf yaml
 
 " Zathurarc
 au BufNewFile,BufRead zathurarc			setf zathurarc
+
+" Rofi stylesheet
+au BufNewFile,BufRead *.rasi			setf rasi
 
 " If the GUI is already running, may still need to install the Syntax menu.
 " Don't do it when the 'M' flag is included in 'guioptions'.

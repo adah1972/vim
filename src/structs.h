@@ -4468,6 +4468,7 @@ typedef struct
     char_u	*pum_kind;	// extra kind text (may be truncated)
     char_u	*pum_extra;	// extra menu text (may be truncated)
     char_u	*pum_info;	// extra info
+    int		 pum_score;	// fuzzy match score
 } pumitem_T;
 
 /*
@@ -4795,6 +4796,7 @@ typedef struct soffset
 typedef struct spat
 {
     char_u	    *pat;	// the pattern (in allocated memory) or NULL
+    size_t	    patlen;	// the length of the pattern (0 if pat is NULL)
     int		    magic;	// magicness of the pattern
     int		    no_scs;	// no smartcase for this pattern
     soffset_T	    off;

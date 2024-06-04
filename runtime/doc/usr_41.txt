@@ -1,4 +1,4 @@
-*usr_41.txt*	For Vim version 9.1.  Last change: 2024 Apr 26
+*usr_41.txt*	For Vim version 9.1.  Last change: 2024 Jun 03
 
 		     VIM USER MANUAL - by Bram Moolenaar
 
@@ -930,6 +930,7 @@ Cursor and mark position:		*cursor-functions* *mark-functions*
 Working with text in the current buffer:		*text-functions*
 	getline()		get a line or list of lines from the buffer
 	getregion()		get a region of text from the buffer
+	getregionpos()		get a list of positions for a region
 	setline()		replace a line in the buffer
 	append()		append line or list of lines in the buffer
 	indent()		indent of a specific line
@@ -992,6 +993,7 @@ System functions and manipulation of files:
 	readdir()		get a List of file names in a directory
 	readdirex()		get a List of file information in a directory
 	writefile()		write a List of lines or Blob into a file
+	filecopy()		copy a file {from} to {to}
 
 Date and Time:				*date-functions* *time-functions*
 	getftime()		get last modification time of a file
