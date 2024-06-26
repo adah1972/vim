@@ -3152,6 +3152,11 @@ def Test_popup_settext()
   v9.CheckSourceDefAndScriptFailure(['popup_settext(1, 2)'], ['E1013: Argument 2: type mismatch, expected string but got number', 'E1222: String or List required for argument 2'])
 enddef
 
+def Test_popup_setbuf()
+  v9.CheckSourceDefAndScriptFailure(['popup_setbuf([], "abc")'], ['E1013: Argument 1: type mismatch, expected number but got list<any>', 'E1210: Number required for argument 1'])
+  v9.CheckSourceDefAndScriptFailure(['popup_setbuf(1, [])'], ['E1013: Argument 2: type mismatch, expected string but got list<any>', 'E1220: String or Number required for argument 2'])
+enddef
+
 def Test_popup_show()
   v9.CheckSourceDefAndScriptFailure(['popup_show("a")'], ['E1013: Argument 1: type mismatch, expected number but got string', 'E1210: Number required for argument 1'])
   v9.CheckSourceDefAndScriptFailure(['popup_show(true)'], ['E1013: Argument 1: type mismatch, expected number but got bool', 'E1210: Number required for argument 1'])
@@ -4557,6 +4562,7 @@ enddef
 def Test_term_getjob()
   CheckRunVimInTerminal
   v9.CheckSourceDefAndScriptFailure(['term_getjob(0z10)'], ['E1013: Argument 1: type mismatch, expected string but got blob', 'E1220: String or Number required for argument 1'])
+  v9.CheckSourceDefAndScriptSuccess(['assert_true(term_getjob(0) == null_job)'])
 enddef
 
 def Test_term_getline()

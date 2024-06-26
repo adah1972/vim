@@ -278,9 +278,20 @@ func Test_termdebug_mapping()
   call assert_equal(':echom "K"<cr>', maparg('K', 'n', 0, 1).rhs)
 
   %bw!
+
+  " -- Test that local-buffer mappings are restored in the correct buffers --
+  " local mappings for foo
+  file foo
   nnoremap <buffer> K :echom "bK"<cr>
   nnoremap <buffer> - :echom "b-"<cr>
   nnoremap <buffer> + :echom "b+"<cr>
+
+  " no mappings for 'bar'
+  enew
+  file bar
+
+  " Start termdebug from foo
+  buffer foo
   Termdebug
   call WaitForAssert({-> assert_equal(3, winnr('$'))})
   wincmd b
@@ -288,55 +299,115 @@ func Test_termdebug_mapping()
   call assert_true(maparg('-', 'n', 0, 1).buffer)
   call assert_true(maparg('+', 'n', 0, 1).buffer)
   call assert_equal(maparg('K', 'n', 0, 1).rhs, ':echom "bK"<cr>')
+
+  Source
+  buffer bar
+  call assert_false(maparg('K', 'n', 0, 1)->empty())
+  call assert_false(maparg('-', 'n', 0, 1)->empty())
+  call assert_false(maparg('+', 'n', 0, 1)->empty())
+  call assert_true(maparg('K', 'n', 0, 1).buffer->empty())
+  call assert_true(maparg('-', 'n', 0, 1).buffer->empty())
+  call assert_true(maparg('+', 'n', 0, 1).buffer->empty())
   wincmd t
   quit!
   redraw!
   call WaitForAssert({-> assert_equal(1, winnr('$'))})
+
+  " Termdebug session ended. Buffer 'bar' shall have no mappings
+  call assert_true(bufname() ==# 'bar')
+  call assert_false(maparg('K', 'n', 0, 1)->empty())
+  call assert_false(maparg('-', 'n', 0, 1)->empty())
+  call assert_false(maparg('+', 'n', 0, 1)->empty())
+  call assert_true(maparg('K', 'n', 0, 1).buffer->empty())
+  call assert_true(maparg('-', 'n', 0, 1).buffer->empty())
+  call assert_true(maparg('+', 'n', 0, 1).buffer->empty())
+
+  " Buffer 'foo' shall have the same mapping as before running the termdebug
+  " session
+  buffer foo
+  call assert_true(bufname() ==# 'foo')
   call assert_true(maparg('K', 'n', 0, 1).buffer)
   call assert_true(maparg('-', 'n', 0, 1).buffer)
   call assert_true(maparg('+', 'n', 0, 1).buffer)
   call assert_equal(':echom "bK"<cr>', maparg('K', 'n', 0, 1).rhs)
 
+  nunmap K
+  nunmap +
+  nunmap -
   %bw!
 endfunc
 
-func Test_termdebug_bufnames()
-  " Test if user has filename/folders named gdb, Termdebug-gdb-console,
-  " etc. in the current directory
+function Test_termdebug_save_restore_variables()
+  " saved mousemodel
+  let &mousemodel=''
+
+  " saved keys
+  nnoremap K :echo "hello world!"<cr>
+  let expected_map_K = maparg('K', 'n', 0 , 1)
+  nnoremap + :echo "hello plus!"<cr>
+  let expected_map_plus = maparg('+', 'n', 0 , 1)
+  let expected_map_minus = {}
+
+  " saved &columns
+  let expected_columns = &columns
+
+  " We want termdebug to overwrite 'K' map but not '+' map.
   let g:termdebug_config = {}
-  let g:termdebug_config['use_prompt'] = 1
-  let filename = 'gdb'
-  let replacement_filename = 'Termdebug-gdb-console'
+  let g:termdebug_config['map_K'] = 1
 
-  call writefile(['This', 'is', 'a', 'test'], filename, 'D')
-  " Throw away the file once the test has done.
   Termdebug
-  " Once termdebug has completed the startup you should have 3 windows on screen
   call WaitForAssert({-> assert_equal(3, winnr('$'))})
-  " A file named filename already exists in the working directory,
-  " hence you must call the newly created buffer differently
-  call WaitForAssert({-> assert_false(bufexists(filename))})
-  call WaitForAssert({-> assert_true(bufexists(replacement_filename))})
+  call WaitForAssert({-> assert_match(&mousemodel, 'popup_setpos')})
+  wincmd t
   quit!
   call WaitForAssert({-> assert_equal(1, winnr('$'))})
 
-  " Check if error message is in :message
-  let g:termdebug_config['disasm_window'] = 1
-  let filename = 'Termdebug-asm-listing'
-  call writefile(['This', 'is', 'a', 'test'], filename, 'D')
-  " Check only the head of the error message
-  let error_message = "You have a file/folder named '" .. filename .. "'"
-  Termdebug
-  " Once termdebug has completed the startup you should have 4 windows on screen
-  call WaitForAssert({-> assert_equal(4, winnr('$'))})
-  call WaitForAssert({-> assert_notequal(-1, stridx(execute('messages'), error_message))})
-  quit!
-  wincmd b
-  wincmd q
-  call WaitForAssert({-> assert_equal(1, winnr('$'))})
+  call assert_true(empty(&mousemodel))
+
+  call assert_true(empty(expected_map_minus))
+  call assert_equal(expected_map_K.rhs, maparg('K', 'n', 0, 1).rhs)
+  call assert_equal(expected_map_plus.rhs, maparg('+', 'n', 0, 1).rhs)
+
+  call assert_equal(expected_columns, &columns)
+
+  nunmap K
+  nunmap +
+  unlet g:termdebug_config
+endfunction
+
+function Test_termdebug_sanity_check()
+  " Test if user has filename/folders with wrong names
+  let g:termdebug_config = {}
+  let s:dict = {'disasm_window': 'Termdebug-asm-listing', 'use_prompt': 'gdb', 'variables_window': 'Termdebug-variables-listing'}
+
+  for key in keys(s:dict)
+    let s:filename = s:dict[key]
+    let g:termdebug_config[key] = 1
+    let s:error_message = "You have a file/folder named '" .. s:filename .. "'"
+
+    " Write dummy file with bad name
+    call writefile(['This', 'is', 'a', 'test'], s:filename)
+    Termdebug
+    call WaitForAssert({-> assert_true(execute('messages') =~ s:error_message)})
+    call WaitForAssert({-> assert_equal(1, winnr('$'))})
+
+    call delete(s:filename)
+    call remove(g:termdebug_config, key)
+  endfor
 
   unlet g:termdebug_config
-endfunc
+endfunction
 
+function Test_termdebug_double_termdebug_instances()
+  let s:error_message = 'Terminal debugger already running, cannot run two'
+  Termdebug
+  call WaitForAssert({-> assert_equal(3, winnr('$'))})
+  Termdebug
+  call WaitForAssert({-> assert_true(execute('messages') =~ s:error_message)})
+  wincmd t
+  quit!
+  call WaitForAssert({-> assert_equal(1, winnr('$'))})
+  :%bw!
+endfunction
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 9.1.  Last change: 2024 Jun 03
+*options.txt*	For Vim version 9.1.  Last change: 2024 Jun 19
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1915,7 +1915,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			feature}
 	A template for a comment.  The "%s" in the value is replaced with the
 	comment text, and should be padded with a space when possible.
-	Currently used to add markers for folding, see |fold-marker| also
+	Currently used to add markers for folding, see |fold-marker|.  Also
 	commonly used by commenting plugins (e.g. |comment-install|).
 
 			*'compatible'* *'cp'* *'nocompatible'* *'nocp'*
@@ -2101,7 +2101,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'completeopt'* *'cot'*
 'completeopt' 'cot'	string	(default: "menu,preview")
-			global
+			global or local to buffer |global-local|
 	A comma-separated list of options for Insert mode completion
 	|ins-completion|.  The supported values are:
 
@@ -2147,7 +2147,15 @@ A jump table for the options with a short description can be found at |Q_op|.
 	   fuzzy    Enable |fuzzy-matching| for completion candidates. This
 		    allows for more flexible and intuitive matching, where
 		    characters can be skipped and matches can be found even
-		    if the exact sequence is not typed.
+		    if the exact sequence is not typed.  Only makes a
+		    difference how completion candidates are reduced from the
+		    list of alternatives, but not how the candidates are
+		    collected (using different completion types).
+	  fuzzycollect
+		    Enable fuzzy collection for default keyword completion.
+		    This allows the collection of matches using fuzzy matching
+		    criteria, providing more comprehensive and flexible
+		    results. Works in combination with other fuzzy options.
 
 					*'completepopup'* *'cpp'*
 'completepopup' 'cpp'	string (default empty)
@@ -4272,6 +4280,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 				     T:DiffText,>:SignColumn,-:Conceal,
 				     B:SpellBad,P:SpellCap,R:SpellRare,
 				     L:SpellLocal,+:Pmenu,=:PmenuSel,
+				     k:PmenuMatch,<:PmenuMatchSel,
 				     [:PmenuKind,]:PmenuKindSel,
 				     {:PmenuExtra,}:PmenuExtraSel,
 				     x:PmenuSbar,X:PmenuThumb,*:TabLine,
@@ -4338,6 +4347,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	|hl-PmenuExtraSel| }  popup menu "extra" selected line
 	|hl-PmenuSbar|	 x  popup menu scrollbar
 	|hl-PmenuThumb|	 X  popup menu scrollbar thumb
+	|hl-PmenuMatch|	 k  popup menu matched text
+	|hl-PmenuMatchSel| <  popup menu matched text in selected line
 
 	The display modes are:
 		r	reverse		(termcap entry "mr" and "me")

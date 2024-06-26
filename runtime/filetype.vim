@@ -457,7 +457,7 @@ au BufNewFile,BufRead */.cmus/{autosave,rc,command-history,*.theme} setf cmusrc
 au BufNewFile,BufRead */cmus/{rc,*.theme}			setf cmusrc
 
 " Cobol
-au BufNewFile,BufRead *.cbl,*.cob,*.lib	setf cobol
+au BufNewFile,BufRead *.cbl,*.cob	setf cobol
 "   cobol or zope form controller python script? (heuristic)
 au BufNewFile,BufRead *.cpy
 	\ if getline(1) =~ '^##' |
@@ -531,6 +531,10 @@ au BufNewFile,BufRead s6-*                              setf execline
 
 " Fontconfig config files
 au BufNewFile,BufRead fonts.conf			setf xml
+
+" Faust
+au BufNewFile,BufRead *.lib				setf faust
+au BufNewFile,BufRead *.dsp				call dist#ft#FTdsp()
 
 " Libreoffice config files
 au BufNewFile,BufRead *.xcu,*.xlb,*.xlc,*.xba		setf xml
@@ -883,7 +887,7 @@ au BufNewFile,BufRead .gitattributes,*.git/info/attributes	setf gitattributes
 au BufNewFile,BufRead */.config/git/attributes			setf gitattributes
 au BufNewFile,BufRead */etc/gitattributes			setf gitattributes
 au BufNewFile,BufRead .gitignore,*.git/info/exclude		setf gitignore
-au BufNewFile,BufRead */.config/git/ignore			setf gitignore
+au BufNewFile,BufRead */.config/git/ignore,*.prettierignore	setf gitignore
 au BufNewFile,BufRead git-rebase-todo				setf gitrebase
 au BufRead,BufNewFile .gitsendemail.msg.??????			setf gitsendemail
 au BufNewFile,BufRead *.git/*
@@ -1365,8 +1369,8 @@ au BufNewFile,BufRead */etc/mail/aliases,*/etc/aliases	setf mailaliases
 au BufNewFile,BufRead .mailcap,mailcap		setf mailcap
 
 " Makefile
-au BufNewFile,BufRead *[mM]akefile,*.mk,*.mak,*.dsp setf make
-au BufNewFile,BufRead Kbuild setf make
+au BufNewFile,BufRead *[mM]akefile,*.mk,*.mak	setf make
+au BufNewFile,BufRead Kbuild			setf make
 
 " MakeIndex
 au BufNewFile,BufRead *.ist,*.mst		setf ist
@@ -2152,7 +2156,7 @@ au BufNewFile,BufRead catalog			setf catalog
 " NOTE: Patterns ending in a star are further down, these have lower priority.
 au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,.bash[_-]history,bash-fc[-.],*.ebuild,*.bash,*.eclass,PKGBUILD,APKBUILD,*.bats,*.cygport call dist#ft#SetFileTypeSH("bash")
 au BufNewFile,BufRead .kshrc,*.ksh call dist#ft#SetFileTypeSH("ksh")
-au BufNewFile,BufRead */etc/profile,.profile,*.sh,*.env call dist#ft#SetFileTypeSH(getline(1))
+au BufNewFile,BufRead */etc/profile,.profile,*.sh,*.env{rc,} call dist#ft#SetFileTypeSH(getline(1))
 
 " Shell script (Arch Linux) or PHP file (Drupal)
 au BufNewFile,BufRead *.install
@@ -2242,6 +2246,9 @@ au BufNewFile,BufRead *.smt,*.smith		setf smith
 
 " Smithy
 au BufNewFile,BufRead *.smithy			setf smithy
+
+" Snakemake
+au BufNewFile,BufRead Snakefile,*.smk		setf snakemake
 
 " Snobol4 and spitbol
 au BufNewFile,BufRead *.sno,*.spt		setf snobol4

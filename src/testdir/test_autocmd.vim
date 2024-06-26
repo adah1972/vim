@@ -2096,6 +2096,29 @@ func Test_Cmdline()
   au! CmdlineEnter
   au! CmdlineLeave
   let &shellslash = save_shellslash
+
+  au! CursorMovedC : let g:pos += [getcmdpos()]
+  let g:pos = []
+  call feedkeys(":hello\<Left>\<C-R>=''\<CR>\<Left>\<Right>\<Esc>", 'xt')
+  call assert_equal([5, 4, 5], g:pos)
+  let g:pos = []
+  call feedkeys(":12345678\<C-R>=setcmdpos(3)??''\<CR>\<Esc>", 'xt')
+  call assert_equal([3], g:pos)
+  let g:pos = []
+  call feedkeys(":12345678\<C-R>=setcmdpos(3)??''\<CR>\<Left>\<Esc>", 'xt')
+  call assert_equal([3, 2], g:pos)
+  au! CursorMovedC
+
+  " setcmdpos() is no-op inside an autocommand
+  au! CursorMovedC : let g:pos += [getcmdpos()] | call setcmdpos(1)
+  let g:pos = []
+  call feedkeys(":hello\<Left>\<Left>\<Esc>", 'xt')
+  call assert_equal([5, 4], g:pos)
+  au! CursorMovedC
+
+  unlet g:entered
+  unlet g:left
+  unlet g:pos
 endfunc
 
 " Test for BufWritePre autocommand that deletes or unloads the buffer.
@@ -4024,6 +4047,32 @@ func Test_autocmd_get()
         \ event: 'BufAdd', pattern: '*.abc'}))
   call assert_equal([], autocmd_get(#{group: 'TestAutoCmdFns',
         \ event: 'BufWipeout'}))
+
+  " Test for getting autocmds after removing one inside an autocmd
+  func CheckAutocmdGet()
+    augroup TestAutoCmdFns
+      autocmd! BufAdd *.vim
+    augroup END
+
+    let expected = [
+          \ #{cmd: 'echo "bufadd-py"', group: 'TestAutoCmdFns',
+          \  pattern: '*.py', nested: v:false, once: v:false,
+          \  event: 'BufAdd'},
+          \ #{cmd: 'echo "bufhidden"', group: 'TestAutoCmdFns',
+          \  pattern: '*.vim', nested: v:false,
+          \  once: v:false, event: 'BufHidden'}]
+
+    call assert_equal(expected, autocmd_get(#{group: 'TestAutoCmdFns'}))
+    call assert_equal([expected[0]],
+          \ autocmd_get(#{group: 'TestAutoCmdFns', pattern: '*.py'}))
+    call assert_equal([expected[1]],
+          \ autocmd_get(#{group: 'TestAutoCmdFns', pattern: '*.vim'}))
+  endfunc
+
+  autocmd User Xauget call CheckAutocmdGet()
+  doautocmd User Xauget
+  autocmd! User Xauget
+
   call assert_fails("call autocmd_get(#{group: 'abc', event: 'BufAdd'})",
         \ 'E367:')
   let cmd = "echo autocmd_get(#{group: 'TestAutoCmdFns', event: 'abc'})"

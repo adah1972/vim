@@ -1586,6 +1586,7 @@ getcmdline_int(
     int		res;
     int		save_msg_scroll = msg_scroll;
     int		save_State = State;	// remember State when called
+    int		prev_cmdpos = -1;
     int		some_key_typed = FALSE;	// one of the keys was typed
     // mouse drag and release events are ignored, unless they are
     // preceded with a mouse down event
@@ -2473,19 +2474,26 @@ getcmdline_int(
  * (Sorry for the goto's, I know it is ugly).
  */
 cmdline_not_changed:
+	// Trigger CursorMovedC autocommands.
+	if (ccline.cmdpos != prev_cmdpos)
+	{
+	    trigger_cmd_autocmd(cmdline_type, EVENT_CURSORMOVEDC);
+	    prev_cmdpos = ccline.cmdpos;
+	}
 #ifdef FEAT_SEARCH_EXTRA
 	if (!is_state.incsearch_postponed)
 	    continue;
 #endif
 
 cmdline_changed:
+	prev_cmdpos = ccline.cmdpos;
 #ifdef FEAT_SEARCH_EXTRA
 	// If the window changed incremental search state is not valid.
 	if (is_state.winid != curwin->w_id)
 	    init_incsearch_state(&is_state);
 #endif
+	// Trigger CmdlineChanged autocommands.
 	if (trigger_cmdlinechanged)
-	    // Trigger CmdlineChanged autocommands.
 	    trigger_cmd_autocmd(cmdline_type, EVENT_CMDLINECHANGED);
 
 #ifdef FEAT_SEARCH_EXTRA
@@ -4176,6 +4184,7 @@ get_cmdline_completion(void)
 {
     cmdline_info_T *p;
     char_u	*buffer;
+    int		xp_context;
 
     if (cmdline_star > 0)
 	return NULL;
@@ -4184,15 +4193,21 @@ get_cmdline_completion(void)
     if (p == NULL || p->xpc == NULL)
 	return NULL;
 
-    set_expand_context(p->xpc);
-    if (p->xpc->xp_context == EXPAND_UNSUCCESSFUL)
+    xp_context = p->xpc->xp_context;
+    if (xp_context == EXPAND_NOTHING)
+    {
+	set_expand_context(p->xpc);
+	xp_context = p->xpc->xp_context;
+	p->xpc->xp_context = EXPAND_NOTHING;
+    }
+    if (xp_context == EXPAND_UNSUCCESSFUL)
 	return NULL;
 
-    char_u *cmd_compl = cmdcomplete_type_to_str(p->xpc->xp_context);
+    char_u *cmd_compl = cmdcomplete_type_to_str(xp_context);
     if (cmd_compl == NULL)
 	return NULL;
 
-    if (p->xpc->xp_context == EXPAND_USER_LIST || p->xpc->xp_context == EXPAND_USER_DEFINED)
+    if (xp_context == EXPAND_USER_LIST || xp_context == EXPAND_USER_DEFINED)
     {
 	buffer = alloc(STRLEN(cmd_compl) + STRLEN(p->xpc->xp_arg) + 2);
 	if (buffer == NULL)
@@ -4308,6 +4323,7 @@ set_cmdline_pos(
 	new_cmdpos = 0;
     else
 	new_cmdpos = pos;
+
     return 0;
 }
 

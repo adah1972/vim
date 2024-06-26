@@ -5092,6 +5092,54 @@ fuzzy_match_str(char_u *str, char_u *pat)
 }
 
 /*
+ * Fuzzy match the position of string 'pat' in string 'str'.
+ * Returns a dynamic array of matching positions. If there is no match,
+ * returns NULL.
+ */
+    garray_T *
+fuzzy_match_str_with_pos(char_u *str UNUSED, char_u *pat UNUSED)
+{
+#ifdef FEAT_SEARCH_EXTRA
+    int		    score = 0;
+    garray_T	    *match_positions = NULL;
+    int_u	    matches[MAX_FUZZY_MATCHES];
+    int		    j = 0;
+
+    if (str == NULL || pat == NULL)
+        return NULL;
+
+    match_positions = ALLOC_ONE(garray_T);
+    if (match_positions == NULL)
+        return NULL;
+    ga_init2(match_positions, sizeof(int_u), 10);
+
+    if (!fuzzy_match(str, pat, FALSE, &score, matches, MAX_FUZZY_MATCHES)
+	    || score == 0)
+    {
+	ga_clear(match_positions);
+	vim_free(match_positions);
+	return NULL;
+    }
+
+    for (char_u *p = pat; *p != NUL; MB_PTR_ADV(p))
+    {
+	if (!VIM_ISWHITE(PTR2CHAR(p)))
+	{
+	    ga_grow(match_positions, 1);
+	    ((int_u *)match_positions->ga_data)[match_positions->ga_len] =
+								    matches[j];
+	    match_positions->ga_len++;
+	    j++;
+	}
+    }
+
+    return match_positions;
+#else
+    return NULL;
+#endif
+}
+
+/*
  * Free an array of fuzzy string matches "fuzmatch[count]".
  */
     void
