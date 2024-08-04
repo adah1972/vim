@@ -2,7 +2,7 @@
 " Language: Vim script
 " Maintainer: Hirohito Higashi (h_east)
 " URL: https://github.com/vim-jp/syntax-vim-ex
-" Last Change: 2024 Apr 07
+" Last Change: 2024 Jul 18
 " Version: 2.1.1
 
 let s:keepcpo= &cpo
@@ -275,6 +275,8 @@ function! s:get_vim_command_type(cmd_name)
 	let menu_prefix = '^\%([acinostvx]\?\|tl\)'
 	let map_prefix  = '^[acilnostvx]\?'
 	let exclude_list =<< trim EOL
+		2match
+		3match
 		Next
 		Print
 		X
@@ -283,6 +285,7 @@ function! s:get_vim_command_type(cmd_name)
 		augroup
 		autocmd
 		behave
+		call
 		catch
 		def
 		doautoall
@@ -297,10 +300,15 @@ function! s:get_vim_command_type(cmd_name)
 		enddef
 		endfunction
 		execute
+		final
+		for
 		function
 		insert
+		let
 		map
 		mapclear
+		match
+		noremap
 		new
 		normal
 		popup
@@ -313,6 +321,8 @@ function! s:get_vim_command_type(cmd_name)
 		substitute
 		syntax
 		throw
+		unlet
+		unmap
 		var
 		vim9script
 	EOL

@@ -699,8 +699,8 @@ popup_highlight_curline(win_T *wp)
 
 	    if (syn_name2id((char_u *)linehl) == 0)
 		linehl = "PmenuSel";
-	    sign_define_by_name(sign_name, NULL, (char_u *)linehl,
-						       NULL, NULL, NULL, NULL);
+	    sign_define_by_name(sign_name, NULL, (char_u *)linehl, NULL, NULL, NULL,
+		    NULL, SIGN_DEF_PRIO);
 	}
 
 	sign_place(&sign_id, (char_u *)"PopUpMenu", sign_name,
@@ -2651,6 +2651,8 @@ f_popup_filter_yesno(typval_T *argvars, typval_T *rettv)
 	return;
 
     c = *key;
+    if (c == CAR && need_wait_return)
+	return;
     if (c == K_SPECIAL && key[1] != NUL)
 	c = TO_SPECIAL(key[1], key[2]);
 

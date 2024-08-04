@@ -82,6 +82,7 @@ static void f_haslocaldir(typval_T *argvars, typval_T *rettv);
 static void f_hlID(typval_T *argvars, typval_T *rettv);
 static void f_hlexists(typval_T *argvars, typval_T *rettv);
 static void f_hostname(typval_T *argvars, typval_T *rettv);
+static void f_id(typval_T *argvars, typval_T *rettv);
 static void f_index(typval_T *argvars, typval_T *rettv);
 static void f_indexof(typval_T *argvars, typval_T *rettv);
 static void f_input(typval_T *argvars, typval_T *rettv);
@@ -1325,7 +1326,6 @@ ret_list_items(int argcount UNUSED,
     *decl_type = &t_list_any;
     return &t_list_list_any;
 }
-
     static type_T *
 ret_list_string_items(int argcount UNUSED,
 	type2_T *argtypes UNUSED,
@@ -1333,6 +1333,14 @@ ret_list_string_items(int argcount UNUSED,
 {
     *decl_type = &t_list_any;
     return &t_list_list_string;
+}
+    static type_T *
+ret_list_regionpos(int argcount UNUSED,
+	type2_T *argtypes UNUSED,
+	type_T	**decl_type)
+{
+    *decl_type = &t_list_any;
+    return &t_list_list_list_number;
 }
     static type_T *
 ret_dict_any(int argcount UNUSED,
@@ -1826,7 +1834,7 @@ static funcentry_T global_functions[] =
 #endif
 			},
     {"bindtextdomain",	2, 2, 0,	    arg2_string,
-			ret_void,	    f_bindtextdomain},
+			ret_bool,	    f_bindtextdomain},
     {"blob2list",	1, 1, FEARG_1,	    arg1_blob,
 			ret_list_number,    f_blob2list},
     {"browse",		4, 4, 0,	    arg4_browse,
@@ -1967,11 +1975,11 @@ static funcentry_T global_functions[] =
 			ret_number,	    f_diff_hlID},
     {"digraph_get",	1, 1, FEARG_1,	    arg1_string,
 			ret_string,	    f_digraph_get},
-    {"digraph_getlist",0, 1, FEARG_1,	    arg1_bool,
+    {"digraph_getlist",	0, 1, FEARG_1,	    arg1_bool,
 			ret_list_string_items, f_digraph_getlist},
     {"digraph_set",	2, 2, FEARG_1,	    arg2_string,
 			ret_bool,	f_digraph_set},
-    {"digraph_setlist",1, 1, FEARG_1,	    arg1_list_string,
+    {"digraph_setlist",	1, 1, FEARG_1,	    arg1_list_string,
 			ret_bool,	    f_digraph_setlist},
     {"echoraw",		1, 1, FEARG_1,	    arg1_string,
 			ret_void,	    f_echoraw},
@@ -2143,8 +2151,8 @@ static funcentry_T global_functions[] =
 			ret_dict_any,	    f_getreginfo},
     {"getregion",	2, 3, FEARG_1,	    arg3_list_list_dict,
 			ret_list_string,    f_getregion},
-    {"getregionpos",   2, 3, FEARG_1,      arg3_list_list_dict,
-			ret_list_string,    f_getregionpos},
+    {"getregionpos",	2, 3, FEARG_1,      arg3_list_list_dict,
+			ret_list_regionpos, f_getregionpos},
     {"getregtype",	0, 1, FEARG_1,	    arg1_string,
 			ret_string,	    f_getregtype},
     {"getscriptinfo",	0, 1, 0,	    arg1_dict_any,
@@ -2207,6 +2215,8 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_hostname},
     {"iconv",		3, 3, FEARG_1,	    arg3_string,
 			ret_string,	    f_iconv},
+    {"id",		1, 1, FEARG_1,	    NULL,
+			ret_string,	    f_id},
     {"indent",		1, 1, FEARG_1,	    arg1_lnum,
 			ret_number,	    f_indent},
     {"index",		2, 4, FEARG_1,	    arg24_index,
@@ -3124,8 +3134,8 @@ internal_func_check_arg_types(
     // functions, check the arguments are not types.
     if (!(func_allows_type(idx)))
     {
-        for (int i = 0; i < argcount; ++i)
-            if (check_type_is_value(types[i].type_curr) == FAIL)
+	for (int i = 0; i < argcount; ++i)
+	    if (check_type_is_value(types[i].type_curr) == FAIL)
 		return FAIL;
     }
 
@@ -3483,8 +3493,11 @@ get_buf_arg(typval_T *arg)
  * "bindtextdomain(package, path)" function
  */
     static void
-f_bindtextdomain(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
+f_bindtextdomain(typval_T *argvars, typval_T *rettv)
 {
+    rettv->v_type = VAR_BOOL;
+    rettv->vval.v_number = VVAL_TRUE;
+
     if (check_for_nonempty_string_arg(argvars, 0) == FAIL
 	    || check_for_nonempty_string_arg(argvars, 1) == FAIL)
 	return;
@@ -3492,7 +3505,13 @@ f_bindtextdomain(typval_T *argvars UNUSED, typval_T *rettv UNUSED)
     if (strcmp((const char *)argvars[0].vval.v_string, VIMPACKAGE) == 0)
 	semsg(_(e_invalid_argument_str), tv_get_string(&argvars[0]));
     else
-	bindtextdomain((const char *)argvars[0].vval.v_string, (const char *)argvars[1].vval.v_string);
+    {
+	if (bindtextdomain((const char *)argvars[0].vval.v_string, (const char *)argvars[1].vval.v_string) == NULL)
+	{
+	    do_outofmem_msg((long)0);
+	    rettv->vval.v_number = VVAL_FALSE;
+	}
+    }
 
     return;
 }
@@ -5132,6 +5151,36 @@ f_get(typval_T *argvars, typval_T *rettv)
 
 		    for (i = 0; i < pt->pt_argc; ++i)
 			list_append_tv(rettv->vval.v_list, &pt->pt_argv[i]);
+		}
+	    }
+	    else if (STRCMP(what, "arity") == 0)
+	    {
+		int required = 0, optional = 0, varargs = FALSE;
+		char_u *name = partial_name(pt);
+
+		get_func_arity(name, &required, &optional, &varargs);
+
+		rettv->v_type = VAR_DICT;
+		if (rettv_dict_alloc(rettv) == OK)
+		{
+		    dict_T *dict = rettv->vval.v_dict;
+
+		    // Take into account the arguments of the partial, if any.
+		    // Note that it is possible to supply more arguments than the function
+		    // accepts.
+		    if (pt->pt_argc >= required + optional)
+			required = optional = 0;
+		    else if (pt->pt_argc > required)
+		    {
+			optional -= pt->pt_argc - required;
+			required = 0;
+		    }
+		    else
+			required -= pt->pt_argc;
+
+		    dict_add_number(dict, "required", required);
+		    dict_add_number(dict, "optional", optional);
+		    dict_add_bool(dict, "varargs", varargs);
 		}
 	    }
 	    else
@@ -7487,6 +7536,46 @@ f_hostname(typval_T *argvars UNUSED, typval_T *rettv)
 }
 
 /*
+ * "id()" function
+ * Identity. Return address of item as a hex string, %p format.
+ * Currently only valid for object/container types.
+ * Return empty string if not an object.
+ */
+    static void
+f_id(typval_T *argvars, typval_T *rettv)
+{
+    char    numbuf[NUMBUFLEN];
+    char    *p = numbuf;
+
+    switch (argvars[0].v_type)
+    {
+	case VAR_LIST:
+	case VAR_DICT:
+	case VAR_OBJECT:
+	case VAR_JOB:
+	case VAR_CHANNEL:
+	case VAR_BLOB:
+	    // Assume pointer value in typval_T vval union at common location.
+	    if (argvars[0].vval.v_object != NULL)
+	    {
+		// "v" gets the address as an integer
+		uintptr_t v = (uintptr_t)(void *)argvars[0].vval.v_object;
+		// Build a hex string from the item's address; it is in
+		// reverse order. Ignore trailing zeros.
+		for (; p < numbuf + sizeof(uintptr_t) * 2 && v != 0;
+								++p, v >>= 4)
+		    *p = "0123456789abcdef"[v & 0xf];
+	    }
+	default:
+	    break;
+    }
+    *p = NUL;
+
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = vim_strsave((char_u *)numbuf);
+}
+
+/*
  * "index()" function
  */
     static void
@@ -7535,7 +7624,7 @@ f_index(typval_T *argvars, typval_T *rettv)
 	{
 	    tv.v_type = VAR_NUMBER;
 	    tv.vval.v_number = blob_get(b, idx);
-	    if (tv_equal(&tv, &argvars[1], ic, FALSE))
+	    if (tv_equal(&tv, &argvars[1], ic))
 	    {
 		rettv->vval.v_number = idx;
 		return;
@@ -7568,7 +7657,7 @@ f_index(typval_T *argvars, typval_T *rettv)
     }
 
     for ( ; item != NULL; item = item->li_next, ++idx)
-	if (tv_equal(&item->li_tv, &argvars[1], ic, FALSE))
+	if (tv_equal(&item->li_tv, &argvars[1], ic))
 	{
 	    rettv->vval.v_number = idx;
 	    break;
@@ -9267,69 +9356,47 @@ f_test_srand_seed(typval_T *argvars, typval_T *rettv UNUSED)
     static void
 init_srand(UINT32_T *x)
 {
-#ifndef MSWIN
-    static int dev_urandom_state = NOTDONE;  // FAIL or OK once tried
-#endif
+    struct {
+	union {
+	    UINT32_T number;
+	    char_u   bytes[sizeof(UINT32_T)];
+	} contents;
+    } buf;
 
     if (srand_seed_for_testing_is_used)
     {
 	*x = srand_seed_for_testing;
 	return;
     }
-#ifndef MSWIN
-    if (dev_urandom_state != FAIL)
-    {
-	int  fd = open("/dev/urandom", O_RDONLY);
-	struct {
-	    union {
-		UINT32_T number;
-		char     bytes[sizeof(UINT32_T)];
-	    } contents;
-	} buf;
 
-	// Attempt reading /dev/urandom.
-	if (fd == -1)
-	    dev_urandom_state = FAIL;
-	else
-	{
-	    buf.contents.number = 0;
-	    if (read(fd, buf.contents.bytes, sizeof(UINT32_T))
-							   != sizeof(UINT32_T))
-		dev_urandom_state = FAIL;
-	    else
-	    {
-		dev_urandom_state = OK;
-		*x = buf.contents.number;
-	    }
-	    close(fd);
-	}
+    if (mch_get_random(buf.contents.bytes, sizeof(buf.contents.bytes)) == OK)
+    {
+	*x = buf.contents.number;
+	return;
     }
-    if (dev_urandom_state != OK)
+
+    // The system's random number generator doesn't work, fall back to:
+    // - randombytes_random()
+    // - reltime() or time()
+    // - XOR with process ID
+#if defined(FEAT_SODIUM)
+    if (crypt_sodium_init() >= 0)
+	*x = crypt_sodium_randombytes_random();
+    else
 #endif
     {
-	// Reading /dev/urandom doesn't work, fall back to:
-	// - randombytes_random()
-	// - reltime() or time()
-	// - XOR with process ID
-#if defined(FEAT_SODIUM)
-	if (crypt_sodium_init() >= 0)
-	    *x = crypt_sodium_randombytes_random();
-	else
-#endif
-	{
 #if defined(FEAT_RELTIME)
-	    proftime_T res;
-	    profile_start(&res);
+	proftime_T res;
+	profile_start(&res);
 #  if defined(MSWIN)
-	    *x = (UINT32_T)res.LowPart;
+	*x = (UINT32_T)res.LowPart;
 #  else
-	    *x = (UINT32_T)res.tv_fsec;
+	*x = (UINT32_T)res.tv_fsec;
 #  endif
 #else
-	    *x = vim_time();
+	*x = vim_time();
 #endif
-	    *x ^= mch_get_pid();
-	}
+	*x ^= mch_get_pid();
     }
 }
 

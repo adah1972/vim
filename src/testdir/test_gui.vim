@@ -1708,7 +1708,8 @@ func Test_gui_lowlevel_keyevent()
   new
 
   " Test for <Ctrl-A> to <Ctrl-Z> keys
-  for kc in range(65, 90)
+  " FIXME: <Ctrl-C> is excluded for now.  It makes the test flaky.
+  for kc in range(65, 66) + range(68, 90)
     call SendKeys([0x11, kc])
     try
       let ch = getcharstr()

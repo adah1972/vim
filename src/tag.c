@@ -144,7 +144,6 @@ static void print_tag_list(int new_tag, int use_tagstack, int num_matches, char_
 #if defined(FEAT_QUICKFIX) && defined(FEAT_EVAL)
 static int add_llist_tags(char_u *tag, int num_matches, char_u **matches);
 #endif
-static void tagstack_clear_entry(taggy_T *item);
 
 static char_u	*tagmatchname = NULL;	// name of last used tag
 
@@ -311,7 +310,7 @@ do_tag(
 #endif
 
     if (postponed_split == 0 && !check_can_set_curbuf_forceit(forceit))
-        return FALSE;
+	return FALSE;
 
     if (type == DT_HELP)
     {
@@ -3413,6 +3412,11 @@ get_tagfname(
 	    // move the filename one char forward and truncate the
 	    // filepath with a NUL
 	    filename = gettail(buf);
+	    if (r_ptr != NULL)
+	    {
+		STRMOVE(r_ptr + 1, r_ptr);
+		++r_ptr;
+	    }
 	    STRMOVE(filename + 1, filename);
 	    *filename++ = NUL;
 
@@ -3709,7 +3713,7 @@ jumpto_tag(
     char_u	*lbuf;
 
     if (postponed_split == 0 && !check_can_set_curbuf_forceit(forceit))
-        return FAIL;
+	return FAIL;
 
     // Make a copy of the line, it can become invalid when an autocommand calls
     // back here recursively.
@@ -4233,7 +4237,7 @@ find_extra(char_u **pp)
 /*
  * Free a single entry in a tag stack
  */
-    static void
+    void
 tagstack_clear_entry(taggy_T *item)
 {
     VIM_CLEAR(item->tagname);

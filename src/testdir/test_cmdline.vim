@@ -658,7 +658,8 @@ func Test_getcompletion()
   unlet g:cmdline_compl_params
 
   " For others test if the name is recognized.
-  let names = ['buffer', 'environment', 'file_in_path', 'mapping', 'tag', 'tag_listfiles', 'user']
+  let names = ['buffer', 'environment', 'file_in_path', 'dir_in_path', 'mapping', 'tag',
+      \ 'tag_listfiles', 'user']
   if has('cmdline_hist')
     call add(names, 'history')
   endif
@@ -3867,6 +3868,27 @@ func Test_term_option()
   call feedkeys(":set t_\<C-A>\<C-B>\"\<CR>", 'tx')
   call assert_match(expected, @:)
   let &cpo = _cpo
+endfunc
+
+func Test_ex_command_completion()
+  " required for :*
+  set cpo+=*
+  let list = filter(getcompletion('', 'command'), 'exists(":" . v:val) == 0')
+  " :++ and :-- are only valid in Vim9 Script context, so they can be ignored
+  call assert_equal(['++', '--'], sort(list))
+  call assert_equal(1, exists(':k'))
+  call assert_equal(0, exists(':ke'))
+  call assert_equal(1, exists(':kee'))
+  call assert_equal(1, exists(':keep'))
+  call assert_equal(1, exists(':keepm'))
+  call assert_equal(1, exists(':keepma'))
+  call assert_equal(1, exists(':keepmar'))
+  call assert_equal(1, exists(':keepmark'))
+  call assert_equal(2, exists(':keepmarks'))
+  call assert_equal(2, exists(':keepalt'))
+  call assert_equal(2, exists(':keepjumps'))
+  call assert_equal(2, exists(':keeppatterns'))
+  set cpo-=*
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

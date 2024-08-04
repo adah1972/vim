@@ -214,6 +214,7 @@ SRC_ALL =	\
 		src/testdir/pyxfile/*.py \
 		src/testdir/dumps/*.dump \
 		src/testdir/dumps/*.vim \
+		src/testdir/samples/*.html \
 		src/testdir/samples/*.txt \
 		src/testdir/samples/*.vim \
 		src/testdir/samples/test000 \
@@ -836,6 +837,7 @@ RT_SCRIPTS =	\
 		runtime/syntax/testdir/runtest.vim \
 		runtime/syntax/testdir/ftplugin/*.* \
 		runtime/syntax/testdir/input/*.* \
+		runtime/syntax/testdir/input/selftestdir/* \
 		runtime/syntax/testdir/input/setup/*.* \
 		runtime/syntax/testdir/dumps/*.dump \
 		runtime/syntax/testdir/dumps/*.vim \

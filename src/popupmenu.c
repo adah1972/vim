@@ -425,7 +425,7 @@ pum_under_menu(int row, int col, int only_redrawing)
  * Returns attributes for every cell, or NULL if all attributes are the same.
  */
     static int *
-pum_compute_text_attrs(char_u *text, hlf_T hlf)
+pum_compute_text_attrs(char_u *text, hlf_T hlf, int user_hlattr)
 {
     int		i;
     size_t	leader_len;
@@ -483,6 +483,9 @@ pum_compute_text_attrs(char_u *text, hlf_T hlf)
 	else if (matched_start && ptr < text + leader_len)
 	    new_attr = highlight_attr[hlf == HLF_PSI ? HLF_PMSI : HLF_PMNI];
 
+	if (user_hlattr > 0)
+	    new_attr = hl_combine_attr(new_attr, user_hlattr);
+
 	char_cells = mb_ptr2cells(ptr);
 	for (i = 0; i < char_cells; i++)
 	    attrs[cell_idx + i] = new_attr;
@@ -527,7 +530,7 @@ pum_screen_puts_with_attrs(
 	else
 #endif
 	    attr = attrs[col - col_start];
-        screen_puts_len(ptr, char_len, row, col, attr);
+	screen_puts_len(ptr, char_len, row, col, attr);
 	col += mb_ptr2cells(ptr);
 	ptr += char_len;
     }
@@ -628,6 +631,8 @@ pum_redraw(void)
 	{
 	    hlf = hlfs[round];
 	    attr = highlight_attr[hlf];
+	    if (pum_array[idx].pum_user_hlattr > 0)
+		attr = hl_combine_attr(attr, pum_array[idx].pum_user_hlattr);
 	    width = 0;
 	    s = NULL;
 	    switch (round)
@@ -656,7 +661,8 @@ pum_redraw(void)
 			if (saved != NUL)
 			    *p = saved;
 
-			attrs = pum_compute_text_attrs(st, hlf);
+			int user_hlattr = pum_array[idx].pum_user_hlattr;
+			attrs = pum_compute_text_attrs(st, hlf, user_hlattr);
 
 #ifdef FEAT_RIGHTLEFT
 			if (pum_rl)
@@ -1332,9 +1338,10 @@ pum_set_event_info(dict_T *dict)
     static void
 pum_position_at_mouse(int min_width)
 {
-    if (Rows - mouse_row > pum_size)
+    if (Rows - mouse_row > pum_size || Rows - mouse_row > mouse_row)
     {
-	// Enough space below the mouse row.
+	// Enough space below the mouse row,
+	// or there is more space below the mouse row than above.
 	pum_row = mouse_row + 1;
 	if (pum_height > Rows - pum_row)
 	    pum_height = Rows - pum_row;
@@ -1633,7 +1640,7 @@ pum_select_mouse_pos(void)
 {
     int idx = mouse_row - pum_row;
 
-    if (idx < 0 || idx >= pum_size)
+    if (idx < 0 || idx >= pum_height)
 	pum_selected = -1;
     else if (*pum_array[idx].pum_text != NUL)
 	pum_selected = idx;

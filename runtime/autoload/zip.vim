@@ -1,11 +1,14 @@
 " zip.vim: Handles browsing zipfiles
-"            AUTOLOAD PORTION
-" Date:		Mar 12, 2023
+" AUTOLOAD PORTION
+" Date:		Jul 30, 2024
 " Version:	33
 " Maintainer:	This runtime file is looking for a new maintainer.
 " Former Maintainer:	Charles E Campbell
 " Last Change:
-"		2024 Jun 16 by Vim Project: handle whitespace on Windows properly (#14998)
+" 2024 Jun 16 by Vim Project: handle whitespace on Windows properly (#14998)
+" 2024 Jul 23 by Vim Project: fix 'x' command
+" 2024 Jul 24 by Vim Project: use delete() function
+" 2024 Jul 20 by Vim Project: fix opening remote zipfile
 " License:	Vim License  (see vim's :help license)
 " Copyright:	Copyright (C) 2005-2019 Charles E. Campbell {{{1
 "		Permission is hereby granted to use and distribute this code,
@@ -71,15 +74,11 @@ endif
 " ---------------------------------------------------------------------
 " zip#Browse: {{{2
 fun! zip#Browse(zipfile)
-"  call Dfunc("zip#Browse(zipfile<".a:zipfile.">)")
-  " sanity check: insure that the zipfile has "PK" as its first two letters
-  "               (zipped files have a leading PK as a "magic cookie")
-  if !filereadable(a:zipfile) || readfile(a:zipfile, "", 1)[0] !~ '^PK'
-   exe "noswapfile noautocmd noswapfile e ".fnameescape(a:zipfile)
-"   call Dret("zip#Browse : not a zipfile<".a:zipfile.">")
+  " sanity check: ensure that the zipfile has "PK" as its first two letters
+  "               (zip files have a leading PK as a "magic cookie")
+  if filereadable(a:zipfile) && readblob(a:zipfile, 0, 2) != 0z50.4B
+   exe "noswapfile noautocmd e " .. fnameescape(a:zipfile)
    return
-"  else        " Decho
-"   call Decho("zip#Browse: a:zipfile<".a:zipfile."> passed PK test - it's a zip file")
   endif
 
   let repkeep= &report
@@ -95,9 +94,7 @@ fun! zip#Browse(zipfile)
   if !executable(g:zip_unzipcmd)
    redraw!
    echohl Error | echo "***error*** (zip#Browse) unzip not available on your system"
-"   call inputsave()|call input("Press <cr> to continue")|call inputrestore()
    let &report= repkeep
-"   call Dret("zip#Browse")
    return
   endif
   if !filereadable(a:zipfile)
@@ -105,13 +102,10 @@ fun! zip#Browse(zipfile)
     " if it's an url, don't complain, let url-handlers such as vim do its thing
     redraw!
     echohl Error | echo "***error*** (zip#Browse) File not readable<".a:zipfile.">" | echohl None
-"    call inputsave()|call input("Press <cr> to continue")|call inputrestore()
    endif
    let &report= repkeep
-"   call Dret("zip#Browse : file<".a:zipfile."> not readable")
    return
   endif
-"  call Decho("passed sanity checks")
   if &ma != 1
    set ma
   endif
@@ -298,7 +292,7 @@ fun! zip#Write(fname)
 
   " place temporary files under .../_ZIPVIM_/
   if isdirectory("_ZIPVIM_")
-   call s:Rmdir("_ZIPVIM_")
+   call delete("_ZIPVIM_", "rf")
   endif
   call mkdir("_ZIPVIM_")
   cd _ZIPVIM_
@@ -358,12 +352,12 @@ fun! zip#Write(fname)
    q!
    unlet s:zipfile_{winnr()}
   endif
-  
+
   " cleanup and restore current directory
   cd ..
-  call s:Rmdir("_ZIPVIM_")
+  call delete("_ZIPVIM_", "rf")
   call s:ChgDir(curdir,s:WARNING,"(zip#Write) unable to return to ".curdir."!")
-  call s:Rmdir(tmpdir)
+  call delete(tmpdir, "rf")
   setlocal nomod
 
   let &report= repkeep
@@ -395,8 +389,7 @@ fun! zip#Extract()
   endif
 
   " extract the file mentioned under the cursor
-"  call Decho("system(".g:zip_extractcmd." ".shellescape(b:zipfile)." ".shellescape(shell).")")
-  call system(g:zip_extractcmd." ".shellescape(b:zipfile)." ".shellescape(shell))
+  call system($"{g:zip_extractcmd} {shellescape(b:zipfile)} {shellescape(fname)}")
 "  call Decho("zipfile<".b:zipfile.">")
   if v:shell_error != 0
    echohl Error | echo "***error*** ".g:zip_extractcmd." ".b:zipfile." ".fname.": failed!" | echohl NONE
@@ -454,18 +447,6 @@ fun! s:ChgDir(newdir,errlvl,errmsg)
 
 "  call Dret("ChgDir 0")
   return 0
-endfun
-
-" ---------------------------------------------------------------------
-" s:Rmdir: {{{2
-fun! s:Rmdir(fname)
-"  call Dfunc("Rmdir(fname<".a:fname.">)")
-  if (has("win32") || has("win95") || has("win64") || has("win16")) && &shell !~? 'sh$'
-   call system("rmdir /S/Q ".s:Escape(a:fname,0))
-  else
-   call system("/bin/rm -rf ".s:Escape(a:fname,0))
-  endif
-"  call Dret("Rmdir")
 endfun
 
 " ------------------------------------------------------------------------

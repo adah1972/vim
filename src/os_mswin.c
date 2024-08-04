@@ -830,6 +830,40 @@ mch_icon_load(HANDLE *iconp)
 						  0, mch_icon_load_cb, iconp);
 }
 
+/*
+ * Fill the buffer 'buf' with 'len' random bytes.
+ * Returns FAIL if the OS PRNG is not available or something went wrong.
+ */
+    int
+mch_get_random(char_u *buf, int len)
+{
+    static int		initialized = NOTDONE;
+    static HINSTANCE	hInstLib;
+    static BOOL (WINAPI *pProcessPrng)(PUCHAR, ULONG);
+
+    if (initialized == NOTDONE)
+    {
+	hInstLib = vimLoadLib("bcryptprimitives.dll");
+	if (hInstLib != NULL)
+	    pProcessPrng = (void *)GetProcAddress(hInstLib, "ProcessPrng");
+	if (hInstLib == NULL || pProcessPrng == NULL)
+	{
+	    FreeLibrary(hInstLib);
+	    initialized = FAIL;
+	}
+	else
+	    initialized = OK;
+    }
+
+    if (initialized == FAIL)
+	return FAIL;
+
+    // According to the documentation this call cannot fail.
+    pProcessPrng(buf, len);
+
+    return OK;
+}
+
     int
 mch_libcall(
     char_u	*libname,
@@ -2887,7 +2921,7 @@ expand_font_enumproc(
     // Filter only on ANSI. Otherwise will see a lot of random fonts that we
     // usually don't want.
     if (lf->lfCharSet != ANSI_CHARSET)
-        return 1;
+	return 1;
 
     int (*add_match)(char_u *) = (int (*)(char_u *))lparam;
 
@@ -2921,7 +2955,7 @@ gui_mch_expand_font(optexpand_T *args, void *param UNUSED, int (*add_match)(char
 
 	// Always fill in with the current font size as first option for
 	// convenience. We simply round to the closest integer for simplicity.
-        int font_height = (int)round(
+	int font_height = (int)round(
 		pixels_to_points(-current_font_height, TRUE, (long_i)NULL));
 	vim_snprintf(buf, ARRAY_LENGTH(buf), "h%d", font_height);
 	add_match((char_u *)buf);

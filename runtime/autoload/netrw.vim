@@ -3,7 +3,7 @@
 " Maintainer: This runtime file is looking for a new maintainer.
 " Date:		  May 03, 2023
 " Version:	173a
-" Last Change:
+" Last Change: {{{1
 " 	2023 Nov 21 by Vim Project: ignore wildignore when expanding $COMSPEC	(v173a)
 " 	2023 Nov 22 by Vim Project: fix handling of very long filename on longlist style	(v173a)
 "   2024 Feb 19 by Vim Project: (announce adoption)
@@ -15,7 +15,12 @@
 "   2024 May 13 by Vim Project: prefer scp over pscp
 "   2024 Jun 04 by Vim Project: set bufhidden if buffer changed, nohidden is set and buffer shall be switched (#14915)
 "   2024 Jun 13 by Vim Project: glob() on Windows fails when a directory name contains [] (#14952)
-"   2024 Jun 23 by Vim Project: save ad restore registers when liststyle = WIDELIST (#15077)
+"   2024 Jun 23 by Vim Project: save ad restore registers when liststyle = WIDELIST (#15077, #15114)
+"   2024 Jul 22 by Vim Project: avoid endless recursion (#15318)
+"   2024 Jul 23 by Vim Project: escape filename before trying to delete it (#15330)
+"   2024 Jul 30 by Vim Project: handle mark-copy to same target directory (#12112)
+"   2024 Aug 02 by Vim Project: honor g:netrw_alt{o,v} for :{S,H,V}explore (#15417)
+"   }}}
 " Former Maintainer:	Charles E Campbell
 " GetLatestVimScripts: 1075 1 :AutoInstall: netrw.vim
 " Copyright:    Copyright (C) 2016 Charles E. Campbell {{{1
@@ -694,12 +699,11 @@ fun! netrw#Explore(indx,dosplit,style,...)
      \ ((isdirectory(s:NetrwFile(a:1))))?  'is a directory'           : 'is not a directory',
      \ '~'.expand("<slnum>"))
    if a:1 =~ "\\\s" && !filereadable(s:NetrwFile(a:1)) && !isdirectory(s:NetrwFile(a:1))
-"    call Decho("re-trying Explore with <".substitute(a:1,'\\\(\s\)','\1','g').">",'~'.expand("<slnum>"))
-    call netrw#Explore(a:indx,a:dosplit,a:style,substitute(a:1,'\\\(\s\)','\1','g'))
-"    call Dret("netrw#Explore : returning from retry")
-    return
-"   else " Decho
-"    call Decho("retry not needed",'~'.expand("<slnum>"))
+    let a1 = substitute(a:1, '\\\(\s\)', '\1', 'g')
+    if a1 != a:1
+      call netrw#Explore(a:indx, a:dosplit, a:style, a1)
+      return
+    endif
    endif
   endif
 
@@ -715,7 +719,6 @@ fun! netrw#Explore(indx,dosplit,style,...)
   " -or- file has been modified AND file not hidden when abandoned
   " -or- Texplore used
   if a:dosplit || (&modified && &hidden == 0 && &bufhidden != "hide") || a:style == 6
-"   call Decho("case dosplit=".a:dosplit." modified=".&modified." a:style=".a:style.": dosplit or file has been modified",'~'.expand("<slnum>"))
    call s:SaveWinVars()
    let winsz= g:netrw_winsize
    if a:indx > 0
@@ -723,57 +726,41 @@ fun! netrw#Explore(indx,dosplit,style,...)
    endif
 
    if a:style == 0      " Explore, Sexplore
-"    call Decho("style=0: Explore or Sexplore",'~'.expand("<slnum>"))
     let winsz= (winsz > 0)? (winsz*winheight(0))/100 : -winsz
     if winsz == 0|let winsz= ""|endif
-    exe "noswapfile ".winsz."wincmd s"
-"    call Decho("exe noswapfile ".winsz."wincmd s",'~'.expand("<slnum>"))
+    exe "noswapfile ".(g:netrw_alto ? "below " : "above ").winsz."wincmd s"
 
-   elseif a:style == 1  "Explore!, Sexplore!
-"    call Decho("style=1: Explore! or Sexplore!",'~'.expand("<slnum>"))
+   elseif a:style == 1  " Explore!, Sexplore!
     let winsz= (winsz > 0)? (winsz*winwidth(0))/100 : -winsz
     if winsz == 0|let winsz= ""|endif
-    exe "keepalt noswapfile ".winsz."wincmd v"
-"    call Decho("exe keepalt noswapfile ".winsz."wincmd v",'~'.expand("<slnum>"))
+    exe "keepalt noswapfile ".(g:netrw_altv ? "rightbelow " : "leftabove ").winsz."wincmd v"
 
    elseif a:style == 2  " Hexplore
-"    call Decho("style=2: Hexplore",'~'.expand("<slnum>"))
     let winsz= (winsz > 0)? (winsz*winheight(0))/100 : -winsz
     if winsz == 0|let winsz= ""|endif
-    exe "keepalt noswapfile bel ".winsz."wincmd s"
-"    call Decho("exe keepalt noswapfile bel ".winsz."wincmd s",'~'.expand("<slnum>"))
+    exe "keepalt noswapfile ".(g:netrw_alto ? "below " : "above ").winsz."wincmd s"
 
    elseif a:style == 3  " Hexplore!
-"    call Decho("style=3: Hexplore!",'~'.expand("<slnum>"))
     let winsz= (winsz > 0)? (winsz*winheight(0))/100 : -winsz
     if winsz == 0|let winsz= ""|endif
-    exe "keepalt noswapfile abo ".winsz."wincmd s"
-"    call Decho("exe keepalt noswapfile abo ".winsz."wincmd s",'~'.expand("<slnum>"))
+    exe "keepalt noswapfile ".(!g:netrw_alto ? "below " : "above ").winsz."wincmd s"
 
    elseif a:style == 4  " Vexplore
-"    call Decho("style=4: Vexplore",'~'.expand("<slnum>"))
     let winsz= (winsz > 0)? (winsz*winwidth(0))/100 : -winsz
     if winsz == 0|let winsz= ""|endif
-    exe "keepalt noswapfile lefta ".winsz."wincmd v"
-"    call Decho("exe keepalt noswapfile lefta ".winsz."wincmd v",'~'.expand("<slnum>"))
+    exe "keepalt noswapfile ".(g:netrw_altv ? "rightbelow " : "leftabove ").winsz."wincmd v"
 
    elseif a:style == 5  " Vexplore!
-"    call Decho("style=5: Vexplore!",'~'.expand("<slnum>"))
     let winsz= (winsz > 0)? (winsz*winwidth(0))/100 : -winsz
     if winsz == 0|let winsz= ""|endif
-    exe "keepalt noswapfile rightb ".winsz."wincmd v"
-"    call Decho("exe keepalt noswapfile rightb ".winsz."wincmd v",'~'.expand("<slnum>"))
+    exe "keepalt noswapfile ".(!g:netrw_altv ? "rightbelow " : "leftabove ").winsz."wincmd v"
 
    elseif a:style == 6  " Texplore
     call s:SaveBufVars()
-"    call Decho("style  = 6: Texplore",'~'.expand("<slnum>"))
     exe "keepalt tabnew ".fnameescape(curdir)
-"    call Decho("exe keepalt tabnew ".fnameescape(curdir),'~'.expand("<slnum>"))
     call s:RestoreBufVars()
    endif
    call s:RestoreWinVars()
-"  else " Decho
-"   call Decho("case a:dosplit=".a:dosplit." AND modified=".&modified." AND a:style=".a:style." is not 6",'~'.expand("<slnum>"))
   endif
   NetrwKeepj norm! 0
 
@@ -4497,7 +4484,15 @@ fun! s:NetrwGetWord()
     call cursor(line("."),filestart+1)
     NetrwKeepj norm! ma
    endif
-   let rega= @a
+
+   let dict={}
+   " save the unnamed register and register 0-9 and a
+   let dict.a=[getreg('a'), getregtype('a')]
+   for i in range(0, 9)
+     let dict[i] = [getreg(i), getregtype(i)]
+   endfor
+   let dict.unnamed = [getreg(''), getregtype('')]
+
    let eofname= filestart + b:netrw_cpf + 1
    if eofname <= col("$")
     call cursor(line("."),filestart+b:netrw_cpf+1)
@@ -4505,8 +4500,10 @@ fun! s:NetrwGetWord()
    else
     NetrwKeepj norm! "ay$
    endif
+
    let dirname = @a
-   let @a      = rega
+   call s:RestoreRegister(dict)
+
 "   call Decho("2: dirname<".dirname.">",'~'.expand("<slnum>"))
    let dirname= substitute(dirname,'\s\+$','','e')
 "   call Decho("3: dirname<".dirname.">",'~'.expand("<slnum>"))
@@ -7154,7 +7151,7 @@ fun! s:NetrwMarkFileCopy(islocal,...)
    endif
 
    " copy marked files while within the same directory (ie. allow renaming)
-   if simplify(s:netrwmftgt) == simplify(b:netrw_curdir)
+   if s:StripTrailingSlash(simplify(s:netrwmftgt)) == s:StripTrailingSlash(simplify(b:netrw_curdir))
     if len(s:netrwmarkfilelist_{bufnr('%')}) == 1
      " only one marked file
 "     call Decho("case: only one marked file",'~'.expand("<slnum>"))
@@ -7231,7 +7228,7 @@ fun! s:NetrwMarkFileCopy(islocal,...)
 "   call Decho("system(".copycmd." '".args."' '".tgt."')",'~'.expand("<slnum>"))
    call system(copycmd.g:netrw_localcopycmdopt." '".args."' '".tgt."'")
    if v:shell_error != 0
-    if exists("b:netrw_curdir") && b:netrw_curdir != getcwd() && !g:netrw_keepdir
+    if exists("b:netrw_curdir") && b:netrw_curdir != getcwd() && g:netrw_keepdir
      call netrw#ErrorMsg(s:ERROR,"copy failed; perhaps due to vim's current directory<".getcwd()."> not matching netrw's (".b:netrw_curdir.") (see :help netrw-cd)",101)
     else
      call netrw#ErrorMsg(s:ERROR,"tried using g:netrw_localcopycmd<".g:netrw_localcopycmd.">; it doesn't work!",80)
@@ -11442,7 +11439,7 @@ fun! s:NetrwLocalRmFile(path,fname,all)
   let all= a:all
   let ok = ""
   NetrwKeepj norm! 0
-  let rmfile= s:NetrwFile(s:ComposePath(a:path,a:fname))
+  let rmfile= s:NetrwFile(s:ComposePath(a:path,escape(a:fname, '\\')))
 "  call Decho("rmfile<".rmfile.">",'~'.expand("<slnum>"))
 
   if rmfile !~ '^"' && (rmfile =~ '@$' || rmfile !~ '[\/]$')
@@ -11451,7 +11448,7 @@ fun! s:NetrwLocalRmFile(path,fname,all)
    if !all
     echohl Statement
     call inputsave()
-    let ok= input("Confirm deletion of file<".rmfile."> ","[{y(es)},n(o),a(ll),q(uit)] ")
+    let ok= input("Confirm deletion of file <".rmfile."> ","[{y(es)},n(o),a(ll),q(uit)] ")
     call inputrestore()
     echohl NONE
     if ok == ""
@@ -11475,7 +11472,7 @@ fun! s:NetrwLocalRmFile(path,fname,all)
    if !all
     echohl Statement
     call inputsave()
-    let ok= input("Confirm *recursive* deletion of directory<".rmfile."> ","[{y(es)},n(o),a(ll),q(uit)] ")
+    let ok= input("Confirm *recursive* deletion of directory <".rmfile."> ","[{y(es)},n(o),a(ll),q(uit)] ")
     call inputrestore()
     let ok= substitute(ok,'\[{y(es)},n(o),a(ll),q(uit)]\s*','','e')
     if ok == ""
@@ -11632,6 +11629,13 @@ fun! netrw#WinPath(path)
   endif
 "  call Dret("netrw#WinPath <".path.">")
   return path
+endfun
+
+" ---------------------------------------------------------------------
+" s:StripTrailingSlash: removes trailing slashes from a path {{{2
+fun! s:StripTrailingSlash(path)
+   " remove trailing slash
+   return substitute(a:path, '[/\\]$', '', 'g')
 endfun
 
 " ---------------------------------------------------------------------

@@ -2189,7 +2189,7 @@ test check: unittests $(TERM_TEST) scripttests
 scripttests:
 	$(MAKE) -f Makefile $(VIMTARGET)
 	if test -n "$(MAKEMO)" -a -f $(PODIR)/Makefile; then \
-		cd $(PODIR); $(MAKE) -f Makefile check VIM=../$(VIMTARGET); \
+		cd $(PODIR); $(MAKE) -f Makefile check VIMPROG=../$(VIMTARGET); \
 	fi
 	-if test $(VIMTARGET) != vim -a ! -r vim; then \
 		ln -s $(VIMTARGET) vim; \
@@ -2354,10 +2354,8 @@ installrtbase: $(HELPSOURCE)/vim.1 $(DEST_VIM) $(VIMTARGET) $(DEST_RT) \
 	cd $(HELPSOURCE); if test -z "$(CROSS_COMPILING)" -a -f tags; then \
 		mv -f tags tags.dist; fi
 	@echo generating help tags
-	# We can assume Vim was build, but it may not have been installed,
-	# thus use the executable in the current directory.
-	-@BUILD_DIR="`pwd`"; cd $(HELPSOURCE); if test -z "$(CROSS_COMPILING)"; then \
-		$(MAKE) VIMEXE="$$BUILD_DIR/$(VIMTARGET)" vimtags; fi
+	-@cd $(HELPSOURCE); if test -z "$(CROSS_COMPILING)"; then \
+		$(MAKE) vimtags; fi
 	cd $(HELPSOURCE); \
 		files=`ls *.txt tags`; \
 		files="$$files `ls *.??x tags-?? 2>/dev/null || true`"; \

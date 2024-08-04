@@ -4007,7 +4007,7 @@ def Test_restoring_cpo()
   edit XanotherScript
   so %
   assert_equal('aABceFsMny>', &cpo)
-  assert_equal('aABceFs', g:cpoval)
+  assert_equal('aABceFsz', g:cpoval)
   :1del
   setline(1, 'let g:cpoval = &cpo')
   w
@@ -4048,10 +4048,10 @@ def Test_restoring_cpo()
     exe "silent !" .. cmd
 
     assert_equal([
-        'before: aABceFs',
-        'after: aABceFsM',
-        'later: aABceFsM',
-        'vim9: aABceFs'], readfile('Xrporesult'))
+        'before: aABceFsz',
+        'after: aABceFszM',
+        'later: aABceFszM',
+        'vim9: aABceFsz'], readfile('Xrporesult'))
 
     $HOME = save_HOME
     delete('Xrporesult')
@@ -5085,15 +5085,19 @@ def Test_null_values()
     var nullValues = [
       [null, 1, 'null', 7, 'special'],
       [null_blob, 1, '0z', 10, 'blob'],
-      [null_channel, 1, 'channel fail', 9, 'channel'],
       [null_dict, 1, '{}', 4, 'dict<any>'],
       [null_function, 1, "function('')", 2, 'func(...): unknown'],
-      [null_job, 1, 'no process', 8, 'job'],
       [null_list, 1, '[]', 3, 'list<any>'],
       [null_object, 1, 'object of [unknown]', 13, 'object<Unknown>'],
       [null_partial, 1, "function('')", 2, 'func(...): unknown'],
       [null_string, 1, "''", 1, 'string']
     ]
+    if has('channel')
+      nullValues->add([null_channel, 1, 'channel fail', 9, 'channel'])
+    endif
+    if has('job')
+      nullValues->add([null_job, 1, 'no process', 8, 'job'])
+    endif
 
     for [Val, emptyExp, stringExp, typeExp, typenameExp] in nullValues
       assert_equal(emptyExp, empty(Val))
