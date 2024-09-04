@@ -213,6 +213,7 @@ runtime/ftplugin/nginx.vim		@chr4
 runtime/ftplugin/nim.vim		@ribru17
 runtime/ftplugin/nroff.vim		@a-vrma
 runtime/ftplugin/nsis.vim		@k-takata
+runtime/ftplugin/nu.vim		@mrcjkb
 runtime/ftplugin/octave.vim		@dkearns
 runtime/ftplugin/ondir.vim		@jparise
 runtime/ftplugin/openvpn.vim		@ObserverOfTime
@@ -341,6 +342,7 @@ runtime/indent/perl.vim			@petdance
 runtime/indent/php.vim			@2072
 runtime/indent/postscr.vim		@mrdubya
 runtime/indent/prolog.vim		@dkearns
+runtime/indent/proto.vim		@Limero
 runtime/indent/ps1.vim			@heaths
 runtime/indent/qb64.vim			@dkearns
 runtime/indent/qml.vim			@ChaseKnowlden
@@ -463,6 +465,7 @@ runtime/syntax/hitest.vim		@lacygoill
 runtime/syntax/hog.vim			@wtfbbqhax
 runtime/syntax/hollywood.vim		@sodero
 runtime/syntax/html.vim			@dkearns
+runtime/syntax/htmlangular.vim @dlvandenberg
 runtime/syntax/i3config.vim		@hiqua
 runtime/syntax/icon.vim			@dkearns
 runtime/syntax/indent.vim		@dkearns

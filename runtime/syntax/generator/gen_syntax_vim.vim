@@ -1,9 +1,7 @@
 " Vim syntax file generator
 " Language: Vim script
 " Maintainer: Hirohito Higashi (h_east)
-" URL: https://github.com/vim-jp/syntax-vim-ex
-" Last Change: 2024 Jul 18
-" Version: 2.1.1
+" Last Change: 2024 Aug 30
 
 let s:keepcpo= &cpo
 set cpo&vim
@@ -288,6 +286,7 @@ function! s:get_vim_command_type(cmd_name)
 		call
 		catch
 		def
+		delcommand
 		doautoall
 		doautocmd
 		echo
@@ -305,6 +304,7 @@ function! s:get_vim_command_type(cmd_name)
 		function
 		insert
 		let
+		loadkeymap
 		map
 		mapclear
 		match
@@ -526,15 +526,15 @@ function! s:parse_vim_complete_name(li)
 		new
 		exec 'read ' . file_name
 		norm! gg
-		exec '/^}\s*command_complete\[\]\s*=\s*$/+1;/^};/-1yank'
+		exec '/^static keyvalue_T command_complete_tab\[] =$/+1;/^};$/-1yank'
 		%delete _
 
 		put
-		g!/^\s*{.*"\w\+"\s*}\s*,.*$/d
+		g!/^\s*KEYVALUE_ENTRY(/d
 		g/"custom\(list\)\?"/d
 
 		for line in getline(1, line('$'))
-			let list = matchlist(line, '^\s*{.*"\(\w\+\)"\s*}\s*,')
+			let list = matchlist(line, '^\s*KEYVALUE_ENTRY(EXPAND_\w\+,\s*"\(\w\+\)"')
 			let item.name = list[1]
 			call add(a:li, copy(item))
 		endfor
@@ -543,6 +543,44 @@ function! s:parse_vim_complete_name(li)
 
 		if empty(a:li)
 			throw 'complete_name is empty'
+		endif
+	catch /.*/
+		call s:err_gen('')
+		throw 'exit'
+	endtry
+endfunc
+
+" ------------------------------------------------------------------------------
+function! s:parse_vim_addr_name(li)
+	try
+		let file_name = $VIM_SRCDIR . '/usercmd.c'
+		let item = {}
+
+		new
+		exec 'read ' . file_name
+		norm! gg
+		exec '/^static addrtype_T addr_type_complete_tab\[] =$/+1;/^};$/-1yank'
+		%delete _
+
+		put
+		g!/^\s*ADDRTYPE_ENTRY(/d
+
+		for line in getline(1, line('$'))
+			let list = matchlist(line, '^\s*ADDRTYPE_ENTRY(ADDR_\w\+,\s*"\(\w\+\)",\s*"\(.*\)"')
+			let item.name = list[1]
+			call add(a:li, copy(item))
+			let item.name = list[2]
+			call add(a:li, copy(item))
+		endfor
+
+		" '?' is not in 'iskeyword' and cannot be used as keyword, so remove it.
+		" (Separately specified as 'syn match' in vim.vim.base).
+		call filter(a:li, {idx, val -> val.name !=# '?'})
+
+		quit!
+
+		if empty(a:li)
+			throw 'addr_name is empty'
 		endif
 	catch /.*/
 		call s:err_gen('')
@@ -657,7 +695,12 @@ function! s:update_syntax_vim_file(vim_info)
 
 		" vimUserAttrbCmplt
 		let li = a:vim_info.compl_name
-		let lnum = s:search_and_check('vimUserAttrbCmplt', base_fname, str_info)
+		let lnum = s:search_and_check('vimUserCmdAttrCmplt', base_fname, str_info)
+		let lnum = s:append_syn_any(lnum, str_info, li)
+
+		" vimUserAttrbAddr
+		let li = a:vim_info.addr_name
+		let lnum = s:search_and_check('vimUserCmdAttrAddr', base_fname, str_info)
 		let lnum = s:append_syn_any(lnum, str_info, li)
 
 		" vimCommand - abbrev
@@ -730,6 +773,7 @@ try
 	let s:vim_info.func = []
 	let s:vim_info.hlgroup = []
 	let s:vim_info.compl_name = []
+	let s:vim_info.addr_name = []
 
 	set lazyredraw
 	silent call s:parse_vim_option(s:vim_info.opt, s:vim_info.missing_opt,
@@ -739,6 +783,7 @@ try
 	silent call s:parse_vim_function(s:vim_info.func)
 	silent call s:parse_vim_hlgroup(s:vim_info.hlgroup)
 	silent call s:parse_vim_complete_name(s:vim_info.compl_name)
+	silent call s:parse_vim_addr_name(s:vim_info.addr_name)
 
 	call s:update_syntax_vim_file(s:vim_info)
 	set nolazyredraw

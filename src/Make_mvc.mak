@@ -80,7 +80,7 @@
 #	Python3 interface:
 #	  PYTHON3=[Path to Python3 directory]
 #	  DYNAMIC_PYTHON3=yes (to load the Python3 DLL dynamically)
-#	  PYTHON3_VER=[Python3 version, eg 30, 31]  (default is 36)
+#	  PYTHON3_VER=[Python3 version, eg 30, 31]  (default is 38)
 #
 #	Ruby interface:
 #	  RUBY=[Path to Ruby directory]
@@ -166,8 +166,11 @@ RM =		del /f /q
 
 # Read MAJOR and MINOR from version.h.
 !IF ![for /f "tokens=2,3" %I in (version.h) do \
-	@if "%I"=="VIM_VERSION_MAJOR" ( echo MAJOR=%J>.\major.tmp ) \
-	else if "%I"=="VIM_VERSION_MINOR" ( echo MINOR=%J>.\minor.tmp )]
+	@if "%I"=="VIM_VERSION_MAJOR" ( \
+		echo MAJOR=%J> .\major.tmp \
+	) else if "%I"=="VIM_VERSION_MINOR" ( \
+		echo MINOR=%J> .\minor.tmp && exit \
+	)]
 !ENDIF
 
 !IF EXIST(.\major.tmp)
@@ -189,11 +192,15 @@ MINOR =		1
 !ENDIF
 
 # Read PATCHLEVEL from version.c.
-!IF ![cmd.exe /V:ON /C "echo off && set LINE=0&& set FIND=0&& \
-	for /f "tokens=1,3 delims=,[ " %I in (version.c) do \
-	( set /A LINE+=1 > NUL && \
-	if "%J"=="included_patches" ( set /A FIND=LINE+3 > NUL ) \
-	else if "!LINE!"=="!FIND!" ( echo PATCHLEVEL=%I>.\patchlvl.tmp && exit ) )"]
+!IF ![cmd.exe /V:ON /Q /C "set LINE=0&& set FIND=0&& \
+	for /f "tokens=1,3 delims=, " %I in (version.c) do ( \
+		set /A LINE+=1 > NUL && \
+		if "%J"=="included_patches[^]" ( \
+			set /A FIND=LINE+3 > NUL \
+		) else if "!LINE!"=="!FIND!" ( \
+			echo PATCHLEVEL=%I> .\patchlvl.tmp && exit \
+		) \
+	)"]
 !ENDIF
 !IF EXIST(.\patchlvl.tmp)
 ! INCLUDE .\patchlvl.tmp
@@ -987,8 +994,13 @@ PYTHON_LIB = "$(PYTHON)\libs\python$(PYTHON_VER).lib"
 
 # PYTHON3 interface
 !ifdef PYTHON3
+! ifndef DYNAMIC_PYTHON3_STABLE_ABI
+!  if "$(DYNAMIC_PYTHON3)" == "yes"
+DYNAMIC_PYTHON3_STABLE_ABI = yes
+!  endif
+! endif
 ! ifndef PYTHON3_VER
-PYTHON3_VER = 36
+PYTHON3_VER = 38
 ! endif
 ! if "$(DYNAMIC_PYTHON3_STABLE_ABI)" == "yes"
 PYTHON3_NAME = python3

@@ -14,6 +14,13 @@ func s:cleanup_buffers() abort
   endfor
 endfunc
 
+func CleanUpTestAuGroup()
+  augroup testing
+    au!
+  augroup END
+  augroup! testing
+endfunc
+
 func Test_vim_did_enter()
   call assert_false(v:vim_did_enter)
 
@@ -269,6 +276,7 @@ endfunc
 func Test_win_tab_autocmd()
   let g:record = []
 
+  defer CleanUpTestAuGroup()
   augroup testing
     au WinNewPre * call add(g:record, 'WinNewPre')
     au WinNew * call add(g:record, 'WinNew')
@@ -288,7 +296,7 @@ func Test_win_tab_autocmd()
 
   call assert_equal([
 	\ 'WinNewPre', 'WinLeave', 'WinNew', 'WinEnter',
-	\ 'WinLeave', 'TabLeave', 'WinNewPre', 'WinNew', 'WinEnter', 'TabNew', 'TabEnter',
+	\ 'WinLeave', 'TabLeave', 'WinNew', 'WinEnter', 'TabNew', 'TabEnter',
 	\ 'WinLeave', 'TabLeave', 'WinClosed', 'TabClosed', 'WinEnter', 'TabEnter',
 	\ 'WinLeave', 'WinClosed', 'WinEnter'
 	\ ], g:record)
@@ -299,7 +307,7 @@ func Test_win_tab_autocmd()
   bwipe somefile
 
   call assert_equal([
-	\ 'WinLeave', 'TabLeave', 'WinNewPre', 'WinNew', 'WinEnter', 'TabNew', 'TabEnter',
+	\ 'WinLeave', 'TabLeave', 'WinNew', 'WinEnter', 'TabNew', 'TabEnter',
 	\ 'WinLeave', 'TabLeave', 'WinEnter', 'TabEnter',
 	\ 'WinClosed', 'TabClosed'
 	\ ], g:record)
@@ -316,9 +324,6 @@ func Test_win_tab_autocmd()
 	\ 'WinNewPre', 'WinLeave', 'WinNew', 'WinEnter'
 	\ ], g:record)
 
-  augroup testing
-    au!
-  augroup END
   unlet g:record
 endfunc
 
@@ -330,17 +335,15 @@ func Test_WinNewPre()
     au WinNewPre * call add(g:layouts_pre, winlayout())
     au WinNew * call add(g:layouts_post, winlayout())
   augroup END
+  defer CleanUpTestAuGroup()
   split
   call assert_notequal(g:layouts_pre[0], g:layouts_post[0])
   split
   call assert_equal(g:layouts_pre[1], g:layouts_post[0])
   call assert_notequal(g:layouts_pre[1], g:layouts_post[1])
+  " not triggered for tabnew
   tabnew
-  call assert_notequal(g:layouts_pre[2], g:layouts_post[1])
-  call assert_notequal(g:layouts_pre[2], g:layouts_post[2])
-  augroup testing
-    au!
-  augroup END
+  call assert_equal(2, len(g:layouts_pre))
   unlet g:layouts_pre
   unlet g:layouts_post
 
@@ -383,9 +386,6 @@ func Test_WinNewPre()
     let g:caught += 1
   endtry
   call assert_equal(4, g:caught)
-  augroup testing
-    au!
-  augroup END
   unlet g:caught
 endfunc
 
@@ -2807,7 +2807,8 @@ endfunc
 
 func Test_autocmd_nested()
   let g:did_nested = 0
-  augroup Testing
+  defer CleanUpTestAuGroup()
+  augroup testing
     au WinNew * edit somefile
     au BufNew * let g:did_nested = 1
   augroup END
@@ -2817,7 +2818,7 @@ func Test_autocmd_nested()
   bwipe! somefile
 
   " old nested argument still works
-  augroup Testing
+  augroup testing
     au!
     au WinNew * nested edit somefile
     au BufNew * let g:did_nested = 1
@@ -3706,7 +3707,7 @@ func Test_autocmd_with_block()
       }
   augroup END
 
-  let expected = "\n--- Autocommands ---\nblock_testing  BufRead\n    *.xml     {^@            setlocal matchpairs+=<:>^@            /<start^@          }"
+  let expected = gettext("\n--- Autocommands ---") .. "\nblock_testing  BufRead\n    *.xml     {^@            setlocal matchpairs+=<:>^@            /<start^@          }"
   call assert_equal(expected, execute('au BufReadPost *.xml'))
 
   doautocmd CursorHold
@@ -4829,6 +4830,57 @@ func Test_KeyInputPre()
   call feedkeys('j', 'tx')
 
   au! KeyInputPre
+endfunc
+
+" those commands caused null pointer access, see #15464
+func Test_WinNewPre_crash()
+  defer CleanUpTestAuGroup()
+  let _cmdheight=&cmdheight
+  augroup testing
+    au!
+    autocmd WinNewPre * redraw
+  augroup END
+  tabnew
+  tabclose
+  augroup testing
+    au!
+    autocmd WinNewPre * wincmd t
+  augroup END
+  tabnew
+  tabclose
+  augroup testing
+    au!
+    autocmd WinNewPre * wincmd b
+  augroup END
+  tabnew
+  tabclose
+  augroup testing
+    au!
+    autocmd WinNewPre * set cmdheight+=1
+  augroup END
+  tabnew
+  tabclose
+  let &cmdheight=_cmdheight
+endfunc
+
+" The specifics of the turkish locale may
+" cause that Vim will not treat the GuiEnter autocommand
+" as case insensitive and instead issues an error
+func Test_GuiEnter_Turkish_locale()
+  try
+    let lng = v:lang
+    lang tr_TR.UTF-8
+    let result = execute(':au GuiEnter')
+    call assert_equal(gettext("\n--- Autocommands ---"), result)
+    let result = execute(':au GUIENTER')
+    call assert_equal(gettext("\n--- Autocommands ---"), result)
+    let result = execute(':au guienter')
+    call assert_equal(gettext("\n--- Autocommands ---"), result)
+    exe ":lang" lng
+  catch /E197:/
+    " can't use Turkish locale
+    throw 'Skipped: Turkish locale not available'
+  endtry
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab
