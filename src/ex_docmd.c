@@ -2898,12 +2898,9 @@ parse_command_modifiers(
 	if (comment_start(eap->cmd, starts_with_colon))
 	{
 	    // a comment ends at a NL
-	    if (eap->nextcmd == NULL)
-	    {
-		eap->nextcmd = vim_strchr(eap->cmd, '\n');
-		if (eap->nextcmd != NULL)
-		    ++eap->nextcmd;
-	    }
+	    eap->nextcmd = vim_strchr(eap->cmd, '\n');
+	    if (eap->nextcmd != NULL)
+		++eap->nextcmd;
 	    if (vim9script)
 	    {
 		if (has_cmdmod(cmod, FALSE))
@@ -2916,7 +2913,7 @@ parse_command_modifiers(
 	    }
 	    return FAIL;
 	}
-	if (eap->nextcmd == NULL && *eap->cmd == '\n')
+	if (*eap->cmd == '\n')
 	{
 	    eap->nextcmd = eap->cmd + 1;
 	    return FAIL;
@@ -3587,7 +3584,9 @@ skip_option_env_lead(char_u *start)
 /*
  * Return TRUE and set "*idx" if "p" points to a one letter command.
  * If not in Vim9 script:
- * - The 'k' command can directly be followed by any character.
+ * - The 'k' command can directly be followed by any character
+ *	    but :keepa[lt] is another command, as are :keepj[umps],
+ *	    :kee[pmarks] and :keepp[atterns].
  * - The 's' command can be followed directly by 'c', 'g', 'i', 'I' or 'r'
  *	    but :sre[wind] is another command, as are :scr[iptnames],
  *	    :scs[cope], :sim[alt], :sig[ns] and :sil[ent].
@@ -3597,7 +3596,8 @@ one_letter_cmd(char_u *p, cmdidx_T *idx)
 {
     if (in_vim9script())
 	return FALSE;
-    if (*p == 'k')
+    if (p[0] == 'k'
+	    && (p[1] != 'e' || (p[1] == 'e' && p[2] != 'e')))
     {
 	*idx = CMD_k;
 	return TRUE;
@@ -3883,6 +3883,8 @@ find_ex_command(
     if (one_letter_cmd(p, &eap->cmdidx))
     {
 	++p;
+	if (full != NULL)
+	    *full = TRUE;
     }
     else
     {

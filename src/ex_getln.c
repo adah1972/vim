@@ -3330,7 +3330,6 @@ realloc_cmdbuff(int len)
     // there, thus copy up to the NUL and add a NUL.
     mch_memmove(ccline.cmdbuff, p, (size_t)ccline.cmdlen);
     ccline.cmdbuff[ccline.cmdlen] = NUL;
-    vim_free(p);
 
     if (ccline.xpc != NULL
 	    && ccline.xpc->xp_pattern != NULL
@@ -3344,6 +3343,8 @@ realloc_cmdbuff(int len)
 	if (i >= 0 && i <= ccline.cmdlen)
 	    ccline.xpc->xp_pattern = ccline.cmdbuff + i;
     }
+
+    vim_free(p);
 
     return OK;
 }
@@ -4242,6 +4243,18 @@ f_getcmdpos(typval_T *argvars UNUSED, typval_T *rettv)
 }
 
 /*
+ * "getcmdprompt()" function
+ */
+    void
+f_getcmdprompt(typval_T *argvars UNUSED, typval_T *rettv)
+{
+    cmdline_info_T *p = get_ccline_ptr();
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = p != NULL && p->cmdprompt != NULL ?
+					    vim_strsave(p->cmdprompt) : NULL;
+}
+
+/*
  * "getcmdscreenpos()" function
  */
     void
@@ -4432,7 +4445,7 @@ did_set_cedit(optset_T *args UNUSED)
     else
     {
 	n = string_to_key(p_cedit, FALSE);
-	if (vim_isprintc(n))
+	if (n == 0 || vim_isprintc(n))
 	    return e_invalid_argument;
 	cedit_key = n;
     }

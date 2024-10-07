@@ -65,6 +65,7 @@ runtime/compiler/gawk.vim		@dkearns
 runtime/compiler/gjs.vim		@dkearns
 runtime/compiler/gm2.vim		@dkearns
 runtime/compiler/go.vim			@dbarnett
+runtime/compiler/groff.vim		@Konfekt
 runtime/compiler/haml.vim		@tpope
 runtime/compiler/hare.vim		@selenebun
 runtime/compiler/icon.vim		@dkearns
@@ -75,6 +76,7 @@ runtime/compiler/jshint.vim		@dkearns
 runtime/compiler/jsonlint.vim		@dkearns
 runtime/compiler/jq.vim                 @vito-c
 runtime/compiler/lazbuild.vim		@dkearns
+runtime/compiler/pandoc.vim		@Konfekt
 runtime/compiler/perl.vim		@petdance @heptite
 runtime/compiler/perlcritic.vim		@petdance @dkearns
 runtime/compiler/php.vim		@dkearns
@@ -176,6 +178,7 @@ runtime/ftplugin/hgcommit.vim		@k-takata
 runtime/ftplugin/hlsplaylist.vim		@avidseeker
 runtime/ftplugin/hog.vim		@wtfbbqhax
 runtime/ftplugin/html.vim		@dkearns
+runtime/ftplugin/http.vim		@ribru17
 runtime/ftplugin/hyprlang.vim		@ribru17
 runtime/ftplugin/i3config.vim		@hiqua
 runtime/ftplugin/icon.vim		@dkearns
@@ -363,7 +366,7 @@ runtime/indent/systemverilog.vim	@Kocha
 runtime/indent/tcl.vim			@dkearns
 runtime/indent/tcsh.vim			@dkearns
 runtime/indent/teraterm.vim		@k-takata
-runtime/indent/terraform.vim		@gpanders.com
+runtime/indent/terraform.vim		@gpanders
 runtime/indent/thrift.vim		@jiangyinzuo
 runtime/indent/typescript.vim		@HerringtonDarkholme
 runtime/indent/typst.vim		@gpanders
@@ -478,6 +481,7 @@ runtime/syntax/j.vim			@glts
 runtime/syntax/jargon.vim		@h3xx
 runtime/syntax/java.vim			@zzzyxwvut
 runtime/syntax/javascript.vim		@fleiner
+runtime/syntax/jinja.vim		@gpanders
 runtime/syntax/jj.vim			@gpanders
 runtime/syntax/json.vim		        @vito-c
 runtime/syntax/jsonc.vim		@izhakjakov
@@ -548,6 +552,7 @@ runtime/syntax/rng.vim			@jhradilek
 runtime/syntax/routeros.vim		@zainin
 runtime/syntax/rst.vim			@marshallward
 runtime/syntax/ruby.vim			@dkearns
+runtime/syntax/salt.vim			@gpanders
 runtime/syntax/sass.vim			@tpope
 runtime/syntax/scala.vim		@derekwyatt
 runtime/syntax/scheme.vim		@evhan

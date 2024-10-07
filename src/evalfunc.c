@@ -2097,6 +2097,8 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_getcmdline},
     {"getcmdpos",	0, 0, 0,	    NULL,
 			ret_number,	    f_getcmdpos},
+    {"getcmdprompt",	0, 0, 0,	    NULL,
+			ret_string,	    f_getcmdprompt},
     {"getcmdscreenpos",	0, 0, 0,	    NULL,
 			ret_number,	    f_getcmdscreenpos},
     {"getcmdtype",	0, 0, 0,	    NULL,

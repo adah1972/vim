@@ -88,15 +88,6 @@ static char *ctrl_x_mode_names[] = {
 #endif
 
 /*
- * Array indexes used for cp_text[].
- */
-#define CPT_ABBR	0	// "abbr"
-#define CPT_MENU	1	// "menu"
-#define CPT_KIND	2	// "kind"
-#define CPT_INFO	3	// "info"
-#define CPT_COUNT	4	// Number of entries
-
-/*
  * Structure used to store one match for insert completion.
  */
 typedef struct compl_S compl_T;
@@ -1338,8 +1329,7 @@ ins_compl_build_pum(void)
 	    }
 
 	    if (compl->cp_text[CPT_ABBR] != NULL)
-		compl_match_array[i].pum_text =
-		    compl->cp_text[CPT_ABBR];
+		compl_match_array[i].pum_text = compl->cp_text[CPT_ABBR];
 	    else
 		compl_match_array[i].pum_text = compl->cp_str;
 	    compl_match_array[i].pum_kind = compl->cp_text[CPT_KIND];
@@ -5198,6 +5188,7 @@ ins_compl_start(void)
     if (line_invalid)
 	line = ml_get(curwin->w_cursor.lnum);
 
+    int in_fuzzy = get_cot_flags() & COT_FUZZY;
     if (compl_status_adding())
     {
 	edit_submode_pre = (char_u *)_(" Adding");
@@ -5213,6 +5204,11 @@ ins_compl_start(void)
 	    curbuf->b_p_com = old;
 	    compl_length = 0;
 	    compl_col = curwin->w_cursor.col;
+	}
+	else if (ctrl_x_mode_normal() && in_fuzzy)
+	{
+	    compl_startpos = curwin->w_cursor;
+	    compl_cont_status &= CONT_S_IPOS;
 	}
     }
     else

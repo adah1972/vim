@@ -7,6 +7,7 @@ $HOME	options.txt	/*$HOME*
 $HOME-use	version5.txt	/*$HOME-use*
 $HOME-windows	options.txt	/*$HOME-windows*
 $MYGVIMRC	gui.txt	/*$MYGVIMRC*
+$MYVIMDIR	starting.txt	/*$MYVIMDIR*
 $MYVIMRC	starting.txt	/*$MYVIMRC*
 $VIM	starting.txt	/*$VIM*
 $VIM-use	version5.txt	/*$VIM-use*
@@ -133,6 +134,7 @@ $quote	eval.txt	/*$quote*
 'character'	intro.txt	/*'character'*
 'charconvert'	options.txt	/*'charconvert'*
 'ci'	options.txt	/*'ci'*
+'cia'	options.txt	/*'cia'*
 'cin'	options.txt	/*'cin'*
 'cindent'	options.txt	/*'cindent'*
 'cink'	options.txt	/*'cink'*
@@ -160,6 +162,7 @@ $quote	eval.txt	/*$quote*
 'compatible'	options.txt	/*'compatible'*
 'complete'	options.txt	/*'complete'*
 'completefunc'	options.txt	/*'completefunc'*
+'completeitemalign'	options.txt	/*'completeitemalign'*
 'completeopt'	options.txt	/*'completeopt'*
 'completepopup'	options.txt	/*'completepopup'*
 'completeslash'	options.txt	/*'completeslash'*
@@ -6191,6 +6194,7 @@ bufexists()	builtin.txt	/*bufexists()*
 buffer-functions	usr_41.txt	/*buffer-functions*
 buffer-hidden	windows.txt	/*buffer-hidden*
 buffer-list	windows.txt	/*buffer-list*
+buffer-reuse	windows.txt	/*buffer-reuse*
 buffer-variable	eval.txt	/*buffer-variable*
 buffer-write	editing.txt	/*buffer-write*
 buffer_exists()	builtin.txt	/*buffer_exists()*
@@ -6539,12 +6543,15 @@ compile-changes-8	version8.txt	/*compile-changes-8*
 compile-changes-9	version9.txt	/*compile-changes-9*
 compile-changes-9.2	version9.txt	/*compile-changes-9.2*
 compiler-compaqada	ft_ada.txt	/*compiler-compaqada*
+compiler-cppcheck	quickfix.txt	/*compiler-cppcheck*
 compiler-decada	ft_ada.txt	/*compiler-decada*
 compiler-dotnet	quickfix.txt	/*compiler-dotnet*
 compiler-gcc	quickfix.txt	/*compiler-gcc*
 compiler-gnat	ft_ada.txt	/*compiler-gnat*
+compiler-groff	quickfix.txt	/*compiler-groff*
 compiler-hpada	ft_ada.txt	/*compiler-hpada*
 compiler-javac	quickfix.txt	/*compiler-javac*
+compiler-make	quickfix.txt	/*compiler-make*
 compiler-manx	quickfix.txt	/*compiler-manx*
 compiler-pandoc	quickfix.txt	/*compiler-pandoc*
 compiler-perl	quickfix.txt	/*compiler-perl*
@@ -7823,6 +7830,7 @@ getcharstr()	builtin.txt	/*getcharstr()*
 getcmdcompltype()	builtin.txt	/*getcmdcompltype()*
 getcmdline()	builtin.txt	/*getcmdline()*
 getcmdpos()	builtin.txt	/*getcmdpos()*
+getcmdprompt()	builtin.txt	/*getcmdprompt()*
 getcmdscreenpos()	builtin.txt	/*getcmdscreenpos()*
 getcmdtype()	builtin.txt	/*getcmdtype()*
 getcmdwintype()	builtin.txt	/*getcmdwintype()*
@@ -9285,6 +9293,7 @@ opening-window	windows.txt	/*opening-window*
 operator	motion.txt	/*operator*
 operator-doubled	motion.txt	/*operator-doubled*
 operator-pending-index	index.txt	/*operator-pending-index*
+operator-resulting-pos	motion.txt	/*operator-resulting-pos*
 operator-variable	eval.txt	/*operator-variable*
 option-backslash	options.txt	/*option-backslash*
 option-list	quickref.txt	/*option-list*
@@ -9634,10 +9643,12 @@ quickfix-ID	quickfix.txt	/*quickfix-ID*
 quickfix-buffer	quickfix.txt	/*quickfix-buffer*
 quickfix-changedtick	quickfix.txt	/*quickfix-changedtick*
 quickfix-context	quickfix.txt	/*quickfix-context*
+quickfix-cppcheck	quickfix.txt	/*quickfix-cppcheck*
 quickfix-directory-stack	quickfix.txt	/*quickfix-directory-stack*
 quickfix-error-lists	quickfix.txt	/*quickfix-error-lists*
 quickfix-functions	usr_41.txt	/*quickfix-functions*
 quickfix-gcc	quickfix.txt	/*quickfix-gcc*
+quickfix-groff	quickfix.txt	/*quickfix-groff*
 quickfix-index	quickfix.txt	/*quickfix-index*
 quickfix-manx	quickfix.txt	/*quickfix-manx*
 quickfix-pandoc	quickfix.txt	/*quickfix-pandoc*
@@ -10849,6 +10860,7 @@ using-menus	gui.txt	/*using-menus*
 using-scripts	repeat.txt	/*using-scripts*
 using-xxd	tips.txt	/*using-xxd*
 using_CTRL-V	map.txt	/*using_CTRL-V*
+usr	usr_toc.txt	/*usr*
 usr_01.txt	usr_01.txt	/*usr_01.txt*
 usr_02.txt	usr_02.txt	/*usr_02.txt*
 usr_03.txt	usr_03.txt	/*usr_03.txt*
