@@ -1,4 +1,4 @@
-*syntax.txt*	For Vim version 9.1.  Last change: 2024 Oct 06
+*syntax.txt*	For Vim version 9.1.  Last change: 2024 Oct 22
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -2223,6 +2223,20 @@ define the vim variable 'lace_case_insensitive' in your startup file: >
 	:let lace_case_insensitive=1
 
 
+LF (LFRC)		*lf.vim* *ft-lf-syntax* *g:lf_shell_syntax*
+						*b:lf_shell_syntax*
+
+For the lf file manager configuration files (lfrc) the shell commands
+syntax highlighting can be changed globally and per buffer by setting
+a different 'include' command search pattern using these variables:
+	let g:lf_shell_syntax = "syntax/dosbatch.vim"
+	let b:lf_shell_syntax = "syntax/zsh.vim"
+
+These variables are unset by default.
+
+The default 'include' command search pattern is 'syntax/sh.vim'.
+
+
 LEX						*lex.vim* *ft-lex-syntax*
 
 Lex uses brute-force synchronizing as the "^%%$" section delimiter
@@ -2523,6 +2537,12 @@ set "msql_minlines" to the value you desire.  Example: >
 
 	:let msql_minlines = 200
 
+
+NEOMUTT			*neomutt.vim* *ft-neomuttrc-syntax* *ft-neomuttlog-syntax*
+
+To disable the default NeoMutt log colors >
+
+	:let g:neolog_disable_default_colors = 1
 
 N1QL						*n1ql.vim* *ft-n1ql-syntax*
 
@@ -5289,12 +5309,15 @@ of colors by using the `:colorscheme` command, for example: >
 			This is basically the same as >
 				:echo g:colors_name
 <			In case g:colors_name has not been defined :colo will
-			output "default".  When compiled without the |+eval|
-			feature it will output "unknown".
+			output "default". Its palette is defined in the file
+			"$VIMRUNTIME/syntax/syncolor.vim" and is based on
+			legacy versions of peachpuff and desert. When compiled
+			without the |+eval| feature it will output "unknown".
 
 :colo[rscheme] {name}	Load color scheme {name}.  This searches 'runtimepath'
 			for the file "colors/{name}.vim".  The first one that
 			is found is loaded.
+			Use `:colo default` to load the default colorscheme.
 			Also searches all plugins in 'packpath', first below
 			"start" and then under "opt".
 
@@ -6119,7 +6142,8 @@ This will set the "w:current_syntax" variable to "foo".  The value of
 restoring "b:current_syntax", since the syntax files do set
 "b:current_syntax".  The value set by the syntax file is assigned to
 "w:current_syntax".
-Note: This resets the 'spell', 'spellcapcheck' and 'spellfile' options.
+Note: This resets the 'spell', 'spellcapcheck', 'spellfile' and 'spelloptions'
+options.
 
 Once a window has its own syntax, syntax commands executed from other windows
 on the same buffer (including :syntax clear) have no effect. Conversely,

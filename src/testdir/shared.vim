@@ -25,10 +25,10 @@ func PythonProg()
     if !(has('job') || executable('pkill'))
       return ''
     endif
-    if executable('python')
-      let s:python = 'python'
-    elseif executable('python3')
+    if executable('python3')
       let s:python = 'python3'
+    elseif executable('python')
+      let s:python = 'python'
     else
       return ''
     end
@@ -59,7 +59,7 @@ func RunCommand(cmd)
     let job = job_start(a:cmd, {"stoponexit": "hup"})
     call job_setoptions(job, {"stoponexit": "kill"})
   elseif has('win32')
-    exe 'silent !start cmd /c start "test_channel" ' . a:cmd
+    exe 'silent !start cmd /D /c start "test_channel" ' . a:cmd
   else
     exe 'silent !' . a:cmd . '&'
   endif
@@ -317,6 +317,14 @@ endfunc
 func RunningWithValgrind()
   return GetVimCommand() =~ '\<valgrind\>'
 endfunc
+
+func RunningAsan()
+  return exists("$ASAN_OPTIONS")
+endfunc
+
+func ValgrindOrAsan()
+  return RunningWithValgrind() || RunningAsan()
+endfun
 
 " Get the command to run Vim, with --clean instead of "-u NONE".
 func GetVimCommandClean()

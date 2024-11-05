@@ -54,6 +54,7 @@
 #define PV_CPT		OPT_BUF(BV_CPT)
 #define PV_DICT		OPT_BOTH(OPT_BUF(BV_DICT))
 #define PV_TSR		OPT_BOTH(OPT_BUF(BV_TSR))
+#define PV_FFU		OPT_BOTH(OPT_BUF(BV_FFU))
 #define PV_CSL		OPT_BUF(BV_CSL)
 #ifdef FEAT_COMPL_FUNC
 # define PV_CFU		OPT_BUF(BV_CFU)
@@ -958,6 +959,16 @@ static struct vimoption options[] =
 			    {(char_u *)"vert:|,fold:-,eob:~,lastline:@",
 								  (char_u *)0L}
 			    SCTX_INIT},
+    {"findfunc", "ffu",     P_STRING|P_ALLOCED|P_VI_DEF|P_SECURE|P_FUNC,
+#ifdef FEAT_EVAL
+			    (char_u *)&p_ffu, PV_FFU,
+			    did_set_findfunc, NULL,
+			    {(char_u *)"", (char_u *)0L}
+#else
+			    (char_u *)NULL, PV_NONE, NULL, NULL,
+			    {(char_u *)0L, (char_u *)0L}
+#endif
+			    SCTX_INIT},
     {"fixendofline",  "fixeol", P_BOOL|P_VI_DEF|P_RSTAT,
 			    (char_u *)&p_fixeol, PV_FIXEOL,
 			    did_set_eof_eol_fixeol_bomb, NULL,
@@ -1456,7 +1467,7 @@ static struct vimoption options[] =
 #endif
 				(char_u *)0L} SCTX_INIT},
     {"iskeyword",   "isk",  P_STRING|P_ALLOCED|P_VIM|P_COMMA|P_NODUP,
-			    (char_u *)&p_isk, PV_ISK, did_set_isopt, NULL,
+			    (char_u *)&p_isk, PV_ISK, did_set_iskeyword, NULL,
 			    {
 				(char_u *)"@,48-57,_",
 #if defined(MSWIN)
@@ -2563,7 +2574,7 @@ static struct vimoption options[] =
 			    SCTX_INIT},
     {"termwinscroll", "twsl", P_NUM|P_VI_DEF|P_VIM|P_RBUF,
 #ifdef FEAT_TERMINAL
-			    (char_u *)&p_twsl, PV_TWSL, NULL, NULL,
+			    (char_u *)&p_twsl, PV_TWSL, did_set_termwinscroll, NULL,
 			    {(char_u *)10000L, (char_u *)10000L}
 #else
 			    (char_u *)NULL, PV_NONE, NULL, NULL,

@@ -446,6 +446,7 @@ term_start(
     buf_T	*newbuf;
     int		vertical = opt->jo_vertical || (cmdmod.cmod_split & WSP_VERT);
     jobopt_T	orig_opt;  // only partly filled
+    pos_T	save_cursor;
 
     if (check_restricted() || check_secure())
 	return NULL;
@@ -518,6 +519,7 @@ term_start(
 	old_curbuf = curbuf;
 	--curbuf->b_nwindows;
 	curbuf = buf;
+	save_cursor = curwin->w_cursor;
 	curwin->w_buffer = buf;
 	++curbuf->b_nwindows;
     }
@@ -763,6 +765,7 @@ term_start(
 	    --curbuf->b_nwindows;
 	    curbuf = old_curbuf;
 	    curwin->w_buffer = curbuf;
+	    curwin->w_cursor = save_cursor;
 	    ++curbuf->b_nwindows;
 	}
 	else if (vgetc_busy
@@ -3433,7 +3436,8 @@ limit_scrollback(term_T *term, garray_T *gap, int update_buffer)
     if (gap->ga_len < term->tl_buffer->b_p_twsl)
 	return;
 
-    int	todo = term->tl_buffer->b_p_twsl / 10;
+    int	todo = MAX(term->tl_buffer->b_p_twsl / 10,
+				     gap->ga_len - term->tl_buffer->b_p_twsl);
     int	i;
 
     curbuf = term->tl_buffer;

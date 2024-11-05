@@ -918,9 +918,8 @@ null_libintl_wputenv(const wchar_t *envstring UNUSED)
  * Enables or disables the specified privilege.
  */
     static BOOL
-win32_enable_privilege(LPTSTR lpszPrivilege, BOOL bEnable)
+win32_enable_privilege(LPTSTR lpszPrivilege)
 {
-    BOOL		bResult;
     LUID		luid;
     HANDLE		hToken;
     TOKEN_PRIVILEGES	tokenPrivileges;
@@ -937,15 +936,22 @@ win32_enable_privilege(LPTSTR lpszPrivilege, BOOL bEnable)
 
     tokenPrivileges.PrivilegeCount	     = 1;
     tokenPrivileges.Privileges[0].Luid       = luid;
-    tokenPrivileges.Privileges[0].Attributes = bEnable ?
-						    SE_PRIVILEGE_ENABLED : 0;
+    tokenPrivileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
 
-    bResult = AdjustTokenPrivileges(hToken, FALSE, &tokenPrivileges,
-	    sizeof(TOKEN_PRIVILEGES), NULL, NULL);
+    if (!AdjustTokenPrivileges(hToken, FALSE, &tokenPrivileges, 0, NULL, NULL))
+    {
+	CloseHandle(hToken);
+	return FALSE;
+    }
+
+    if (GetLastError() != ERROR_SUCCESS)
+    {
+	CloseHandle(hToken);
+	return FALSE;
+    }
 
     CloseHandle(hToken);
-
-    return bResult && GetLastError() == ERROR_SUCCESS;
+    return TRUE;
 }
 #endif
 
@@ -961,15 +967,11 @@ win32_enable_privilege(LPTSTR lpszPrivilege, BOOL bEnable)
     void
 PlatformId(void)
 {
-    static int done = FALSE;
-
-    if (done)
-	return;
-
     OSVERSIONINFO ovi;
 
     ovi.dwOSVersionInfoSize = sizeof(ovi);
-    GetVersionEx(&ovi);
+    if (!GetVersionEx(&ovi))
+        return;
 
 #ifdef FEAT_EVAL
     vim_snprintf(windowsVersion, sizeof(windowsVersion), "%d.%d",
@@ -985,9 +987,9 @@ PlatformId(void)
 
 #ifdef HAVE_ACL
     // Enable privilege for getting or setting SACLs.
-    win32_enable_privilege(SE_SECURITY_NAME, TRUE);
+    if (!win32_enable_privilege(SE_SECURITY_NAME))
+        return;
 #endif
-    done = TRUE;
 }
 #ifdef _MSC_VER
 # pragma warning(pop)
@@ -3556,13 +3558,16 @@ mch_init_c(void)
     static void
 mch_exit_c(int r)
 {
+    // Copy flag since stoptermcap() will clear the flag.
+    int fTermcapMode = g_fTermcapMode;
+
     exiting = TRUE;
 
     vtp_exit();
 
     stoptermcap();
-    // Switch back to main screen buffer.
-    if (use_alternate_screen_buffer)
+    // Switch back to main screen buffer if TermcapMode was not active.
+    if (!fTermcapMode &&  use_alternate_screen_buffer)
 	vtp_printf("\033[?1049l");
 
     if (g_fWindInitCalled)
@@ -6345,6 +6350,10 @@ termcap_mode_end(void)
 # endif
     RestoreConsoleBuffer(cb, p_rs);
     restore_console_color_rgb();
+
+    // Switch back to main screen buffer.
+    if (exiting && use_alternate_screen_buffer)
+        vtp_printf("\033[?1049l");
 
     if (!USE_WT && (p_rs || exiting))
     {

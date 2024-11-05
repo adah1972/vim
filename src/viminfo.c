@@ -552,25 +552,32 @@ read_viminfo_history(vir_T *virp, int writing)
 
     // Need to re-allocate to append the separator byte.
     len = STRLEN(val);
-    p = alloc(len + 2);
-    if (p == NULL)
-	goto done;
-
     if (type == HIST_SEARCH)
     {
+	p = alloc((size_t)len + 1);	    // +1 for the NUL. val already
+					    // includes the separator.
+	if (p == NULL)
+	    goto done;
+
 	// Search entry: Move the separator from the first
 	// column to after the NUL.
 	mch_memmove(p, val + 1, (size_t)len);
 	p[len] = sep;
+	--len;				    // take into account the shortened string
     }
     else
     {
+	p = alloc((size_t)len + 2);	    // +1 for NUL and +1 for separator
+	if (p == NULL)
+	    goto done;
+
 	// Not a search entry: No separator in the viminfo
 	// file, add a NUL separator.
-	mch_memmove(p, val, (size_t)len + 1);
-	p[len + 1] = NUL;
+	mch_memmove(p, val, (size_t)len + 1);	// +1 to include the NUL
+	p[len + 1] = NUL;			// put the separator *after* the string's NUL
     }
     viminfo_history[type][viminfo_hisidx[type]].hisstr = p;
+    viminfo_history[type][viminfo_hisidx[type]].hisstrlen = (size_t)len;
     viminfo_history[type][viminfo_hisidx[type]].time_set = 0;
     viminfo_history[type][viminfo_hisidx[type]].viminfo = TRUE;
     viminfo_history[type][viminfo_hisidx[type]].hisnum = 0;
@@ -629,8 +636,9 @@ handle_viminfo_history(
     for (idx = 0; idx < viminfo_hisidx[type]; ++idx)
     {
 	p = viminfo_history[type][idx].hisstr;
+	len = viminfo_history[type][idx].hisstrlen;
 	if (STRCMP(val, p) == 0
-		&& (type != HIST_SEARCH || sep == p[STRLEN(p) + 1]))
+		&& (type != HIST_SEARCH || sep == p[len + 1]))
 	{
 	    overwrite = TRUE;
 	    break;
@@ -654,6 +662,7 @@ handle_viminfo_history(
 	    // Put the separator after the NUL.
 	    p[len + 1] = sep;
 	    viminfo_history[type][idx].hisstr = p;
+	    viminfo_history[type][idx].hisstrlen = (size_t)len;
 	    viminfo_history[type][idx].hisnum = 0;
 	    viminfo_history[type][idx].viminfo = TRUE;
 	    viminfo_hisidx[type]++;
@@ -699,6 +708,7 @@ concat_history(int type)
     {
 	vim_free(histentry[idx].hisstr);
 	histentry[idx].hisstr = viminfo_history[type][i].hisstr;
+	histentry[idx].hisstrlen = viminfo_history[type][i].hisstrlen;
 	histentry[idx].viminfo = TRUE;
 	histentry[idx].time_set = viminfo_history[type][i].time_set;
 	if (--idx < 0)
@@ -768,6 +778,7 @@ merge_history(int type)
 	{
 	    new_hist[i] = *tot_hist[i];
 	    tot_hist[i]->hisstr = NULL;
+	    tot_hist[i]->hisstrlen = 0;
 	    if (new_hist[i].hisnum == 0)
 		new_hist[i].hisnum = ++*hisnum;
 	}
@@ -778,9 +789,15 @@ merge_history(int type)
 
     // Free what is not kept.
     for (i = 0; i < viminfo_hisidx[type]; i++)
+    {
 	vim_free(viminfo_history[type][i].hisstr);
+	viminfo_history[type][i].hisstrlen = 0;
+    }
     for (i = 0; i < hislen; i++)
+    {
 	vim_free(histentry[i].hisstr);
+	histentry[i].hisstrlen = 0;
+    }
     vim_free(histentry);
     set_histentry(type, new_hist);
     vim_free(tot_hist);
@@ -867,20 +884,30 @@ write_viminfo_history(FILE *fp, int merge)
 			&& !(round == 2 && i >= viminfo_hisidx[type]))
 		{
 		    char_u  *p;
+		    size_t  plen;
 		    time_t  timestamp;
 		    int	    c = NUL;
 
 		    if (round == 1)
 		    {
 			p = histentry[i].hisstr;
+			plen = histentry[i].hisstrlen;
 			timestamp = histentry[i].time_set;
 		    }
 		    else
 		    {
-			p = viminfo_history[type] == NULL ? NULL
-					    : viminfo_history[type][i].hisstr;
-			timestamp = viminfo_history[type] == NULL ? 0
-					  : viminfo_history[type][i].time_set;
+			if (viminfo_history[type] == NULL)
+			{
+			    p = NULL;
+			    plen = 0;
+			    timestamp = 0;
+			}
+			else
+			{
+			    p = viminfo_history[type][i].hisstr;
+			    plen = viminfo_history[type][i].hisstrlen;
+			    timestamp = viminfo_history[type][i].time_set;
+			}
 		    }
 
 		    if (p != NULL && (round == 2
@@ -893,7 +920,7 @@ write_viminfo_history(FILE *fp, int merge)
 			// second column; use a space if there isn't one.
 			if (type == HIST_SEARCH)
 			{
-			    c = p[STRLEN(p) + 1];
+			    c = p[plen + 1];
 			    putc(c == NUL ? ' ' : c, fp);
 			}
 			viminfo_writestring(fp, p);
@@ -931,7 +958,10 @@ write_viminfo_history(FILE *fp, int merge)
 	}
 	for (i = 0; i < viminfo_hisidx[type]; ++i)
 	    if (viminfo_history[type] != NULL)
+	    {
 		vim_free(viminfo_history[type][i].hisstr);
+		viminfo_history[type][i].hisstrlen = 0;
+	    }
 	VIM_CLEAR(viminfo_history[type]);
 	viminfo_hisidx[type] = 0;
     }
@@ -1112,6 +1142,7 @@ barline_parse(vir_T *virp, char_u *text, garray_T *values)
 			// freed later, also need to free "buf" later
 			value->bv_tofree = buf;
 		    s = sconv;
+		    len = STRLEN(s);
 		    converted = TRUE;
 		}
 	    }
@@ -1119,7 +1150,7 @@ barline_parse(vir_T *virp, char_u *text, garray_T *values)
 	    // Need to copy in allocated memory if the string wasn't allocated
 	    // above and we did allocate before, thus vir_line may change.
 	    if (s != buf && allocated && !converted)
-		s = vim_strsave(s);
+		s = vim_strnsave(s, len);
 	    value->bv_string = s;
 	    value->bv_type = BVAL_STRING;
 	    value->bv_len = len;
@@ -1575,7 +1606,7 @@ finish_viminfo_registers(void)
 	if (y_read_regs[i].y_array != NULL)
 	{
 	    for (j = 0; j < y_read_regs[i].y_size; j++)
-		vim_free(y_read_regs[i].y_array[j]);
+		vim_free(y_read_regs[i].y_array[j].string);
 	    vim_free(y_read_regs[i].y_array);
 	}
     VIM_CLEAR(y_read_regs);
@@ -1591,7 +1622,7 @@ read_viminfo_register(vir_T *virp, int force)
     int		i;
     int		set_prev = FALSE;
     char_u	*str;
-    char_u	**array = NULL;
+    string_T	*array = NULL;
     int		new_type = MCHAR; // init to shut up compiler
     colnr_T	new_width = 0; // init to shut up compiler
     yankreg_T	*y_current_p;
@@ -1634,7 +1665,7 @@ read_viminfo_register(vir_T *virp, int force)
 	// array[] needs to be freed.
 	if (set_prev)
 	    set_y_previous(y_current_p);
-	array = ALLOC_MULT(char_u *, limit);
+	array = ALLOC_MULT(string_T, limit);
 	str = skipwhite(skiptowhite(str));
 	if (STRNCMP(str, "CHAR", 4) == 0)
 	    new_type = MCHAR;
@@ -1654,8 +1685,8 @@ read_viminfo_register(vir_T *virp, int force)
 	{
 	    if (size == limit)
 	    {
-		char_u **new_array = (char_u **)
-					   alloc(limit * 2 * sizeof(char_u *));
+		string_T *new_array = (string_T *)
+					   alloc(limit * 2 * sizeof(string_T));
 
 		if (new_array == NULL)
 		{
@@ -1670,7 +1701,11 @@ read_viminfo_register(vir_T *virp, int force)
 	    }
 	    str = viminfo_readstring(virp, 1, TRUE);
 	    if (str != NULL)
-		array[size++] = str;
+	    {
+		array[size].string = str;
+		array[size].length = STRLEN(str);
+		++size;
+	    }
 	    else
 		// error, don't store the result
 		do_it = FALSE;
@@ -1681,7 +1716,7 @@ read_viminfo_register(vir_T *virp, int force)
     {
 	// free y_array[]
 	for (i = 0; i < y_current_p->y_size; i++)
-	    vim_free(y_current_p->y_array[i]);
+	    vim_free(y_current_p->y_array[i].string);
 	vim_free(y_current_p->y_array);
 
 	y_current_p->y_type = new_type;
@@ -1695,13 +1730,18 @@ read_viminfo_register(vir_T *virp, int force)
 	else
 	{
 	    // Move the lines from array[] to y_array[].
-	    y_current_p->y_array = ALLOC_MULT(char_u *, size);
+	    y_current_p->y_array = ALLOC_MULT(string_T, size);
 	    for (i = 0; i < size; i++)
 	    {
 		if (y_current_p->y_array == NULL)
-		    vim_free(array[i]);
+		{
+		    VIM_CLEAR_STRING(array[i]);
+		}
 		else
-		    y_current_p->y_array[i] = array[i];
+		{
+		    y_current_p->y_array[i].string = array[i].string;
+		    y_current_p->y_array[i].length = array[i].length;
+		}
 	    }
 	}
     }
@@ -1709,7 +1749,7 @@ read_viminfo_register(vir_T *virp, int force)
     {
 	// Free array[] if it was filled.
 	for (i = 0; i < size; i++)
-	    vim_free(array[i]);
+	    vim_free(array[i].string);
     }
     vim_free(array);
 
@@ -1773,7 +1813,7 @@ handle_viminfo_register(garray_T *values, int force)
 
     if (y_ptr->y_array != NULL)
 	for (i = 0; i < y_ptr->y_size; i++)
-	    vim_free(y_ptr->y_array[i]);
+	    vim_free(y_ptr->y_array[i].string);
     vim_free(y_ptr->y_array);
 
     if (y_read_regs == NULL)
@@ -1792,7 +1832,7 @@ handle_viminfo_register(garray_T *values, int force)
 	y_ptr->y_array = NULL;
 	return;
     }
-    y_ptr->y_array = ALLOC_MULT(char_u *, linecount);
+    y_ptr->y_array = ALLOC_MULT(string_T, linecount);
     if (y_ptr->y_array == NULL)
     {
 	y_ptr->y_size = 0; // ensure object state is consistent
@@ -1802,7 +1842,8 @@ handle_viminfo_register(garray_T *values, int force)
     {
 	if (vp[i + 6].bv_allocated)
 	{
-	    y_ptr->y_array[i] = vp[i + 6].bv_string;
+	    y_ptr->y_array[i].string = vp[i + 6].bv_string;
+	    y_ptr->y_array[i].length = vp[i + 6].bv_len;
 	    vp[i + 6].bv_string = NULL;
 	}
 	else if (vp[i + 6].bv_type != BVAL_STRING)
@@ -1811,7 +1852,10 @@ handle_viminfo_register(garray_T *values, int force)
 	    y_ptr->y_array = NULL;
 	}
 	else
-	    y_ptr->y_array[i] = vim_strsave(vp[i + 6].bv_string);
+	{
+	    y_ptr->y_array[i].string = vim_strnsave(vp[i + 6].bv_string, vp[i + 6].bv_len);
+	    y_ptr->y_array[i].length = vp[i + 6].bv_len;
+	}
     }
 }
 
@@ -1868,7 +1912,7 @@ write_viminfo_registers(FILE *fp)
 	num_lines = y_ptr->y_size;
 	if (num_lines == 0
 		|| (num_lines == 1 && y_ptr->y_type == MCHAR
-					&& *y_ptr->y_array[0] == NUL))
+					&& *y_ptr->y_array[0].string == NUL))
 	    continue;
 
 	if (max_kbyte > 0)
@@ -1876,7 +1920,7 @@ write_viminfo_registers(FILE *fp)
 	    // Skip register if there is more text than the maximum size.
 	    len = 0;
 	    for (j = 0; j < num_lines; j++)
-		len += (long)STRLEN(y_ptr->y_array[j]) + 1L;
+		len += (long)y_ptr->y_array[j].length + 1L;
 	    if (len > (long)max_kbyte * 1024L)
 		continue;
 	}
@@ -1911,7 +1955,7 @@ write_viminfo_registers(FILE *fp)
 	for (j = 0; j < num_lines; j++)
 	{
 	    putc('\t', fp);
-	    viminfo_writestring(fp, y_ptr->y_array[j]);
+	    viminfo_writestring(fp, y_ptr->y_array[j].string);
 	}
 
 	{
@@ -1936,7 +1980,7 @@ write_viminfo_registers(FILE *fp)
 	    {
 		putc(',', fp);
 		--remaining;
-		remaining = barline_writestring(fp, y_ptr->y_array[j],
+		remaining = barline_writestring(fp, y_ptr->y_array[j].string,
 								   remaining);
 	    }
 	    putc('\n', fp);
