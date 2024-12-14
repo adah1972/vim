@@ -270,6 +270,12 @@ func Test_changing_cmdheight()
 
   let lines =<< trim END
       set cmdheight=1 laststatus=2
+      func EchoOne()
+        set laststatus=2 cmdheight=1
+        echo 'foo'
+        echo 'bar'
+        set cmdheight=2
+      endfunc
       func EchoTwo()
         set laststatus=2
         set cmdheight=5
@@ -304,6 +310,10 @@ func Test_changing_cmdheight()
   " setting 'cmdheight' works after outputting two messages
   call term_sendkeys(buf, ":call EchoTwo()\<CR>")
   call VerifyScreenDump(buf, 'Test_changing_cmdheight_6', {})
+
+  " increasing 'cmdheight' doesn't clear the messages that need hit-enter
+  call term_sendkeys(buf, ":call EchoOne()\<CR>")
+  call VerifyScreenDump(buf, 'Test_changing_cmdheight_7', {})
 
   " clean up
   call StopVimInTerminal(buf)
@@ -3852,6 +3862,27 @@ func Test_rulerformat_position()
   call term_sendkeys(buf, ":set laststatus=0 winwidth=1\<CR>")
   call term_sendkeys(buf, "\<C-W>v\<C-W>|\<C-W>p")
   call VerifyScreenDump(buf, 'Test_rulerformat_position', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+endfunc
+
+" Test for using "%!" in 'rulerformat' to use a function
+func Test_rulerformat_function()
+  CheckScreendump
+
+  let lines =<< trim END
+    func TestRulerFn()
+      return '10,20%=30%%'
+    endfunc
+  END
+  call writefile(lines, 'Xrulerformat_function', 'D')
+
+  let buf = RunVimInTerminal('-S Xrulerformat_function', #{rows: 2, cols: 40})
+  call term_sendkeys(buf, ":set ruler rulerformat=%!TestRulerFn()\<CR>")
+  call term_sendkeys(buf, ":redraw!\<CR>")
+  call term_wait(buf)
+  call VerifyScreenDump(buf, 'Test_rulerformat_function', {})
 
   " clean up
   call StopVimInTerminal(buf)

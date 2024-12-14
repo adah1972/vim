@@ -65,6 +65,8 @@
  * 10.05.2024  fix another buffer-overflow when writing colored output to buffer, #14738
  * 10.09.2024  Support -b and -i together, #15661
  * 19.10.2024  -e did add an extra space #15899
+ * 11.11.2024  improve end-of-options argument parser #9285
+ * 07.12.2024  fix overflow with xxd --autoskip and large sparse files #16175
  *
  * (c) 1990-1998 by Juergen Weigert (jnweiger@gmail.com)
  *
@@ -145,7 +147,7 @@ extern void perror __P((char *));
 # endif
 #endif
 
-char version[] = "xxd 2024-10-19 by Juergen Weigert et al.";
+char version[] = "xxd 2024-12-07 by Juergen Weigert et al.";
 #ifdef WIN32
 char osver[] = " (Win32)";
 #else
@@ -514,7 +516,7 @@ huntype(
 }
 
 /*
- * Print line l. If nz is false, xxdline regards the line a line of
+ * Print line l. If nz is false, xxdline regards the line as a line of
  * zeroes. If there are three or more consecutive lines of zeroes,
  * they are replaced by a single '*' character.
  *
@@ -529,7 +531,7 @@ huntype(
 xxdline(FILE *fp, char *l, int nz)
 {
   static char z[LLEN+1];
-  static int zero_seen = 0;
+  static signed char zero_seen = 0;
 
   if (!nz && zero_seen == 1)
     strcpy(z, l);
@@ -550,6 +552,11 @@ xxdline(FILE *fp, char *l, int nz)
       if (nz)
 	zero_seen = 0;
     }
+
+  /* If zero_seen > 3, then its exact value doesn't matter, so long as it
+   * remains >3 and incrementing it will not cause overflow. */
+  if (zero_seen >= 0x7F)
+    zero_seen = 4;
 }
 
 /* This is an EBCDIC to ASCII conversion table */
@@ -843,7 +850,7 @@ main(int argc, char *argv[])
 	  else
 	    exit_with_usage();
         }
-      else if (!strcmp(pp, "--"))	/* end of options */
+      else if (!strcmp(argv[1], "--"))	/* end of options */
 	{
 	  argv++;
 	  argc--;

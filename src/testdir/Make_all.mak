@@ -21,7 +21,8 @@ SCRIPTS_TINY = \
 	test25 \
 	test26 \
 	test27 \
-	test28
+	test28 \
+	test29
 
 SCRIPTS_TINY_OUT = \
 	test10.out \
@@ -33,7 +34,8 @@ SCRIPTS_TINY_OUT = \
 	test25.out \
 	test26.out \
 	test27.out \
-	test28.out
+	test28.out \
+	test29.out
 
 # Tests for Vim9 script.
 TEST_VIM9 = \
@@ -47,6 +49,7 @@ TEST_VIM9 = \
 	test_vim9_fails \
 	test_vim9_func \
 	test_vim9_import \
+	test_vim9_python3 \
 	test_vim9_script \
 	test_vim9_typealias
 
@@ -61,6 +64,7 @@ TEST_VIM9_RES = \
 	test_vim9_fails.res \
 	test_vim9_func.res \
 	test_vim9_import.res \
+	test_vim9_python3.res \
 	test_vim9_script.res \
 	test_vim9_typealias.res
 
@@ -171,6 +175,7 @@ NEW_TESTS = \
 	test_gf \
 	test_glob2regpat \
 	test_global \
+	test_glvs \
 	test_gn \
 	test_goto \
 	test_gui \
@@ -435,6 +440,7 @@ NEW_TESTS_RES = \
 	test_gettext_make.res \
 	test_getvar.res \
 	test_gf.res \
+	test_glvs.res \
 	test_gn.res \
 	test_goto.res \
 	test_gui.res \

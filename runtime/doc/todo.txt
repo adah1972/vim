@@ -1,4 +1,4 @@
-*todo.txt*      For Vim version 9.1.  Last change: 2024 Oct 27
+*todo.txt*      For Vim version 9.1.  Last change: 2024 Dec 04
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -4749,13 +4749,9 @@ Insert mode completion/expansion:
     (Prabir Shrestha, 2017 May 19, #1713)
 -   When 'completeopt' has "noselect" does not insert a newline.
     (Lifepillar, 2017 Apr 23, #1653)
--   Can 'completeopt' be made buffer-local? (#5487)
 -   When complete() first argument is before where insert started and
     'backspace' is Vi compatible, the completion fails.
     (Hirohito Higashi, 2015 Feb 19)
--   The CompleteDone autocommand needs some info passed to it:
-    - The word that was selected (empty if abandoned complete)
-    - Type of completion: tag, omnifunc, user func.
 -   When a:base in 'completefunc' starts with a number it's passed as a
     number, not a string. (Sean Ma)  Need to add flag to call_func_retlist()
     to force a string value.

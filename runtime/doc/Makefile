@@ -93,7 +93,7 @@ test_urls:
 	$(VIMPROG) --clean -S test_urls.vim
 
 clean:
-	-rm -f doctags *.html tags.ref
+	-rm -f doctags *.html tags.ref tags-* vim-stylesheet.css
 
 # These files are in the extra archive, skip if not present
 
@@ -149,6 +149,9 @@ os_risc.txt:
 	touch $@
 
 os_win32.txt:
+	touch $@
+
+vietnamese.txt:
 	touch $@
 
 # In *BSD, the variable '$<' is used in suffix-transformation rules (in GNU this

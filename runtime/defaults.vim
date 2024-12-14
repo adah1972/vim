@@ -1,7 +1,7 @@
 " The default vimrc file.
 "
 " Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last Change:	2024 Nov 03
+" Last Change:	2024 Dec 01
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 "
 " This is loaded if no vimrc file was found.
@@ -33,13 +33,8 @@ silent! while 0
   set nocompatible
 silent! endwhile
 
-" Allow backspacing over everything in insert mode.
-set backspace=indent,eol,start
-
-set history=200		" keep 200 lines of command line history
 set ruler		" show the cursor position all the time
 set showcmd		" display incomplete commands
-set wildmenu		" display completion matches in a status line
 
 set ttimeout		" time out for key codes
 set ttimeoutlen=100	" wait up to 100ms after Esc for special key
@@ -115,7 +110,7 @@ if 1
       \ |   execute "normal! g`\""
       \ | endif
 
-    " Set the default background for putty to dark. Putty usually sets the 
+    " Set the default background for putty to dark. Putty usually sets the
     " $TERM to xterm and by default it starts with a dark background which
     " makes syntax highlighting often hard to read with bg=light
     " undo this using:  ":au! vimStartup TermResponse"

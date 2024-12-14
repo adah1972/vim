@@ -144,6 +144,14 @@ export def FTcfg()
   endif
 enddef
 
+export def FTcl()
+  if join(getline(1, 4), '') =~ '/\*'
+    setf opencl
+  else
+    setf lisp
+  endif
+enddef
+
 export def FTcls()
   if exists("g:filetype_cls")
     exe "setf " .. g:filetype_cls
@@ -166,6 +174,14 @@ export def FTcls()
     setf rexx
   else
     setf st
+  endif
+enddef
+
+export def FTll()
+  if getline(1) =~ ';\|\<source_filename\>\|\<target\>'
+    setf llvm
+  else
+    setf lifelines
   endif
 enddef
 

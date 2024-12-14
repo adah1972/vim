@@ -499,6 +499,7 @@ $quote	eval.txt	/*$quote*
 'menc'	options.txt	/*'menc'*
 'menuitems'	options.txt	/*'menuitems'*
 'mesg'	vi_diff.txt	/*'mesg'*
+'messagesopt'	options.txt	/*'messagesopt'*
 'mfd'	options.txt	/*'mfd'*
 'mh'	options.txt	/*'mh'*
 'mis'	options.txt	/*'mis'*
@@ -516,6 +517,7 @@ $quote	eval.txt	/*$quote*
 'modelines'	options.txt	/*'modelines'*
 'modifiable'	options.txt	/*'modifiable'*
 'modified'	options.txt	/*'modified'*
+'mopt'	options.txt	/*'mopt'*
 'more'	options.txt	/*'more'*
 'mouse'	options.txt	/*'mouse'*
 'mousef'	options.txt	/*'mousef'*
@@ -2125,6 +2127,7 @@ $quote	eval.txt	/*$quote*
 :GnatFind	ft_ada.txt	/*:GnatFind*
 :GnatPretty	ft_ada.txt	/*:GnatPretty*
 :GnatTags	ft_ada.txt	/*:GnatTags*
+:HelpToc	helphelp.txt	/*:HelpToc*
 :Hexplore	pi_netrw.txt	/*:Hexplore*
 :LP	pi_logipat.txt	/*:LP*
 :LPE	pi_logipat.txt	/*:LPE*
@@ -2216,7 +2219,6 @@ $quote	eval.txt	/*$quote*
 :abo	windows.txt	/*:abo*
 :aboveleft	windows.txt	/*:aboveleft*
 :abstract	vim9class.txt	/*:abstract*
-:addd	quickfix.txt	/*:addd*
 :al	windows.txt	/*:al*
 :all	windows.txt	/*:all*
 :am	gui.txt	/*:am*
@@ -2736,6 +2738,7 @@ $quote	eval.txt	/*$quote*
 :lab	quickfix.txt	/*:lab*
 :labove	quickfix.txt	/*:labove*
 :lad	quickfix.txt	/*:lad*
+:ladd	quickfix.txt	/*:ladd*
 :laddb	quickfix.txt	/*:laddb*
 :laddbuffer	quickfix.txt	/*:laddbuffer*
 :laddexpr	quickfix.txt	/*:laddexpr*
@@ -5783,6 +5786,7 @@ V	visual.txt	/*V*
 VIMINIT	starting.txt	/*VIMINIT*
 VMS	os_vms.txt	/*VMS*
 Vi	intro.txt	/*Vi*
+Vietnamese	vietnamese.txt	/*Vietnamese*
 View	starting.txt	/*View*
 Vim9	vim9.txt	/*Vim9*
 Vim9-abstract-class	vim9class.txt	/*Vim9-abstract-class*
@@ -5818,6 +5822,8 @@ W19	autocmd.txt	/*W19*
 W20	if_pyth.txt	/*W20*
 W21	if_pyth.txt	/*W21*
 W22	userfunc.txt	/*W22*
+W23	gui_x11.txt	/*W23*
+W24	gui_x11.txt	/*W24*
 WORD	motion.txt	/*WORD*
 WSL	os_win32.txt	/*WSL*
 WWW	intro.txt	/*WWW*
@@ -6560,10 +6566,16 @@ compiler-hpada	ft_ada.txt	/*compiler-hpada*
 compiler-javac	quickfix.txt	/*compiler-javac*
 compiler-make	quickfix.txt	/*compiler-make*
 compiler-manx	quickfix.txt	/*compiler-manx*
+compiler-maven	quickfix.txt	/*compiler-maven*
+compiler-mypy	quickfix.txt	/*compiler-mypy*
 compiler-pandoc	quickfix.txt	/*compiler-pandoc*
 compiler-perl	quickfix.txt	/*compiler-perl*
+compiler-pylint	quickfix.txt	/*compiler-pylint*
+compiler-pytest	quickfix.txt	/*compiler-pytest*
 compiler-pyunit	quickfix.txt	/*compiler-pyunit*
+compiler-ruff	quickfix.txt	/*compiler-ruff*
 compiler-select	quickfix.txt	/*compiler-select*
+compiler-spotbugs	quickfix.txt	/*compiler-spotbugs*
 compiler-tex	quickfix.txt	/*compiler-tex*
 compiler-typst	quickfix.txt	/*compiler-typst*
 compiler-vaxada	ft_ada.txt	/*compiler-vaxada*
@@ -7329,6 +7341,8 @@ ft-html-omni	insert.txt	/*ft-html-omni*
 ft-html-syntax	syntax.txt	/*ft-html-syntax*
 ft-htmlos-syntax	syntax.txt	/*ft-htmlos-syntax*
 ft-ia64-syntax	syntax.txt	/*ft-ia64-syntax*
+ft-idris2-indent	indent.txt	/*ft-idris2-indent*
+ft-idris2-plugin	filetype.txt	/*ft-idris2-plugin*
 ft-inform-syntax	syntax.txt	/*ft-inform-syntax*
 ft-java-plugin	filetype.txt	/*ft-java-plugin*
 ft-java-syntax	syntax.txt	/*ft-java-syntax*
@@ -7344,6 +7358,7 @@ ft-lifelines-syntax	syntax.txt	/*ft-lifelines-syntax*
 ft-lisp-syntax	syntax.txt	/*ft-lisp-syntax*
 ft-lite-syntax	syntax.txt	/*ft-lite-syntax*
 ft-lpc-syntax	syntax.txt	/*ft-lpc-syntax*
+ft-lua-plugin	filetype.txt	/*ft-lua-plugin*
 ft-lua-syntax	syntax.txt	/*ft-lua-syntax*
 ft-mail-plugin	filetype.txt	/*ft-mail-plugin*
 ft-mail.vim	syntax.txt	/*ft-mail.vim*
@@ -7376,6 +7391,7 @@ ft-neomuttlog-syntax	syntax.txt	/*ft-neomuttlog-syntax*
 ft-neomuttrc-syntax	syntax.txt	/*ft-neomuttrc-syntax*
 ft-nroff-syntax	syntax.txt	/*ft-nroff-syntax*
 ft-ocaml-syntax	syntax.txt	/*ft-ocaml-syntax*
+ft-org-plugin	filetype.txt	/*ft-org-plugin*
 ft-pandoc-syntax	syntax.txt	/*ft-pandoc-syntax*
 ft-papp-syntax	syntax.txt	/*ft-papp-syntax*
 ft-pascal-syntax	syntax.txt	/*ft-pascal-syntax*
@@ -7834,6 +7850,7 @@ getbufinfo()	builtin.txt	/*getbufinfo()*
 getbufline()	builtin.txt	/*getbufline()*
 getbufoneline()	builtin.txt	/*getbufoneline()*
 getbufvar()	builtin.txt	/*getbufvar()*
+getcellpixels()	builtin.txt	/*getcellpixels()*
 getcellwidths()	builtin.txt	/*getcellwidths()*
 getchangelist()	builtin.txt	/*getchangelist()*
 getchar()	builtin.txt	/*getchar()*
@@ -9279,6 +9296,7 @@ o_CTRL-V	motion.txt	/*o_CTRL-V*
 o_V	motion.txt	/*o_V*
 o_object-select	motion.txt	/*o_object-select*
 o_v	motion.txt	/*o_v*
+obj-var-type-any	vim9class.txt	/*obj-var-type-any*
 object	vim9class.txt	/*object*
 object-const-variable	vim9class.txt	/*object-const-variable*
 object-empty()	vim9class.txt	/*object-empty()*
@@ -9328,6 +9346,7 @@ options.txt	options.txt	/*options.txt*
 optwin	options.txt	/*optwin*
 or()	builtin.txt	/*or()*
 oracle	ft_sql.txt	/*oracle*
+os-support	vi_diff.txt	/*os-support*
 os2	os_os2.txt	/*os2*
 os390	os_390.txt	/*os390*
 os_390.txt	os_390.txt	/*os_390.txt*
@@ -10208,6 +10227,7 @@ state()	builtin.txt	/*state()*
 static-tag	tagsrch.txt	/*static-tag*
 status-line	windows.txt	/*status-line*
 statusmsg-variable	eval.txt	/*statusmsg-variable*
+stl-%!	options.txt	/*stl-%!*
 stl-%{	options.txt	/*stl-%{*
 str2float()	builtin.txt	/*str2float()*
 str2list()	builtin.txt	/*str2list()*
@@ -10629,6 +10649,7 @@ template	autocmd.txt	/*template*
 tempname()	builtin.txt	/*tempname()*
 term++close	terminal.txt	/*term++close*
 term++open	terminal.txt	/*term++open*
+term++shell	terminal.txt	/*term++shell*
 term-dependent-settings	term.txt	/*term-dependent-settings*
 term-list	syntax.txt	/*term-list*
 term.txt	term.txt	/*term.txt*
@@ -10675,6 +10696,7 @@ termdebug-starting	terminal.txt	/*termdebug-starting*
 termdebug-stepping	terminal.txt	/*termdebug-stepping*
 termdebug-timeout	terminal.txt	/*termdebug-timeout*
 termdebug-variables	terminal.txt	/*termdebug-variables*
+termdebug_contributing	terminal.txt	/*termdebug_contributing*
 termdebug_disasm_window	terminal.txt	/*termdebug_disasm_window*
 termdebug_evaluate_in_popup	terminal.txt	/*termdebug_evaluate_in_popup*
 termdebug_map_K	terminal.txt	/*termdebug_map_K*
@@ -10708,6 +10730,7 @@ terminal-job-index	index.txt	/*terminal-job-index*
 terminal-key-codes	term.txt	/*terminal-key-codes*
 terminal-mouse	term.txt	/*terminal-mouse*
 terminal-ms-windows	terminal.txt	/*terminal-ms-windows*
+terminal-nospecial	terminal.txt	/*terminal-nospecial*
 terminal-options	term.txt	/*terminal-options*
 terminal-output-codes	term.txt	/*terminal-output-codes*
 terminal-resizing	terminal.txt	/*terminal-resizing*
@@ -11220,6 +11243,15 @@ vi-features	vi_diff.txt	/*vi-features*
 vi:	options.txt	/*vi:*
 vi_diff.txt	vi_diff.txt	/*vi_diff.txt*
 vib	motion.txt	/*vib*
+vietnamese	vietnamese.txt	/*vietnamese*
+vietnamese-ime_diff	vietnamese.txt	/*vietnamese-ime_diff*
+vietnamese-intro	vietnamese.txt	/*vietnamese-intro*
+vietnamese-keymap	vietnamese.txt	/*vietnamese-keymap*
+vietnamese-l10n	vietnamese.txt	/*vietnamese-l10n*
+vietnamese-telex_utf-8	vietnamese.txt	/*vietnamese-telex_utf-8*
+vietnamese-viqr_utf-8	vietnamese.txt	/*vietnamese-viqr_utf-8*
+vietnamese-vni_utf-8	vietnamese.txt	/*vietnamese-vni_utf-8*
+vietnamese.txt	vietnamese.txt	/*vietnamese.txt*
 view	starting.txt	/*view*
 view-diffs	diff.txt	/*view-diffs*
 view-file	starting.txt	/*view-file*

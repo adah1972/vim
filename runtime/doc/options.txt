@@ -1,4 +1,4 @@
-*options.txt*	For Vim version 9.1.  Last change: 2024 Nov 02
+*options.txt*	For Vim version 9.1.  Last change: 2024 Dec 07
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -1069,8 +1069,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	done with ":syntax on".
 
 							*'backspace'* *'bs'*
-'backspace' 'bs'	string	(default "", set to "indent,eol,start"
-							    in |defaults.vim|)
+'backspace' 'bs'	string	(Vim default: "indent,eol,start",
+				 Vi default:  "")
 			global
 	Influences the working of <BS>, <Del>, CTRL-W and CTRL-U in Insert
 	mode.  This is a list of items, separated by commas.  Each item allows
@@ -2155,9 +2155,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 		    a match from the menu. Only works in combination with
 		    "menu" or "menuone". No effect if "longest" is present.
 
-	   noselect Do not select a match in the menu, force the user to
-		    select one from the menu. Only works in combination with
-		    "menu" or "menuone".
+	   noselect Same as "noinsert", except that no menu item is
+		    pre-selected. If both "noinsert" and "noselect" are
+		    present, "noselect" has precedence.
 
 	   fuzzy    Enable |fuzzy-matching| for completion candidates. This
 		    allows for more flexible and intuitive matching, where
@@ -3515,7 +3515,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Only alphanumeric characters, '-' and '_' can be used.
 
 						*'fillchars'* *'fcs'*
-'fillchars' 'fcs'	string	(default "vert:|,fold:-,eob:~")
+'fillchars' 'fcs'	string	(default "vert:|,fold:-,eob:~,lastline:@")
 			global or local to window |global-local|
 	Characters to fill the statuslines, vertical separators and special
 	lines in the window.
@@ -4435,12 +4435,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 	See |highlight-default| for the default highlight groups.
 
 						*'history'* *'hi'*
-'history' 'hi'		number	(Vim default: 50, Vi default: 0,
-						 set to 200 in |defaults.vim|)
+'history' 'hi'		number	(Vim default: 200, Vi default: 0)
 			global
 	A history of ":" commands, and a history of previous search patterns
 	is remembered.  This option decides how many entries may be stored in
-	each of these histories (see |cmdline-editing|).
+	each of these histories (see |cmdline-editing| and 'messagesopt' for
+	the number of messages to remember).
 	The maximum value is 10000.
 	NOTE: This option is set to the Vi default value when 'compatible' is
 	set and to the Vim default value when 'compatible' is reset.
@@ -5634,6 +5634,29 @@ A jump table for the options with a short description can be found at |Q_op|.
 	generated from a list of items, e.g., the Buffers menu.  Changing this
 	option has no direct effect, the menu must be refreshed first.
 
+						*'messagesopt'* *'mopt'*
+'messagesopt' 'mopt'	string	(default "hit-enter,history:500")
+			global
+
+	Option settings for outputting messages.  It can consist of the
+	following items.  Items must be separated by a comma.
+
+	hit-enter	Use a |hit-enter| prompt when the message is longer than
+			'cmdheight' size.
+
+	wait:{n}	Instead of using a |hit-enter| prompt, simply wait for
+			{n} milliseconds so that the user has a chance to read
+			the message.  The maximum value of {n} is 10000.  Use
+			0 to disable the wait (but then the user may miss an
+			important message).
+			This item is ignored when "hit-enter" is present, but
+			required when "hit-enter" is not present.
+
+	history:{n}	Determines how many entries are remembered in the
+			|:messages| history.  The maximum value is 10000.
+			Setting it to zero clears the message history.
+			This item must always be present.
+
 						*'mkspellmem'* *'msm'*
 'mkspellmem' 'msm'	string	(default "460000,2000,500")
 			global
@@ -5916,6 +5939,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Only for GUI, Win32 and Unix with xterm.  Defines the maximum
 	time in msec between two mouse clicks for the second click to be
 	recognized as a multi click.
+
 
 						    *'mzquantum'* *'mzq'*
 'mzquantum' 'mzq'	number	(default 100)
@@ -7861,6 +7885,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	All fields except the {item} are optional.  A single percent sign can
 	be given as "%%".
 
+							*stl-%!*
 	When the option starts with "%!" then it is used as an expression,
 	evaluated and the result is used as the option value.  Example: >
 		:set statusline=%!MyStatusLine()
@@ -9430,7 +9455,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	happens when there are special characters.
 
 				*'wildmenu'* *'wmnu'* *'nowildmenu'* *'nowmnu'*
-'wildmenu' 'wmnu'	boolean	(default off, set in |defaults.vim|)
+'wildmenu' 'wmnu'	boolean	(default on)
 			global
 	When 'wildmenu' is on, command-line completion operates in an enhanced
 	mode.  On pressing 'wildchar' (usually <Tab>) to invoke completion,

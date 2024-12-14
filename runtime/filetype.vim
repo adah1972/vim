@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last Change:	2024 May 31
+" Last Change:	2024 Dec 12
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " Listen very carefully, I will say this only once
@@ -183,7 +183,14 @@ au BufNewFile,BufRead *.demo,*.dm{1,2,3,t},*.wxm,maxima-init.mac setf maxima
 
 " Assembly (all kinds)
 " *.lst is not pure assembly, it has two extra columns (address, byte codes)
+" *.[sS], *.[aA] usually Assembly - GNU
 au BufNewFile,BufRead *.asm,*.[sS],*.[aA],*.mac,*.lst	call dist#ft#FTasm()
+
+" Assembly - Netwide
+au BufNewFile,BufRead *.nasm			setf nasm
+
+" Assembly - Microsoft
+au BufNewFile,BufRead *.masm			setf masm
 
 " Assembly - Macro (VAX)
 au BufNewFile,BufRead *.mar			setf vmasm
@@ -310,6 +317,9 @@ au BufNewFile,BufRead */.bundle/config			setf yaml
 " C or lpc
 au BufNewFile,BufRead *.c			call dist#ft#FTlpc()
 au BufNewFile,BufRead *.lpc,*.ulpc		setf lpc
+
+" C3
+au BufNewFile,BufRead *.c3,*.c3i,*.c3t		setf c3
 
 " Cairo
 au BufNewFile,BufRead *.cairo			setf cairo
@@ -448,6 +458,9 @@ au BufNewFile,BufRead .clang-format		setf yaml
 
 " Clang-tidy
 au BufNewFile,BufRead .clang-tidy		setf yaml
+
+" Conda configuration file
+au BufNewFile,BufRead .condarc,condarc		setf yaml
 
 " Matplotlib
 au BufNewFile,BufRead *.mplstyle,matplotlibrc	setf yaml
@@ -643,9 +656,9 @@ au BufNewFile,BufRead *.dfy			setf dafny
 au BufRead,BufNewfile *.dart,*.drt		setf dart
 
 " Debian Control
-au BufNewFile,BufRead */debian/control		setf debcontrol
+au BufNewFile,BufRead */{debian,DEBIAN}/control		setf debcontrol
 au BufNewFile,BufRead control
-	\  if getline(1) =~ '^Source:'
+	\  if getline(1) =~ '^Source:\|^Package:'
 	\|   setf debcontrol
 	\| endif
 
@@ -1099,8 +1112,8 @@ au BufRead,BufNewFile *.hurl			setf hurl
 " Hyper Builder
 au BufNewFile,BufRead *.hb			setf hb
 
-" Hyprlang
-au BufNewFile,BufRead hypr\(land\|paper\|idle\|lock\).conf	setf hyprlang
+" Hyprland Configuration language
+au BufNewFile,BufRead */hypr/*.conf,hypr\(land\|paper\|idle\|lock\).conf setf hyprlang
 
 " Httest
 au BufNewFile,BufRead *.htt,*.htb		setf httest
@@ -1156,7 +1169,7 @@ au BufRead,BufNewFile usw2kagt.log\c,usw2kagt.*.log\c,*.usw2kagt.log\c	setf usw2
 " Ipfilter
 au BufNewFile,BufRead ipf.conf,ipf6.conf,ipf.rules	setf ipfilter
 
-" Ipkg
+" Ipkg for Idris 2 language
 au BufNewFile,BufRead *.ipkg			setf ipkg
 
 " Informix 4GL (source - canonical, include file, I4GL+M4 preproc.)
@@ -1262,6 +1275,12 @@ au BufNewFile,BufRead *.jl			setf julia
 " Just
 au BufNewFile,BufRead [jJ]ustfile,.justfile,*.just setf just
 
+" KAREL
+au BufNewFile,BufRead *.kl setf karel
+if has("fname_case")
+   au BufNewFile,BufRead *.KL setf karel
+endif
+
 " KDL
 au BufNewFile,BufRead *.kdl			setf kdl
 
@@ -1351,7 +1370,7 @@ au BufNewFile,BufRead */etc/sensors.conf,*/etc/sensors3.conf	setf sensors
 au BufNewFile,BufRead lftp.conf,.lftprc,*lftp/rc	setf lftp
 
 " Lifelines (or Lex for C++!)
-au BufNewFile,BufRead *.ll			setf lifelines
+au BufNewFile,BufRead *.ll			call dist#ft#FTll()
 
 " Lilo: Linux loader
 au BufNewFile,BufRead lilo.conf			setf lilo
@@ -1359,13 +1378,16 @@ au BufNewFile,BufRead lilo.conf			setf lilo
 " Lilypond
 au BufNewFile,BufRead *.ly,*.ily		setf lilypond
 
-" Lisp (*.el = ELisp, *.cl = Common Lisp)
+" Lisp (*.el = ELisp)
 " *.jl was removed, it's also used for Julia, better skip than guess wrong.
 if has("fname_case")
-  au BufNewFile,BufRead *.lsp,*.lisp,*.asd,*.el,*.cl,*.L,.emacs,.sawfishrc,*.stsg,*/supertux2/config setf lisp
+  au BufNewFile,BufRead *.lsp,*.lisp,*.asd,*.el,*.L,.emacs,.sawfishrc,*.stsg,*/supertux2/config setf lisp
 else
-  au BufNewFile,BufRead *.lsp,*.lisp,*.asd,*.el,*.cl,.emacs,.sawfishrc,*.stsg,*/supertux2/config setf lisp
+  au BufNewFile,BufRead *.lsp,*.lisp,*.asd,*.el,.emacs,.sawfishrc,*.stsg,*/supertux2/config setf lisp
 endif
+
+" *.cl = Common Lisp or OpenCL
+au BufNewFile,BufRead *.cl call dist#ft#FTcl()
 
 " SBCL implementation of Common Lisp
 au BufNewFile,BufRead sbclrc,.sbclrc		setf lisp
@@ -1723,7 +1745,7 @@ au BufNewFile,BufRead *.scad				setf openscad
 " Oracle config file
 au BufNewFile,BufRead *.ora				setf ora
 
-" Org
+" Org (Emacs' org-mode)
 au BufNewFile,BufRead *.org,*.org_archive		setf org
 
 " Packet filter conf
@@ -1961,6 +1983,10 @@ au BufNewFile,BufRead *.pk			setf poke
 " Protocols
 au BufNewFile,BufRead */etc/protocols		setf protocols
 
+" Nvidia PTX (Parallel Thread Execution)
+" See https://docs.nvidia.com/cuda/parallel-thread-execution/
+au BufNewFile,BufRead *.ptx			setf ptx
+
 " Purescript
 au BufNewFile,BufRead *.purs			setf purescript
 
@@ -1970,8 +1996,8 @@ au BufNewFile,BufRead MANIFEST.in		setf pymanifest
 " Pyret
 au BufNewFile,BufRead *.arr			setf pyret
 
-" Pyrex
-au BufNewFile,BufRead *.pyx,*.pxd		setf pyrex
+" Pyrex/Cython
+au BufNewFile,BufRead *.pyx,*.pyx+,*.pxd,*.pxi	setf pyrex
 
 " Python, Python Shell Startup and Python Stub Files
 " Quixote (Python-based web framework)
@@ -2840,6 +2866,7 @@ au BufNewFile,BufRead */etc/xinetd.conf		setf xinetd
 " Xilinx Vivado/Vitis project files and block design files
 au BufNewFile,BufRead *.xpr,*.xpfm,*.spfm,*.bxml,*.mmi		setf xml
 au BufNewFile,BufRead *.bd,*.bda,*.xci				setf json
+au BufNewFile,BufRead *.mss					setf mss
 
 " XS Perl extension interface language
 au BufNewFile,BufRead *.xs			setf xs
@@ -2919,6 +2946,7 @@ au BufNewFile,BufRead *.y			call dist#ft#FTy()
 
 " Yaml
 au BufNewFile,BufRead *.yaml,*.yml,*.eyaml		setf yaml
+au BufNewFile,BufRead */.kube/config	setf yaml
 
 " Raml
 au BufNewFile,BufRead *.raml			setf raml
