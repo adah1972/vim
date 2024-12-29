@@ -173,6 +173,7 @@ static pos_T	  compl_startpos;
 static int	  compl_length = 0;
 static colnr_T	  compl_col = 0;	    // column where the text starts
 					    // that is being completed
+static colnr_T	  compl_ins_end_col = 0;
 static string_T	  compl_orig_text = {NULL, 0};  // text as it was before
 					    // completion started
 static int	  compl_cont_mode = 0;
@@ -197,6 +198,11 @@ static int	  compl_opt_suppress_empty = FALSE;
 static int	  compl_selected_item = -1;
 
 static int	  *compl_fuzzy_scores;
+
+// "compl_match_array" points the currently displayed list of entries in the
+// popup menu.  It is NULL when there is no popup menu.
+static pumitem_T *compl_match_array = NULL;
+static int compl_match_arraysize;
 
 static int ins_compl_add(char_u *str, int len, char_u *fname, char_u **cptext, typval_T *user_data, int cdir, int flags, int adup, int *user_hl);
 static void ins_compl_longest_match(compl_T *match);
@@ -554,19 +560,18 @@ ins_compl_infercase_gettext(
 
     p = str;
     for (i = 0; i < char_len; ++i)
+    {
 	if (has_mbyte)
 	    wca[i] = mb_ptr2char_adv(&p);
 	else
 	    wca[i] = *(p++);
+    }
 
     // Rule 1: Were any chars converted to lower?
     p = compl_orig_text.string;
     for (i = 0; i < min_len; ++i)
     {
-	if (has_mbyte)
-	    c = mb_ptr2char_adv(&p);
-	else
-	    c = *(p++);
+	c = has_mbyte ? mb_ptr2char_adv(&p) : *(p++);
 	if (MB_ISLOWER(c))
 	{
 	    has_lower = TRUE;
@@ -587,10 +592,7 @@ ins_compl_infercase_gettext(
 	p = compl_orig_text.string;
 	for (i = 0; i < min_len; ++i)
 	{
-	    if (has_mbyte)
-		c = mb_ptr2char_adv(&p);
-	    else
-		c = *(p++);
+	    c = has_mbyte ? mb_ptr2char_adv(&p) : *(p++);
 	    if (was_letter && MB_ISUPPER(c) && MB_ISLOWER(wca[i]))
 	    {
 		// Rule 2 is satisfied.
@@ -606,10 +608,7 @@ ins_compl_infercase_gettext(
     p = compl_orig_text.string;
     for (i = 0; i < min_len; ++i)
     {
-	if (has_mbyte)
-	    c = mb_ptr2char_adv(&p);
-	else
-	    c = *(p++);
+	c = has_mbyte ? mb_ptr2char_adv(&p) : *(p++);
 	if (MB_ISLOWER(c))
 	    wca[i] = MB_TOLOWER(wca[i]);
 	else if (MB_ISUPPER(c))
@@ -710,7 +709,9 @@ ins_compl_add_infercase(
 	    }
 	}
 	else
+	{
 	    char_len = len;
+	}
 
 	// Find actual length of original text.
 	if (has_mbyte)
@@ -724,11 +725,13 @@ ins_compl_add_infercase(
 	    }
 	}
 	else
+	{
 	    compl_char_len = compl_length;
+	}
 
 	// "char_len" may be smaller than "compl_char_len" when using
 	// thesaurus, only use the minimum when comparing.
-	min_len = char_len < compl_char_len ? char_len : compl_char_len;
+	min_len = MIN(char_len, compl_char_len);
 
 	str = ins_compl_infercase_gettext(str, char_len,
 					  compl_char_len, min_len, &tofree);
@@ -847,8 +850,10 @@ ins_compl_add(
 	int i;
 
 	for (i = 0; i < CPT_COUNT; ++i)
+	{
 	    if (cptext[i] != NULL && *cptext[i] != NUL)
 		match->cp_text[i] = vim_strsave(cptext[i]);
+	}
     }
 #ifdef FEAT_EVAL
     if (user_data != NULL)
@@ -899,6 +904,32 @@ ins_compl_equal(compl_T *match, char_u *str, int len)
 }
 
 /*
+ * when len is -1 mean use whole length of p otherwise part of p
+ */
+    static void
+ins_compl_insert_bytes(char_u *p, int len)
+{
+    if (len == -1)
+	len = (int)STRLEN(p);
+    ins_bytes_len(p, len);
+    compl_ins_end_col = curwin->w_cursor.col;
+}
+
+/*
+ * Checks if the column is within the currently inserted completion text
+ * column range. If it is, it returns a special highlight attribute.
+ * -1 mean normal item.
+ */
+    int
+ins_compl_col_range_attr(int col)
+{
+    if (col >= compl_col && col < compl_ins_end_col)
+	return syn_name2attr((char_u *)"ComplMatchIns");
+
+    return -1;
+}
+
+/*
  * Reduce the longest common string for match "match".
  */
     static void
@@ -918,7 +949,7 @@ ins_compl_longest_match(compl_T *match)
 	compl_leader.length = match->cp_str.length;
 	had_match = (curwin->w_cursor.col > compl_col);
 	ins_compl_delete();
-	ins_bytes(compl_leader.string + get_compl_len());
+	ins_compl_insert_bytes(compl_leader.string + get_compl_len(), -1);
 	ins_redraw(FALSE);
 
 	// When the match isn't there (to avoid matching itself) remove it
@@ -968,7 +999,7 @@ ins_compl_longest_match(compl_T *match)
 
 	had_match = (curwin->w_cursor.col > compl_col);
 	ins_compl_delete();
-	ins_bytes(compl_leader.string + get_compl_len());
+	ins_compl_insert_bytes(compl_leader.string + get_compl_len(), -1);
 	ins_redraw(FALSE);
 
 	// When the match isn't there (to avoid matching itself) remove it
@@ -995,10 +1026,13 @@ ins_compl_add_matches(
     int		dir = compl_direction;
 
     for (i = 0; i < num_matches && add_r != FAIL; i++)
-	if ((add_r = ins_compl_add(matches[i], -1, NULL, NULL, NULL, dir,
-			       CP_FAST | (icase ? CP_ICASE : 0), FALSE, NULL)) == OK)
+    {
+	add_r = ins_compl_add(matches[i], -1, NULL, NULL, NULL, dir,
+				CP_FAST | (icase ? CP_ICASE : 0), FALSE, NULL);
+	if (add_r == OK)
 	    // if dir was BACKWARD then honor it just once
 	    dir = FORWARD;
+    }
     FreeWild(num_matches, matches);
 }
 
@@ -1057,12 +1091,6 @@ get_cot_flags(void)
 {
     return curbuf->b_cot_flags != 0 ? curbuf->b_cot_flags : cot_flags;
 }
-
-
-// "compl_match_array" points the currently displayed list of entries in the
-// popup menu.  It is NULL when there is no popup menu.
-static pumitem_T *compl_match_array = NULL;
-static int compl_match_arraysize;
 
 /*
  * Update the screen and when there is any scrolling remove the popup menu.
@@ -1123,12 +1151,11 @@ pum_wanted(void)
 pum_enough_matches(void)
 {
     compl_T     *compl;
-    int		i;
+    int		i = 0;
 
     // Don't display the popup menu if there are no matches or there is only
     // one (ignoring the original text).
     compl = compl_first_match;
-    i = 0;
     do
     {
 	if (compl == NULL || (!match_at_original_text(compl) && ++i == 2))
@@ -1342,20 +1369,15 @@ ins_compl_build_pum(void)
     i = 0;
     while (compl != NULL)
     {
-	if (compl->cp_text[CPT_ABBR] != NULL)
-	    compl_match_array[i].pum_text = compl->cp_text[CPT_ABBR];
-	else
-	    compl_match_array[i].pum_text = compl->cp_str.string;
+	compl_match_array[i].pum_text = compl->cp_text[CPT_ABBR] != NULL
+			    ? compl->cp_text[CPT_ABBR] : compl->cp_str.string;
 	compl_match_array[i].pum_kind = compl->cp_text[CPT_KIND];
 	compl_match_array[i].pum_info = compl->cp_text[CPT_INFO];
 	compl_match_array[i].pum_score = compl->cp_score;
 	compl_match_array[i].pum_user_abbr_hlattr = compl->cp_user_abbr_hlattr;
 	compl_match_array[i].pum_user_kind_hlattr = compl->cp_user_kind_hlattr;
-	if (compl->cp_text[CPT_MENU] != NULL)
-	    compl_match_array[i++].pum_extra =
-	        compl->cp_text[CPT_MENU];
-	else
-	    compl_match_array[i++].pum_extra = compl->cp_fname;
+	compl_match_array[i++].pum_extra = compl->cp_text[CPT_MENU] != NULL
+			    ? compl->cp_text[CPT_MENU] : compl->cp_fname;
 	match_next = compl->cp_match_next;
 	compl->cp_match_next = NULL;
 	compl = match_next;
@@ -1687,10 +1709,8 @@ ins_compl_files(
 	    while (vim_regexec(regmatch, buf, (colnr_T)(ptr - buf)))
 	    {
 		ptr = regmatch->startp[0];
-		if (ctrl_x_mode_line_or_eval())
-		    ptr = find_line_end(ptr);
-		else
-		    ptr = find_word_end(ptr);
+		ptr = ctrl_x_mode_line_or_eval() ? find_line_end(ptr)
+							: find_word_end(ptr);
 		add_r = ins_compl_add_infercase(regmatch->startp[0],
 			(int)(ptr - regmatch->startp[0]),
 			p_ic, files[i], *dir, FALSE);
@@ -1823,6 +1843,7 @@ ins_compl_clear(void)
     compl_cont_status = 0;
     compl_started = FALSE;
     compl_matches = 0;
+    compl_ins_end_col = 0;
     VIM_CLEAR_STRING(compl_pattern);
     VIM_CLEAR_STRING(compl_leader);
     edit_submode_extra = NULL;
@@ -1841,6 +1862,23 @@ ins_compl_clear(void)
 ins_compl_active(void)
 {
     return compl_started;
+}
+
+/*
+ * Return True when wp is the actual completion window
+ */
+    int
+ins_compl_win_active(win_T *wp UNUSED)
+{
+    return ins_compl_active()
+#if defined(FEAT_QUICKFIX)
+        && (!wp->w_p_pvw
+# ifdef FEAT_PROP_POPUP
+            && !(wp->w_popup_flags & POPF_INFO)
+# endif
+        )
+#endif
+    ;
 }
 
 /*
@@ -1971,7 +2009,7 @@ ins_compl_new_leader(void)
 {
     ins_compl_del_pum();
     ins_compl_delete();
-    ins_bytes(compl_leader.string + get_compl_len());
+    ins_compl_insert_bytes(compl_leader.string + get_compl_len(), -1);
     compl_used_match = FALSE;
 
     if (compl_started)
@@ -2416,7 +2454,7 @@ ins_compl_stop(int c, int prev_mode, int retval)
 	    int	    compl_len = get_compl_len();
 
 	    if ((int)plen > compl_len)
-		ins_bytes_len(p + compl_len, (int)(plen - compl_len));
+		ins_compl_insert_bytes(p + compl_len, (int)plen - compl_len);
 	}
 	retval = TRUE;
     }
@@ -4243,6 +4281,7 @@ ins_compl_delete(void)
 	if (stop_arrow() == FAIL)
 	    return;
 	backspace_until_column(col);
+	compl_ins_end_col = curwin->w_cursor.col;
     }
 
     // TODO: is this sufficient for redrawing?  Redrawing everything causes
@@ -4266,7 +4305,7 @@ ins_compl_insert(int in_compl_func)
     // Make sure we don't go over the end of the string, this can happen with
     // illegal bytes.
     if (compl_len < (int)compl_shown_match->cp_str.length)
-	ins_bytes(compl_shown_match->cp_str.string + compl_len);
+	ins_compl_insert_bytes(compl_shown_match->cp_str.string + compl_len, -1);
     if (match_at_original_text(compl_shown_match))
 	compl_used_match = FALSE;
     else
@@ -4543,7 +4582,7 @@ ins_compl_next(
     // Insert the text of the new completion, or the compl_leader.
     if (compl_no_insert && !started)
     {
-	ins_bytes(compl_orig_text.string + get_compl_len());
+	ins_compl_insert_bytes(compl_orig_text.string + get_compl_len(), -1);
 	compl_used_match = FALSE;
     }
     else if (insert_match)
@@ -4551,7 +4590,7 @@ ins_compl_next(
 	if (!compl_get_longest || compl_used_match)
 	    ins_compl_insert(in_compl_func);
 	else
-	    ins_bytes(compl_leader.string + get_compl_len());
+	    ins_compl_insert_bytes(compl_leader.string + get_compl_len(), -1);
     }
     else
 	compl_used_match = FALSE;

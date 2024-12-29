@@ -844,7 +844,7 @@ au BufNewFile,BufRead *.fan,*.fwt		setf fan
 au BufNewFile,BufRead *.factor			setf factor
 
 " Fennel
-autocmd BufRead,BufNewFile *.fnl		setf fennel
+autocmd BufRead,BufNewFile *.fnl,{,.}fennelrc	setf fennel
 
 " Fetchmail RC file
 au BufNewFile,BufRead .fetchmailrc		setf fetchmail
@@ -1078,6 +1078,9 @@ au BufRead,BufNewFile *.hws			setf hollywood
 " Hoon
 au BufRead,BufNewFile *.hoon			setf hoon
 
+" TI Code Composer Studio General Extension Language
+au BufNewFile,BufRead *.gel			setf gel
+
 " Tilde (must be before HTML)
 au BufNewFile,BufRead *.t.html			setf tilde
 
@@ -1108,6 +1111,9 @@ au BufNewFile,BufRead */etc/hosts.allow,*/etc/hosts.deny  setf hostsaccess
 
 " Hurl
 au BufRead,BufNewFile *.hurl			setf hurl
+
+" Hy
+au BufRead,BufNewFile *.hy,.hy-history		setf hy
 
 " Hyper Builder
 au BufNewFile,BufRead *.hb			setf hb
@@ -1200,7 +1206,7 @@ au BufNewFile,BufRead *.jpl,*.jpr		setf jam
 au BufNewFile,BufRead *.janet			setf janet
 
 " Java
-au BufNewFile,BufRead *.java,*.jav		setf java
+au BufNewFile,BufRead *.java,*.jav,*.jsh	setf java
 
 " JavaCC
 au BufNewFile,BufRead *.jj,*.jjt		setf javacc
@@ -1257,7 +1263,7 @@ au BufNewFile,BufRead *.sublime-project,*.sublime-settings,*.sublime-workspace	s
 au BufNewFile,BufRead .prettierrc,.firebaserc,.stylelintrc,.lintstagedrc,flake.lock,deno.lock	setf json
 
 " JSONC (JSON with comments)
-au BufNewFile,BufRead *.jsonc,.babelrc,.eslintrc,.jsfmtrc	setf jsonc
+au BufNewFile,BufRead *.jsonc,.babelrc,.eslintrc,.jsfmtrc,bun.lock	setf jsonc
 au BufNewFile,BufRead .jshintrc,.jscsrc,.vsconfig,.hintrc,.swrc,[jt]sconfig*.json	setf jsonc
 
 " JSON
@@ -1314,6 +1320,9 @@ au BufNewFile,BufRead Kconfig,Kconfig.debug,Config.in	setf kconfig
 
 " Lace (ISE)
 au BufNewFile,BufRead *.ace,*.ACE		setf lace
+
+" Lalrpop
+au BufNewFile,Bufread *.lalrpop			setf lalrpop
 
 " Larch Shared Language
 au BufNewFile,BufRead .lsl			call dist#ft#FTlsl()
@@ -1381,9 +1390,9 @@ au BufNewFile,BufRead *.ly,*.ily		setf lilypond
 " Lisp (*.el = ELisp)
 " *.jl was removed, it's also used for Julia, better skip than guess wrong.
 if has("fname_case")
-  au BufNewFile,BufRead *.lsp,*.lisp,*.asd,*.el,*.L,.emacs,.sawfishrc,*.stsg,*/supertux2/config setf lisp
+  au BufNewFile,BufRead *.lsp,*.lisp,*.asd,*.el,*.L,.emacs,.sawfishrc setf lisp
 else
-  au BufNewFile,BufRead *.lsp,*.lisp,*.asd,*.el,.emacs,.sawfishrc,*.stsg,*/supertux2/config setf lisp
+  au BufNewFile,BufRead *.lsp,*.lisp,*.asd,*.el,.emacs,.sawfishrc setf lisp
 endif
 
 " *.cl = Common Lisp or OpenCL
@@ -1873,6 +1882,9 @@ au BufNewFile,BufRead requires/*.txt		setf requirements
 au BufNewFile,BufRead Pipfile			setf toml
 au BufNewFile,BufRead Pipfile.lock		setf json
 
+" Pixi lock
+au BufNewFile,BufRead pixi.lock			setf yaml
+
 " PL/1, PL/I
 au BufNewFile,BufRead *.pli,*.pl1		setf pli
 
@@ -2267,12 +2279,13 @@ au BufNewFile,BufRead *.decl,*.dcl,*.dec
 au BufNewFile,BufRead catalog			setf catalog
 
 " Shell scripts (sh, ksh, bash, bash2, csh); Allow .profile_foo etc.
-" Gentoo ebuilds, Arch Linux PKGBUILDs and Alpine Linux APKBUILDs are actually
-" bash scripts.
+" Gentoo ebuilds and Arch Linux PKGBUILDs are actually bash scripts.
 " NOTE: Patterns ending in a star are further down, these have lower priority.
-au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,.bash[_-]history,bash-fc[-.],*.ebuild,*.bash,*.eclass,PKGBUILD,APKBUILD,*.bats,*.cygport call dist#ft#SetFileTypeSH("bash")
+au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,.bash[_-]history,bash-fc[-.],*.ebuild,*.bash,*.eclass,PKGBUILD,*.bats,*.cygport call dist#ft#SetFileTypeSH("bash")
 au BufNewFile,BufRead .kshrc,*.ksh call dist#ft#SetFileTypeSH("ksh")
 au BufNewFile,BufRead */etc/profile,.profile,*.sh,*.env{rc,} call dist#ft#SetFileTypeSH(getline(1))
+" Alpine Linux APKBUILDs are actually POSIX sh scripts with special treatment.
+au BufNewFile,BufRead APKBUILD	setf apkbuild
 
 " Shell script (Arch Linux) or PHP file (Drupal)
 au BufNewFile,BufRead *.install
@@ -2307,8 +2320,8 @@ au BufNewFile,BufRead *.zsh,*.zsh-theme,*.zunit		setf zsh
 " Salt state files
 au BufNewFile,BufRead *.sls			setf salt
 
-" Scheme ("racket" patterns are now separate, see above)
-au BufNewFile,BufRead *.scm,*.ss,*.sld		setf scheme
+" Scheme, Supertux configuration, Lips.js history ("racket" patterns are now separate, see above)
+au BufNewFile,BufRead *.scm,*.ss,*.sld,*.stsg,*/supertux2/config,.lips_repl_history	setf scheme
 
 " Screen RC
 au BufNewFile,BufRead .screenrc,screenrc	setf screen

@@ -36,6 +36,7 @@ char_u *find_word_start(char_u *ptr);
 char_u *find_word_end(char_u *ptr);
 void ins_compl_clear(void);
 int ins_compl_active(void);
+int ins_compl_win_active(win_T *wp);
 int ins_compl_used_match(void);
 void ins_compl_init_get_longest(void);
 int ins_compl_interrupted(void);
@@ -60,5 +61,6 @@ void ins_compl_delete(void);
 void ins_compl_insert(int in_compl_func);
 void ins_compl_check_keys(int frequency, int in_compl_func);
 int ins_complete(int c, int enable_pum);
+int ins_compl_col_range_attr(int col);
 void free_insexpand_stuff(void);
 /* vim: set ft=c : */

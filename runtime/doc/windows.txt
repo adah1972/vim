@@ -1,4 +1,4 @@
-*windows.txt*   For Vim version 9.1.  Last change: 2024 Sep 08
+*windows.txt*   For Vim version 9.1.  Last change: 2024 Dec 16
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -1005,6 +1005,15 @@ CTRL-W g }						*CTRL-W_g}*
 		it.  Make the new Preview window (if required) N high.  If N is
 		not given, 'previewheight' is used.
 
+							*:pb* *:pbuffer*
+:[N]pb[uffer][!] [+cmd] [N]
+		Edit buffer [N] from the buffer list in the preview window.
+		If [N] is not given, the current buffer remains being edited.
+		See |:buffer-!| for [!].  This will also edit a buffer that is
+		not in the buffer list, without setting the 'buflisted' flag.
+		The notation with single quotes does not work here, `:pbuffer
+		12'345'` uses 12'345 as a buffer name.  Also see |+cmd|.
+
 							*:ped* *:pedit*
 :ped[it][!] [++opt] [+cmd] {file}
 		Edit {file} in the preview window.  The preview window is
@@ -1012,6 +1021,8 @@ CTRL-W g }						*CTRL-W_g}*
 		position isn't changed.  Useful example: >
 			:pedit +/fputc /usr/include/stdio.h
 <
+		Also see |++opt| and |+cmd|.
+
 							*:ps* *:psearch*
 :[range]ps[earch][!] [count] [/]pattern[/]
 		Works like |:ijump| but shows the found match in the preview
