@@ -28,6 +28,8 @@ static void f_balloon_show(typval_T *argvars, typval_T *rettv);
 static void f_balloon_split(typval_T *argvars, typval_T *rettv);
 # endif
 #endif
+static void f_base64_encode(typval_T *argvars, typval_T *rettv);
+static void f_base64_decode(typval_T *argvars, typval_T *rettv);
 static void f_bindtextdomain(typval_T *argvars, typval_T *rettv);
 static void f_byte2line(typval_T *argvars, typval_T *rettv);
 static void f_call(typval_T *argvars, typval_T *rettv);
@@ -1127,6 +1129,7 @@ static argcheck_T arg2_list_any_number[] = {arg_list_any, arg_number};
 static argcheck_T arg2_list_any_string[] = {arg_list_any, arg_string};
 static argcheck_T arg2_list_number[] = {arg_list_number, arg_list_number};
 static argcheck_T arg2_list_number_bool[] = {arg_list_number, arg_bool};
+static argcheck_T arg2_list_string_dict[] = {arg_list_string, arg_dict_any};
 static argcheck_T arg2_listblobmod_item[] = {arg_list_or_blob_mod, arg_item_of_prev};
 static argcheck_T arg2_lnum[] = {arg_lnum, arg_lnum};
 static argcheck_T arg2_lnum_number[] = {arg_lnum, arg_number};
@@ -1149,6 +1152,7 @@ static argcheck_T arg2_string_number[] = {arg_string, arg_number};
 static argcheck_T arg2_string_or_list_dict[] = {arg_string_or_list_any, arg_dict_any};
 static argcheck_T arg2_string_or_list_number[] = {arg_string_or_list_any, arg_number};
 static argcheck_T arg2_string_string_or_number[] = {arg_string, arg_string_or_nr};
+static argcheck_T arg2_blob_dict[] = {arg_blob, arg_dict_any};
 static argcheck_T arg3_any_list_dict[] = {arg_any, arg_list_any, arg_dict_any};
 static argcheck_T arg3_buffer_lnum_lnum[] = {arg_buffer, arg_lnum, arg_lnum};
 static argcheck_T arg3_buffer_number_number[] = {arg_buffer, arg_number, arg_number};
@@ -1834,10 +1838,16 @@ static funcentry_T global_functions[] =
 	    NULL
 #endif
 			},
+    {"base64_decode",	1, 1, FEARG_1,	    arg1_string,
+			ret_blob,	    f_base64_decode},
+    {"base64_encode",	1, 1, FEARG_1,	    arg1_blob,
+			ret_string,	    f_base64_encode},
     {"bindtextdomain",	2, 2, 0,	    arg2_string,
 			ret_bool,	    f_bindtextdomain},
     {"blob2list",	1, 1, FEARG_1,	    arg1_blob,
 			ret_list_number,    f_blob2list},
+    {"blob2str",	1, 2, FEARG_1,	    arg2_blob_dict,
+			ret_list_string,    f_blob2str},
     {"browse",		4, 4, 0,	    arg4_browse,
 			ret_string,	    f_browse},
     {"browsedir",	2, 2, 0,	    arg2_string,
@@ -2164,6 +2174,8 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_getregtype},
     {"getscriptinfo",	0, 1, 0,	    arg1_dict_any,
 			ret_list_dict_any,  f_getscriptinfo},
+    {"getstacktrace",	0, 0, 0,	    NULL,
+			ret_list_dict_any,  f_getstacktrace},
     {"gettabinfo",	0, 1, FEARG_1,	    arg1_number,
 			ret_list_dict_any,  f_gettabinfo},
     {"gettabvar",	2, 3, FEARG_1,	    arg3_number_string_any,
@@ -2702,6 +2714,8 @@ static funcentry_T global_functions[] =
 			ret_list_number,    f_srand},
     {"state",		0, 1, FEARG_1,	    arg1_string,
 			ret_string,	    f_state},
+    {"str2blob",	1, 2, FEARG_1,	    arg2_list_string_dict,
+			ret_blob,	    f_str2blob},
     {"str2float",	1, 2, FEARG_1,	    arg2_string_bool,
 			ret_float,	    f_str2float},
     {"str2list",	1, 2, FEARG_1,	    arg2_string_bool,
@@ -3479,6 +3493,182 @@ f_balloon_split(typval_T *argvars, typval_T *rettv UNUSED)
 # endif
 #endif
 
+// Base64 character set
+static const char_u base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Base64 decoding table (initialized in init_base64_dec_table() below)
+static char_u base64_dec_table[256];
+
+/*
+ * Initialize the base64 decoding table
+ */
+    static void
+init_base64_dec_table(void)
+{
+    static int base64_dec_tbl_initialized = FALSE;
+
+    if (base64_dec_tbl_initialized)
+	return;
+
+    // Unsupported characters are set to 0xFF
+    vim_memset(base64_dec_table, 0xFF, sizeof(base64_dec_table));
+
+    // Initialize the index for the base64 alphabets
+    for (size_t i = 0; i < sizeof(base64_table) - 1; i++)
+	base64_dec_table[(char_u)base64_table[i]] = (char_u)i;
+
+    // base64 padding character
+    base64_dec_table['='] = 0;
+
+    base64_dec_tbl_initialized = TRUE;
+}
+
+/*
+ * Encode the bytes in "blob" using base-64 encoding.
+ */
+    static char_u *
+base64_encode(blob_T *blob)
+{
+    size_t input_len = blob->bv_ga.ga_len;
+    size_t encoded_len = ((input_len + 2) / 3) * 4;
+    char_u *data = blob->bv_ga.ga_data;
+
+    char_u *encoded = alloc(encoded_len + 1);
+    if (encoded == NULL)
+	return NULL;
+
+    size_t i, j;
+    for (i = 0, j = 0; i < input_len;)
+    {
+	int_u octet_a = i < input_len ? data[i++] : 0;
+	int_u octet_b = i < input_len ? data[i++] : 0;
+	int_u octet_c = i < input_len ? data[i++] : 0;
+
+	int_u triple = (octet_a << 16) | (octet_b << 8) | octet_c;
+
+	encoded[j++] = base64_table[(triple >> 18) & 0x3F];
+	encoded[j++] = base64_table[(triple >> 12) & 0x3F];
+	encoded[j++] = (!octet_b && i >= input_len) ? '='
+					: base64_table[(triple >> 6) & 0x3F];
+	encoded[j++] = (!octet_c && i >= input_len) ? '='
+					: base64_table[triple & 0x3F];
+    }
+    encoded[j] = NUL;
+
+    return encoded;
+}
+
+/*
+ * Decode the string "data" using base-64 encoding.
+ */
+    static void
+base64_decode(const char_u *data, blob_T *blob)
+{
+    size_t input_len = STRLEN(data);
+
+    if (input_len == 0)
+	return;
+
+    if (input_len % 4 != 0)
+    {
+	// Invalid input length
+	semsg(_(e_invalid_argument_str), data);
+	return;
+    }
+
+    init_base64_dec_table();
+
+    size_t decoded_len = (input_len / 4) * 3;
+    if (data[input_len - 1] == '=')
+	decoded_len--;
+    if (data[input_len - 2] == '=')
+	decoded_len--;
+
+    size_t i, j;
+    for (i = 0, j = 0; i < input_len;)
+    {
+	int_u sextet_a = base64_dec_table[(char_u)data[i++]];
+	int_u sextet_b = base64_dec_table[(char_u)data[i++]];
+	int_u sextet_c = base64_dec_table[(char_u)data[i++]];
+	int_u sextet_d = base64_dec_table[(char_u)data[i++]];
+
+	if (sextet_a == 0xFF || sextet_b == 0xFF || sextet_c == 0xFF
+							|| sextet_d == 0xFF)
+	{
+	    // Invalid character
+	    semsg(_(e_invalid_argument_str), data);
+	    ga_clear(&blob->bv_ga);
+	    return;
+	}
+
+	int_u triple = (sextet_a << 18) | (sextet_b << 12)
+						| (sextet_c << 6) | sextet_d;
+
+	if (j < decoded_len)
+	{
+	    ga_append(&blob->bv_ga, (triple >> 16) & 0xFF);
+	    j++;
+	}
+	if (j < decoded_len)
+	{
+	    ga_append(&blob->bv_ga, (triple >> 8) & 0xFF);
+	    j++;
+	}
+	if (j < decoded_len)
+	{
+	    ga_append(&blob->bv_ga, triple & 0xFF);
+	    j++;
+	}
+
+	if (j == decoded_len)
+	{
+	    // Check for invalid padding bytes (based on the
+	    // "Base64 Malleability in Practice" ACM paper).
+	    if ((data[input_len - 2] == '=' && ((sextet_b & 0xF) != 0))
+		|| ((data[input_len - 1] == '=') && ((sextet_c & 0x3) != 0)))
+	    {
+		semsg(_(e_invalid_argument_str), data);
+		ga_clear(&blob->bv_ga);
+		return;
+	    }
+	}
+    }
+}
+
+/*
+ * "base64_decode(string)" function
+ */
+    static void
+f_base64_decode(typval_T *argvars, typval_T *rettv)
+{
+    if (check_for_string_arg(argvars, 0) == FAIL)
+	return;
+
+    if (rettv_blob_alloc(rettv) == FAIL)
+	return;
+
+    char_u *str = tv_get_string_chk(&argvars[0]);
+    if (str != NULL)
+	base64_decode(str, rettv->vval.v_blob);
+}
+
+/*
+ * "base64_encode(blob)" function
+ */
+    static void
+f_base64_encode(typval_T *argvars, typval_T *rettv)
+{
+    if (check_for_blob_arg(argvars, 0) == FAIL)
+	return;
+
+    rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
+
+    blob_T *blob = argvars->vval.v_blob;
+    if (blob != NULL)
+	rettv->vval.v_string = base64_encode(blob);
+}
+
 /*
  * Get the buffer from "arg" and give an error and return NULL if it is not
  * valid.
@@ -3555,7 +3745,6 @@ f_call(typval_T *argvars, typval_T *rettv)
     char_u	*func;
     partial_T   *partial = NULL;
     dict_T	*selfdict = NULL;
-    char_u	*dot;
     char_u	*tofree = NULL;
 
     if (in_vim9script()
@@ -3581,36 +3770,29 @@ f_call(typval_T *argvars, typval_T *rettv)
     if (func == NULL || *func == NUL)
 	return;		// type error, empty name or null function
 
-    dot = vim_strchr(func, '.');
-    if (dot != NULL)
+    if (argvars[0].v_type == VAR_STRING)
     {
-	imported_T *import = find_imported(func, dot - func, TRUE);
-
-	if (import != NULL && SCRIPT_ID_VALID(import->imp_sid))
+	char_u	*p = func;
+	tofree = trans_function_name(&p, NULL, FALSE, TFN_INT|TFN_QUIET);
+	if (tofree == NULL)
 	{
-	    scriptitem_T *si = SCRIPT_ITEM(import->imp_sid);
-
-	    if (si->sn_autoload_prefix != NULL)
-	    {
-		// Turn "import.Func" into "scriptname#Func".
-		tofree = concat_str(si->sn_autoload_prefix, dot + 1);
-		if (tofree == NULL)
-		    return;
-		func = tofree;
-	    }
+	    emsg_funcname(e_unknown_function_str, func);
+	    return;
 	}
+	func = tofree;
     }
 
     if (argvars[2].v_type != VAR_UNKNOWN)
     {
 	if (check_for_dict_arg(argvars, 2) == FAIL)
-	    return;
+	    goto done;
 
 	selfdict = argvars[2].vval.v_dict;
     }
 
     (void)func_call(func, &argvars[1], partial, selfdict, rettv);
 
+done:
     vim_free(tofree);
 }
 

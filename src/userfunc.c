@@ -860,6 +860,92 @@ function_using_block_scopes(ufunc_T *fp, cstack_T *cstack)
 }
 
 /*
+ * Skip over all the characters in a single quoted string starting at "p" and
+ * return a pointer to the character following the ending single quote.
+ * If the ending single quote is missing, then return a pointer to the NUL
+ * character.
+ */
+    static char_u *
+skip_single_quote_string(char_u *p)
+{
+    p++;	    // skip the beginning single quote
+    while (*p != NUL)
+    {
+	// Within the string, a single quote can be escaped by using
+	// two single quotes.
+	if (*p == '\'' && *(p + 1) == '\'')
+	    p += 2;
+	else if (*p == '\'')
+	{
+	    p++;    // skip the ending single quote
+	    break;
+	}
+	else
+	    MB_PTR_ADV(p);
+    }
+
+    return p;
+}
+
+/*
+ * Skip over all the characters in a double quoted string starting at "p" and
+ * return a pointer to the character following the ending double quote.
+ * If the ending double quote is missing, then return a pointer to the NUL
+ * character.
+ */
+    static char_u *
+skip_double_quote_string(char_u *p)
+{
+    p++;	    // skip the beginning double quote
+    while (*p != NUL)
+    {
+	// Within the string, a double quote can be escaped by
+	// preceding it with a backslash.
+	if (*p == '\\' && *(p + 1) == '"')
+	    p += 2;
+	else if (*p == '"')
+	{
+	    p++;    // skip the ending double quote
+	    break;
+	}
+	else
+	    MB_PTR_ADV(p);
+    }
+
+    return p;
+}
+
+/*
+ * Return the start of a Vim9 comment (#) in the line starting at "line".
+ * If a comment is not found, then returns a pointer to the end of the
+ * string (NUL).
+ */
+    static char_u *
+find_start_of_vim9_comment(char_u *line)
+{
+    char_u	*p = line;
+
+    while (*p != NUL)
+    {
+	if (*p == '\'')
+	    // Skip a single quoted string.
+	    p = skip_single_quote_string(p);
+	else if (*p == '"')
+	    // Skip a double quoted string.
+	    p = skip_double_quote_string(p);
+	else
+	{
+	    if (*p == '#')
+		// Found the start of a Vim9 comment
+		break;
+	    MB_PTR_ADV(p);
+	}
+    }
+
+    return p;
+}
+
+/*
  * Read the body of a function, put every line in "newlines".
  * This stops at "}", "endfunction" or "enddef".
  * "newlines" must already have been initialized.
@@ -1123,7 +1209,17 @@ get_function_body(
 	    if (nesting_def[nesting] ? *p != '#' : *p != '"')
 	    {
 		// Not a comment line: check for nested inline function.
-		end = p + STRLEN(p) - 1;
+
+		if (nesting_inline[nesting])
+		{
+		    // A comment (#) can follow the opening curly brace of a
+		    // block statement.  Need to ignore the comment and look
+		    // for the opening curly brace before the comment.
+		    end = find_start_of_vim9_comment(p) - 1;
+		}
+		else
+		    end = p + STRLEN(p) - 1;
+
 		while (end > p && VIM_ISWHITE(*end))
 		    --end;
 		if (end > p + 1 && *end == '{' && VIM_ISWHITE(end[-1]))
@@ -2213,49 +2309,6 @@ find_func_with_prefix(char_u *name, int sid)
 }
 
 /*
- * Find a function by name, return pointer to it.
- * The name may be a local script variable, VAR_FUNC. or it may be a fully
- * qualified import name such as 'i_imp.FuncName'.
- *
- * When VAR_FUNC, the import might either direct or autoload.
- * When 'i_imp.FuncName' it is direct, autoload is rewritten as i_imp#FuncName
- * in f_call and subsequently found.
- */
-    static ufunc_T *
-find_func_imported(char_u *name, int flags)
-{
-    ufunc_T	*func = NULL;
-    char_u	*dot = name; // Find a dot, '.', in the name
-
-    // Either run into '.' or the end of the string
-    while (eval_isnamec(*dot))
-	++dot;
-
-    if (*dot == '.')
-    {
-	imported_T *import = find_imported(name, dot - name, FALSE);
-	if (import != NULL)
-	    func = find_func_with_sid(dot + 1, import->imp_sid);
-    }
-    else if (*dot == NUL) // looking at the entire string
-    {
-	hashtab_T *ht = get_script_local_ht();
-	if (ht != NULL)
-	{
-	    hashitem_T *hi = hash_find(ht, name);
-	    if (!HASHITEM_EMPTY(hi))
-	    {
-		dictitem_T *di = HI2DI(hi);
-		if (di->di_tv.v_type == VAR_FUNC
-			&& di->di_tv.vval.v_string != NULL)
-		    func = find_func_even_dead(di->di_tv.vval.v_string, flags);
-	    }
-	}
-    }
-    return func;
-}
-
-/*
  * Find a function by name, return pointer to it in ufuncs.
  * When "flags" has FFED_IS_GLOBAL don't find script-local or imported
  * functions.
@@ -2304,15 +2357,8 @@ find_func_even_dead(char_u *name, int flags)
     }
 
     // Find autoload function if this is an autoload script.
-    func = find_func_with_prefix(name[0] == 's' && name[1] == ':'
+    return find_func_with_prefix(name[0] == 's' && name[1] == ':'
 				       ? name + 2 : name, current_sctx.sc_sid);
-    if (func != NULL)
-	return func;
-
-    // Find a script-local "VAR_FUNC" or i_"imp.Func", so vim9script).
-    if (in_vim9script())
-	func = find_func_imported(name, flags);
-    return func;
 }
 
 /*
@@ -5426,11 +5472,19 @@ define_function(
 	// The function may use script variables from the context.
 	function_using_block_scopes(fp, cstack);
 
+	// The argument types and the return type may use an imported type.
+	// In that case, the imported file will be sourced.  To avoid treating
+	// everything in the imported file as exported, temporarily reset
+	// is_export.
+	int save_is_export = is_export;
+	is_export = FALSE;
+
 	if (parse_argument_types(fp, &argtypes, varargs, &arg_objm,
 					obj_members, obj_member_count) == FAIL)
 	{
 	    SOURCING_LNUM = lnum_save;
 	    free_fp = fp_allocated;
+	    is_export = save_is_export;
 	    goto erret;
 	}
 	varargs = FALSE;
@@ -5440,8 +5494,10 @@ define_function(
 	{
 	    SOURCING_LNUM = lnum_save;
 	    free_fp = fp_allocated;
+	    is_export = save_is_export;
 	    goto erret;
 	}
+	is_export = save_is_export;
 	SOURCING_LNUM = lnum_save;
     }
     else

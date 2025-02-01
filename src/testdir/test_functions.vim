@@ -2990,6 +2990,8 @@ endfunc
 func Test_call()
   call assert_equal(3, call('len', [123]))
   call assert_equal(3, 'len'->call([123]))
+  call assert_equal(4, call({ x -> len(x) }, ['xxxx']))
+  call assert_equal(2, call(function('len'), ['xx']))
   call assert_fails("call call('len', 123)", 'E1211:')
   call assert_equal(0, call('', []))
   call assert_equal(0, call('len', test_null_list()))
@@ -4204,6 +4206,147 @@ func Test_getcellpixels_gui()
     let cellpixels = getcellpixels()
     call assert_equal(2, len(cellpixels))
   endif
+endfunc
+
+func Str2Blob(s)
+  return list2blob(str2list(a:s))
+endfunc
+
+func Blob2Str(b)
+  return list2str(blob2list(a:b))
+endfunc
+
+" Test for the base64_encode() and base64_decode() functions
+func Test_base64_encoding()
+  let lines =<< trim END
+    #" Test for encoding/decoding the RFC-4648 alphabets
+    VAR s = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    for i in range(64)
+      call assert_equal($'{s[i]}A==', base64_encode(list2blob([i << 2])))
+      call assert_equal(list2blob([i << 2]), base64_decode($'{s[i]}A=='))
+    endfor
+
+    #" Test for encoding with padding
+    call assert_equal('TQ==', base64_encode(g:Str2Blob("M")))
+    call assert_equal('TWE=', base64_encode(g:Str2Blob("Ma")))
+    call assert_equal('TWFu', g:Str2Blob("Man")->base64_encode())
+    call assert_equal('', base64_encode(0z))
+    call assert_equal('', base64_encode(g:Str2Blob("")))
+
+    #" Test for decoding with padding
+    call assert_equal('light work.', g:Blob2Str(base64_decode("bGlnaHQgd29yay4=")))
+    call assert_equal('light work', g:Blob2Str(base64_decode("bGlnaHQgd29yaw==")))
+    call assert_equal('light wor', g:Blob2Str("bGlnaHQgd29y"->base64_decode()))
+    call assert_equal(0z00, base64_decode("===="))
+    call assert_equal(0z, base64_decode(""))
+
+    #" Test for invalid padding
+    call assert_equal('Hello', g:Blob2Str(base64_decode("SGVsbG8=")))
+    call assert_fails('call base64_decode("SGVsbG9=")', 'E475:')
+    call assert_fails('call base64_decode("SGVsbG9")', 'E475:')
+    call assert_equal('Hell', g:Blob2Str(base64_decode("SGVsbA==")))
+    call assert_fails('call base64_decode("SGVsbA=")', 'E475:')
+    call assert_fails('call base64_decode("SGVsbA")', 'E475:')
+    call assert_fails('call base64_decode("SGVsbA====")', 'E475:')
+
+    #" Error case
+    call assert_fails('call base64_decode("b")', 'E475: Invalid argument: b')
+    call assert_fails('call base64_decode("<<==")', 'E475: Invalid argument: <<==')
+
+    call assert_fails('call base64_encode([])', 'E1238: Blob required for argument 1')
+    call assert_fails('call base64_decode([])', 'E1174: String required for argument 1')
+  END
+  call v9.CheckLegacyAndVim9Success(lines)
+endfunc
+
+" Tests for the str2blob() function
+func Test_str2blob()
+  let lines =<< trim END
+    call assert_equal(0z, str2blob([""]))
+    call assert_equal(0z, str2blob([]))
+    call assert_equal(0z, str2blob(test_null_list()))
+    call assert_equal(0z, str2blob([test_null_string(), test_null_string()]))
+    call assert_fails("call str2blob('')", 'E1211: List required for argument 1')
+    call assert_equal(0z61, str2blob(["a"]))
+    call assert_equal(0z6162, str2blob(["ab"]))
+    call assert_equal(0z610062, str2blob(["a\nb"]))
+    call assert_equal(0z61620A6364, str2blob(["ab", "cd"]))
+    call assert_equal(0z0A, str2blob(["", ""]))
+
+    call assert_equal(0zC2ABC2BB, str2blob(["«»"]))
+    call assert_equal(0zC59DC59F, str2blob(["ŝş"]))
+    call assert_equal(0zE0AE85E0.AE87, str2blob(["அஇ"]))
+    call assert_equal(0zF09F81B0.F09F81B3, str2blob(["🁰🁳"]))
+    call assert_equal(0z616263, str2blob(['abc'], {}))
+    call assert_equal(0zABBB, str2blob(['«»'], {'encoding': 'latin1'}))
+    call assert_equal(0zABBB0AABBB, str2blob(['«»', '«»'], {'encoding': 'latin1'}))
+    call assert_equal(0zC2ABC2BB, str2blob(['«»'], {'encoding': 'utf8'}))
+
+    call assert_equal(0z62, str2blob(["b"], test_null_dict()))
+    call assert_equal(0z63, str2blob(["c"], {'encoding': test_null_string()}))
+
+    call assert_fails("call str2blob(['abc'], [])", 'E1206: Dictionary required for argument 2')
+    call assert_fails("call str2blob(['abc'], {'encoding': []})", 'E730: Using a List as a String')
+    call assert_fails("call str2blob(['abc'], {'encoding': 'ab12xy'})", 'E1515: Unable to convert to ''ab12xy'' encoding')
+    call assert_fails("call str2blob(['ŝş'], {'encoding': 'latin1'})", 'E1515: Unable to convert to ''latin1'' encoding')
+    call assert_fails("call str2blob(['அஇ'], {'encoding': 'latin1'})", 'E1515: Unable to convert to ''latin1'' encoding')
+    call assert_fails("call str2blob(['🁰🁳'], {'encoding': 'latin1'})", 'E1515: Unable to convert to ''latin1'' encoding')
+  END
+  call v9.CheckLegacyAndVim9Success(lines)
+endfunc
+
+" Tests for the blob2str() function
+func Test_blob2str()
+  let lines =<< trim END
+    call assert_equal([], blob2str(0z))
+    call assert_equal([], blob2str(test_null_blob()))
+    call assert_fails("call blob2str([])", 'E1238: Blob required for argument 1')
+    call assert_equal(["ab"], blob2str(0z6162))
+    call assert_equal(["a\nb"], blob2str(0z610062))
+    call assert_equal(["ab", "cd"], blob2str(0z61620A6364))
+
+    call assert_equal(["«»"], blob2str(0zC2ABC2BB))
+    call assert_equal(["ŝş"], blob2str(0zC59DC59F))
+    call assert_equal(["அஇ"], blob2str(0zE0AE85E0.AE87))
+    call assert_equal(["🁰🁳"], blob2str(0zF09F81B0.F09F81B3))
+    call assert_equal(['«»'], blob2str(0zABBB, {'encoding': 'latin1'}))
+    call assert_equal(['«»'], blob2str(0zC2ABC2BB, {'encoding': 'utf8'}))
+    call assert_equal(['«»'], blob2str(0zC2ABC2BB, {'encoding': 'utf-8'}))
+
+    call assert_equal(['a'], blob2str(0z61, test_null_dict()))
+    call assert_equal(['a'], blob2str(0z61, {'encoding': test_null_string()}))
+
+    #" Invalid encoding
+    call assert_fails("call blob2str(0z80)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0z610A80)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0zC0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0zE0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0zF0)", "E1515: Unable to convert from 'utf-8' encoding")
+
+    call assert_fails("call blob2str(0z6180)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0z61C0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0z61E0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0z61F0)", "E1515: Unable to convert from 'utf-8' encoding")
+
+    call assert_fails("call blob2str(0zC0C0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0z61C0C0)", "E1515: Unable to convert from 'utf-8' encoding")
+
+    call assert_fails("call blob2str(0zE0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0zE080)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0zE080C0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0z61E080C0)", "E1515: Unable to convert from 'utf-8' encoding")
+
+    call assert_fails("call blob2str(0zF08080C0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0z61F08080C0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0zF0)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0zF080)", "E1515: Unable to convert from 'utf-8' encoding")
+    call assert_fails("call blob2str(0zF08080)", "E1515: Unable to convert from 'utf-8' encoding")
+
+    call assert_fails("call blob2str(0z6162, [])", 'E1206: Dictionary required for argument 2')
+    call assert_fails("call blob2str(0z6162, {'encoding': []})", 'E730: Using a List as a String')
+    call assert_fails("call blob2str(0z6162, {'encoding': 'ab12xy'})", 'E1515: Unable to convert from ''ab12xy'' encoding')
+  END
+  call v9.CheckLegacyAndVim9Success(lines)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

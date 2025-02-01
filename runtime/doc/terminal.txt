@@ -1,4 +1,4 @@
-*terminal.txt*	For Vim version 9.1.  Last change: 2024 Dec 03
+*terminal.txt*	For Vim version 9.1.  Last change: 2025 Jan 11
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -196,6 +196,9 @@ Command syntax ~
 			If [command] is not given the 'shell' option is used.
 			if [command] is NONE no job is started, the pty of the
 			terminal can be used by a command like gdb.
+
+			If [command] outputs NUL bytes, those will be
+			converted to new lines |NL-used-for-Nul|.
 
 							*terminal-nospecial*
 			Vim itself only recognizes |cmdline-special|
@@ -490,6 +493,12 @@ ConPTY problems have been fixed "winpty" will be preferred.
 
 Environment variables are used to pass information to the running job:
     VIM_SERVERNAME	v:servername
+
+							*git-vimdumps*
+There exists a git-difftool extension called `git-vimdumps` that can be used
+to conveniently inspect screendump files and diff them.  Please see in the Vim
+Repository the file `src/testdir/commondumps.vim` on how to create and use
+this git extension.
 
 ==============================================================================
 2. Terminal functions				 *terminal-function-details*
@@ -1251,7 +1260,7 @@ Alternatively, press "s" to swap the first and second dump. Do this several
 times so that you can spot the difference in the context of the text.
 
 ==============================================================================
-6. Debugging				*terminal-debug* *terminal-debugger*
+6. Debugging	*terminal-debug* *terminal-debugger* *package-termdebug*
 
 The Terminal debugging plugin can be used to debug a program with gdb and view
 the source code in a Vim window.  Since this is completely contained inside

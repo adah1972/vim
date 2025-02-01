@@ -127,10 +127,6 @@ def s:GetFilenameChecks(): dict<list<string>>
     ave: ['file.ave'],
     awk: ['file.awk', 'file.gawk'],
     b: ['file.mch', 'file.ref', 'file.imp'],
-    bash: ['.bashrc', '.bash_profile', '.bash-profile', '.bash_logout',
-           '.bash-logout', '.bash_aliases', '.bash-aliases', '.bash_history',
-           '.bash-history', '/tmp/bash-fc-3Ozjlw', '/tmp/bash-fc.3Ozjlw', 'PKGBUILD',
-           'file.bash', 'file.bats',  'file.cygport'],
     basic: ['file.bas', 'file.bi', 'file.bm'],
     bass: ['file.bass'],
     bc: ['file.bc'],
@@ -196,7 +192,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     crm: ['file.crm'],
     crontab: ['crontab', 'crontab.file', '/etc/cron.d/file', 'any/etc/cron.d/file'],
     crystal: ['file.cr'],
-    cs: ['file.cs', 'file.csx'],
+    cs: ['file.cs', 'file.csx', 'file.cake'],
     csc: ['file.csc'],
     csdl: ['file.csdl'],
     csp: ['file.csp', 'file.fdr'],
@@ -309,7 +305,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     gitattributes: ['file.git/info/attributes', '.gitattributes', '/.config/git/attributes', '/etc/gitattributes', '/usr/local/etc/gitattributes', 'some.git/info/attributes'] + WhenConfigHome('$XDG_CONFIG_HOME/git/attributes'),
     gitcommit: ['COMMIT_EDITMSG', 'MERGE_MSG', 'TAG_EDITMSG', 'NOTES_EDITMSG', 'EDIT_DESCRIPTION'],
     gitconfig: ['file.git/config', 'file.git/config.worktree', 'file.git/worktrees/x/config.worktree', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/usr/local/etc/gitconfig', '/etc/gitconfig.d/file', 'any/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'] + WhenConfigHome('$XDG_CONFIG_HOME/git/config'),
-    gitignore: ['file.git/info/exclude', '.gitignore', '/.config/git/ignore', 'some.git/info/exclude'] + WhenConfigHome('$XDG_CONFIG_HOME/git/ignore') + ['.prettierignore'],
+    gitignore: ['file.git/info/exclude', '.gitignore', '/.config/git/ignore', 'some.git/info/exclude'] + WhenConfigHome('$XDG_CONFIG_HOME/git/ignore') + ['.prettierignore', '.fdignore', '/.config/fd/ignore', '.ignore', '.rgignore', '.dockerignore', '.npmignore', '.vscodeignore'],
     gitolite: ['gitolite.conf', '/gitolite-admin/conf/file', 'any/gitolite-admin/conf/file'],
     gitrebase: ['git-rebase-todo'],
     gitsendemail: ['.gitsendemail.msg.xxxxxx'],
@@ -391,15 +387,15 @@ def s:GetFilenameChecks(): dict<list<string>>
     jess: ['file.clp'],
     jgraph: ['file.jgr'],
     jinja: ['file.jinja'],
-    jj: ['file.jjdescription'],
+    jjdescription: ['file.jjdescription'],
     jovial: ['file.jov', 'file.j73', 'file.jovial'],
     jproperties: ['file.properties', 'file.properties_xx', 'file.properties_xx_xx', 'some.properties_xx_xx_file', 'org.eclipse.xyz.prefs'],
     jq: ['file.jq'],
     json: ['file.json', 'file.jsonp', 'file.json-patch', 'file.geojson', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', 'file.jupyterlab-settings',
     '.prettierrc', '.firebaserc', '.stylelintrc', '.lintstagedrc', 'file.slnf', 'file.sublime-project', 'file.sublime-settings', 'file.sublime-workspace',
-    'file.bd', 'file.bda', 'file.xci', 'flake.lock', 'pack.mcmeta', 'deno.lock'],
+    'file.bd', 'file.bda', 'file.xci', 'flake.lock', 'pack.mcmeta', 'deno.lock', '.swcrc'],
     json5: ['file.json5'],
-    jsonc: ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.jscsrc', '.vsconfig', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc', 'bun.lock'],
+    jsonc: ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.jscsrc', '.vsconfig', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc', 'bun.lock', expand("$HOME/.config/VSCodium/User/settings.json")],
     jsonl: ['file.jsonl'],
     jsonnet: ['file.jsonnet', 'file.libsonnet'],
     jsp: ['file.jsp'],
@@ -463,7 +459,6 @@ def s:GetFilenameChecks(): dict<list<string>>
     mallard: ['file.page'],
     man: ['file.man'],
     manconf: ['/etc/man.conf', 'man.config', 'any/etc/man.conf'],
-    map: ['file.map'],
     maple: ['file.mv', 'file.mpl', 'file.mws'],
     markdown: ['file.markdown', 'file.mdown', 'file.mkd', 'file.mkdn', 'file.mdwn', 'file.md'],
     masm: ['file.masm'],
@@ -557,6 +552,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     nqc: ['file.nqc'],
     nroff: ['file.tr', 'file.nr', 'file.roff', 'file.tmac', 'file.mom', 'tmac.file'],
     nsis: ['file.nsi', 'file.nsh'],
+    ntriples: ['file.nt'],
     nu: ['file.nu'],
     obj: ['file.obj'],
     objdump: ['file.objdump', 'file.cppobjdump'],
@@ -677,7 +673,6 @@ def s:GetFilenameChecks(): dict<list<string>>
     samba: ['smb.conf'],
     sas: ['file.sas'],
     sass: ['file.sass'],
-    sather: ['file.sa'],
     sbt: ['file.sbt'],
     scala: ['file.scala'],
     scheme: ['file.scm', 'file.ss', 'file.sld', 'file.stsg', 'any/local/share/supertux2/config', '.lips_repl_history'],
@@ -692,12 +687,12 @@ def s:GetFilenameChecks(): dict<list<string>>
     services: ['/etc/services', 'any/etc/services'],
     setserial: ['/etc/serial.conf', 'any/etc/serial.conf'],
     sexplib: ['file.sexp'],
-    sh: ['/usr/share/doc/bash-completion/filter.sh',
-         '/etc/udev/cdsymlinks.conf', 'any/etc/udev/cdsymlinks.conf',
-         '.ash_history', 'any/etc/neofetch/config.conf', '.xprofile',
-         'user-dirs.defaults', 'user-dirs.dirs', 'makepkg.conf', '.makepkg.conf',
-         'file.mdd', '.env', '.envrc', 'devscripts.conf', '.devscripts', 'file.lo',
-         'file.la', 'file.lai'],
+    sh: ['.bashrc', '.bash_profile', '.bash-profile', '.bash_logout', '.bash-logout', '.bash_aliases', '.bash-aliases', '.bash_history', '.bash-history',
+         '/tmp/bash-fc-3Ozjlw', '/tmp/bash-fc.3Ozjlw', 'PKGBUILD', 'file.bash', '/usr/share/doc/bash-completion/filter.sh',
+         '/etc/udev/cdsymlinks.conf', 'any/etc/udev/cdsymlinks.conf', 'file.bats', '.ash_history', 'any/etc/neofetch/config.conf', '.xprofile',
+         'user-dirs.defaults', 'user-dirs.dirs', 'makepkg.conf', '.makepkg.conf', 'file.mdd', 'file.cygport', '.env', '.envrc', 'devscripts.conf',
+         '.devscripts', 'file.lo', 'file.la', 'file.lai'],
+    shaderslang: ['file.slang'],
     sieve: ['file.siv', 'file.sieve'],
     sil: ['file.sil'],
     simula: ['file.sim'],
@@ -823,6 +818,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     tpp: ['file.tpp'],
     trace32: ['file.cmm', 'file.t32'],
     treetop: ['file.treetop'],
+    trig: ['file.trig'],
     trustees: ['trustees.conf'],
     tsalt: ['file.slt'],
     tsscl: ['file.tsscl'],
@@ -892,7 +888,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     xml: ['/etc/blkid.tab', '/etc/blkid.tab.old', 'file.xmi', 'file.csproj', 'file.csproj.user', 'file.fsproj', 'file.fsproj.user', 'file.vbproj', 'file.vbproj.user', 'file.ui',
           'file.tpm', '/etc/xdg/menus/file.menu', 'fglrxrc', 'file.xlf', 'file.xliff', 'file.xul', 'file.wsdl', 'file.wpl', 'any/etc/blkid.tab', 'any/etc/blkid.tab.old',
           'any/etc/xdg/menus/file.menu', 'file.atom', 'file.rss', 'file.cdxml', 'file.psc1', 'file.mpd', 'fonts.conf', 'file.xcu', 'file.xlb', 'file.xlc', 'file.xba', 'file.xpr',
-          'file.xpfm', 'file.spfm', 'file.bxml', 'file.mmi'],
+          'file.xpfm', 'file.spfm', 'file.bxml', 'file.mmi', 'file.slnx', 'Directory.Packages.props', 'Directory.Build.targets', 'Directory.Build.props'],
     xmodmap: ['anyXmodmap', 'Xmodmap', 'some-Xmodmap', 'some-xmodmap', 'some-xmodmap-file', 'xmodmap', 'xmodmap-file'],
     xpm: ['file.xpm'],
     xpm2: ['file.xpm2'],
@@ -989,11 +985,11 @@ def s:GetScriptChecks(): dict<list<list<string>>>
     clojure: [['#!/path/clojure']],
     scala:  [['#!/path/scala']],
     sh:     [['#!/path/sh'],
+            ['#!/path/bash'],
+            ['#!/path/bash2'],
             ['#!/path/dash'],
             ['#!/path/ksh'],
             ['#!/path/ksh93']],
-    bash:   [['#!/path/bash'],
-            ['#!/path/bash2']],
     csh:    [['#!/path/csh']],
     tcsh:   [['#!/path/tcsh']],
     zsh:    [['#!/path/zsh']],
@@ -1005,6 +1001,7 @@ def s:GetScriptChecks(): dict<list<list<string>>>
     expect: [['#!/path/expect']],
     execline: [['#!/sbin/execlineb -S0'], ['#!/usr/bin/execlineb']],
     gnuplot: [['#!/path/gnuplot']],
+    just:   [['#!/path/just']],
     make:   [['#!/path/make']],
     nix:    [['#!/path/nix-shell']],
     pike:   [['#!/path/pike'],
@@ -2310,6 +2307,43 @@ func Test_cls_file()
   filetype off
 endfunc
 
+func Test_cmd_file()
+  filetype on
+
+  call writefile(['--rom_model'], 'Xfile.cmd')
+  split Xfile.cmd
+  call assert_equal('lnk', &filetype)
+  bwipe!
+
+  call writefile(['/* comment */'], 'Xfile.cmd')
+  split Xfile.cmd
+  call assert_equal('rexx', &filetype)
+  bwipe!
+
+  call writefile(['REM comment'], 'Xfile.cmd')
+  split Xfile.cmd
+  call assert_equal('dosbatch', &filetype)
+  bwipe!
+
+  filetype off
+endfunc
+
+func Test_sa_file()
+  filetype on
+
+  call writefile([';* XXX-a.sa: XXX for TI C6000 DSP *;', '.no_mdep'], 'Xfile.sa')
+  split Xfile.sa
+  call assert_equal('tiasm', &filetype)
+  bwipe!
+
+  call writefile(['-- comment'], 'Xfile.sa')
+  split Xfile.sa
+  call assert_equal('sather', &filetype)
+  bwipe!
+
+  filetype off
+endfunc
+
 func Test_sig_file()
   filetype on
 
@@ -2769,6 +2803,24 @@ func Test_make_file()
   call writefile(['# get the list of tests', 'include testdir/Make_all.mak'], 'XMakefile.mak', 'D')
   split XMakefile.mak
   call assert_equal(0, get(b:, 'make_microsoft', 0))
+  bwipe!
+
+  filetype off
+endfunc
+
+func Test_map_file()
+  filetype on
+
+  " TI linker map file
+  call writefile(['******************************************************************************', '               TMS320C6x Linker Unix v7.4.24                   ', '******************************************************************************'], 'Xfile.map', 'D')
+  split Xfile.map
+  call assert_equal('lnkmap', &filetype)
+  bwipe!
+
+  " UMN mapserver config file
+  call writefile(['MAP', 'NAME "local-demo"', 'END'], 'Xfile.map', 'D')
+  split Xfile.map
+  call assert_equal('map', &filetype)
   bwipe!
 
   filetype off

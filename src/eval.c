@@ -819,6 +819,8 @@ deref_function_name(
     typval_T	ref;
     char_u	*name = *arg;
     int		save_flags = 0;
+    int		evaluate = evalarg != NULL
+				      && (evalarg->eval_flags & EVAL_EVALUATE);
 
     ref.v_type = VAR_UNKNOWN;
     if (evalarg != NULL)
@@ -867,7 +869,7 @@ deref_function_name(
 	    *tofree = name;
 	}
     }
-    else
+    else if (evaluate)
     {
 	if (verbose)
 	    semsg(_(e_not_callable_type_str), name);
@@ -3992,7 +3994,7 @@ eval_shift_number(typval_T *tv1, typval_T *tv2, int shift_type)
 }
 
 /*
- * Handle the bitwise left/right shift operator expression:
+ * Handle fourth level expression (bitwise left/right shift operators):
  *	var1 << var2
  *	var1 >> var2
  *
@@ -4510,7 +4512,8 @@ eval7(
 }
 
 /*
- * Handle a type cast before a base level expression.
+ * Handle seventh level expression:
+ *	a type cast before a base level expression.
  * "arg" must point to the first non-white of the expression.
  * "arg" is advanced to just after the recognized expression.
  * Return OK or FAIL.
@@ -4881,7 +4884,7 @@ eval9_var_func_name(
 }
 
 /*
- * Handle sixth level expression:
+ * Handle eighth level expression:
  *  number		number constant
  *  0zFFFFFFFF		Blob constant
  *  "string"		string constant

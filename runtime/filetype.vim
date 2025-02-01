@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last Change:	2024 Dec 12
+" Last Change:	2025 Jan 21
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " Listen very carefully, I will say this only once
@@ -240,9 +240,17 @@ au BufNewFile,BufRead *.fb			setf freebasic
 
 " Batch file for MSDOS. See dist#ft#FTsys for *.sys
 au BufNewFile,BufRead *.bat			setf dosbatch
-" *.cmd is close to a Batch file, but on OS/2 Rexx files also use *.cmd.
+" *.cmd is close to a Batch file, but on OS/2 Rexx files and TI linker command files also use *.cmd.
+" lnk: `/* comment */`, `// comment`, and `--linker-option=value`
+" rexx: `/* comment */`, `-- comment`
 au BufNewFile,BufRead *.cmd
-	\ if getline(1) =~ '^/\*' | setf rexx | else | setf dosbatch | endif
+	\  if join(getline(1, 20), "\n") =~ 'MEMORY\|SECTIONS\|\%(^\|\n\)--\S\|\%(^\|\n\)//'
+	\|   setf lnk
+	\| elseif getline(1) =~ '^/\*'
+	\|   setf rexx
+	\| else
+	\|   setf dosbatch
+	\| endif
 " ABB RAPID or Batch file for MSDOS.
 au BufNewFile,BufRead *.sys			call dist#ft#FTsys()
 if has("fname_case")
@@ -334,7 +342,7 @@ au BufNewFile,BufRead *.capnp			setf capnp
 au BufNewFile,BufRead cgdbrc			setf cgdbrc
 
 " C#
-au BufNewFile,BufRead *.cs,*.csx		setf cs
+au BufNewFile,BufRead *.cs,*.csx,*.cake		setf cs
 
 " CSDL
 au BufNewFile,BufRead *.csdl			setf csdl
@@ -943,6 +951,9 @@ au BufNewFile,BufRead */.config/git/attributes			setf gitattributes
 au BufNewFile,BufRead */etc/gitattributes			setf gitattributes
 au BufNewFile,BufRead .gitignore,*.git/info/exclude		setf gitignore
 au BufNewFile,BufRead */.config/git/ignore,*.prettierignore	setf gitignore
+au BufNewFile,BufRead */.config/fd/ignore,.fdignore,.ignore	setf gitignore
+au BufNewFile,BufRead .rgignore,.dockerignore			setf gitignore
+au BufNewFile,BufRead .npmignore,.vscodeignore			setf gitignore
 au BufNewFile,BufRead git-rebase-todo				setf gitrebase
 au BufRead,BufNewFile .gitsendemail.msg.??????			setf gitsendemail
 au BufNewFile,BufRead *.git/*
@@ -1236,7 +1247,7 @@ au BufNewFile,BufRead *.jgr			setf jgraph
 au BufNewFile,BufRead *.jinja			setf jinja
 
 " Jujutsu
-au BufNewFile,BufRead *.jjdescription		setf jj
+au BufNewFile,BufRead *.jjdescription		setf jjdescription
 
 " Jovial
 au BufNewFile,BufRead *.jov,*.j73,*.jovial	setf jovial
@@ -1260,11 +1271,13 @@ au BufNewFile,BufRead *.ipynb,*.jupyterlab-settings	setf json
 au BufNewFile,BufRead *.sublime-project,*.sublime-settings,*.sublime-workspace	setf json
 
 " Other files that look like json
-au BufNewFile,BufRead .prettierrc,.firebaserc,.stylelintrc,.lintstagedrc,flake.lock,deno.lock	setf json
+au BufNewFile,BufRead .prettierrc,.firebaserc,.stylelintrc,.lintstagedrc,flake.lock,deno.lock,.swcrc	setf json
 
 " JSONC (JSON with comments)
 au BufNewFile,BufRead *.jsonc,.babelrc,.eslintrc,.jsfmtrc,bun.lock	setf jsonc
 au BufNewFile,BufRead .jshintrc,.jscsrc,.vsconfig,.hintrc,.swrc,[jt]sconfig*.json	setf jsonc
+" Visual Studio Code settings
+au BufRead,BufNewFile ~/*/{Code,VSCodium}/User/*.json setf jsonc
 
 " JSON
 au BufNewFile,BufRead *.json,*.jsonp,*.webmanifest	setf json
@@ -1279,7 +1292,7 @@ au BufNewFile,BufRead *.jsonnet,*.libsonnet	setf jsonnet
 au BufNewFile,BufRead *.jl			setf julia
 
 " Just
-au BufNewFile,BufRead [jJ]ustfile,.justfile,*.just setf just
+au BufNewFile,BufRead \c{,*.}justfile,\c*.just setf just
 
 " KAREL
 au BufNewFile,BufRead *.kl setf karel
@@ -1493,7 +1506,12 @@ au BufNewFile,BufRead */etc/man.conf,man.config	setf manconf
 au BufNewFile,BufRead *.mv,*.mpl,*.mws		setf maple
 
 " Map (UMN mapserver config file)
-au BufNewFile,BufRead *.map			setf map
+au BufNewFile,BufRead *.map
+	\ if getline(1) =~ '^\*\+$' |
+	\   setf lnkmap |
+	\ else |
+	\   setf map |
+	\ endif
 
 " Markdown
 au BufNewFile,BufRead *.markdown,*.mdown,*.mkd,*.mkdn,*.mdwn,*.md
@@ -1708,6 +1726,9 @@ au BufNewFile,BufRead *.nse			setf lua
 
 " NSIS
 au BufNewFile,BufRead *.nsi,*.nsh		setf nsis
+
+" N-Triples
+au BufNewFile,BufRead *.nt			setf ntriples
 
 " Nu
 au BufNewFile,BufRead *.nu		setf nu
@@ -2172,7 +2193,7 @@ au BufNewFile,BufRead [rR]antfile,*.rant,[rR]akefile,*.rake	setf ruby
 au BufNewFile,BufRead *.rs			setf rust
 au BufNewFile,BufRead Cargo.lock,*/.cargo/config,*/.cargo/credentials	setf toml
 
-" S-lang (or shader language, or SmallLisp)
+" S-lang
 au BufNewFile,BufRead *.sl			setf slang
 
 " Sage
@@ -2187,14 +2208,17 @@ au BufNewFile,BufRead *.sas			setf sas
 " Sass
 au BufNewFile,BufRead *.sass			setf sass
 
-" Sather
-au BufNewFile,BufRead *.sa			setf sather
+" Sather, TI linear assembly
+au BufNewFile,BufRead *.sa			call dist#ft#FTsa()
 
 " Scala
 au BufNewFile,BufRead *.scala			setf scala
 
 " SBT - Scala Build Tool
 au BufNewFile,BufRead *.sbt			setf sbt
+
+" Slang Shading Language
+au BufNewFile,BufRead *.slang			setf shaderslang
 
 " Slint
 au BufNewFile,BufRead *.slint			setf slint
@@ -2301,6 +2325,9 @@ au BufNewFile,BufRead .tcshrc,*.tcsh,tcsh.tcshrc,tcsh.login	call dist#ft#SetFile
 " csh scripts, but might also be tcsh scripts (on some systems csh is tcsh)
 " (patterns ending in a start further below)
 au BufNewFile,BufRead .login,.cshrc,csh.cshrc,csh.login,csh.logout,*.csh,.alias  call dist#ft#CSH()
+
+" TriG
+au BufNewFile,BufRead *.trig			setf trig
 
 " Zig and Zig Object Notation (ZON)
 au BufNewFile,BufRead *.zig,*.zon		setf zig
@@ -2414,6 +2441,7 @@ au BufNewFile,BufRead *.ice			setf slice
 " Microsoft Visual Studio Solution
 au BufNewFile,BufRead *.sln			setf solution
 au BufNewFile,BufRead *.slnf			setf json
+au BufNewFile,BufRead *.slnx			setf xml
 
 " Spice
 au BufNewFile,BufRead *.sp,*.spice		setf spice
@@ -2909,6 +2937,9 @@ au BufNewFile,BufRead *.fsproj,*.fsproj.user	setf xml
 
 " VBPROJ files are Visual Studio.NET's XML-based Visual Basic project config files
 au BufNewFile,BufRead *.vbproj,*.vbproj.user	setf xml
+
+" MSBUILD configuration files are also XML
+au BufNewFile,BufRead Directory.Packages.props,Directory.Build.targets,Directory.Build.props	setf xml
 
 " Unison Language
 au BufNewFile,BufRead *.u,*.uu				setf unison

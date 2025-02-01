@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   linux:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.architecture == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
 
     env:
       CC: ${{ matrix.compiler }}
@@ -48,6 +48,10 @@ jobs:
           - features: tiny
             compiler: gcc
             extra: [nogui]
+          - features: tiny
+            compiler: gcc
+            extra: [nogui]
+            architecture: arm64
           - features: normal
             shadow: ./src/shadow
             compiler: gcc
@@ -73,6 +77,11 @@ jobs:
             compiler: gcc
             coverage: true
             extra: [unittests]
+          - features: huge
+            compiler: gcc
+            coverage: true
+            extra: [unittests]
+            architecture: arm64
           - features: normal
             compiler: gcc
             extra: [vimtags]
@@ -215,21 +224,6 @@ jobs:
           sudo usermod -a -G audio "${USER}"
           sudo bash ci/setup-xvfb.sh
 
-      - name: Set up snd-dummy
-        if: (!(contains(matrix.extra, 'unittests') || contains(matrix.extra, 'vimtags')))
-        env:
-          DEST_DIR: ${{ env.TMPDIR }}/linux-modules-extra-${{ env.LINUX_VERSION }}
-        uses: tecolicom/actions-use-apt-tools@main
-        with:
-          tools: linux-modules-extra-${{ env.LINUX_VERSION }}
-          path: "${DEST_DIR}"
-
-      - name: modprobe snd-dummy
-        if: (!(contains(matrix.extra, 'unittests') || contains(matrix.extra, 'vimtags')))
-        run: |
-          sudo depmod --verbose
-          sudo modprobe --verbose snd-dummy || true
-
       - name: Check autoconf
         if: contains(matrix.extra, 'unittests')
         run: |
@@ -266,10 +260,18 @@ jobs:
           "${SRCDIR}"/vim -u NONE -i NONE --not-a-term -esNX -V1 -S ci/if_ver-2.vim -c quit
 
       - name: Test
+        if: matrix.architecture != 'arm64'
         timeout-minutes: 25
         run: |
           do_test() { echo "$*"; sg audio "sg $(id -gn) '$*'"; }
           do_test make ${SHADOWOPT} ${TEST}
+
+      # `sg audio` does not work on arm64 runner due to permission ('Incorrect password' error).
+      - name: Test on arm64
+        if: matrix.architecture == 'arm64'
+        timeout-minutes: 25
+        run: |
+          make ${SHADOWOPT} ${TEST}
 
       - if: ${{ !cancelled() }}
         uses: ./.github/actions/test_artifacts
@@ -415,13 +417,13 @@ jobs:
       PYTHON_VER_DOT: '2.7'
       PYTHON_DIR: 'C:\Python27'
       # Python 3
-      PYTHON3_VER: 311
-      PYTHON3_VER_DOT: '3.11'
+      PYTHON3_VER: 312
+      PYTHON3_VER_DOT: '3.12'
       # Other dependencies
       # winpty
       WINPTY_URL: https://github.com/rprichard/winpty/releases/download/0.4.3/winpty-0.4.3-msvc2015.zip
       # libsodium
-      SODIUM_VER: '1.0.19'
+      SODIUM_VER: '1.0.20'
       # SODIUM_MSVC_URL: https://download.libsodium.org/libsodium/releases/libsodium-%SODIUM_VER%-stable-msvc.zip
       SODIUM_MSVC_URL: https://github.com/jedisct1/libsodium/releases/download/%SODIUM_VER%-RELEASE/libsodium-%SODIUM_VER%-msvc.zip
       SODIUM_MSVC_VER: v143

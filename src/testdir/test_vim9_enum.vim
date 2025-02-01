@@ -908,6 +908,18 @@ def Test_enum_comments()
   END
   v9.CheckSourceSuccess(lines)
 
+  lines =<< trim END
+    vim9script
+    enum Car   # cars
+      # before enum
+      Honda(), # honda
+      # before enum
+      Ford()   # ford
+    endenum
+    assert_equal(1, Car.Ford.ordinal)
+  END
+  v9.CheckSourceSuccess(lines)
+
   # Test for using an unsupported comment
   lines =<< trim END
     vim9script
@@ -919,6 +931,29 @@ def Test_enum_comments()
     defcompile
   END
   v9.CheckSourceFailure(lines, 'E1170: Cannot use #{ to start a comment', 4)
+enddef
+
+" Test trailing whitespace after enum values
+def Test_enum_whitespace()
+  var lines =<< trim END
+    vim9script
+    enum Car
+      Honda, 
+      Ford   
+    endenum
+    defcompile
+  END
+  v9.CheckSourceSuccess(lines)
+
+  lines =<< trim END
+    vim9script
+    enum Car
+      Honda(), 
+      Ford()   
+    endenum
+    defcompile
+  END
+  v9.CheckSourceSuccess(lines)
 enddef
 
 " Test string() with enums
@@ -1547,6 +1582,21 @@ def Test_lambda_block_in_enum()
       }
     endenum
     assert_equal(12, IdEnum2.Id(10))
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
+" Echo an enum
+def Test_enum_echo()
+  var lines =<< trim END
+    vim9script
+    enum Demo
+      one('tahi'),
+      two('rua'),
+      three('toru')
+      var alias: string
+    endenum
+    assert_equal('enum Demo.one {name: one, ordinal: 0, alias: tahi}', execute('echo Demo.one')->split("\n")[0])
   END
   v9.CheckScriptSuccess(lines)
 enddef

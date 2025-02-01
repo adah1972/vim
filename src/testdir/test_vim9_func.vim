@@ -550,6 +550,47 @@ def Test_not_missing_return()
   v9.CheckScriptSuccess(lines)
 enddef
 
+" Test for an if-else block ending in a throw statement
+def Test_if_else_with_throw()
+  var lines =<< trim END
+      def Ifelse_Throw1(): number
+        if false
+          return 1
+        else
+          throw 'Error'
+        endif
+      enddef
+      defcompile
+  END
+  v9.CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      def Ifelse_Throw2(): number
+        if true
+          throw 'Error'
+        else
+          return 2
+        endif
+      enddef
+      defcompile
+  END
+  v9.CheckScriptSuccess(lines)
+
+  lines =<< trim END
+      def Ifelse_Throw3(): number
+        if true
+          return 1
+        elseif false
+          throw 'Error'
+        else
+          return 3
+        endif
+      enddef
+      defcompile
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
 def Test_return_bool()
   var lines =<< trim END
       vim9script
@@ -4654,6 +4695,67 @@ def Test_test_override_defcompile()
   test_override('defcompile', 1)
   v9.CheckScriptFailure(lines, 'E476: Invalid command: xxx')
   test_override('defcompile', 0)
+enddef
+
+" Test for using a comment after the opening curly brace of an inner block.
+def Test_comment_after_inner_block()
+  var lines =<< trim END
+    vim9script
+
+    def F(G: func)
+    enddef
+
+    F(() => {       # comment1
+      F(() => {     # comment2
+        echo 'ok'   # comment3
+      })            # comment4
+    })              # comment5
+  END
+  v9.CheckScriptSuccess(lines)
+enddef
+
+" Test for calling an imported funcref which is modified in the current script
+def Test_call_modified_import_func()
+  var lines =<< trim END
+    vim9script
+
+    export var done = 0
+
+    def Noop()
+    enddef
+
+    export var Setup = Noop
+
+    export def Run()
+      done = 0
+      Setup()
+      call(Setup, [])
+      call("Setup", [])
+      call(() => Setup(), [])
+      done += 1
+    enddef
+  END
+  writefile(lines, 'XcallModifiedImportFunc.vim', 'D')
+
+  lines =<< trim END
+    vim9script
+
+    import './XcallModifiedImportFunc.vim' as imp
+
+    var setup = 0
+
+    imp.Run()
+
+    imp.Setup = () => {
+      ++setup
+    }
+
+    imp.Run()
+
+    assert_equal(4, setup)
+    assert_equal(1, imp.done)
+  END
+  v9.CheckScriptSuccess(lines)
 enddef
 
 " The following messes up syntax highlight, keep near the end.
