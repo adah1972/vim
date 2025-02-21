@@ -431,6 +431,23 @@ func Test_set_register()
   enew!
 endfunc
 
+" Test for blockwise register width calculations
+func Test_set_register_blockwise_width()
+  " Test for regular calculations and overriding the width
+  call setreg('a', "12\n1234\n123", 'b')
+  call assert_equal("\<c-v>4", getreginfo('a').regtype)
+  call setreg('a', "12\n1234\n123", 'b1')
+  call assert_equal("\<c-v>1", getreginfo('a').regtype)
+  call setreg('a', "12\n1234\n123", 'b6')
+  call assert_equal("\<c-v>6", getreginfo('a').regtype)
+
+  " Test for Unicode parsing
+  call setreg('a', "z😅😅z\n12345", 'b')
+  call assert_equal("\<c-v>6", getreginfo('a').regtype)
+  call setreg('a', ["z😅😅z", "12345"], 'b')
+  call assert_equal("\<c-v>6", getreginfo('a').regtype)
+endfunc
+
 " Test for clipboard registers (* and +)
 func Test_clipboard_regs()
   CheckNotGui
@@ -1083,6 +1100,27 @@ func Test_clipboard_regs_not_working2()
   let result = readfile('Xclipboard_result.txt')
   call assert_match("^\\nW23:", result[0])
   let $DISPLAY=display
+endfunc
+
+" This caused use-after-free
+func Test_register_redir_display()
+  CheckFeature clipboard
+  " don't touch the clipboard, so only perform this, when the clipboard is not working
+  if has("clipboard_working")
+    throw "Skipped: skip touching the clipboard register!"
+  endif
+  let @"=''
+  redir @+>
+  disp +"
+  redir END
+  call assert_equal("\nType Name Content", getreg('+'))
+  let a = [getreg('1'), getregtype('1')]
+  let @1='register 1'
+  redir @+
+  disp 1
+  redir END
+  call assert_equal("register 1", getreg('1'))
+  call setreg(1, a[0], a[1])
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

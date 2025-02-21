@@ -230,6 +230,7 @@ $quote	eval.txt	/*$quote*
 'ef'	options.txt	/*'ef'*
 'efm'	options.txt	/*'efm'*
 'ei'	options.txt	/*'ei'*
+'eiw'	options.txt	/*'eiw'*
 'ek'	options.txt	/*'ek'*
 'emo'	options.txt	/*'emo'*
 'emoji'	options.txt	/*'emoji'*
@@ -248,6 +249,7 @@ $quote	eval.txt	/*$quote*
 'esckeys'	options.txt	/*'esckeys'*
 'et'	options.txt	/*'et'*
 'eventignore'	options.txt	/*'eventignore'*
+'eventignorewin'	options.txt	/*'eventignorewin'*
 'ex'	options.txt	/*'ex'*
 'expandtab'	options.txt	/*'expandtab'*
 'exrc'	options.txt	/*'exrc'*
@@ -8189,6 +8191,7 @@ hl-PmenuSbar	syntax.txt	/*hl-PmenuSbar*
 hl-PmenuSel	syntax.txt	/*hl-PmenuSel*
 hl-PmenuThumb	syntax.txt	/*hl-PmenuThumb*
 hl-PopupNotification	syntax.txt	/*hl-PopupNotification*
+hl-PopupSelected	syntax.txt	/*hl-PopupSelected*
 hl-Question	syntax.txt	/*hl-Question*
 hl-QuickFixLine	syntax.txt	/*hl-QuickFixLine*
 hl-Scrollbar	syntax.txt	/*hl-Scrollbar*
@@ -9260,6 +9263,7 @@ new-vimscript-8.2	version8.txt	/*new-vimscript-8.2*
 new-virtedit	version6.txt	/*new-virtedit*
 news	intro.txt	/*news*
 nextnonblank()	builtin.txt	/*nextnonblank()*
+ngettext()	builtin.txt	/*ngettext()*
 no-eval-feature	eval.txt	/*no-eval-feature*
 no-type-checking	eval.txt	/*no-type-checking*
 no_buffers_menu	gui.txt	/*no_buffers_menu*

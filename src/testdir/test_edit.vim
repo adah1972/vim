@@ -198,7 +198,7 @@ func Test_edit_07()
     endif
   endfu
   au InsertCharPre <buffer> :call DoIt()
-  call feedkeys("A\<f5>\<c-p>u\<cr>\<c-l>\<cr>", 'tx')
+  call feedkeys("A\<f5>\<c-p>u\<C-Y>\<c-l>\<cr>", 'tx')
   call assert_equal(["Jan\<c-l>",''], 1->getline('$'))
   %d
   call setline(1, 'J')
@@ -2291,6 +2291,17 @@ func Test_edit_backspace_smarttab_virtual_text()
   call CloseWindow()
   call prop_type_delete('theprop')
   set smarttab&
+endfunc
+
+func Test_edit_CAR()
+  set cot=menu,menuone,noselect
+  new
+
+  call feedkeys("Shello hero\<CR>h\<C-x>\<C-N>e\<CR>", 'tx')
+  call assert_equal(['hello hero', 'he', ''], getline(1, '$'))
+
+  bw!
+  set cot&
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -1661,10 +1661,12 @@ set_color_count(int nr)
 	sprintf((char *)nr_colors, "%d", t_colors);
     else
 	*nr_colors = NUL;
+#if 0
 #ifdef FEAT_TERMGUICOLORS
     // xterm-direct, enable termguicolors, when it wasn't set yet
     if (t_colors == 0x1000000 && !p_tgc_set)
 	set_option_value((char_u *)"termguicolors", 1L, NULL, 0);
+#endif
 #endif
     set_string_option_direct((char_u *)"t_Co", -1, nr_colors, OPT_FREE, 0);
 }
@@ -1701,7 +1703,9 @@ static char *(key_names[]) =
 # ifdef FEAT_TERMRESPONSE
     // Do those ones first, both may cause a screen redraw.
     "Co",
-    "RGB",
+    // disabled, because it switches termguicolors, but that
+    // is noticable and confuses users
+    // "RGB",
 # endif
     "ku", "kd", "kr", "kl",
     "#2", "#4", "%i", "*7",
@@ -7136,7 +7140,9 @@ req_more_codes_from_term(void)
 }
 
 /*
- * Decode key code response from xterm: '<Esc>P1+r<name>=<string><Esc>\'.
+ * Decode key code response from xterm:
+ * '<Esc>P1+r<name>=<string><Esc>\' if it is enabled/supported
+ * '<Esc>P0+r<Esc>\'                if it not enabled
  * A "0" instead of the "1" indicates a code that isn't supported.
  * Both <name> and <string> are encoded in hex.
  * "code" points to the "0" or "1".
@@ -7152,8 +7158,9 @@ got_code_from_term(char_u *code, int len)
     int		c;
 
     // A '1' means the code is supported, a '0' means it isn't.
+    // If it is supported, there must be a '=' following
     // When half the length is > XT_LEN we can't use it.
-    if (code[0] == '1' && (code[7] || code[9] == '=') && len / 2 < XT_LEN)
+    if (code[0] == '1' && (code[7] == '=' || code[9] == '=') && len / 2 < XT_LEN)
     {
 	// Get the name from the response and find it in the table.
 	name[0] = hexhex2nr(code + 3);
@@ -7194,6 +7201,7 @@ got_code_from_term(char_u *code, int len)
 #endif
 		may_adjust_color_count(val);
 	    }
+#if 0
 #ifdef FEAT_TERMGUICOLORS
 	    // when RGB result comes back, it is supported when the result contains an '='
 	    else if (name[0] == 'R' && name[1] == 'G' && name[2] == 'B' && code[9] == '=')
@@ -7210,6 +7218,7 @@ got_code_from_term(char_u *code, int len)
 		    set_option_value((char_u *)"termguicolors", 1L, NULL, 0);
 		}
 	    }
+#endif
 #endif
 	    else
 	    {
@@ -7494,7 +7503,7 @@ ansi_color2rgb(int nr, char_u *r, char_u *g, char_u *b, char_u *ansi_idx)
 	*r = ansi_table[nr][0];
 	*g = ansi_table[nr][1];
 	*b = ansi_table[nr][2];
-	*ansi_idx = nr;
+	*ansi_idx = nr + 1;
     }
     else
     {

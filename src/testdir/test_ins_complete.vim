@@ -2689,6 +2689,8 @@ func Test_complete_fuzzy_match()
   func OnPumChange()
     let g:item = get(v:event, 'completed_item', {})
     let g:word = get(g:item, 'word', v:null)
+    let g:abbr = get(g:item, 'abbr', v:null)
+    let g:selected = get(complete_info(['selected']), 'selected')
   endfunction
 
   augroup AAAAA_Group
@@ -2853,7 +2855,7 @@ func Test_complete_fuzzy_match()
   call setline(1, ['Text', 'ToText', ''])
   call cursor(3, 1)
   call feedkeys("STe\<C-X>\<C-N>x\<CR>\<Esc>0", 'tx!')
-  call assert_equal('Tex', getline('.'))
+  call assert_equal('Tex', getline(line('.') - 1))
 
   " test case for nosort option
   set cot=menuone,menu,noinsert,fuzzy,nosort
@@ -2875,6 +2877,28 @@ func Test_complete_fuzzy_match()
   call feedkeys("S\<C-x>\<C-o>fooB\<C-Y>", 'tx')
   call assert_equal('fooBaz', getline('.'))
 
+  set cot=menuone,fuzzy,nosort
+  func CompAnother()
+    call complete(col('.'), [#{word: "do" }, #{word: "echo"}, #{word: "for (${1:expr1}, ${2:expr2}, ${3:expr3}) {\n\t$0\n}", abbr: "for" }, #{word: "foo"}])
+    return ''
+  endfunc
+  call feedkeys("i\<C-R>=CompAnother()\<CR>\<C-N>\<C-N>", 'tx')
+  call assert_equal("for", g:abbr)
+  call assert_equal(2, g:selected)
+
+  set cot+=noinsert
+  call feedkeys("i\<C-R>=CompAnother()\<CR>f", 'tx')
+  call assert_equal("for", g:abbr)
+  call assert_equal(2, g:selected)
+
+  set cot=menu,menuone,noselect,fuzzy
+  call feedkeys("i\<C-R>=CompAnother()\<CR>\<C-N>\<C-N>\<C-N>\<C-N>", 'tx')
+  call assert_equal("foo", g:word)
+  call feedkeys("i\<C-R>=CompAnother()\<CR>\<C-P>", 'tx')
+  call assert_equal("foo", g:word)
+  call feedkeys("i\<C-R>=CompAnother()\<CR>\<C-P>\<C-P>", 'tx')
+  call assert_equal("for", g:abbr)
+
   " clean up
   set omnifunc=
   bw!
@@ -2885,8 +2909,11 @@ func Test_complete_fuzzy_match()
   delfunc OnPumChange
   delfunc Omni_test
   delfunc Comp
+  delfunc CompAnother
   unlet g:item
   unlet g:word
+  unlet g:selected
+  unlet g:abbr
 endfunc
 
 func Test_complete_fuzzy_with_completeslash()
@@ -3103,6 +3130,14 @@ function Test_completeopt_preinsert()
   call assert_equal("fo ", getline('.'))
   call assert_equal(3, col('.'))
 
+  call feedkeys("She\<C-X>\<C-N>\<C-U>", 'tx')
+  call assert_equal("", getline('.'))
+  call assert_equal(1, col('.'))
+
+  call feedkeys("She\<C-X>\<C-N>\<C-W>", 'tx')
+  call assert_equal("", getline('.'))
+  call assert_equal(1, col('.'))
+
   " whole line
   call feedkeys("Shello hero\<CR>\<C-X>\<C-L>", 'tx')
   call assert_equal("hello hero", getline('.'))
@@ -3135,6 +3170,11 @@ function Test_completeopt_preinsert()
   call feedkeys("S\<C-X>\<C-O>fb\<C-Y>", 'tx')
   call assert_equal("fobar", getline('.'))
   call assert_equal(5, col('.'))
+
+  set cot=preinsert
+  call feedkeys("Sfoo1 foo2\<CR>f\<C-X>\<C-N>bar", 'tx')
+  call assert_equal("fbar", getline('.'))
+  call assert_equal(4, col('.'))
 
   bw!
   set cot&

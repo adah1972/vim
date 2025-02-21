@@ -2420,7 +2420,8 @@ ex_display(exarg_T *eap)
 
 #ifdef FEAT_EVAL
 	if (name == MB_TOLOWER(redir_reg)
-		|| (redir_reg == '"' && yb == y_previous))
+		|| (vim_strchr((char_u *)"\"*+", redir_reg) != NULL &&
+		    (yb == y_previous || yb == &y_regs[0])))
 	    continue;	    // do not list register being written to, the
 			    // pointer can be freed
 #endif
@@ -3019,12 +3020,17 @@ str_to_reg(
 	{
 	    int charlen = 0;
 
-	    for (i = start; i < len; ++i)	// find the end of the line
+	    for (i = start; i < len;)	// find the end of the line
 	    {
 		if (str[i] == '\n')
 		    break;
 		if (type == MBLOCK)
 		    charlen += mb_ptr2cells_len(str + i, len - i);
+
+		if (str[i] == NUL)
+		    i++; // registers can have NUL chars
+		else
+		    i += mb_ptr2len_len(str + i, len - i);
 	    }
 	    i -= start;			// i is now length of line
 	    if (charlen > maxlen)
