@@ -91,3 +91,23 @@ set path=abc,
 set path=
       "\ def is a 'path' directory value
       \abc,def
+
+
+" CompilerSet
+
+CompilerSet makeprg=ant
+CompilerSet errorformat=\ %#[%.%#]\ %#%f:%l:%v:%*\\d:%*\\d:\ %t%[%^:]%#:%m,
+    \%A\ %#[%.%#]\ %f:%l:\ %m,%-Z\ %#[%.%#]\ %p^,%C\ %#[%.%#]\ %#%m
+
+
+" Unreported issue (double backslash)
+
+setlocal com=s1:/*,mb:*,ex:*/,b:--,be:\\
+echo "Foo"
+setlocal include=^\\s*\\%(so\\%[urce]\\\|ru\\%[ntime]\\)[!\ ]\ *\\zs[^\\|]*
+echo "Foo"
+set quoteescape=\\
+echo "Foo"
+set quoteescape=\
+echo "Foo"
+

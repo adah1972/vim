@@ -461,8 +461,8 @@ handle_lnum_col(
 	  if (wp->w_p_cul
 		  && wlv->lnum == wp->w_cursor.lnum
 		  && (wp->w_p_culopt_flags & CULOPT_NBR)
-		  && (wlv->row == wlv->startrow + wlv->filler_lines
-		      || (wlv->row > wlv->startrow + wlv->filler_lines
+		  && (wlv->row == lnum_row
+		      || (wlv->row > lnum_row
 			 && (wp->w_p_culopt_flags & CULOPT_LINE))))
 	    wlv->char_attr = hl_combine_attr(wlv->wcr_attr, HL_ATTR(HLF_CLN));
 #endif
@@ -2274,7 +2274,7 @@ win_line(
 				}
 
 				if (above)
-				    wlv.vcol_off_tp = vim_strsize(wlv.p_extra);
+				    wlv.vcol_off_tp += vim_strsize(wlv.p_extra);
 
 				if (lcs_eol_one < 0
 					&& wp->w_p_wrap
@@ -3727,6 +3727,7 @@ win_line(
 		&& wlv.filler_todo <= 0
 #endif
 		&& wlv.draw_state > WL_NR
+		&& skip_cells <= 0
 		&& c != NUL)
 	{
 	    c = wp->w_lcs_chars.prec;

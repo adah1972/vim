@@ -1584,6 +1584,7 @@ BASIC_SRC = \
 	textobject.c \
 	textprop.c \
 	time.c \
+	tuple.c \
 	typval.c \
 	ui.c \
 	undo.c \
@@ -1744,6 +1745,7 @@ OBJ_COMMON = \
 	objects/textobject.o \
 	objects/textprop.o \
 	objects/time.o \
+	objects/tuple.o \
 	objects/typval.o \
 	objects/ui.o \
 	objects/undo.o \
@@ -1937,6 +1939,7 @@ PRO_AUTO = \
 	textobject.pro \
 	textprop.pro \
 	time.pro \
+	tuple.pro \
 	typval.pro \
 	ui.pro \
 	undo.pro \
@@ -2354,6 +2357,7 @@ installrtbase: $(HELPSOURCE)/vim.1 $(DEST_VIM) $(VIMTARGET) $(DEST_RT) \
 		$(DEST_IMPORT) $(DEST_IMPORT)/dist \
 		$(DEST_PLUG) \
 	       	$(DEST_TUTOR) $(DEST_TUTOR)/en $(DEST_TUTOR)/it $(DEST_TUTOR)/sr \
+		$(DEST_TUTOR)/ru \
 		$(DEST_SPELL) $(DEST_COMP)
 	-$(SHELL) ./installman.sh install $(DEST_MAN) "" $(INSTALLMANARGS)
 # Generate the help tags with ":helptags" to handle all languages.
@@ -2484,15 +2488,17 @@ installgtutorbin: $(DEST_BIN)
 	$(INSTALL_DATA) gvimtutor $(DEST_BIN)/$(GVIMNAME)tutor
 	chmod $(SCRIPTMOD) $(DEST_BIN)/$(GVIMNAME)tutor
 
-installtutor: $(DEST_RT) $(DEST_TUTOR)/en $(DEST_TUTOR)/it $(DEST_TUTOR)/sr
+installtutor: $(DEST_RT) $(DEST_TUTOR)/en $(DEST_TUTOR)/it $(DEST_TUTOR)/sr $(DEST_TUTOR)/ru
 	-$(INSTALL_DATA) $(TUTORSOURCE)/README* $(TUTORSOURCE)/tutor* $(DEST_TUTOR)
 	-$(INSTALL_DATA) $(TUTORSOURCE)/en/* $(DEST_TUTOR)/en/
 	-$(INSTALL_DATA) $(TUTORSOURCE)/it/* $(DEST_TUTOR)/it/
+	-$(INSTALL_DATA) $(TUTORSOURCE)/ru/* $(DEST_TUTOR)/ru/
 	-$(INSTALL_DATA) $(TUTORSOURCE)/sr/* $(DEST_TUTOR)/sr/
 	-rm -f $(DEST_TUTOR)/*.info
 	chmod $(HELPMOD) $(DEST_TUTOR)/*
 	chmod $(DIRMOD) $(DEST_TUTOR)/en
 	chmod $(DIRMOD) $(DEST_TUTOR)/it
+	chmod $(DIRMOD) $(DEST_TUTOR)/ru
 	chmod $(DIRMOD) $(DEST_TUTOR)/sr
 
 # Install the spell files, if they exist.  This assumes at least the English
@@ -2642,7 +2648,7 @@ install-languages: languages $(DEST_LANG) $(DEST_KMAP) $(DEST_RT)
 	  elif test -n "$(LC_MESSAGES)" ; then \
 	    lngusr=$${LC_MESSAGES%%.*} ; \
 	  fi; \
-	  if test "$$lngusr" = "zh_TW" -o "$$lngusr" = "zh_CN" ; then \
+	  if test "$$lngusr" = "zh_TW" -o "$$lngusr" = "zh_CN" -o "$$lngusr" = "pt_BR" ; then \
 	    lngusr=`echo $$lngusr | tr '[:upper:]' '[:lower:]'` ; \
 	  elif test -n "$$lngusr" -a "$$lngusr" != "C" -a "$$lngusr" != "POSIX" ; then \
 	    lngusr=$${lngusr%%_*} ; \
@@ -2715,7 +2721,7 @@ $(DESTDIR)$(exec_prefix) $(DEST_BIN) \
 		$(DEST_LANG) $(DEST_KMAP) $(DEST_COMP) $(DEST_MACRO) \
 		$(DEST_PACK) $(DEST_TOOLS) \
 		$(DEST_TUTOR) $(DEST_TUTOR)/en $(DEST_TUTOR)/it \
-		$(DEST_TUTOR)/sr \
+		$(DEST_TUTOR)/sr $(DEST_TUTOR)/ru \
 		$(DEST_SPELL) \
 		$(DEST_AUTO) $(DEST_AUTO)/dist $(DEST_AUTO)/xml \
 		$(DEST_AUTO)/cargo $(DEST_AUTO)/rust \
@@ -2901,6 +2907,7 @@ uninstall_runtime:
 	-rm -rf $(DEST_PACK)
 	-rm -rf $(DEST_TUTOR)/en
 	-rm -rf $(DEST_TUTOR)/it
+	-rm -rf $(DEST_TUTOR)/ru
 	-rm -rf $(DEST_TUTOR)/sr
 	-rm -rf $(DEST_TUTOR)
 	-rm -rf $(DEST_SPELL)
@@ -2920,7 +2927,9 @@ uninstall_runtime:
 	-rmdir $(DEST_FTP) $(DEST_AUTO)/dist $(DEST_AUTO)/xml $(DEST_AUTO)/cargo $(DEST_AUTO)/rust $(DEST_AUTO)
 	-rmdir $(DEST_IMPORT)/dist $(DEST_IMPORT)
 	-rm -f $(DEST_RT)/README.??.txt
+	-rm -f $(DEST_RT)/README.??_??.txt
 	-rm -f $(DEST_RT)/LICENSE.??.txt
+	-rm -f $(DEST_RT)/LICENSE.??_??.txt
 	-rm -f $(DEST_RT)/README.txt $(DEST_RT)/LICENSE
 	-rmdir $(DEST_PLUG) $(DEST_RT)
 #	This will fail when other Vim versions are installed, no worries.
@@ -3561,6 +3570,9 @@ objects/textprop.o: textprop.c
 
 objects/time.o: time.c
 	$(CCC) -o $@ time.c
+
+objects/tuple.o: tuple.c
+	$(CCC) -o $@ tuple.c
 
 objects/typval.o: typval.c
 	$(CCC) -o $@ typval.c
@@ -4238,6 +4250,11 @@ objects/textprop.o: textprop.c vim.h protodef.h auto/config.h feature.h os_unix.
  libvterm/include/vterm_keycodes.h alloc.h ex_cmds.h spell.h proto.h \
  globals.h errors.h
 objects/time.o: time.c vim.h protodef.h auto/config.h feature.h os_unix.h \
+ auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
+ proto/gui_beval.pro structs.h regexp.h gui.h libvterm/include/vterm.h \
+ libvterm/include/vterm_keycodes.h alloc.h ex_cmds.h spell.h proto.h \
+ globals.h errors.h
+objects/tuple.o: tuple.c vim.h protodef.h auto/config.h feature.h os_unix.h \
  auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
  proto/gui_beval.pro structs.h regexp.h gui.h libvterm/include/vterm.h \
  libvterm/include/vterm_keycodes.h alloc.h ex_cmds.h spell.h proto.h \

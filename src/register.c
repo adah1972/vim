@@ -437,7 +437,7 @@ do_record(int c)
     static int
 stuff_yank(int regname, char_u *p)
 {
-    size_t	plen;
+    size_t  plen;
 
     // check for read-only register
     if (regname != 0 && !valid_yank_reg(regname, TRUE))
@@ -1374,6 +1374,9 @@ op_yank(oparg_T *oap, int deleting, int mess)
 	    curbuf->b_op_start.col = 0;
 	    curbuf->b_op_end.col = MAXCOL;
 	}
+	if (yanktype != MLINE && !oap->inclusive)
+	    // Exclude the end position.
+	    decl(&curbuf->b_op_end);
     }
 
 #ifdef FEAT_CLIPBOARD
@@ -2249,7 +2252,7 @@ error:
 	    // Put the '] mark on the first byte of the last inserted character.
 	    // Correct the length for change in indent.
 	    curbuf->b_op_end.lnum = new_lnum;
-	    col = (colnr_T)y_array[y_size - 1].length - lendiff;
+	    col = MAX(0, (colnr_T)y_array[y_size - 1].length - lendiff);
 	    if (col > 1)
 	    {
 		curbuf->b_op_end.col = col - 1;
@@ -2376,6 +2379,7 @@ ex_display(exarg_T *eap)
     char_u	*arg = eap->arg;
     int		clen;
     int		type;
+    string_T	insert;
 
     if (arg != NULL && *arg == NUL)
 	arg = NULL;
@@ -2468,7 +2472,8 @@ ex_display(exarg_T *eap)
     }
 
     // display last inserted text
-    if ((p = get_last_insert()) != NULL
+    insert = get_last_insert();
+    if ((p = insert.string) != NULL
 		  && (arg == NULL || vim_strchr(arg, '.') != NULL) && !got_int
 						      && !message_filtered(p))
     {
