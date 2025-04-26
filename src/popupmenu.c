@@ -115,6 +115,8 @@ pum_display(
     do
     {
 	def_width = p_pw;
+	if (p_pmw > 0 && def_width > p_pmw)
+	    def_width = p_pmw;
 	above_row = 0;
 	below_row = cmdline_row;
 
@@ -226,6 +228,8 @@ pum_display(
 	pum_size = size;
 	pum_compute_size();
 	max_width = pum_base_width;
+        if (p_pmw > 0 && max_width > p_pmw)
+	    max_width = p_pmw;
 
 	// Calculate column
 	if (State == MODE_CMDLINE)
@@ -275,8 +279,12 @@ pum_display(
 
 	    content_width = max_width + pum_kind_width + pum_extra_width + 1;
 	    if (pum_width > content_width && pum_width > p_pw)
+	    {
 		// Reduce width to fit item
-		pum_width = MAX(content_width , p_pw);
+		pum_width = MAX(content_width, p_pw);
+		if (p_pmw > 0 && pum_width > p_pmw)
+		    pum_width = p_pmw;
+	    }
 	    else if (((cursor_col > p_pw || cursor_col > max_width)
 #ifdef FEAT_RIGHTLEFT
 			&& !pum_rl)
@@ -313,6 +321,8 @@ pum_display(
 		if (pum_width < p_pw)
 		{
 		    pum_width = p_pw;
+		    if (p_pmw > 0 && pum_width > p_pmw)
+			pum_width = p_pmw;
 #ifdef FEAT_RIGHTLEFT
 		    if (pum_rl)
 		    {
@@ -327,7 +337,15 @@ pum_display(
 		    }
 		}
 		else if (pum_width > content_width && pum_width > p_pw)
+		{
 		    pum_width = MAX(content_width, p_pw);
+		    if (p_pmw > 0 && pum_width > p_pmw)
+			pum_width = p_pmw;
+		}
+		else if (p_pmw > 0 && pum_width > p_pmw)
+		{
+		    pum_width = p_pmw;
+		}
 	    }
 
 	}
@@ -341,11 +359,15 @@ pum_display(
 #endif
 		pum_col = 0;
 	    pum_width = Columns - 1;
+	    if (p_pmw > 0 && pum_width > p_pmw)
+		pum_width = p_pmw;
 	}
 	else
 	{
 	    if (max_width > p_pw)
 		max_width = p_pw;	// truncate
+	    if (p_pmw > 0 && max_width > p_pmw)
+		max_width = p_pmw;
 #ifdef FEAT_RIGHTLEFT
 	    if (pum_rl)
 		pum_col = max_width - 1;
@@ -456,7 +478,7 @@ pum_compute_text_attrs(char_u *text, hlf_T hlf, int user_hlattr)
 	else
 	{
 	    if (matched_len < 0 && MB_STRNICMP(ptr, leader, leader_len) == 0)
-		matched_len = leader_len;
+		matched_len = (int)leader_len;
 	    if (matched_len > 0)
 	    {
 		new_attr = highlight_attr[is_select ? HLF_PMSI : HLF_PMNI];
@@ -582,6 +604,15 @@ pum_redraw(void)
     int		last_isabbr = FALSE;
     int		orig_attr = -1;
     int		scroll_range = pum_size - pum_height;
+    int		remaining = 0;
+    int		fcs_trunc;
+
+#ifdef  FEAT_RIGHTLEFT
+    if (pum_rl)
+	fcs_trunc = curwin->w_fill_chars.truncrl;
+    else
+#endif
+	fcs_trunc = curwin->w_fill_chars.trunc;
 
     hlf_T	hlfsNorm[3];
     hlf_T	hlfsSel[3];
@@ -660,6 +691,10 @@ pum_redraw(void)
 	    width = 0;
 	    s = NULL;
 	    p = pum_get_item(idx, item_type);
+
+	    if (j + 1 < 3)
+		next_isempty = pum_get_item(idx, order[j + 1]) == NULL;
+
 	    if (p != NULL)
 		for ( ; ; MB_PTR_ADV(p))
 		{
@@ -696,10 +731,17 @@ pum_redraw(void)
 
 			    if (rt != NULL)
 			    {
-				char_u		*rt_start = rt;
-				int		cells;
+				char_u	    *rt_start = rt;
+				int	    cells;
+				int	    over_cell = 0;
+				int	    truncated = FALSE;
+				int	    pad = next_isempty ? 0 : 2;
 
-				cells = vim_strsize(rt);
+				cells = mb_string2cells(rt , -1);
+				truncated = pum_width == p_pmw
+					    && pum_width - totwidth < cells + pad;
+
+				// only draw the text that fits
 				if (cells > pum_width)
 				{
 				    do
@@ -718,6 +760,39 @@ pum_redraw(void)
 					*(--rt) = '<';
 					cells++;
 				    }
+				}
+
+				if (truncated)
+				{
+				    char_u  *orig_rt = rt;
+				    int	    size = 0;
+
+				    remaining = pum_width - totwidth - 1;
+				    cells = mb_string2cells(rt, -1);
+				    if (cells > remaining)
+				    {
+					while (cells > remaining)
+					{
+					    MB_PTR_ADV(orig_rt);
+					    cells -= has_mbyte ? (*mb_ptr2cells)(orig_rt) : 1;
+					}
+				    }
+				    size = (int)STRLEN(orig_rt);
+				    if (cells < remaining)
+					over_cell =  remaining - cells;
+
+				    cells = mb_string2cells(orig_rt, size);
+				    width = cells + over_cell + 1;
+				    rt = orig_rt;
+
+				    if (fcs_trunc != NUL)
+					screen_putchar(fcs_trunc, row, col - width + 1, attr);
+				    else
+					screen_putchar('<', row, col - width + 1, attr);
+
+				    if (over_cell > 0)
+					screen_fill(row, row + 1, col - width + 2,
+						    col - width + 2 + over_cell, ' ', ' ', attr);
 				}
 
 				if (attrs == NULL)
@@ -739,8 +814,13 @@ pum_redraw(void)
 		    {
 			if (st != NULL)
 			{
-			    int size = (int)STRLEN(st);
-			    int cells = (*mb_string2cells)(st, size);
+			    int		size = (int)STRLEN(st);
+			    int		cells = (*mb_string2cells)(st, size);
+			    char_u	*st_end = NULL;
+			    int		over_cell = 0;
+			    int		pad = next_isempty ? 0 : 2;
+			    int		truncated = pum_width == p_pmw
+					    && pum_width - totwidth < cells + pad;
 
 			    // only draw the text that fits
 			    while (size > 0
@@ -756,11 +836,44 @@ pum_redraw(void)
 				    --cells;
 			    }
 
+			    // truncated
+			    if (truncated)
+			    {
+				remaining = pum_width - totwidth - 1;
+				if (cells > remaining)
+				{
+				    st_end = st + size;
+				    while (st_end > st && cells > remaining)
+				    {
+					MB_PTR_BACK(st, st_end);
+					cells -= has_mbyte ? (*mb_ptr2cells)(st_end) : 1;
+				    }
+				    size = st_end - st;
+				}
+
+				if (cells < remaining)
+				    over_cell =  remaining - cells;
+				cells = mb_string2cells(st, size);
+				width = cells + over_cell + 1;
+			    }
+
 			    if (attrs == NULL)
 				screen_puts_len(st, size, row, col, attr);
 			    else
 				pum_screen_puts_with_attrs(row, col, cells,
 							      st, size, attrs);
+			    if (truncated)
+			    {
+				if (over_cell > 0)
+				    screen_fill(row, row + 1, col + cells,
+					    col + cells + over_cell, ' ', ' ', attr);
+				if (fcs_trunc != NUL)
+				    screen_putchar(fcs_trunc, row,
+					    col + cells + over_cell, attr);
+				else
+				    screen_putchar('>', row,
+					    col + cells + over_cell, attr);
+			    }
 
 			    vim_free(st);
 			}
@@ -795,9 +908,6 @@ pum_redraw(void)
 		n = items_width_array[order[1]] + (last_isabbr ? 0 : 1);
 	    else
 		n = order[j] == CPT_ABBR ? 1 : 0;
-
-	    if (j + 1 < 3)
-		next_isempty = pum_get_item(idx, order[j + 1]) == NULL;
 
 	    // Stop when there is nothing more to display.
 	    if (j == 2

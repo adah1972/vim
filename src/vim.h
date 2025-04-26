@@ -854,6 +854,7 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 #define EXPAND_SHELLCMDLINE	60
 #define EXPAND_FINDFUNC		61
 #define EXPAND_HIGHLIGHT_GROUP  62
+#define EXPAND_FILETYPECMD	63
 
 
 // Values for exmode_active (0 is no exmode)
@@ -1371,6 +1372,7 @@ enum auto_event
     EVENT_BUFWRITEPRE,		// before writing a buffer
     EVENT_CMDLINECHANGED,	// command line was modified
     EVENT_CMDLINEENTER,		// after entering the command line
+    EVENT_CMDLINELEAVEPRE,	// just before leaving the command line
     EVENT_CMDLINELEAVE,		// before leaving the command line
     EVENT_CMDUNDEFINED,		// command undefined
     EVENT_CMDWINENTER,		// after entering the cmdline window
@@ -1517,7 +1519,8 @@ typedef enum
     , HLF_ADD	    // Added diff line
     , HLF_CHD	    // Changed diff line
     , HLF_DED	    // Deleted diff line
-    , HLF_TXD	    // Text Changed in diff line
+    , HLF_TXD	    // Text Changed in changed diff line
+    , HLF_TXA	    // Text Added in changed diff line
     , HLF_CONCEAL   // Concealed text
     , HLF_SC	    // Sign column
     , HLF_SPB	    // SpellBad
@@ -1551,7 +1554,7 @@ typedef enum
 // When changing this also adjust the default for 'highlight'.
 #define HL_FLAGS {'8', '~', '@', 'd', 'e', 'h', 'i', 'l', 'y', 'm', 'M', \
 		  'n', 'a', 'b', 'N', 'G', 'O', 'r', 's', 'S', 'c', 't', 'v', 'V', \
-		  'w', 'W', 'f', 'F', 'A', 'C', 'D', 'T', '-', '>', \
+		  'w', 'W', 'f', 'F', 'A', 'C', 'D', 'T', 'E', '-', '>', \
 		  'B', 'P', 'R', 'L', \
 		  '+', '=', 'k', '<','[', ']', '{', '}', 'x', 'X', \
 		  '*', '#', '_', '!', '.', 'o', 'q', \

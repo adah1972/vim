@@ -4735,6 +4735,44 @@ did_set_wrap(optset_T *args UNUSED)
     return NULL;
 }
 
+#ifdef FEAT_QUICKFIX
+/*
+ * Process the new 'chistory' or 'lhistory' option value. 'chistory' will
+ * be used if args->os_varp is the same as p_chi, else 'lhistory'.
+ */
+    char *
+did_set_xhistory(optset_T *args)
+{
+    int is_p_chi = (long*)args->os_varp == &p_chi;
+    int err;
+    long *arg = (is_p_chi) ? &p_chi :(long*)args->os_varp;
+
+    // cannot have zero or negative number of quickfix lists in a stack
+    if (*arg < 1)
+    {
+	*arg = args->os_oldval.number;
+	return e_cannot_have_negative_or_zero_number_of_quickfix;
+    }
+
+    // cannot have more than 100 quickfix lists in a stack
+    if (*arg > 100)
+    {
+	*arg = args->os_oldval.number;
+	return e_cannot_have_more_than_hundred_quickfix;
+    }
+
+    if (is_p_chi)
+	err = qf_resize_stack(*arg);
+    else
+	err = ll_resize_stack(curwin, *arg);
+
+    if (err == FAIL)
+	return e_failed_resizing_quickfix_stack;
+
+    return NULL;
+}
+#endif
+
 /*
  * Set the value of a boolean option, and take care of side effects.
  * Returns NULL for success, or an error message for an error.
@@ -6362,6 +6400,9 @@ unset_global_local_option(char_u *name, void *from)
 	    clear_string_option(&buf->b_p_cot);
 	    buf->b_cot_flags = 0;
 	    break;
+	case PV_ISE:
+	    clear_string_option(&buf->b_p_ise);
+	    break;
 	case PV_DICT:
 	    clear_string_option(&buf->b_p_dict);
 	    break;
@@ -6480,6 +6521,7 @@ get_varp_scope(struct vimoption *p, int scope)
 	    case PV_INC:  return (char_u *)&(curbuf->b_p_inc);
 #endif
 	    case PV_COT:  return (char_u *)&(curbuf->b_p_cot);
+	    case PV_ISE:  return (char_u *)&(curbuf->b_p_ise);
 	    case PV_DICT: return (char_u *)&(curbuf->b_p_dict);
 	    case PV_TSR:  return (char_u *)&(curbuf->b_p_tsr);
 #ifdef FEAT_COMPL_FUNC
@@ -6562,6 +6604,8 @@ get_varp(struct vimoption *p)
 #endif
 	case PV_COT:	return *curbuf->b_p_cot != NUL
 				    ? (char_u *)&(curbuf->b_p_cot) : p->var;
+	case PV_ISE:	return *curbuf->b_p_ise != NUL
+				    ? (char_u *)&(curbuf->b_p_ise) : p->var;
 	case PV_DICT:	return *curbuf->b_p_dict != NUL
 				    ? (char_u *)&(curbuf->b_p_dict) : p->var;
 	case PV_TSR:	return *curbuf->b_p_tsr != NUL
@@ -6653,6 +6697,7 @@ get_varp(struct vimoption *p)
 	case PV_WFW:	return (char_u *)&(curwin->w_p_wfw);
 #if defined(FEAT_QUICKFIX)
 	case PV_PVW:	return (char_u *)&(curwin->w_p_pvw);
+	case PV_LHI:	return (char_u *)&(curwin->w_p_lhi);
 #endif
 #ifdef FEAT_RIGHTLEFT
 	case PV_RL:	return (char_u *)&(curwin->w_p_rl);
@@ -6972,6 +7017,9 @@ copy_winopt(winopt_T *from, winopt_T *to)
 #endif
 #ifdef FEAT_SIGNS
     to->wo_scl = copy_option_val(from->wo_scl);
+#endif
+#ifdef FEAT_QUICKFIX
+    to->wo_lhi = from->wo_lhi;
 #endif
 
 #ifdef FEAT_EVAL
@@ -7389,6 +7437,7 @@ buf_copy_options(buf_T *buf, int flags)
 	    buf->b_cot_flags = 0;
 	    buf->b_p_dict = empty_option;
 	    buf->b_p_tsr = empty_option;
+	    buf->b_p_ise = empty_option;
 #ifdef FEAT_COMPL_FUNC
 	    buf->b_p_tsrfu = empty_option;
 #endif

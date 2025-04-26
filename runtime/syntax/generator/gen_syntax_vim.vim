@@ -1,7 +1,7 @@
 " Vim syntax file generator
 " Language: Vim script
 " Maintainer: Hirohito Higashi (h_east)
-" Last Change: 2025 Mar 09
+" Last Change: 2025 Apr 23
 
 let s:keepcpo= &cpo
 set cpo&vim
@@ -257,7 +257,6 @@ function s:get_vim_command_type(cmd_name)
 		abstract
 		append
 		augroup
-		augroup
 		autocmd
 		behave
 		call
@@ -284,14 +283,22 @@ function s:get_vim_command_type(cmd_name)
 		enum
 		execute
 		export
+		filter
 		final
 		for
 		function
+		grep
+		grepadd
+		helpgrep
 		if
 		interface
 		insert
 		let
 		loadkeymap
+		lhelpgrep
+		lvimgrep
+		lvimgrepadd
+		make
 		map
 		mapclear
 		match
@@ -300,6 +307,7 @@ function s:get_vim_command_type(cmd_name)
 		normal
 		popup
 		public
+		redir
 		return
 		set
 		setglobal
@@ -307,6 +315,7 @@ function s:get_vim_command_type(cmd_name)
 		sleep
 		smagic
 		snomagic
+		sort
 		static
 		substitute
 		syntax
@@ -317,6 +326,8 @@ function s:get_vim_command_type(cmd_name)
 		unmap
 		var
 		vim9script
+		vimgrep
+		vimgrepadd
 		while
 	EOL
 	" Required for original behavior
@@ -389,6 +400,10 @@ function s:parse_vim_event(li)
 			let item.name = list[1]
 			call add(a:li, copy(item))
 		endfor
+
+		" "User" requires a user defined argument event.
+		" (Separately specified in vim.vim.base).
+		call filter(a:li, {idx, val -> val.name !=# 'User'})
 
 		quit!
 
@@ -733,9 +748,9 @@ function s:update_syntax_vim_file(vim_info)
 		let lnum = s:search_and_check('vimVarName', base_fname, str_info)
 		let lnum = s:append_syn_any(lnum, str_info, li)
 
-		" vimUserAttrbCmplt
+		" vimUserAttrComplete
 		let li = a:vim_info.compl_name
-		let lnum = s:search_and_check('vimUserCmdAttrCmplt', base_fname, str_info)
+		let lnum = s:search_and_check('vimUserCmdAttrComplete', base_fname, str_info)
 		let lnum = s:append_syn_any(lnum, str_info, li)
 
 		" vimUserAttrbAddr

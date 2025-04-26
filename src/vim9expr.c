@@ -404,7 +404,10 @@ compile_class_object_index(cctx_T *cctx, char_u **arg, type_T *type)
     char_u *name = *arg;
     char_u *name_end = find_name_end(name, NULL, NULL, FNE_CHECK_START);
     if (name_end == name)
+    {
+	emsg(_(e_missing_name_after_dot));
 	return FAIL;
+    }
     size_t len = name_end - name;
 
     if (*name_end == '(')
@@ -1644,6 +1647,11 @@ compile_lambda(char_u **arg, cctx_T *cctx)
     ++ufunc->uf_refcount;
     clear_tv(&rettv);
 
+    if (cctx->ctx_ufunc != NULL)
+	// This lambda might be defined in a class method.  Inherit the class
+	// from the current function.
+	ufunc->uf_defclass = cctx->ctx_ufunc->uf_defclass;
+
     // Compile it here to get the return type.  The return type is optional,
     // when it's missing use t_unknown.  This is recognized in
     // compile_return().
@@ -2684,7 +2692,8 @@ compile_subscript(
 	    type = get_type_on_stack(cctx, 0);
 	    if (type != &t_unknown
 		    && (type->tt_type == VAR_CLASS
-					       || type->tt_type == VAR_OBJECT))
+			|| (type->tt_type == VAR_OBJECT
+			    && type != &t_object_any)))
 	    {
 		// class member: SomeClass.varname
 		// class method: SomeClass.SomeMethod()

@@ -97,14 +97,14 @@ static int close_disallowed = 0;
  * make sure the previously selected window is still there.
  * Must be matched with exactly one call to window_layout_unlock()!
  */
-    static void
+    void
 window_layout_lock(void)
 {
     ++split_disallowed;
     ++close_disallowed;
 }
 
-    static void
+    void
 window_layout_unlock(void)
 {
     --split_disallowed;
@@ -5642,10 +5642,6 @@ win_enter_ext(win_T *wp, int flags)
 	--dont_parse_messages;
 	did_decrement = TRUE;
     }
-#endif
-#ifdef FEAT_TERMINAL
-    if (bt_terminal(curwin->w_buffer))
-	update_topline();
 #endif
 
     win_fix_current_dir();

@@ -608,7 +608,16 @@ edit(
 		    if (c != K_IGNORE && c != K_NOP)
 			vungetc(c);
 		    count = 0;
-		    nomove = TRUE;
+
+		    if (!bt_prompt(curwin->w_buffer)
+#ifdef FEAT_TERMINAL
+			    && !bt_terminal(curwin->w_buffer)
+#endif
+			    && stop_insert_mode)
+			// :stopinsert command via callback or via server command
+			nomove = FALSE;
+		    else
+			nomove = TRUE;
 		    ins_compl_prep(ESC);
 		    goto doESCkey;
 		}
@@ -1401,6 +1410,11 @@ normalchar:
 #endif
 	       )
 	    did_cursorhold = FALSE;
+
+	// Check if we need to cancel completion mode because the window
+	// or tab page was changed
+	if (ins_compl_active() && !ins_compl_win_active(curwin))
+	    ins_compl_cancel();
 
 	// If the cursor was moved we didn't just insert a space
 	if (arrow_used)
@@ -2962,7 +2976,7 @@ stuff_inserted(
 
     do
     {
-	stuffReadbuffLen(insert.string, insert.length);
+	stuffReadbuffLen(insert.string, (long)insert.length);
 	// a trailing "0" is inserted as "<C-V>048", "^" as "<C-V>^"
 	switch (last)
 	{
@@ -3022,7 +3036,7 @@ get_last_insert_save(void)
 	return NULL;
 
     if (insert.length > 0 && s[insert.length - 1] == ESC)	// remove trailing ESC
-	s[insert.length - 1] = NUL;
+	s[--insert.length] = NUL;
     return s;
 }
 
@@ -5468,7 +5482,7 @@ do_insert_char_pre(int c)
 
     // Lock the text to avoid weird things from happening.
     ++textlock;
-    set_vim_var_string(VV_CHAR, buf, buflen);  // set v:char
+    set_vim_var_string(VV_CHAR, buf, (int)buflen);  // set v:char
 
     res = NULL;
     if (ins_apply_autocmds(EVENT_INSERTCHARPRE))

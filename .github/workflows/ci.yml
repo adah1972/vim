@@ -21,7 +21,7 @@ jobs:
 
     env:
       CC: ${{ matrix.compiler }}
-      GCC_VER: 13
+      GCC_VER: 14
       CLANG_VER: 20
       TEST: test
       SRCDIR: ./src
@@ -29,6 +29,7 @@ jobs:
       LOG_DIR: ${{ github.workspace }}/logs
       TERM: xterm
       DISPLAY: ':99'
+      WAYLAND_DISPLAY: 'wayland-1'
       DEBIAN_FRONTEND: noninteractive
 
     strategy:
@@ -114,6 +115,7 @@ jobs:
         run: |
           # This is added by default, and it is often broken, but we don't need anything from it
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+
           PKGS=( \
             gettext \
             libgtk2.0-dev:${{ matrix.architecture }} \
@@ -123,6 +125,7 @@ jobs:
             libxt-dev:${{ matrix.architecture }} \
             locales-all \
             software-properties-common \
+            sway \
           )
           if ${{ matrix.features == 'huge' }}; then
             LUA_VER=${{ matrix.lua_ver || '5.4' }}
@@ -143,13 +146,15 @@ jobs:
               libattr1-dev
             )
           fi
+
           sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get install -y "${PKGS[@]}"
 
       - name: Install gcc-${{ env.GCC_VER }}
         if:  matrix.compiler == 'gcc'
         run: |
           # ubuntu-toolchain-r/test PPA for gcc-13 compiler
-          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+          # disabled because the installation failed, causing test failures
+          # sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
           sudo apt-get update -y
           sudo apt-get install -y gcc-${{ env.GCC_VER }}:${{ matrix.architecture }}
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${{ env.GCC_VER }} 100
@@ -231,6 +236,8 @@ jobs:
           sudo sysctl -w net.ipv6.conf.lo.disable_ipv6=0
           sudo usermod -a -G audio "${USER}"
           sudo bash ci/setup-xvfb.sh
+          # Sway requires user session
+          bash ci/setup-sway.sh
 
       - name: Check autoconf
         if: contains(matrix.extra, 'unittests')
@@ -266,6 +273,12 @@ jobs:
           "${SRCDIR}"/vim --version
           "${SRCDIR}"/vim -u NONE -i NONE --not-a-term -esNX -V1 -S ci/if_ver-1.vim -c quit
           "${SRCDIR}"/vim -u NONE -i NONE --not-a-term -esNX -V1 -S ci/if_ver-2.vim -c quit
+          if ${{ matrix.features == 'huge' }}; then
+            # Also check that optional and dynamic features are configured and working
+            "${SRCDIR}"/vim -u NONE -i NONE --not-a-term -esNX -V1 \
+              -c "let g:required=['gettext', 'sodium', 'sound', 'perl', 'python3', 'lua', 'ruby', 'tcl']" \
+              -S ci/if_feat_check.vim -c quit
+          fi
 
       - name: Test
         if: matrix.architecture != 'arm64'
@@ -349,7 +362,7 @@ jobs:
         if: matrix.runner == 'macos-15'
         run: |
           # Xcode 16 has compiler bugs which are fixed in 16.2+
-          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
 
       - name: Set up environment
         run: |
@@ -392,6 +405,12 @@ jobs:
           "${SRCDIR}"/vim --version
           "${SRCDIR}"/vim -u NONE -i NONE --not-a-term -esNX -V1 -S ci/if_ver-1.vim -c quit
           "${SRCDIR}"/vim -u NONE -i NONE --not-a-term -esNX -V1 -S ci/if_ver-2.vim -c quit
+          if ${{ matrix.features == 'huge' }}; then
+            # Also check that optional and dynamic features are configured and working
+            "${SRCDIR}"/vim -u NONE -i NONE --not-a-term -esNX -V1 \
+              -c "let g:required=['sound', 'perl', 'python3', 'lua', 'ruby', 'tcl']" \
+              -S ci/if_feat_check.vim -c quit
+          fi
 
       - name: Install packages for testing
         run: |
@@ -608,11 +627,13 @@ jobs:
               DYNAMIC_PYTHON=yes PYTHON=%PYTHON_DIR% ^
               DYNAMIC_PYTHON3=yes PYTHON3=%PYTHON3_DIR% ^
               DYNAMIC_PYTHON3_STABLE_ABI=%PYTHON3_STABLE% ^
-              DYNAMIC_SODIUM=yes SODIUM=%SODIUM_DIR%
+              DYNAMIC_SODIUM=yes SODIUM=%SODIUM_DIR% ^
+              CI_FLAGS=/we4267
           ) else (
             nmake -nologo -f Make_mvc.mak ^
               FEATURES=${{ matrix.features }} ^
-              GUI=%GUI% IME=yes ICONV=yes VIMDLL=${{ matrix.VIMDLL }}
+              GUI=%GUI% IME=yes ICONV=yes VIMDLL=${{ matrix.VIMDLL }} ^
+              CI_FLAGS=/we4267
           )
 
       - name: Build (MinGW)
@@ -663,6 +684,11 @@ jobs:
             src\vim --version || exit 1
             src\vim -u NONE -i NONE --not-a-term -esNX -V1 -S ci/if_ver-1.vim -c quit
             src\vim -u NONE -i NONE --not-a-term -esNX -V1 -S ci/if_ver-2.vim -c quit
+            if "${{ matrix.features }}"=="HUGE" (
+              src\vim -u NONE -i NONE --not-a-term -esNX -V1 ^
+                -c "let g:required=['gettext', 'sodium', 'sound', 'python3', 'lua']" ^
+                -S ci/if_feat_check.vim -c quit
+            )
           )
 
       #- name: Prepare Artifact

@@ -3454,7 +3454,22 @@ limit_scrollback(term_T *term, garray_T *gap, int update_buffer)
 	    (sb_line_T *)gap->ga_data + todo,
 	    sizeof(sb_line_T) * gap->ga_len);
     if (update_buffer)
+    {
+	win_T	    *curwin_save = curwin;
+	win_T	    *wp = NULL;
+
 	term->tl_scrollback_scrolled -= todo;
+
+	FOR_ALL_WINDOWS(wp)
+	{
+	    if (wp->w_buffer == term->tl_buffer)
+	    {
+		curwin = wp;
+		check_cursor();
+	    }
+	}
+	curwin = curwin_save;
+    }
 
     // make sure cursor is on a valid line
     if (curbuf == term->tl_buffer)
@@ -7068,7 +7083,11 @@ conpty_term_and_job_init(
     if (cmd_wchar == NULL)
 	goto failed;
     if (opt->jo_cwd != NULL)
+    {
 	cwd_wchar = enc_to_utf16(opt->jo_cwd, NULL);
+	if (cwd_wchar == NULL)
+	    goto failed;
+    }
 
     win32_build_env(opt->jo_env, &ga_env, TRUE);
     env_wchar = ga_env.ga_data;
@@ -7410,7 +7429,11 @@ winpty_term_and_job_init(
     if (cmd_wchar == NULL)
 	goto failed;
     if (opt->jo_cwd != NULL)
+    {
 	cwd_wchar = enc_to_utf16(opt->jo_cwd, NULL);
+	if (cwd_wchar == NULL)
+	    goto failed;
+    }
 
     win32_build_env(opt->jo_env, &ga_env, TRUE);
     env_wchar = ga_env.ga_data;
@@ -7570,7 +7593,11 @@ failed:
 	char *msg = (char *)utf16_to_enc(
 				(short_u *)winpty_error_msg(winpty_err), NULL);
 
-	emsg(msg);
+	if (msg != NULL)
+	{
+	    emsg(msg);
+	    vim_free(msg);
+	}
 	winpty_error_free(winpty_err);
     }
     return FAIL;
