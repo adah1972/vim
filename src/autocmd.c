@@ -1585,9 +1585,10 @@ aucmd_prepbuf(
 #ifdef FEAT_AUTOCHDIR
     int		save_acd;
 #endif
+    int		same_buffer = buf == curbuf;
 
     // Find a window that is for the new buffer
-    if (buf == curbuf)		// be quick when buf is curbuf
+    if (same_buffer)		// be quick when buf is curbuf
 	win = curwin;
     else
 	FOR_ALL_WINDOWS(win)
@@ -1677,9 +1678,10 @@ aucmd_prepbuf(
     aco->new_curwin_id = curwin->w_id;
     set_bufref(&aco->new_curbuf, curbuf);
 
-    // disable the Visual area, the position may be invalid in another buffer
     aco->save_VIsual_active = VIsual_active;
-    VIsual_active = FALSE;
+    if (!same_buffer)
+	// disable the Visual area, position may be invalid in another buffer
+	VIsual_active = FALSE;
 }
 
 /*
@@ -2135,16 +2137,24 @@ apply_autocmds_group(
     if (event_ignored(event, p_ei))
 	goto BYPASS_AU;
 
-    wininfo_T *wip;
     int win_ignore = FALSE;
     // If event is allowed in 'eventignorewin', check if curwin or all windows
     // into "buf" are ignoring the event.
     if (buf == curbuf && event_tab[event].key <= 0)
 	win_ignore = event_ignored(event, curwin->w_p_eiw);
-    else if (buf != NULL && event_tab[event].key <= 0)
-	FOR_ALL_BUF_WININFO(buf, wip)
-	    if (wip->wi_win != NULL && wip->wi_win->w_buffer == buf)
-		win_ignore = event_ignored(event, wip->wi_win->w_p_eiw);
+    else if (buf != NULL && event_tab[event].key <= 0 && buf->b_nwindows > 0)
+    {
+	tabpage_T *tp;
+	win_T *wp;
+
+	win_ignore = TRUE;
+	FOR_ALL_TAB_WINDOWS(tp, wp)
+	    if (wp->w_buffer == buf && !event_ignored(event, wp->w_p_eiw))
+	    {
+		win_ignore = FALSE;
+		break;
+	    }
+    }
     if (win_ignore)
 	goto BYPASS_AU;
 

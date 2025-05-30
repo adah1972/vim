@@ -175,12 +175,12 @@ static int conpty_working = 0;
 static int conpty_type = 0;
 static int conpty_stable = 0;
 static int conpty_fix_type = 0;
-static void vtp_flag_init();
+static void vtp_flag_init(void);
 
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
 static int vtp_working = 0;
-static void vtp_init();
-static void vtp_exit();
+static void vtp_init(void);
+static void vtp_exit(void);
 static void vtp_sgr_bulk(int arg);
 static void vtp_sgr_bulks(int argc, int *argv);
 
@@ -971,7 +971,7 @@ PlatformId(void)
 
     ovi.dwOSVersionInfoSize = sizeof(ovi);
     if (!GetVersionEx(&ovi))
-        return;
+	return;
 
 #ifdef FEAT_EVAL
     vim_snprintf(windowsVersion, sizeof(windowsVersion), "%d.%d",
@@ -988,7 +988,7 @@ PlatformId(void)
 #ifdef HAVE_ACL
     // Enable privilege for getting or setting SACLs.
     if (!win32_enable_privilege(SE_SECURITY_NAME))
-        return;
+	return;
 #endif
 }
 #ifdef _MSC_VER
@@ -5097,8 +5097,8 @@ mch_system_piped(char *cmd, int options)
     // About "Inherit handles" being TRUE: this command can be litigious,
     // handle inheritance was deactivated for pending temp file, but, if we
     // deactivate it, the pipes don't work for some reason.
-     vim_create_process(p, TRUE, CREATE_DEFAULT_ERROR_MODE,
-	     &si, &pi, NULL, NULL);
+    vim_create_process(p, TRUE, CREATE_DEFAULT_ERROR_MODE,
+						&si, &pi, NULL, NULL);
 
     if (p != cmd)
 	vim_free(p);
@@ -6357,7 +6357,7 @@ termcap_mode_end(void)
 
     // Switch back to main screen buffer.
     if (exiting && use_alternate_screen_buffer)
-        vtp_printf("\033[?1049l");
+	vtp_printf("\033[?1049l");
 
     if (!USE_WT && (p_rs || exiting))
     {
@@ -9002,9 +9002,7 @@ static sig_atomic_t *timeout_flag = &timeout_flags[0];
     static void CALLBACK
 set_flag(void *param, BOOLEAN unused2 UNUSED)
 {
-    int *timeout_flag = (int *)param;
-
-    *timeout_flag = TRUE;
+    *(sig_atomic_t *)param = TRUE;
 }
 
 /*

@@ -404,7 +404,7 @@ clip_invert_rectangle(
 	gui_mch_invert_rectangle(row, col, height, width);
     else
 #endif
-	screen_draw_rectangle(row, col, height, width, invert);
+	screen_draw_rectangle(row, col + TPL_LCOL(NULL), height, width, invert);
 #ifdef FEAT_PROP_POPUP
     screen_zindex = 0;
 #endif
@@ -2221,7 +2221,7 @@ adjust_clip_reg(int *rp)
 					   && clip_plus.available) ? '+' : '*';
     }
     if ((!clip_star.available && *rp == '*') ||
-           (!clip_plus.available && *rp == '+'))
+	   (!clip_plus.available && *rp == '+'))
     {
 	msg_warn_missing_clipboard();
 	*rp = 0;

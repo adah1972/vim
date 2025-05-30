@@ -2379,6 +2379,25 @@ func Test_grep()
   call s:test_xgrep('l')
 endfunc
 
+func Test_local_grepformat()
+  let save_grepformat = &grepformat
+  set grepformat=%f:%l:%m
+  " The following line are used for the local grep test. Don't remove.
+  " UNIQUEPREFIX:2:3: Local grepformat test
+  new
+  setlocal grepformat=UNIQUEPREFIX:%c:%n:%m
+  call assert_equal('UNIQUEPREFIX:%c:%n:%m', &l:grepformat)
+  call assert_equal('%f:%l:%m', &g:grepformat)
+
+  set grepprg=internal
+  silent grep "^[[:space:]]*\" UNIQUEPREFIX:" test_quickfix.vim
+  call assert_equal(1, len(getqflist()))
+  set grepprg&vim
+
+  bwipe!
+  let &grepformat = save_grepformat
+endfunc
+
 func Test_two_windows()
   " Use one 'errorformat' for two windows.  Add an expression to each of them,
   " make sure they each keep their own state.
@@ -6897,6 +6916,47 @@ func Test_quickfix_close_buffer_crash()
   wincmd k
   lclose
   wincmd q
+endfunc
+
+func Test_vimgrep_dummy_buffer_crash()
+  augroup DummyCrash
+    autocmd!
+    " Make the dummy buffer non-current, but still open in a window.
+    autocmd BufReadCmd * ++once let s:dummy_buf = bufnr()
+          \| split | wincmd p | enew
+
+    " Autocmds from cleaning up the dummy buffer in this case should be blocked.
+    autocmd BufWipeout *
+          \ call assert_notequal(s:dummy_buf, str2nr(expand('<abuf>')))
+  augroup END
+
+  silent! vimgrep /./ .
+  redraw! " Window to freed dummy buffer used to remain; heap UAF.
+  call assert_equal([], win_findbuf(s:dummy_buf))
+  call assert_equal(0, bufexists(s:dummy_buf))
+
+  unlet! s:dummy_buf
+  autocmd! DummyCrash
+  %bw!
+endfunc
+
+func Test_vimgrep_dummy_buffer_keep()
+  augroup DummyKeep
+    autocmd!
+    " Trigger a wipe of the dummy buffer by aborting script processing. Prevent
+    " wiping it by splitting it from the autocmd window into an only window.
+    autocmd BufReadCmd * ++once let s:dummy_buf = bufnr()
+          \| tab split | call interrupt()
+  augroup END
+
+  call assert_fails('vimgrep /./ .')
+  call assert_equal(1, bufexists(s:dummy_buf))
+  " Ensure it's no longer considered a dummy; should be able to switch to it.
+  execute s:dummy_buf 'sbuffer'
+
+  unlet! s:dummy_buf
+  autocmd! DummyKeep
+  %bw!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -1,7 +1,7 @@
 " Vim syntax file generator
-" Language: Vim script
-" Maintainer: Hirohito Higashi (h_east)
-" Last Change: 2025 Apr 23
+" Language:		 Vim script
+" Maintainer:  Hirohito Higashi (h_east)
+" Last Change: 2025 May 17
 
 let s:keepcpo= &cpo
 set cpo&vim
@@ -274,11 +274,13 @@ function s:get_vim_command_type(cmd_name)
 		echomsg
 		echon
 		echowindow
+		else
 		elseif
 		endclass
 		enddef
 		endenum
 		endfunction
+		endif
 		endinterface
 		enum
 		execute
@@ -291,6 +293,7 @@ function s:get_vim_command_type(cmd_name)
 		grepadd
 		helpgrep
 		if
+		import
 		interface
 		insert
 		let
@@ -299,14 +302,32 @@ function s:get_vim_command_type(cmd_name)
 		lvimgrep
 		lvimgrepadd
 		make
+		lua
+		luado
+		luafile
 		map
 		mapclear
 		match
+		mzscheme
+		mzfile
 		noremap
 		new
 		normal
+		perl
+		perldo
 		popup
 		public
+		python
+		pyfile
+		pydo
+		python3
+		py3
+		py3do
+		py3file
+		pythonx
+		pyx
+		pyxdo
+		pyxfile
 		redir
 		return
 		set
@@ -319,6 +340,9 @@ function s:get_vim_command_type(cmd_name)
 		static
 		substitute
 		syntax
+		tcl
+		tcldo
+		tclfile
 		this
 		throw
 		type

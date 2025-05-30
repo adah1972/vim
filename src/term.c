@@ -4454,9 +4454,16 @@ scroll_region_set(win_T *wp, int off)
 {
     OUT_STR(tgoto((char *)T_CS, W_WINROW(wp) + wp->w_height - 1,
 							 W_WINROW(wp) + off));
+#if defined(FEAT_TABPANEL)
+    if (*T_CSV != NUL)
+	OUT_STR(tgoto((char *)T_CSV,
+		wp->w_wincol + wp->w_width - 1 + TPL_LCOL(NULL),
+		wp->w_wincol + TPL_LCOL(NULL)));
+#else
     if (*T_CSV != NUL && wp->w_width != Columns)
 	OUT_STR(tgoto((char *)T_CSV, wp->w_wincol + wp->w_width - 1,
 							       wp->w_wincol));
+#endif
     screen_start();		    // don't know where cursor is now
 }
 
@@ -4468,7 +4475,7 @@ scroll_region_reset(void)
 {
     OUT_STR(tgoto((char *)T_CS, (int)Rows - 1, 0));
     if (*T_CSV != NUL)
-	OUT_STR(tgoto((char *)T_CSV, (int)Columns - 1, 0));
+	OUT_STR(tgoto((char *)T_CSV, COLUMNS_WITHOUT_TPL() - 1, 0));
     screen_start();		    // don't know where cursor is now
 }
 
@@ -7302,13 +7309,13 @@ update_tcap(int attr)
 	return;
     while (p->bt_string != NULL)
     {
-      if (p->bt_entry == (int)KS_ME)
-	  p->bt_string = &ksme_str[0];
-      else if (p->bt_entry == (int)KS_MR)
-	  p->bt_string = &ksmr_str[0];
-      else if (p->bt_entry == (int)KS_MD)
-	  p->bt_string = &ksmd_str[0];
-      ++p;
+	if (p->bt_entry == (int)KS_ME)
+	    p->bt_string = &ksme_str[0];
+	else if (p->bt_entry == (int)KS_MR)
+	    p->bt_string = &ksmr_str[0];
+	else if (p->bt_entry == (int)KS_MD)
+	    p->bt_string = &ksmd_str[0];
+	++p;
     }
 }
 

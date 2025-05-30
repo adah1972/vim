@@ -526,12 +526,6 @@ can_unload_buffer(buf_T *buf)
     return can_unload;
 }
 
-    int
-buf_locked(buf_T *buf)
-{
-    return buf->b_locked || buf->b_locked_split;
-}
-
 /*
  * Close the link to a buffer.
  * "action" is used when there is no longer a window for the buffer.
@@ -915,7 +909,7 @@ buf_freeall(buf_T *buf, int flags)
     // If the buffer was in curwin and the window has changed, go back to that
     // window, if it still exists.  This avoids that ":edit x" triggering a
     // "tabnext" BufUnload autocmd leaves a window behind without a buffer.
-    if (is_curwin && curwin != the_curwin &&  win_valid_any_tab(the_curwin))
+    if (is_curwin && curwin != the_curwin && win_valid_any_tab(the_curwin))
     {
 	block_autocmds();
 	goto_tabpage_win(the_curtab, the_curwin);
@@ -1432,12 +1426,19 @@ do_buffer_ext(
     if ((flags & DOBUF_NOPOPUP) && bt_popup(buf) && !bt_terminal(buf))
 	return OK;
 #endif
-    if (
-	action == DOBUF_GOTO
-	&& buf != curbuf
-	&& !check_can_set_curbuf_forceit((flags & DOBUF_FORCEIT) ? TRUE : FALSE))
-      // disallow navigating to another buffer when 'winfixbuf' is applied
-      return FAIL;
+    if (action == DOBUF_GOTO && buf != curbuf)
+    {
+	if (!check_can_set_curbuf_forceit((flags & DOBUF_FORCEIT) != 0))
+	    // disallow navigating to another buffer when 'winfixbuf' is applied
+	    return FAIL;
+	if (buf->b_locked_split)
+	{
+	    // disallow navigating to a closing buffer, which like splitting,
+	    // can result in more windows displaying it
+	    emsg(_(e_cannot_switch_to_a_closing_buffer));
+	    return FAIL;
+	}
+    }
 
     if ((action == DOBUF_GOTO || action == DOBUF_SPLIT)
 						  && (buf->b_flags & BF_DUMMY))
@@ -2219,13 +2220,14 @@ buflist_new(
     buf = NULL;
     if ((flags & BLN_CURBUF) && curbuf_reusable())
     {
+	bufref_T bufref;
+
 	buf = curbuf;
+	set_bufref(&bufref, buf);
 	trigger_undo_ftplugin(buf, curwin);
 	// It's like this buffer is deleted.  Watch out for autocommands that
 	// change curbuf!  If that happens, allocate a new buffer anyway.
 	buf_freeall(buf, BFA_WIPE | BFA_DEL);
-	if (buf != curbuf)   // autocommands deleted the buffer!
-	    return NULL;
 #ifdef FEAT_EVAL
 	if (aborting())		// autocmds may abort script processing
 	{
@@ -2233,6 +2235,8 @@ buflist_new(
 	    return NULL;
 	}
 #endif
+	if (!bufref_valid(&bufref))
+	    buf = NULL;		// buf was deleted; allocate a new buffer
     }
     if (buf != curbuf || curbuf == NULL)
     {
@@ -2504,6 +2508,7 @@ free_buf_options(
     free_callback(&buf->b_tsrfu_cb);
 #endif
 #ifdef FEAT_QUICKFIX
+    clear_string_option(&buf->b_p_gefm);
     clear_string_option(&buf->b_p_gp);
     clear_string_option(&buf->b_p_mp);
     clear_string_option(&buf->b_p_efm);

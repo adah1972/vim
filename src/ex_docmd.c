@@ -247,6 +247,7 @@ static void	ex_later(exarg_T *eap);
 static void	ex_redir(exarg_T *eap);
 static void	ex_redrawstatus(exarg_T *eap);
 static void	ex_redrawtabline(exarg_T *eap);
+static void	ex_redrawtabpanel(exarg_T *eap);
 static void	close_redir(void);
 static void	ex_mark(exarg_T *eap);
 static void	ex_startinsert(exarg_T *eap);
@@ -467,36 +468,38 @@ restore_dbg_stuff(struct dbg_stuff *dsp)
 
 /*
  * Check if ffname differs from fnum.
- * fnum is a buffer number. 0 == current buffer, 1-or-more must be a valid buffer ID.
+ * fnum is a buffer number. 0 == current buffer, 1-or-more must be a valid
+ * buffer ID.
  * ffname is a full path to where a buffer lives on-disk or would live on-disk.
  *
  */
     static int
 is_other_file(int fnum, char_u *ffname)
 {
-  if (fnum != 0)
-  {
-    if (fnum == curbuf->b_fnum)
-      return FALSE;
+    if (fnum != 0)
+    {
+	if (fnum == curbuf->b_fnum)
+	    return FALSE;
 
-    return TRUE;
-  }
+	return TRUE;
+    }
 
-  if (ffname == NULL)
-    return TRUE;
+    if (ffname == NULL)
+	return TRUE;
 
-  if (*ffname == NUL)
-    return FALSE;
+    if (*ffname == NUL)
+	return FALSE;
 
-  // TODO: Need a reliable way to know whether a buffer is meant to live on-disk
-  // !curbuf->b_dev_valid is not always available (example: missing on Windows)
-  if (curbuf->b_sfname != NULL
-      && *curbuf->b_sfname != NUL)
-    // This occurs with unsaved buffers. In which case `ffname`
-    // actually corresponds to curbuf->b_sfname
-    return fnamecmp(ffname, curbuf->b_sfname) != 0;
+    // TODO: Need a reliable way to know whether a buffer is meant to live
+    // on-disk !curbuf->b_dev_valid is not always available (example: missing
+    // on Windows)
+    if (curbuf->b_sfname != NULL
+	    && *curbuf->b_sfname != NUL)
+	// This occurs with unsaved buffers. In which case `ffname` actually
+	// corresponds to curbuf->b_sfname
+	return fnamecmp(ffname, curbuf->b_sfname) != 0;
 
-  return otherfile(ffname);
+    return otherfile(ffname);
 }
 
 /*
@@ -2715,7 +2718,7 @@ static char ex_error_buf[MSG_BUF_LEN];
  * Uses a static buffer, only the last error will be kept.
  * "msg" will be translated, caller should use N_().
  */
-     char *
+    char *
 ex_errmsg(char *msg, char_u *arg)
 {
     vim_snprintf(ex_error_buf, MSG_BUF_LEN, _(msg), arg);
@@ -5975,7 +5978,7 @@ get_command_name(expand_T *xp UNUSED, int idx)
 	return expand_user_command_name(idx);
     // the following are no real commands
     if (STRNCMP(cmdnames[idx].cmd_name, "{", 1) == 0 ||
-        STRNCMP(cmdnames[idx].cmd_name, "}", 1) == 0)
+	STRNCMP(cmdnames[idx].cmd_name, "}", 1) == 0)
 	return (char_u *)"";
     return cmdnames[idx].cmd_name;
 }
@@ -8231,7 +8234,7 @@ ex_sleep(exarg_T *eap)
     {
 	n = W_WINROW(curwin) + curwin->w_wrow - msg_scrolled;
 	if (n >= 0)
-	    windgoto(n, curwin->w_wincol + curwin->w_wcol);
+	    windgoto(n, curwin->w_wincol + curwin->w_wcol + TPL_LCOL(curwin));
     }
 
     len = eap->line2;
@@ -8990,6 +8993,29 @@ ex_redrawtabline(exarg_T *eap UNUSED)
     out_flush();
 }
 
+/*
+ * ":redrawtabpanel": force redraw of the tabpanel
+ */
+    static void
+ex_redrawtabpanel(exarg_T *eap UNUSED)
+{
+    int save_RedrawingDisabled = RedrawingDisabled;
+    RedrawingDisabled = 0;
+
+    int save_p_lz = p_lz;
+    p_lz = FALSE;
+
+#if defined(FEAT_TABPANEL)
+    draw_tabpanel();
+#else
+    emsg(_(e_cannot_not_support_redrawtabpanel));
+#endif
+
+    RedrawingDisabled = save_RedrawingDisabled;
+    p_lz = save_p_lz;
+    out_flush();
+}
+
     static void
 close_redir(void)
 {
@@ -9330,7 +9356,7 @@ ex_stopinsert(exarg_T *eap UNUSED)
     // when called from remote_expr in insert mode, make sure insert mode is
     // ended by adding K_NOP to the typeahead buffer
     if (vgetc_busy)
-       ins_char_typebuf(K_NOP, 0);
+	ins_char_typebuf(K_NOP, 0);
 #endif
     clearmode();
 }
@@ -10375,5 +10401,5 @@ get_pressedreturn(void)
     void
 set_pressedreturn(int val)
 {
-     ex_pressedreturn = val;
+    ex_pressedreturn = val;
 }

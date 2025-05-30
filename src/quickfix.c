@@ -2268,12 +2268,12 @@ qf_add_entry(
     if (buf != NULL &&
 	buf->b_ffname != NULL && fullname != NULL)
     {
-        if (fnamecmp(fullname, buf->b_ffname) != 0)
-        {
-            p = shorten_fname1(fullname);
-            if (p != NULL)
+	if (fnamecmp(fullname, buf->b_ffname) != 0)
+	{
+	    p = shorten_fname1(fullname);
+	    if (p != NULL)
 		qfp->qf_fname = vim_strsave(p);
-        }
+	}
     }
     vim_free(fullname);
     if ((qfp->qf_text = vim_strsave(mesg)) == NULL)
@@ -4759,7 +4759,7 @@ ex_cbottom(exarg_T *eap)
  * Return the number of the current entry (line number in the quickfix
  * window).
  */
-     linenr_T
+    linenr_T
 qf_current_entry(win_T *wp)
 {
     qf_info_T	*qi = ql_info;
@@ -5503,7 +5503,7 @@ ex_make(exarg_T *eap)
     incr_quickfix_busy();
 
     if (eap->cmdidx != CMD_make && eap->cmdidx != CMD_lmake)
-	errorformat = p_gefm;
+	errorformat =  *curbuf->b_p_gefm != NUL ? curbuf->b_p_gefm : p_gefm;
     if (eap->cmdidx == CMD_grepadd || eap->cmdidx == CMD_lgrepadd)
 	newlist = FALSE;
 
@@ -7026,7 +7026,11 @@ load_dummy_buffer(
 	    aucmd_restbuf(&aco);
 
 	    if (newbuf_to_wipe.br_buf != NULL && bufref_valid(&newbuf_to_wipe))
-		wipe_buffer(newbuf_to_wipe.br_buf, FALSE);
+	    {
+		block_autocmds();
+		wipe_dummy_buffer(newbuf_to_wipe.br_buf, NULL);
+		unblock_autocmds();
+	    }
 	}
 
 	// Add back the "dummy" flag, otherwise buflist_findname_stat() won't
@@ -7052,8 +7056,8 @@ load_dummy_buffer(
 
 /*
  * Wipe out the dummy buffer that load_dummy_buffer() created. Restores
- * directory to "dirname_start" prior to returning, if autocmds or the
- * 'autochdir' option have changed it.
+ * directory to "dirname_start" if not NULL prior to returning, if autocmds or
+ * the 'autochdir' option have changed it.
  */
     static void
 wipe_dummy_buffer(buf_T *buf, char_u *dirname_start)
@@ -7074,7 +7078,7 @@ wipe_dummy_buffer(buf_T *buf, char_u *dirname_start)
 		    break;
 		}
 	if (!did_one)
-	    return;
+	    goto fail;
     }
 
     if (curbuf != buf && buf->b_nwindows == 0)	// safety check
@@ -7095,9 +7099,16 @@ wipe_dummy_buffer(buf_T *buf, char_u *dirname_start)
 	// new aborting error, interrupt, or uncaught exception.
 	leave_cleanup(&cs);
 #endif
-	// When autocommands/'autochdir' option changed directory: go back.
-	restore_start_dir(dirname_start);
+	if (dirname_start != NULL)
+	    // When autocommands/'autochdir' option changed directory: go back.
+	    restore_start_dir(dirname_start);
+
+	return;
     }
+
+fail:
+    // Keeping the buffer, remove the dummy flag.
+    buf->b_flags &= ~BF_DUMMY;
 }
 
 /*
@@ -7893,7 +7904,7 @@ qf_add_entries(
 	{
 	    entry_to_select = entry;
 	    entry_to_select_index = qfl->qf_count;
-        }
+	}
     }
 
     // Check if any valid error entries are added to the list.

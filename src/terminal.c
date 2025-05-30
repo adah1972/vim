@@ -53,10 +53,10 @@
 
 // This is VTermScreenCell without the characters, thus much smaller.
 typedef struct {
-  VTermScreenCellAttrs	attrs;
-  char			width;
-  VTermColor		fg;
-  VTermColor		bg;
+    VTermScreenCellAttrs	attrs;
+    char			width;
+    VTermColor			fg;
+    VTermColor			bg;
 } cellattr_T;
 
 typedef struct sb_line_S {
@@ -1351,7 +1351,7 @@ update_cursor(term_T *term, int redraw)
 	// do not use the window cursor position
 	position_cursor(curwin, &curbuf->b_term->tl_cursor_pos);
 	windgoto(W_WINROW(curwin) + curwin->w_wrow,
-		 curwin->w_wincol + curwin->w_wcol);
+		 curwin->w_wincol + curwin->w_wcol + TPL_LCOL(NULL));
     }
     if (redraw)
     {
@@ -1430,6 +1430,10 @@ write_to_term(buf_T *buffer, char_u *msg, channel_T *channel)
 	if (buffer == curbuf && (State & MODE_CMDLINE) == 0)
 	{
 	    update_screen(UPD_VALID_NO_UPDATE);
+#if defined(FEAT_TABPANEL)
+	    if (redraw_tabpanel)
+		draw_tabpanel();
+#endif
 	    // update_screen() can be slow, check the terminal wasn't closed
 	    // already
 	    if (buffer == curbuf && curbuf->b_term != NULL)
@@ -3455,8 +3459,8 @@ limit_scrollback(term_T *term, garray_T *gap, int update_buffer)
 	    sizeof(sb_line_T) * gap->ga_len);
     if (update_buffer)
     {
-	win_T	    *curwin_save = curwin;
-	win_T	    *wp = NULL;
+	win_T *curwin_save = curwin;
+	win_T *wp = NULL;
 
 	term->tl_scrollback_scrolled -= todo;
 
@@ -3466,14 +3470,11 @@ limit_scrollback(term_T *term, garray_T *gap, int update_buffer)
 	    {
 		curwin = wp;
 		check_cursor();
+		update_topline();
 	    }
 	}
 	curwin = curwin_save;
     }
-
-    // make sure cursor is on a valid line
-    if (curbuf == term->tl_buffer)
-	check_cursor();
 }
 
 /*
@@ -3637,15 +3638,15 @@ handle_bell(void *user UNUSED)
 }
 
 static VTermScreenCallbacks screen_callbacks = {
-  handle_damage,	// damage
-  handle_moverect,	// moverect
-  handle_movecursor,	// movecursor
-  handle_settermprop,	// settermprop
-  handle_bell,		// bell
-  handle_resize,	// resize
-  handle_pushline,	// sb_pushline
-  NULL,			// sb_popline
-  NULL			// sb_clear
+    handle_damage,		// damage
+    handle_moverect,		// moverect
+    handle_movecursor,		// movecursor
+    handle_settermprop,		// settermprop
+    handle_bell,		// bell
+    handle_resize,		// resize
+    handle_pushline,		// sb_pushline
+    NULL,			// sb_popline
+    NULL			// sb_clear
 };
 
 /*
@@ -4119,7 +4120,8 @@ term_update_window(win_T *wp)
 #ifdef FEAT_MENU
 				+ winbar_height(wp)
 #endif
-				, wp->w_wincol, pos.col, wp->w_width, -1,
+				, wp->w_wincol + TPL_LCOL(wp), pos.col,
+				wp->w_width, -1,
 #ifdef FEAT_PROP_POPUP
 				popup_is_popup(wp) ? SLF_POPUP :
 #endif
@@ -4861,13 +4863,13 @@ parse_csi(
 }
 
 static VTermStateFallbacks state_fallbacks = {
-  NULL,		// control
-  parse_csi,	// csi
-  parse_osc,	// osc
-  NULL,		// dcs
-  NULL,		// apc
-  NULL,		// pm
-  NULL		// sos
+    NULL,		// control
+    parse_csi,		// csi
+    parse_osc,		// osc
+    NULL,		// dcs
+    NULL,		// apc
+    NULL,		// pm
+    NULL		// sos
 };
 
 /*

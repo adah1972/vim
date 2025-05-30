@@ -779,6 +779,7 @@ OBJ = \
 	$(OUTDIR)\spellsuggest.obj \
 	$(OUTDIR)\strings.obj \
 	$(OUTDIR)\syntax.obj \
+	$(OUTDIR)\tabpanel.obj \
 	$(OUTDIR)\tag.obj \
 	$(OUTDIR)\term.obj \
 	$(OUTDIR)\testing.obj \
@@ -1430,14 +1431,14 @@ clean: testclean
 	$(MAKE) /NOLOGO -f Make_mvc.mak clean
 	cd ..
 
-# Run vim script to generate the Ex command lookup table.
+# Run Vim script to generate the Ex command lookup table.
 # This only needs to be run when a command name has been added or changed.
 # If this fails because you don't have Vim yet, first build and install Vim
 # without changes.
 cmdidxs: ex_cmds.h
 	vim --clean -N -X --not-a-term -u create_cmdidxs.vim -c quit
 
-# Run vim script to generate the normal/visual mode command lookup table.
+# Run Vim script to generate the normal/visual mode command lookup table.
 # This only needs to be run when a new normal/visual mode command has been
 # added.  If this fails because you don't have Vim yet:
 #   - change nv_cmds[] in nv_cmds.h to add the new normal/visual mode command.
@@ -1778,6 +1779,8 @@ $(OUTDIR)/strings.obj:	$(OUTDIR) strings.c  $(INCL)
 
 $(OUTDIR)/syntax.obj:	$(OUTDIR) syntax.c  $(INCL)
 
+$(OUTDIR)/tabpanel.obj:	$(OUTDIR) tabpanel.c  $(INCL)
+
 $(OUTDIR)/tag.obj:	$(OUTDIR) tag.c  $(INCL)
 
 $(OUTDIR)/term.obj:	$(OUTDIR) term.c  $(INCL)
@@ -2001,6 +2004,7 @@ proto.h: \
 	proto/spellsuggest.pro \
 	proto/strings.pro \
 	proto/syntax.pro \
+	proto/tabpanel.pro \
 	proto/tag.pro \
 	proto/term.pro \
 	proto/testing.pro \

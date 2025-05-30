@@ -3579,7 +3579,7 @@ nv_ident(cmdarg_T *cap)
 	    aux_ptr = (char_u *)(magic_isset() ? "/?.*~[^$\\" : "/?^$\\");
 	else if (tag_cmd)
 	{
-	    if (curbuf->b_help)
+	    if (STRCMP(curbuf->b_p_ft, "help") == 0)
 		// ":help" handles unescaped argument
 		aux_ptr = (char_u *)"";
 	    else
@@ -4059,7 +4059,7 @@ nv_gotofile(cmdarg_T *cap)
 #endif
 
     if (!check_can_set_curbuf_disabled())
-      return;
+	return;
 
     ptr = grab_file_name(cap->count1, &lnum);
 

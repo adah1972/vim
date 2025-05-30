@@ -1012,9 +1012,10 @@ EXTERN win_T	*curwin;	// currently active window
 #define AUCMD_WIN_COUNT 5
 
 typedef struct {
-  win_T	*auc_win;	// Window used in aucmd_prepbuf().  When not NULL the
-			// window has been allocated.
-  int	auc_win_used;	// This auc_win is being used.
+    // Window used in aucmd_prepbuf().  When not NULL the window has been
+    // allocated.
+    win_T	*auc_win;
+    int		auc_win_used;	// This auc_win is being used.
 } aucmdwin_T;
 
 EXTERN aucmdwin_T aucmd_win[AUCMD_WIN_COUNT];
@@ -1054,6 +1055,10 @@ EXTERN tabpage_T    *first_tabpage;
 EXTERN tabpage_T    *curtab;
 EXTERN tabpage_T    *lastused_tabpage;
 EXTERN int	    redraw_tabline INIT(= FALSE);  // need to redraw tabline
+
+#if defined(FEAT_TABPANEL)
+EXTERN int	    redraw_tabpanel INIT(= FALSE);  // need to redraw tabpanel
+#endif
 
 /*
  * All buffers are linked in a list. 'firstbuf' points to the first entry,
@@ -1609,7 +1614,7 @@ EXTERN int	autocmd_bufnr INIT(= 0);     // fnum for <abuf> on cmdline
 EXTERN char_u	*autocmd_match INIT(= NULL); // name for <amatch> on cmdline
 EXTERN int	aucmd_cmdline_changed_count INIT(= 0);
 
-EXTERN int	did_cursorhold INIT(= FALSE); // set when CursorHold t'gerd
+EXTERN int	did_cursorhold INIT(= TRUE);  // set when CursorHold t'gerd
 EXTERN pos_T	last_cursormoved	      // for CursorMoved event
 # ifdef DO_INIT
 		    = {0, 0, 0}

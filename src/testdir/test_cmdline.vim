@@ -2637,6 +2637,7 @@ endfunc
 " Test for using a popup menu for the command line completion matches
 " (wildoptions=pum)
 func Test_wildmenu_pum()
+  CheckScreendump
   CheckRunVimInTerminal
 
   let commands =<< trim [CODE]
@@ -2929,6 +2930,7 @@ func Test_wildmenumode_with_pum()
 endfunc
 
 func Test_wildmenu_with_pum_foldexpr()
+  CheckScreendump
   CheckRunVimInTerminal
 
   let lines =<< trim END
@@ -2954,6 +2956,7 @@ endfunc
 " The popup menu should be positioned correctly over the status line of the
 " bottom-most window.
 func Test_wildmenu_pum_from_terminal()
+  CheckScreendump
   CheckRunVimInTerminal
   let python = PythonProg()
   call CheckPython(python)
@@ -2974,6 +2977,7 @@ func Test_wildmenu_pum_from_terminal()
 endfunc
 
 func Test_wildmenu_pum_odd_wildchar()
+  CheckScreendump
   CheckRunVimInTerminal
 
   " Test odd wildchar interactions with pum. Make sure they behave properly
@@ -4267,7 +4271,7 @@ func Test_ex_command_completion()
   " required for :*
   set cpo+=*
   let list = filter(getcompletion('', 'command'), 'exists(":" . v:val) == 0')
-  " :++ and :-- are only valid in Vim9 Script context, so they can be ignored
+  " :++ and :-- are only valid in Vim9 script context, so they can be ignored
   call assert_equal(['++', '--'], sort(list))
   call assert_equal(2, exists(':k'))
   call assert_equal(0, exists(':ke'))
@@ -4339,6 +4343,11 @@ func Test_cmdcomplete_info()
         \ g:cmdcomplete_info)
   bw!
   set wildoptions&
+endfunc
+
+func Test_redrawtabpanel_error()
+  CheckNotFeature tabpanel
+  call assert_fails(':redrawtabpanel', 'E1547:')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -1606,7 +1606,7 @@ static yankreg_T *y_read_regs = NULL;
     static void
 prepare_viminfo_registers(void)
 {
-     y_read_regs = ALLOC_CLEAR_MULT(yankreg_T, NUM_REGISTERS);
+    y_read_regs = ALLOC_CLEAR_MULT(yankreg_T, NUM_REGISTERS);
 }
 
     static void
@@ -2899,7 +2899,8 @@ read_viminfo_up_to_marks(
 		if (virp->vir_version < VIMINFO_VERSION_WITH_REGISTERS)
 		    eof = read_viminfo_register(virp, forceit);
 		else
-		    do {
+		    do
+		    {
 			eof = viminfo_readline(virp);
 		    } while (!eof && (virp->vir_line[0] == TAB
 						|| virp->vir_line[0] == '<'));

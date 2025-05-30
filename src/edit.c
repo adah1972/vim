@@ -929,6 +929,8 @@ doESCkey:
 	    break;
 
 	case Ctrl_R:	// insert the contents of a register
+	    if (ctrl_x_mode_register() && !ins_compl_active())
+		goto docomplete;
 	    ins_reg();
 	    auto_format(FALSE, TRUE);
 	    inserted_space = FALSE;
@@ -1714,7 +1716,7 @@ edit_putchar(int c, int highlight)
 
 	    if (fix_col != pc_col)
 	    {
-		screen_putchar(' ', pc_row, fix_col, attr);
+		screen_putchar(' ', pc_row, fix_col + TPL_LCOL(NULL), attr);
 		--curwin->w_wcol;
 		pc_status = PC_STATUS_RIGHT;
 	    }
@@ -1734,7 +1736,7 @@ edit_putchar(int c, int highlight)
 	screen_getbytes(pc_row, pc_col, pc_bytes, &pc_attr);
 	pc_status = PC_STATUS_SET;
     }
-    screen_putchar(c, pc_row, pc_col, attr);
+    screen_putchar(c, pc_row, pc_col + TPL_LCOL(NULL), attr);
 }
 
 #if defined(FEAT_JOB_CHANNEL) || defined(PROTO)

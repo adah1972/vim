@@ -124,6 +124,7 @@ runtime/doc/vimtutor-ru.UTF-8.1		@RestorerZ
 runtime/doc/xxd-ru.1			@RestorerZ
 runtime/doc/xxd-ru.UTF-8.1		@RestorerZ
 runtime/ftplugin/abaqus.vim		@costerwi
+runtime/ftplugin/abnf.vim		@A4-Tacks
 runtime/ftplugin/antlr4.vim		@jiangyinzuo
 runtime/ftplugin/apache.vim		@dubgeiser
 runtime/ftplugin/arduino.vim		@k-takata
@@ -430,6 +431,7 @@ runtime/lang/menu_ru_ru.koi8-r.vim	@RestorerZ
 runtime/lang/menu_ru_ru.utf-8.vim	@RestorerZ
 runtime/pack/dist/opt/cfilter/plugin/cfilter.vim	@yegappan
 runtime/pack/dist/opt/comment/	@habamax
+runtime/pack/dist/opt/helptoc/	@kennypete
 runtime/pack/dist/opt/matchit/		@chrisbra
 runtime/pack/dist/opt/nohlsearch/		@habamax
 runtime/plugin/manpager.vim		@Konfekt
@@ -679,7 +681,6 @@ runtime/tutor/tutor.ru.cp1251		@RestorerZ
 runtime/tutor/tutor.ru.utf-8		@RestorerZ
 src/iscygpty.*				@k-takata
 src/libvterm/				@leonerd
-src/po/am.po				@gagikh
 src/po/ca.po				@nfdisco
 src/po/de.po				@chrisbra
 src/po/eo.po				@dpelle
@@ -687,6 +688,7 @@ src/po/es.po				@victorhck
 src/po/fi.po				@flammie
 src/po/fr.po				@dpelle
 src/po/ga.po				@kscanne
+src/po/hy.po				@gagikh
 src/po/it.po				@azc100
 src/po/ja.po				@k-takata
 src/po/ru.po				@RestorerZ

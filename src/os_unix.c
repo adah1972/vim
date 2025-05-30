@@ -4396,9 +4396,9 @@ mch_calc_cell_size(struct cellsize *cs_out)
 
    if (retval == -1 || ws.ws_col == 0 || ws.ws_row == 0)
    {
-       cs_out->cs_xpixel = -1;
-       cs_out->cs_ypixel = -1;
-       return;
+	cs_out->cs_xpixel = -1;
+	cs_out->cs_ypixel = -1;
+	return;
    }
 
    // calculate parent tty's pixel per cell.
@@ -4440,14 +4440,14 @@ mch_report_winsize(int fd, int rows, int cols)
 
     if (cs.cs_xpixel == -1)
     {
-        // failed get pixel size.
-        ws.ws_xpixel = 0;
-        ws.ws_ypixel = 0;
+	// failed get pixel size.
+	ws.ws_xpixel = 0;
+	ws.ws_ypixel = 0;
     }
     else
     {
-        ws.ws_xpixel = cols * cs.cs_xpixel;
-        ws.ws_ypixel = rows * cs.cs_ypixel;
+	ws.ws_xpixel = cols * cs.cs_xpixel;
+	ws.ws_ypixel = rows * cs.cs_ypixel;
     }
 
     retval = ioctl(tty_fd, TIOCSWINSZ, &ws);
@@ -6969,9 +6969,9 @@ mch_expand_wildcards(
     }
     if (shell_style == STYLE_ECHO)
     {
-       if (strstr((char *)gettail(p_sh), "bash") != NULL)
+	if (strstr((char *)gettail(p_sh), "bash") != NULL)
 	    shell_style = STYLE_GLOBSTAR;
-       else if (strstr((char *)gettail(p_sh), "sh") != NULL)
+	else if (strstr((char *)gettail(p_sh), "sh") != NULL)
 	    shell_style = STYLE_VIMGLOB;
     }
 

@@ -225,7 +225,7 @@ func Test_completefunc_args()
   call assert_equal(0, s:args[1][0])
   set omnifunc=
 
-  set complete=fCompleteFunc
+  set complete=FCompleteFunc
   call feedkeys("i\<C-N>\<Esc>", 'x')
   call assert_equal([1, 1], s:args[0])
   call assert_equal(0, s:args[1][0])
@@ -299,7 +299,7 @@ func Test_CompleteDoneNone()
   call assert_equal(oldline, newline)
   let s:called_completedone = 0
 
-  set complete=f<SID>CompleteDone_CompleteFuncNone
+  set complete=F<SID>CompleteDone_CompleteFuncNone
   execute "normal a\<C-N>\<C-Y>"
   set complete&
   let newline = join(map(range(&columns), 'nr2char(screenchar(&lines-1, v:val+1))'), '')
@@ -326,7 +326,7 @@ func Test_CompleteDone_vevent_keys()
   endfunc
   set omnifunc=CompleteFunc
   set completefunc=CompleteFunc
-  set complete=.,fCompleteFunc
+  set complete=.,FCompleteFunc
   set completeopt+=menuone
 
   new
@@ -418,7 +418,7 @@ func Test_CompleteDoneDict()
   au CompleteDonePre * :call <SID>CompleteDone_CheckCompletedItemDict(2)
   au CompleteDone * :call <SID>CompleteDone_CheckCompletedItemDict(0)
 
-  set complete=.,f<SID>CompleteDone_CompleteFuncDict
+  set complete=.,F<SID>CompleteDone_CompleteFuncDict
   execute "normal a\<C-N>\<C-Y>"
   set complete&
 
@@ -471,7 +471,7 @@ func Test_CompleteDoneDictNoUserData()
 
   let s:called_completedone = 0
 
-  set complete=.,f<SID>CompleteDone_CompleteFuncDictNoUserData
+  set complete=.,F<SID>CompleteDone_CompleteFuncDictNoUserData
   execute "normal a\<C-N>\<C-Y>"
   set complete&
 
@@ -513,7 +513,7 @@ func Test_CompleteDoneList()
 
   let s:called_completedone = 0
 
-  set complete=.,f<SID>CompleteDone_CompleteFuncList
+  set complete=.,F<SID>CompleteDone_CompleteFuncList
   execute "normal a\<C-N>\<C-Y>"
   set complete&
 
@@ -522,7 +522,7 @@ func Test_CompleteDoneList()
 
   let s:called_completedone = 0
 
-  set complete=.,f
+  set complete=.,F
   execute "normal a\<C-N>\<C-Y>"
   set complete&
 
@@ -573,11 +573,11 @@ func Test_completefunc_info()
   call feedkeys("i\<C-X>\<C-U>\<C-R>\<C-R>=string(complete_info())\<CR>\<ESC>", "tx")
   call assert_equal("matched{'pum_visible': 1, 'mode': 'function', 'selected': 0, 'items': [{'word': 'matched', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''}]}", getline(1))
   %d
-  set complete=.,fCompleteTest
+  set complete=.,FCompleteTest
   call feedkeys("i\<C-N>\<C-R>\<C-R>=string(complete_info())\<CR>\<ESC>", "tx")
   call assert_equal("matched{'pum_visible': 1, 'mode': 'keyword', 'selected': 0, 'items': [{'word': 'matched', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''}]}", getline(1))
   %d
-  set complete=.,f
+  set complete=.,F
   call feedkeys("i\<C-N>\<C-R>\<C-R>=string(complete_info())\<CR>\<ESC>", "tx")
   call assert_equal("matched{'pum_visible': 1, 'mode': 'keyword', 'selected': 0, 'items': [{'word': 'matched', 'menu': '', 'user_data': '', 'info': '', 'kind': '', 'abbr': ''}]}", getline(1))
   set completeopt&
@@ -597,7 +597,7 @@ func Test_cpt_func_cursorcol()
     return v:none
   endfunc
 
-  set complete=fCptColTest
+  set complete=FCptColTest
   new
   call feedkeys("ifoo bar\<C-N>", "tx")
   bwipe!
@@ -689,12 +689,12 @@ func CompleteInfoTestUserDefinedFn(mvmt, idx, noselect)
   let completed = a:idx != -1 ? ['foo', 'bar', 'baz', 'qux']->get(a:idx) : ''
   call assert_equal(completed. "{'pum_visible': 1, 'mode': 'function', 'selected': " . a:idx . ", 'items': " . items . "}", getline(1))
   %d
-  set complete=.,fCompleteInfoUserDefinedFn
+  set complete=.,FCompleteInfoUserDefinedFn
   call feedkeys("i\<C-N>" . a:mvmt . "\<C-R>\<C-R>=string(complete_info())\<CR>\<ESC>", "tx")
   let completed = a:idx != -1 ? ['foo', 'bar', 'baz', 'qux']->get(a:idx) : ''
   call assert_equal(completed. "{'pum_visible': 1, 'mode': 'keyword', 'selected': " . a:idx . ", 'items': " . items . "}", getline(1))
   %d
-  set complete=.,f
+  set complete=.,F
   call feedkeys("i\<C-N>" . a:mvmt . "\<C-R>\<C-R>=string(complete_info())\<CR>\<ESC>", "tx")
   let completed = a:idx != -1 ? ['foo', 'bar', 'baz', 'qux']->get(a:idx) : ''
   call assert_equal(completed. "{'pum_visible': 1, 'mode': 'keyword', 'selected': " . a:idx . ", 'items': " . items . "}", getline(1))
@@ -969,9 +969,9 @@ func Test_completefunc_error()
   set completefunc=CompleteFunc
   call setline(1, ['', 'abcd', ''])
   call assert_fails('exe "normal 2G$a\<C-X>\<C-U>"', 'E565:')
-  set complete=fCompleteFunc
+  set complete=FCompleteFunc
   call assert_fails('exe "normal 2G$a\<C-N>"', 'E565:')
-  set complete=f
+  set complete=F
   call assert_fails('exe "normal 2G$a\<C-N>"', 'E565:')
 
   " delete text when called for the second time
@@ -985,9 +985,9 @@ func Test_completefunc_error()
   set completefunc=CompleteFunc2
   call setline(1, ['', 'abcd', ''])
   call assert_fails('exe "normal 2G$a\<C-X>\<C-U>"', 'E565:')
-  set complete=fCompleteFunc2
+  set complete=FCompleteFunc2
   call assert_fails('exe "normal 2G$a\<C-N>"', 'E565:')
-  set complete=f
+  set complete=F
   call assert_fails('exe "normal 2G$a\<C-N>"', 'E565:')
 
   " Jump to a different window from the complete function
@@ -1002,10 +1002,10 @@ func Test_completefunc_error()
   new
   call assert_fails('exe "normal a\<C-X>\<C-U>"', 'E565:')
   %d
-  set complete=fCompleteFunc3
+  set complete=FCompleteFunc3
   call assert_fails('exe "normal a\<C-N>"', 'E565:')
   %d
-  set complete=f
+  set complete=F
   call assert_fails('exe "normal a\<C-N>"', 'E565:')
   close!
 
@@ -1029,15 +1029,15 @@ func Test_completefunc_invalid_data()
   exe "normal i\<C-X>\<C-U>"
   call assert_equal('moon', getline(1))
   %d
-  set complete=fCompleteFunc
+  set complete=FCompleteFunc
   exe "normal i\<C-N>"
   call assert_equal('moon', getline(1))
   %d
-  set complete=f
+  set complete=F
   exe "normal i\<C-N>"
   call assert_equal('moon', getline(1))
   set completefunc& complete&
-  close!
+  bw!
 endfunc
 
 " Test for errors in using complete() function
@@ -1717,13 +1717,13 @@ func Test_complete_item_refresh_always()
   call assert_equal(6, g:CallCount)
   %d
   let g:CallCount = 0
-  set complete=fTcomplete
+  set complete=FTcomplete
   exe "normal! iup\<C-N>\<BS>\<BS>\<BS>\<BS>\<BS>"
   call assert_equal('up', getline(1))
   call assert_equal(6, g:CallCount)
   %d
   let g:CallCount = 0
-  set complete=f
+  set complete=F
   exe "normal! iup\<C-N>\<BS>\<BS>\<BS>\<BS>\<BS>"
   call assert_equal('up', getline(1))
   call assert_equal(6, g:CallCount)
@@ -1750,10 +1750,10 @@ func Test_cpt_func_refresh_always_fail()
     call assert_equal(-999, a:findstart) " Should not reach here
   endfunc
   new
-  set complete=ffunction('CompleteFail'\\,\ [-2])
+  set complete=Ffunction('CompleteFail'\\,\ [-2])
   exe "normal! ia\<C-N>"
   %d
-  set complete=ffunction('CompleteFail'\\,\ [-3])
+  set complete=Ffunction('CompleteFail'\\,\ [-3])
   exe "normal! ia\<C-N>"
   bw!
 
@@ -1771,7 +1771,7 @@ func Test_cpt_func_refresh_always_fail()
   endfunc
   new
   set completeopt=menuone,noselect
-  set complete=ffunction('CompleteFailIntermittent'\\,\ [-2])
+  set complete=Ffunction('CompleteFailIntermittent'\\,\ [-2])
   let g:CallCount = 0
   exe "normal! if\<C-N>\<c-r>=complete_info([\"items\"])\<cr>"
   call assert_match('''word'': ''foo''.*''word'': ''fbar''', getline(1))
@@ -1782,13 +1782,13 @@ func Test_cpt_func_refresh_always_fail()
   call assert_match('''selected'': -1.*''word'': ''foo1''.*''word'': ''foo2''', getline(1))
   call assert_equal(2, g:CallCount)
   %d
-  set complete=ffunction('CompleteFailIntermittent'\\,\ [-3])
+  set complete=Ffunction('CompleteFailIntermittent'\\,\ [-3])
   let g:CallCount = 0
   exe "normal! if\<C-N>o\<c-r>=complete_info([\"items\", \"selected\"])\<cr>"
   call assert_match('''selected'': -1.*''word'': ''foo1''.*''word'': ''foo2''', getline(1))
   call assert_equal(2, g:CallCount)
   %d
-  set complete=ffunction('CompleteFailIntermittent'\\,\ [-2])
+  set complete=Ffunction('CompleteFailIntermittent'\\,\ [-2])
   " completion mode is dismissed when there are no matches in list
   let g:CallCount = 0
   exe "normal! if\<C-N>oo\<c-r>=complete_info([\"items\"])\<cr>"
@@ -1801,7 +1801,7 @@ func Test_cpt_func_refresh_always_fail()
   call assert_equal(3, g:CallCount)
   %d
   " completion mode continues when matches from other sources present
-  set complete=.,ffunction('CompleteFailIntermittent'\\,\ [-2])
+  set complete=.,Ffunction('CompleteFailIntermittent'\\,\ [-2])
   call setline(1, 'fooo1')
   let g:CallCount = 0
   exe "normal! Gof\<C-N>oo\<c-r>=complete_info([\"items\", \"selected\"])\<cr>"
@@ -1817,7 +1817,7 @@ func Test_cpt_func_refresh_always_fail()
   call assert_equal(4, g:CallCount)
   %d
   " refresh will stop when -3 is returned
-  set complete=.,,\ ffunction('CompleteFailIntermittent'\\,\ [-3])
+  set complete=.,,\ Ffunction('CompleteFailIntermittent'\\,\ [-3])
   call setline(1, 'fooo1')
   let g:CallCount = 0
   exe "normal! Gof\<C-N>o\<bs>\<c-r>=complete_info([\"items\", \"selected\"])\<cr>"
@@ -1862,7 +1862,7 @@ func Test_cpt_select_item_refresh_always()
   endfunc
 
   new
-  set complete=.,ffunction('CompleteItemsSelect'\\,\ [[]])
+  set complete=.,Ffunction('CompleteItemsSelect'\\,\ [[]])
   call setline(1, "foobarbar")
   let g:CallCount = 0
   exe "normal! Gof\<c-n>\<c-n>\<c-r>=CompleteMenuWords()\<cr>"
@@ -1894,7 +1894,7 @@ func Test_cpt_select_item_refresh_always()
   call assert_equal(2, g:CallCount)
 
   %d
-  set complete=.,ffunction('CompleteItemsSelect'\\,\ [['foonext']])
+  set complete=.,Ffunction('CompleteItemsSelect'\\,\ [['foonext']])
   call setline(1, "foobarbar")
   let g:CallCount = 0
   exe "normal! Gof\<c-n>\<c-n>\<bs>\<c-r>=CompleteMenuWords()\<cr>"
@@ -1934,7 +1934,7 @@ func Test_cpt_select_item_refresh_always()
   call assert_equal(3, g:CallCount)
 
   %d
-  set complete=.,ffunction('CompleteItemsSelect'\\,\ [['fo'\\,\ 'foonext']])
+  set complete=.,Ffunction('CompleteItemsSelect'\\,\ [['fo'\\,\ 'foonext']])
   call setline(1, "foobarbar")
   let g:CallCount = 0
   exe "normal! Gof\<c-n>\<c-n>\<bs>\<c-r>=CompleteMenuWords()\<cr>"
@@ -1986,7 +1986,7 @@ func Test_cpt_multi_func_refresh_always()
   call assert_equal("f\x0e" . '{''matches'': [], ''selected'': -1}', getline(1))
 
   set completeopt=menuone,noselect
-  set complete=fCompleteItems1,fCompleteItems2
+  set complete=FCompleteItems1,FCompleteItems2
 
   new
   let g:CallCount1 = 0
@@ -2118,7 +2118,7 @@ func Test_cpt_func_callback()
 
   let lines =<< trim END
     #" Test for using a global function name
-    set complete=fg:CompleteFunc2
+    set complete=Fg:CompleteFunc2
     new
     call setline(1, 'global')
     LET g:CompleteFunc2Args = []
@@ -2128,7 +2128,7 @@ func Test_cpt_func_callback()
     bw!
 
     #" Test for using a function()
-    set complete=ffunction('g:CompleteFunc1'\\,\ [10])
+    set complete=Ffunction('g:CompleteFunc1'\\,\ [10])
     new
     call setline(1, 'one')
     LET g:CompleteFunc1Args = []
@@ -2138,7 +2138,7 @@ func Test_cpt_func_callback()
     bw!
 
     #" Using a funcref variable
-    set complete=ffuncref('g:CompleteFunc1'\\,\ [11])
+    set complete=Ffuncref('g:CompleteFunc1'\\,\ [11])
     new
     call setline(1, 'two')
     LET g:CompleteFunc1Args = []
@@ -2155,7 +2155,7 @@ func Test_cpt_func_callback()
     call add(g:CompleteFunc3Args, [a:findstart, a:base])
     return a:findstart ? 0 : []
   endfunc
-  set complete=fs:CompleteFunc3
+  set complete=Fs:CompleteFunc3
   new
   call setline(1, 'script1')
   let g:CompleteFunc3Args = []
@@ -2164,7 +2164,7 @@ func Test_cpt_func_callback()
   set complete&
   bw!
 
-  let &complete = 'fs:CompleteFunc3'
+  let &complete = 'Fs:CompleteFunc3'
   new
   call setline(1, 'script2')
   let g:CompleteFunc3Args = []
@@ -2182,7 +2182,7 @@ func Test_cpt_func_callback()
         add(CompleteFunc4Args, [findstart, base])
         return findstart ? 0 : []
       enddef
-      set complete=fCompleteFunc4
+      set complete=FCompleteFunc4
       new
       setline(1, 'script1')
       feedkeys("A\<C-N>\<Esc>", 'x')
@@ -2202,7 +2202,7 @@ func Test_cpt_func_callback()
     enddef
 
     # Test for using a def function with completefunc
-    set complete=ffunction('Vim9CompleteFunc'\\,\ [60])
+    set complete=Ffunction('Vim9CompleteFunc'\\,\ [60])
     new | only
     setline(1, 'one')
     g:Vim9completeFuncArgs = []
@@ -2211,7 +2211,7 @@ func Test_cpt_func_callback()
     bw!
 
     # Test for using a global function name
-    &complete = 'fg:CompleteFunc2'
+    &complete = 'Fg:CompleteFunc2'
     new | only
     setline(1, 'two')
     g:CompleteFunc2Args = []
@@ -2224,7 +2224,7 @@ func Test_cpt_func_callback()
       add(g:LocalCompleteFuncArgs, [findstart, base])
       return findstart ? 0 : []
     enddef
-    &complete = 'fLocalCompleteFunc'
+    &complete = 'FLocalCompleteFunc'
     new | only
     setline(1, 'three')
     g:LocalCompleteFuncArgs = []
@@ -3122,12 +3122,12 @@ func Test_complete_smartindent()
   let result = getline(1,'$')
   call assert_equal(['', '{','}',''], result)
   %d
-  setlocal complete=fFooBarComplete
+  setlocal complete=FFooBarComplete
   exe "norm! o{\<cr>\<c-n>\<c-p>}\<cr>\<esc>"
   let result = getline(1,'$')
   call assert_equal(['', '{','}',''], result)
   %d
-  setlocal complete=f
+  setlocal complete=F
   exe "norm! o{\<cr>\<c-n>\<c-p>}\<cr>\<esc>"
   let result = getline(1,'$')
   call assert_equal(['', '{','}',''], result)
@@ -3387,11 +3387,15 @@ func Test_complete_opt_fuzzy()
     autocmd CompleteChanged * :call OnPumChange()
   augroup END
 
+  let g:change = 0
   func Omni_test(findstart, base)
     if a:findstart
       return col(".")
     endif
-    return [#{word: "foo"}, #{word: "foobar"}, #{word: "fooBaz"}, #{word: "foobala"}, #{word: "你好吗"}, #{word: "我好"}]
+    if g:change == 0
+      return [#{word: "foo"}, #{word: "foobar"}, #{word: "fooBaz"}, #{word: "foobala"}, #{word: "你好吗"}, #{word: "我好"}]
+    endif
+    return [#{word: "for i = .."}, #{word: "bar"}, #{word: "foo"}, #{word: "for .. ipairs"}, #{word: "for .. pairs"}]
   endfunc
 
   new
@@ -3487,6 +3491,15 @@ func Test_complete_opt_fuzzy()
   " issue #15412
   call feedkeys("Salpha bravio charlie\<CR>alpha\<C-X>\<C-N>\<C-X>\<C-N>\<C-X>\<C-N>\<ESC>", 'tx')
   call assert_equal('alpha bravio charlie', getline('.'))
+
+  set cot=fuzzy,menu,noinsert
+  call feedkeys(":let g:change=1\<CR>")
+  call feedkeys("S\<C-X>\<C-O>for\<C-N>\<C-N>\<C-N>", 'tx')
+  call assert_equal('for', getline('.'))
+  call feedkeys("S\<C-X>\<C-O>for\<C-P>", 'tx')
+  call assert_equal('for', getline('.'))
+  call feedkeys("S\<C-X>\<C-O>for\<C-P>\<C-P>", 'tx')
+  call assert_equal('for .. ipairs', getline('.'))
 
   " clean up
   set omnifunc=
@@ -4065,7 +4078,7 @@ func Test_complete_multiline_marks()
 endfunc
 
 func Test_complete_match_count()
-  func PrintMenuWords()
+  func! PrintMenuWords()
     let info = complete_info(["selected", "matches"])
     call map(info.matches, {_, v -> v.word})
     return info
@@ -4108,7 +4121,12 @@ func Test_complete_match_count()
 
   %d
   set completefunc=ComplFunc
-  set cpt=.^1,f^2
+  set cpt=.^1,F^2
+  call setline(1, ["fo", "foo", "foobar", "fobarbaz"])
+  exe "normal! Gof\<c-n>\<c-r>=PrintMenuWords()\<cr>"
+  call assert_equal('fo{''matches'': [''fo'', ''foo1'', ''foo2''], ''selected'': 0}', getline(5))
+  5d
+  set cpt=.^1,,,F^2,,,
   call setline(1, ["fo", "foo", "foobar", "fobarbaz"])
   exe "normal! Gof\<c-n>\<c-r>=PrintMenuWords()\<cr>"
   call assert_equal('fo{''matches'': [''fo'', ''foo1'', ''foo2''], ''selected'': 0}', getline(5))
@@ -4143,7 +4161,7 @@ func Test_complete_match_count()
 
   %d
   call setline(1, ["foo"])
-  set cpt=fComplFunc^2,.
+  set cpt=FComplFunc^2,.
   exe "normal! Gof\<c-n>\<c-r>=PrintMenuWords()\<cr>"
   call assert_equal('foo1{''matches'': [''foo1'', ''foo2'', ''foo''], ''selected'': 0}', getline(2))
   bw!
@@ -4160,7 +4178,7 @@ func Test_complete_match_count()
   endfunc
 
   new
-  set complete=.,ffunction('CompleteItemsSelect')^2
+  set complete=.,Ffunction('CompleteItemsSelect')^2
   call setline(1, "foobarbar")
   let g:CallCount = 0
   exe "normal! Gof\<c-n>\<c-n>\<c-r>=PrintMenuWords()\<cr>"
@@ -4180,8 +4198,50 @@ func Test_complete_match_count()
   call assert_equal(3, g:CallCount)
   bw!
 
+  " Test 'fuzzy' with max_items
+  " XXX: Cannot use complete_info() since it is broken for 'fuzzy'
+  new
+  set completeopt=menu,noselect,fuzzy
+  set complete=.
+  call setline(1, ["abcd", "abac", "abdc"])
+  execute "normal Goa\<c-n>c\<c-n>"
+  call assert_equal('abac', getline(4))
+  execute "normal Sa\<c-n>c\<c-n>\<c-n>\<c-n>\<c-n>\<c-n>"
+  call assert_equal('abac', getline(4))
+  set complete=.^1
+  execute "normal Sa\<c-n>c\<c-n>\<c-n>\<c-n>"
+  call assert_equal('abac', getline(4))
+  set complete=.^2
+  execute "normal Sa\<c-n>c\<c-n>\<c-n>\<c-n>\<c-n>"
+  call assert_equal('abac', getline(4))
+  set complete=.^3
+  execute "normal Sa\<c-n>c\<c-n>\<c-n>\<c-n>\<c-n>\<c-n>"
+  call assert_equal('abac', getline(4))
+  set complete=.^4
+  execute "normal Sa\<c-n>c\<c-n>\<c-n>\<c-n>\<c-n>\<c-n>"
+  call assert_equal('abac', getline(4))
+
+  func! ComplFunc(findstart, base)
+    if a:findstart
+      return col(".")
+    endif
+    return ["abcde", "abacr"]
+  endfunc
+
+  set complete=.,FComplFunc^1
+  execute "normal Sa\<c-n>c\<c-n>\<c-n>"
+  call assert_equal('abacr', getline(4))
+  execute "normal Sa\<c-n>c\<c-n>\<c-n>\<c-n>\<c-n>\<c-n>\<c-n>"
+  call assert_equal('abac', getline(4))
+  set complete=.^1,FComplFunc^1
+  execute "normal Sa\<c-n>c\<c-n>\<c-n>\<c-n>\<c-n>"
+  call assert_equal('abac', getline(4))
+  bw!
+
   set completeopt& complete&
   delfunc PrintMenuWords
+  delfunc ComplFunc
+  delfunc CompleteItemsSelect
 endfunc
 
 func Test_complete_append_selected_match_default()
@@ -4213,10 +4273,97 @@ func Test_complete_append_selected_match_default()
   delfunc PrintMenuWords
 endfunc
 
+" Test normal mode (^N/^P/^X^N/^X^P) with smartcase when 1) matches are first
+" found and 2) matches are filtered (when a character is typed).
+func Test_smartcase_normal_mode()
+
+  func! PrintMenu()
+    let info = complete_info(["matches"])
+    call map(info.matches, {_, v -> v.word})
+    return info
+  endfunc
+
+  func! TestInner(key)
+    let pr = "\<c-r>=PrintMenu()\<cr>"
+
+    new
+    set completeopt=menuone,noselect ignorecase smartcase
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}{pr}"
+    call assert_equal('F{''matches'': [''Fast'', ''FAST'', ''False'',
+          \ ''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}a{pr}"
+    call assert_equal('Fa{''matches'': [''Fast'', ''False'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}a\<bs>{pr}"
+    call assert_equal('F{''matches'': [''Fast'', ''FAST'', ''False'',
+          \ ''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}ax{pr}"
+    call assert_equal('Fax{''matches'': []}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}ax\<bs>{pr}"
+    call assert_equal('Fa{''matches'': [''Fast'', ''False'']}', getline(1))
+
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}A{pr}"
+    call assert_equal('FA{''matches'': [''FAST'', ''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}A\<bs>{pr}"
+    call assert_equal('F{''matches'': [''Fast'', ''FAST'', ''False'',
+          \ ''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}AL{pr}"
+    call assert_equal('FAL{''matches'': [''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}ALx{pr}"
+    call assert_equal('FALx{''matches'': []}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}ALx\<bs>{pr}"
+    call assert_equal('FAL{''matches'': [''FALSE'']}', getline(1))
+
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOf{a:key}{pr}"
+    call assert_equal('f{''matches'': [''Fast'', ''FAST'', ''False'', ''FALSE'',
+          \ ''fast'', ''false'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOf{a:key}a{pr}"
+    call assert_equal('fa{''matches'': [''Fast'', ''FAST'', ''False'', ''FALSE'',
+          \ ''fast'', ''false'']}', getline(1))
+
+    %d
+    exe $"normal! ggOf{a:key}{pr}"
+    call assert_equal('f{''matches'': []}', getline(1))
+    exe $"normal! ggOf{a:key}a\<bs>{pr}"
+    call assert_equal('f{''matches'': []}', getline(1))
+    set ignorecase& smartcase& completeopt&
+    bw!
+  endfunc
+
+  call TestInner("\<c-n>")
+  call TestInner("\<c-p>")
+  call TestInner("\<c-x>\<c-n>")
+  call TestInner("\<c-x>\<c-p>")
+  delfunc PrintMenu
+  delfunc TestInner
+endfunc
+
 " Test 'nearest' flag of 'completeopt'
 func Test_nearest_cpt_option()
 
-  func PrintMenuWords()
+  func! PrintMenuWords()
     let info = complete_info(["selected", "matches"])
     call map(info.matches, {_, v -> v.word})
     return info
@@ -4404,9 +4551,141 @@ func Test_complete_match()
   call feedkeys("Sabc, \<ESC>:let g:result=complete_match()\<CR>", 'tx')
   call assert_equal([[4, ',']], g:result)
 
+  set ise=\ ,=
+  call feedkeys("Sif true  \<ESC>:let g:result=complete_match()\<CR>", 'tx')
+  call assert_equal([[8, ' ']], g:result)
+  call feedkeys("Slet a = \<ESC>:let g:result=complete_match()\<CR>", 'tx')
+  call assert_equal([[7, '=']], g:result)
+  set ise={,\ ,=
+  call feedkeys("Sif true  \<ESC>:let g:result=complete_match()\<CR>", 'tx')
+  call assert_equal([[8, ' ']], g:result)
+  call feedkeys("S{ \<ESC>:let g:result=complete_match()\<CR>", 'tx')
+  call assert_equal([[1, '{']], g:result)
+
   bw!
   unlet g:result
   set isexpand&
+  delfunc TestComplete
+endfunc
+
+func Test_register_completion()
+  let @a = "completion test apple application"
+  let @b = "banana behavior better best"
+  let @c = "complete completion compliment computer"
+  let g:save_reg = ''
+  func GetItems()
+    let g:result = complete_info(['pum_visible'])
+  endfunc
+
+  new
+  call setline(1, "comp")
+  call cursor(1, 4)
+  call feedkeys("a\<C-X>\<C-R>\<C-N>\<C-N>\<Esc>", 'tx')
+  call assert_equal("compliment", getline(1))
+
+  inoremap <buffer><F2> <C-R>=GetItems()<CR>
+  call feedkeys("S\<C-X>\<C-R>\<F2>\<ESC>", 'tx')
+  call assert_equal(1, g:result['pum_visible'])
+
+  call setline(1, "app")
+  call cursor(1, 3)
+  call feedkeys("a\<C-X>\<C-R>\<C-N>\<Esc>", 'tx')
+  call assert_equal("application", getline(1))
+
+  " Test completion with case differences
+  set ignorecase
+  let @e = "TestCase UPPERCASE lowercase"
+  call setline(1, "testc")
+  call cursor(1, 5)
+  call feedkeys("a\<C-X>\<C-R>\<Esc>", 'tx')
+  call assert_equal("TestCase", getline(1))
+
+  " Test clipboard registers if available
+  if has('clipboard_working')
+    let g:save_reg = getreg('*')
+    call setreg('*', "clipboard selection unique words")
+    call setline(1, "uni")
+    call cursor(1, 3)
+    call feedkeys("a\<C-X>\<C-R>\<Esc>", 'tx')
+    call assert_equal("unique", getline(1))
+    call setreg('*', g:save_reg)
+
+    let g:save_reg = getreg('+')
+    call setreg('+', "system clipboard special content")
+    call setline(1, "spe")
+    call cursor(1, 3)
+    call feedkeys("a\<C-X>\<C-R>\<Esc>", 'tx')
+    call assert_equal("special", getline(1))
+    call setreg('+', g:save_reg)
+
+    call setreg('*', g:save_reg)
+    call setreg('a', "normal register")
+    call setreg('*', "clipboard mixed content")
+    call setline(1, "mix")
+    call cursor(1, 3)
+    call feedkeys("a\<C-X>\<C-R>\<Esc>", 'tx')
+    call assert_equal("mixed", getline(1))
+    call setreg('*', g:save_reg)
+  endif
+
+  " Test black hole register should be skipped
+  let @_ = "blackhole content should not appear"
+  call setline(1, "black")
+  call cursor(1, 5)
+  call feedkeys("a\<C-X>\<C-R>\<Esc>", 'tx')
+  call assert_equal("black", getline(1))
+
+  let @1 = "recent yank zero"
+  call setline(1, "ze")
+  call cursor(1, 2)
+  call feedkeys("a\<C-X>\<C-R>\<Esc>", 'tx')
+  call assert_equal("zero", getline(1))
+
+  call feedkeys("Sze\<C-X>\<C-R>\<C-R>=string(complete_info(['mode']))\<CR>\<ESC>", "tx")
+  call assert_equal("zero{'mode': 'register'}", getline(1))
+
+  " Clean up
+  bwipe!
+  delfunc GetItems
+  unlet g:result
+  unlet g:save_reg
+  set ignorecase&
+endfunc
+
+" Test refresh:always with unloaded buffers (issue #17363)
+func Test_complete_unloaded_buf_refresh_always()
+  func TestComplete(findstart, base)
+    if a:findstart
+      let line = getline('.')
+      let start = col('.') - 1
+      while start > 0 && line[start - 1] =~ '\a'
+        let start -= 1
+      endwhile
+      return start
+    else
+      let g:CallCount += 1
+      let res = ["update1", "update12", "update123"]
+      return #{words: res, refresh: 'always'}
+    endif
+  endfunc
+
+  let g:CallCount = 0
+  set completeopt=menu,longest
+  set completefunc=TestComplete
+  set complete=b,u,t,i,F
+  badd foo1
+  badd foo2
+  new
+  exe "normal! iup\<C-N>\<BS>\<BS>\<BS>\<BS>\<BS>"
+  call assert_equal('up', getline(1))
+  call assert_equal(6, g:CallCount)
+
+  bd! foo1
+  bd! foo2
+  bw!
+  set completeopt&
+  set complete&
+  set completefunc&
   delfunc TestComplete
 endfunc
 
