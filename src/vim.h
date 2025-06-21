@@ -921,10 +921,10 @@ extern int (*dyn_libintl_wputenv)(const wchar_t *envstring);
 
 #if defined(FEAT_TABPANEL)
 # define COLUMNS_WITHOUT_TPL()		(Columns - tabpanel_width())
-# define TPL_LCOL(W)			tabpanel_leftcol(W)
+# define TPL_LCOL()			tabpanel_leftcol()
 #else
 # define COLUMNS_WITHOUT_TPL()		Columns
-# define TPL_LCOL(W)			0
+# define TPL_LCOL()			0
 #endif
 
 #define W_ENDCOL(wp)	((wp)->w_wincol + (wp)->w_width)
@@ -2089,7 +2089,6 @@ typedef int sock_T;
 #define IN_STATUS_LINE		2	// on status or command line
 #define IN_SEP_LINE		4	// on vertical separator line
 #define IN_OTHER_WIN		8	// in other window but can't go there
-#define IN_TABPANEL		16	// in tabpanel
 #define CURSOR_MOVED		0x100
 #define MOUSE_FOLD_CLOSE	0x200	// clicked on '-' in fold column
 #define MOUSE_FOLD_OPEN		0x400	// clicked on '+' in fold column
