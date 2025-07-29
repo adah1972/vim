@@ -146,6 +146,9 @@ gui_start(char_u *arg UNUSED)
 	    emsg(msg);
 #endif
     }
+    else
+	// Reset clipmethod to CLIPMETHOD_NONE
+	choose_clipmethod();
 
     vim_free(old_term);
 
@@ -393,7 +396,7 @@ gui_init_check(void)
 	return result;
     }
 
-    gui.shell_created = FALSE;
+    gui.shell_created = false;
     gui.dying = FALSE;
     gui.in_focus = TRUE;		// so the guicursor setting works
     gui.dragged_sb = SBAR_NONE;
@@ -714,7 +717,7 @@ gui_init(void)
     gui_init_which_components(NULL);
 
     // All components of the GUI have been created now
-    gui.shell_created = TRUE;
+    gui.shell_created = true;
 
 #ifdef FEAT_GUI_MSWIN
     // Set the shell size, adjusted for the screen size.  For GTK this only

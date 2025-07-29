@@ -1032,10 +1032,12 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
     compiletype_T   compile_type;
     int		funcref_isn_idx = -1;
     lvar_T	*lvar = NULL;
+    char_u	*bracket_start = NULL;
 
     if (eap->forceit)
     {
-	emsg(_(e_cannot_use_bang_with_nested_def));
+	semsg(_(e_cannot_use_bang_with_nested_def_str),
+		eap->cmdidx == CMD_def ? ":def" : ":function");
 	return NULL;
     }
 
@@ -1046,6 +1048,14 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
 	    ++name_end;
 	set_nextcmd(eap, name_end);
     }
+
+    if (*name_end == '<')
+    {
+	bracket_start = name_end;
+	if (skip_generic_func_type_args(&name_end) == FAIL)
+	    return NULL;
+    }
+
     if (name_end == name_start || *skipwhite(name_end) != '(')
     {
 	if (!ends_excmd2(name_start, name_end))
@@ -1063,6 +1073,11 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
 	    return NULL;
 	return eap->nextcmd == NULL ? (char_u *)"" : eap->nextcmd;
     }
+
+    if (bracket_start != NULL)
+	// generic function.  The function name ends before the list of types
+	// (opening angle bracket).
+	name_end = bracket_start;
 
     // Only g:Func() can use a namespace.
     if (name_start[1] == ':' && !is_global)
@@ -1103,7 +1118,8 @@ compile_nested_function(exarg_T *eap, cctx_T *cctx, garray_T *lines_to_free)
     int save_KeyTyped = KeyTyped;
     KeyTyped = FALSE;
 
-    ufunc = define_function(eap, lambda_name.string, lines_to_free, 0, NULL, 0);
+    ufunc = define_function(eap, lambda_name.string, lines_to_free, 0, NULL, 0,
+									cctx);
 
     KeyTyped = save_KeyTyped;
 
@@ -2104,7 +2120,7 @@ compile_lhs_set_type(cctx_T *cctx, lhs_T *lhs, char_u *var_end, int is_decl)
 	}
 
 	p = skipwhite(var_end + 1);
-	lhs->lhs_type = parse_type(&p, cctx->ctx_type_list, TRUE);
+	lhs->lhs_type = parse_type(&p, cctx->ctx_type_list, cctx->ctx_ufunc, cctx, TRUE);
 	if (lhs->lhs_type == NULL)
 	    return FAIL;
 
@@ -3444,7 +3460,13 @@ compile_assign_compound_op(cctx_T *cctx, cac_T *cac)
 
     if (*cac->cac_op == '.')
     {
-	if (may_generate_2STRING(-1, TOSTRING_NONE, cctx) == FAIL)
+	expected = lhs->lhs_member_type;
+	stacktype = get_type_on_stack(cctx, 0);
+	if (expected != &t_string
+		&& need_type(stacktype, expected, FALSE, -1, 0, cctx,
+					FALSE, FALSE) == FAIL)
+	    return FAIL;
+	else if (may_generate_2STRING(-1, TOSTRING_NONE, cctx) == FAIL)
 	    return FAIL;
     }
     else
@@ -4726,6 +4748,14 @@ compile_def_function_body(
 
 	    case CMD_class:
 		    emsg(_(e_class_can_only_be_used_in_script));
+		    return FAIL;
+
+	    case CMD_enum:
+		    emsg(_(e_enum_can_only_be_used_in_script));
+		    return FAIL;
+
+	    case CMD_interface:
+		    emsg(_(e_interface_can_only_be_used_in_script));
 		    return FAIL;
 
 	    case CMD_type:

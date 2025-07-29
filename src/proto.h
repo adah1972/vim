@@ -177,6 +177,9 @@ void mbyte_im_set_active(int active_arg);
 #  include "profiler.pro"
 # endif
 # include "quickfix.pro"
+#ifdef FEAT_WAYLAND
+# include "wayland.pro"
+#endif
 # include "regexp.pro"
 # include "register.pro"
 # include "scriptfile.pro"
@@ -227,6 +230,7 @@ void mbyte_im_set_active(int active_arg);
 #  include "vim9compile.pro"
 #  include "vim9execute.pro"
 #  include "vim9expr.pro"
+#  include "vim9generics.pro"
 #  include "vim9instr.pro"
 #  include "vim9type.pro"
 # endif
