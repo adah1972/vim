@@ -156,6 +156,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     cabalproject: ['cabal.project', 'cabal.project.local'],
     cairo: ['file.cairo'],
     calendar: ['calendar', '/.calendar/file', '/share/calendar/any/calendar.file', '/share/calendar/calendar.file', 'any/share/calendar/any/calendar.file', 'any/share/calendar/calendar.file'],
+    cangjie: ['file.cj'],
     capnp: ['file.capnp'],
     catalog: ['catalog', 'sgml.catalogfile', 'sgml.catalog', 'sgml.catalog-file'],
     cdc: ['file.cdc'],
@@ -404,9 +405,9 @@ def s:GetFilenameChecks(): dict<list<string>>
     jq: ['file.jq'],
     json: ['file.json', 'file.jsonp', 'file.json-patch', 'file.geojson', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', 'file.jupyterlab-settings',
     '.prettierrc', '.firebaserc', '.stylelintrc', '.lintstagedrc', 'file.slnf', 'file.sublime-project', 'file.sublime-settings', 'file.sublime-workspace',
-    'file.bd', 'file.bda', 'file.xci', 'flake.lock', 'pack.mcmeta', 'deno.lock', '.swcrc'],
+    'file.bd', 'file.bda', 'file.xci', 'flake.lock', 'pack.mcmeta', 'deno.lock', '.swcrc', 'composer.lock', 'symfony.lock'],
     json5: ['file.json5'],
-    jsonc: ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.jscsrc', '.vsconfig', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc', 'bun.lock', expand("$HOME/.config/VSCodium/User/settings.json")],
+    jsonc: ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.jscsrc', '.vsconfig', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc', 'bun.lock', expand("$HOME/.config/VSCodium/User/settings.json"), '/home/user/.config/waybar/config' ],
     jsonl: ['file.jsonl'],
     jsonnet: ['file.jsonnet', 'file.libsonnet'],
     jsp: ['file.jsp'],
@@ -662,7 +663,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     readline: ['.inputrc', 'inputrc'],
     rego: ['file.rego'],
     remind: ['.reminders', 'file.remind', 'file.rem', '.reminders-file'],
-    requirements: ['file.pip', 'requirements.txt', 'dev-requirements.txt', 'constraints.txt', 'requirements.in', 'requirements/dev.txt', 'requires/dev.txt'],
+    requirements: ['file.pip', 'requirements.txt', 'dev-requirements.txt', 'requirements-dev.txt', 'constraints.txt', 'requirements.in', 'requirements/dev.txt', 'requires/dev.txt'],
     rescript: ['file.res', 'file.resi'],
     resolv: ['resolv.conf'],
     reva: ['file.frt'],
@@ -3024,6 +3025,39 @@ func Test_org_file()
   filetype off
 endfunc
 
+func Test_info_file()
+  filetype on
+
+  call writefile(['File: coreutils.info,  Node: Top,  Next: Introduction,  Up: (dir)'], 'Xfile', 'D')
+  split Xfile
+  call assert_equal('info', &filetype)
+  bwipe!
+
+  filetype off
+endfunc
+
+func Test_mail_file()
+  filetype on
+
+  call writefile(['Return-path: <lgc@debian.home.arpa>'], 'Xfile', 'D')
+  split Xfile
+  call assert_equal('mail', &filetype)
+  bwipe!
+
+  filetype off
+endfunc
+
+func Test_terminfo_file()
+  filetype on
+
+  call writefile(['#	Reconstructed via infocmp from file: /etc/terminfo/x/xterm'], 'Xfile', 'D')
+  split Xfile
+  call assert_equal('terminfo', &filetype)
+  bwipe!
+
+  filetype off
+endfunc
+
 " Filetypes detected from names of existing files
 func Test_pacmanlog()
   filetype on
@@ -3033,6 +3067,17 @@ func Test_pacmanlog()
     call assert_equal('pacmanlog', &filetype, 'for text: ' .. string(fname))
     bwipe!
   endfor
+  filetype off
+endfunc
+
+func Test_diff_format()
+  filetype on
+
+  call writefile(['0d555557  1 (John John   2025-01-01 00:00:00 +0000  1) foo'], 'Xdiff', 'D')
+  split Xdiff
+  call assert_true(empty(&filetype))
+  bwipe!
+
   filetype off
 endfunc
 

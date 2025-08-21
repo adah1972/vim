@@ -359,7 +359,11 @@ repeat:
 	}
 
 	// FullName_save() is slow, don't use it when not needed.
-	if (*p != NUL || !vim_isAbsName(*fnamep))
+	if (*p != NUL || !vim_isAbsName(*fnamep)
+#ifdef MSWIN	// enforce drive letter on Windows paths
+		|| **fnamep == '/' || **fnamep == '\\'
+#endif
+	)
 	{
 	    *fnamep = FullName_save(*fnamep, *p != NUL);
 	    vim_free(*bufp);	// free any allocated file name
@@ -842,7 +846,22 @@ f_chdir(typval_T *argvars, typval_T *rettv)
 	vim_free(cwd);
     }
 
-    if (curwin->w_localdir != NULL)
+    if (argvars[1].v_type != VAR_UNKNOWN)
+    {
+	char_u *s = tv_get_string(&argvars[1]);
+	if (STRCMP(s, "global") == 0)
+	    scope = CDSCOPE_GLOBAL;
+	else if (STRCMP(s, "tabpage") == 0)
+	    scope = CDSCOPE_TABPAGE;
+	else if (STRCMP(s, "window") == 0)
+	    scope = CDSCOPE_WINDOW;
+	else
+	{
+	    semsg(_(e_invalid_value_for_argument_str_str), "scope", s);
+	    return;
+	}
+    }
+    else if (curwin->w_localdir != NULL)
 	scope = CDSCOPE_WINDOW;
     else if (curtab->tp_localdir != NULL)
 	scope = CDSCOPE_TABPAGE;
@@ -3094,6 +3113,42 @@ vim_fnamencmp(char_u *x, char_u *y, size_t len)
     char_u	*py = y;
     int		cx = NUL;
     int		cy = NUL;
+
+# ifdef MSWIN
+    /*
+     * To allow proper comparison of absolute paths:
+     *	 - one with explicit drive letter C:\xxx
+     *	 - another with implicit drive letter \xxx
+     * advance the pointer, of the explicit one, to skip the drive
+     */
+    for (int swap = 0, drive = NUL; swap < 2; ++swap)
+    {
+	// Handle absolute paths with implicit drive letter
+	cx = PTR2CHAR(px);
+	cy = PTR2CHAR(py);
+
+	if ((cx == '/' || cx == '\\') && ASCII_ISALPHA(cy))
+	{
+	    drive = MB_TOUPPER(cy) - 'A' + 1;
+
+	    // Check for the colon
+	    py += mb_ptr2len(py);
+	    cy = PTR2CHAR(py);
+	    if (cy == ':' && drive == _getdrive())
+	    { // skip the drive for comparison
+		py += mb_ptr2len(py);
+		break;
+	    }
+	    else // ignore
+		py -= mb_ptr2len(py);
+	}
+
+	// swap pointers
+	char_u *tmp = px;
+	px = py;
+	py = tmp;
+    }
+# endif
 
     while (len > 0)
     {

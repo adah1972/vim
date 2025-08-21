@@ -12,6 +12,7 @@ SRC_ALL =	\
 		.github/workflows/ci.yml \
 		.github/workflows/codeql-analysis.yml \
 		.github/workflows/coverity.yml \
+		.github/workflows/link-check.yml \
 		.github/actions/test_artifacts/action.yml \
 		.github/dependabot.yml \
 		.gitignore \
@@ -24,6 +25,7 @@ SRC_ALL =	\
 		ci/config.mk*.sed \
 		ci/if_ver*.vim \
 		ci/if_feat_check.vim \
+		ci/lychee.toml \
 		ci/setup-xvfb.sh \
 		ci/setup-sway.sh \
 		ci/remove_snap.sh \
@@ -80,6 +82,7 @@ SRC_ALL =	\
 		src/findfile.c \
 		src/float.c \
 		src/fold.c \
+		src/fuzzy.c \
 		src/getchar.c \
 		src/gc.c \
 		src/globals.h \
@@ -289,6 +292,7 @@ SRC_ALL =	\
 		src/proto/findfile.pro \
 		src/proto/float.pro \
 		src/proto/fold.pro \
+		src/proto/fuzzy.pro \
 		src/proto/getchar.pro \
 		src/proto/gc.pro \
 		src/proto/gui.pro \

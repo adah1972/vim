@@ -620,6 +620,7 @@ may_adjust_incsearch_highlighting(
     int	    search_flags = SEARCH_NOOF;
     int	    i;
     int	    save;
+    int	    bslsh = FALSE;
     int	    search_delim;
 
     // Parsing range may already set the last search pattern.
@@ -652,6 +653,18 @@ may_adjust_incsearch_highlighting(
     else
 	pat = ccline.cmdbuff + skiplen;
 
+    // do not search for the search end delimiter,
+    // unless it is part of the pattern
+    if (patlen > 2 && firstc == pat[patlen - 1])
+    {
+	patlen--;
+	if (pat[patlen - 1] == '\\')
+	{
+	    pat[patlen - 1] = firstc;
+	    bslsh = TRUE;
+	}
+    }
+
     cursor_off();
     out_flush();
     if (c == Ctrl_G)
@@ -675,6 +688,8 @@ may_adjust_incsearch_highlighting(
 		 pat, patlen, count, search_flags, RE_SEARCH, NULL);
     --emsg_off;
     pat[patlen] = save;
+    if (bslsh)
+	pat[patlen - 1] = '\\';
     if (i)
     {
 	is_state->search_start = is_state->match_start;
@@ -924,16 +939,18 @@ cmdline_wildchar_complete(
 	int		*wim_index_p,
 	expand_T	*xp,
 	int		*gotesc,
+	int		redraw_if_menu_empty,
 	pos_T		*pre_incsearch_pos)
 {
     int		wim_index = *wim_index_p;
     int		res;
     int		j;
     int		options = WILD_NO_BEEP;
+    int		noselect = (wim_flags[0] & WIM_NOSELECT) != 0;
 
     if (wim_flags[wim_index] & WIM_BUFLASTUSED)
 	options |= WILD_BUFLASTUSED;
-    if (wim_flags[0] & WIM_NOSELECT)
+    if (noselect)
 	options |= WILD_KEEP_SOLE_ITEM;
     if (xp->xp_numfiles > 0)   // typed p_wc at least twice
     {
@@ -944,7 +961,8 @@ cmdline_wildchar_complete(
 		    || (p_wmnu && (wim_flags[wim_index] & WIM_FULL) != 0)))
 	{
 	    (void)showmatches(xp,
-		    p_wmnu && ((wim_flags[wim_index] & WIM_LIST) == 0));
+		    p_wmnu && ((wim_flags[wim_index] & WIM_LIST) == 0),
+		    noselect);
 	    redrawcmd();
 	    *did_wild_list = TRUE;
 	}
@@ -976,6 +994,10 @@ cmdline_wildchar_complete(
 	else
 	    res = nextwild(xp, WILD_EXPAND_KEEP, options, escape);
 
+	// Remove popup window if no completion items are available
+	if (redraw_if_menu_empty && xp->xp_numfiles <= 0)
+	    update_screen(0);
+
 	// if interrupted while completing, behave like it failed
 	if (got_int)
 	{
@@ -991,7 +1013,7 @@ cmdline_wildchar_complete(
 	// "list", or no change and 'wildmode' contains "longest,list",
 	// list all matches
 	if (res == OK
-		&& xp->xp_numfiles > ((wim_flags[wim_index] & WIM_NOSELECT) ? 0 : 1))
+		&& xp->xp_numfiles > (noselect ? 0 : 1))
 	{
 	    // a "longest" that didn't do anything is skipped (but not
 	    // "list:longest")
@@ -1011,7 +1033,7 @@ cmdline_wildchar_complete(
 		    p_wmnu = p_wmnu_save;
 		}
 		(void)showmatches(xp, p_wmnu
-			&& ((wim_flags[wim_index] & WIM_LIST) == 0));
+			&& ((wim_flags[wim_index] & WIM_LIST) == 0), noselect);
 		redrawcmd();
 		*did_wild_list = TRUE;
 		if (wim_flags[wim_index] & WIM_LONGEST)
@@ -1618,7 +1640,7 @@ getcmdline_int(
     int		clear_ccline)	// clear ccline first
 {
     static int	depth = 0;	    // call depth
-    int		c;
+    int		c = 0;
     int		i;
     int		j;
     int		gotesc = FALSE;		// TRUE when <ESC> just typed
@@ -1823,6 +1845,7 @@ getcmdline_int(
 	int	trigger_cmdlinechanged = TRUE;
 	int	end_wildmenu;
 	int	prev_cmdpos = ccline.cmdpos;
+	int	skip_pum_redraw = FALSE;
 
 	VIM_CLEAR(prev_cmdbuff);
 
@@ -1847,6 +1870,10 @@ getcmdline_int(
 	    if (prev_cmdbuff == NULL)
 		goto returncmd;
 	}
+
+	// Defer screen update to avoid pum flicker during wildtrigger()
+	if (c == K_WILD && firstc != '@')
+	    skip_pum_redraw = TRUE;
 
 	// Get a character.  Ignore K_IGNORE and K_NOP, they should not do
 	// anything, such as stop completion.
@@ -1987,7 +2014,13 @@ getcmdline_int(
 	if (end_wildmenu)
 	{
 	    if (cmdline_pum_active())
-		cmdline_pum_remove(&ccline);
+	    {
+		skip_pum_redraw = skip_pum_redraw && !key_is_wc
+		    && (vim_isprintc(c)
+			|| c == K_BS || c == Ctrl_H || c == K_DEL
+			|| c == K_KDEL || c == Ctrl_W || c == Ctrl_U);
+		cmdline_pum_remove(&ccline, skip_pum_redraw);
+	    }
 	    if (xpc.xp_numfiles != -1)
 		(void)ExpandOne(&xpc, NULL, NULL, 0, WILD_FREE);
 	    did_wild_list = FALSE;
@@ -2066,7 +2099,7 @@ getcmdline_int(
 	    if (c == K_WILD)
 		++emsg_silent;  // Silence the bell
 	    res = cmdline_wildchar_complete(c, firstc != '@', &did_wild_list,
-		    &wim_index, &xpc, &gotesc,
+		    &wim_index, &xpc, &gotesc, c == K_WILD,
 #ifdef FEAT_SEARCH_EXTRA
 		    &is_state.search_start
 #else
@@ -2094,7 +2127,8 @@ getcmdline_int(
 		{
 		    // Trigger the popup menu when wildoptions=pum
 		    showmatches(&xpc, p_wmnu
-			    && ((wim_flags[wim_index] & WIM_LIST) == 0));
+			    && ((wim_flags[wim_index] & WIM_LIST) == 0),
+			    wim_flags[0] & WIM_NOSELECT);
 		}
 		if (nextwild(&xpc, WILD_PREV, 0, firstc != '@') == OK
 			&& nextwild(&xpc, WILD_PREV, 0, firstc != '@') == OK)
@@ -2113,13 +2147,10 @@ getcmdline_int(
 	{
 #ifdef FEAT_SEARCH_EXTRA
 	    // Apply search highlighting
-	    if (wild_type == WILD_APPLY)
-	    {
-		if (is_state.winid != curwin->w_id)
-		    init_incsearch_state(&is_state);
-		if (KeyTyped || vpeekc() == NUL)
-		    may_do_incsearch_highlighting(firstc, count, &is_state);
-	    }
+	    if (is_state.winid != curwin->w_id)
+		init_incsearch_state(&is_state);
+	    if (KeyTyped || vpeekc() == NUL)
+		may_do_incsearch_highlighting(firstc, count, &is_state);
 #endif
 	    wild_type = 0;
 	    goto cmdline_not_changed;
@@ -2212,7 +2243,8 @@ getcmdline_int(
 		goto cmdline_not_changed;
 
 	case Ctrl_D:
-		if (showmatches(&xpc, FALSE) == EXPAND_NOTHING)
+		if (showmatches(&xpc, FALSE, wim_flags[0] & WIM_NOSELECT)
+			== EXPAND_NOTHING)
 		    break;	// Use ^D as normal char instead
 
 		redrawcmd();
@@ -2635,7 +2667,7 @@ returncmd:
     // if certain special keys like <Esc> or <C-\> were used as wildchar. Make
     // sure to still clean up to avoid memory corruption.
     if (cmdline_pum_active())
-	cmdline_pum_remove(&ccline);
+	cmdline_pum_remove(&ccline, FALSE);
     wildmenu_cleanup(&ccline);
     did_wild_list = FALSE;
     wim_index = 0;

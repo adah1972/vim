@@ -1,11 +1,11 @@
 " These commands create the option window.
 "
 " Maintainer:	The Vim Project <https://github.com/vim/vim>
-" Last Change:	2025 Jul 25
+" Last Change:	2025 Aug 16
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " If there already is an option window, jump to that one.
-let buf = bufnr('option-window')
+let buf = bufexists('option-window') ? bufnr('option-window') : -1
 if buf >= 0
   let winids = win_findbuf(buf)
   if len(winids) > 0
@@ -876,6 +876,8 @@ if has("insert_expand")
   call <SID>OptionL("cpt")
   call <SID>AddOption("autocomplete", gettext("automatic completion in insert mode"))
   call <SID>BinOptionG("ac", &ac)
+  call <SID>AddOption("autocompletedelay", gettext("delay in msec before menu appears after typing"))
+  call append("$", " \tset acl=" . &acl)
   call <SID>AddOption("completeopt", gettext("whether to use a popup menu for Insert mode completion"))
   call <SID>OptionL("cot")
   call <SID>AddOption("completeitemalign", gettext("popup menu item align order"))

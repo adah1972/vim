@@ -68,6 +68,8 @@
  * 11.11.2024  improve end-of-options argument parser #9285
  * 07.12.2024  fix overflow with xxd --autoskip and large sparse files #16175
  * 15.06.2025  improve color code logic
+ * 08.08.2025  fix overflow with bitwise output
+ * 20.08.2025  remove external library call for autoconversion on z/OS (MVS)
  *
  * (c) 1990-1998 by Juergen Weigert (jnweiger@gmail.com)
  *
@@ -148,7 +150,7 @@ extern void perror __P((char *));
 # endif
 #endif
 
-char version[] = "xxd 2025-06-15 by Juergen Weigert et al.";
+char version[] = "xxd 2025-08-20 by Juergen Weigert et al.";
 #ifdef WIN32
 char osver[] = " (Win32)";
 #else
@@ -228,10 +230,9 @@ char osver[] = "";
 #define LLEN_NO_COLOR \
     (39            /* addr: ⌈log10(ULONG_MAX)⌉ if "-d" flag given. We assume ULONG_MAX = 2**128 */ \
     + 2            /* ": " */ \
-    + 2 * COLS    /* hex dump */ \
-    + (COLS - 1)   /* whitespace between groups if "-g1" option given and "-c" maxed out */ \
+    + 9 * COLS     /* hex dump, worst case: bitwise output using -b */ \
     + 2            /* whitespace */ \
-    + COLS    /* ASCII dump */ \
+    + COLS         /* ASCII dump */ \
     + 2)           /* "\n\0" */
 
 char hexxa[] = "0123456789abcdef0123456789ABCDEF", *hexx = hexxa;
@@ -1009,10 +1010,6 @@ main(int argc, char *argv[])
 	}
       rewind(fpo);
     }
-#ifdef __MVS__
-  // Disable auto-conversion on input file descriptors
-  __disableautocvt(fileno(fp));
-#endif
 
   if (revert)
     switch (hextype)
@@ -1182,9 +1179,7 @@ main(int argc, char *argv[])
 
       c += addrlen + 3 + p;
       if (color)
-	{
 	  colors[c] = cur_color;
-	}
       l[c++] =
 #if defined(__MVS__) && __CHARSET_LIB == 0
 	  (e >= 64)

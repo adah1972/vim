@@ -50,7 +50,7 @@ toggle_Magic(int x)
     return Magic(x);
 }
 
-#ifdef FEAT_RELTIME
+#if defined(FEAT_RELTIME) || defined(PROTO)
 static int timeout_nesting = 0;
 
 /*
@@ -1253,7 +1253,11 @@ typedef enum
 // note:
 //     submatch is available only if FEAT_EVAL is defined.
     static void
-reg_getline_common(linenr_T lnum, reg_getline_flags_T flags, char_u **line, colnr_T *length)
+reg_getline_common(
+    linenr_T		lnum,
+    reg_getline_flags_T	flags,
+    char_u		**line,
+    colnr_T		*length)
 {
     int get_line = flags & RGLF_LINE;
     int get_length = flags & RGLF_LENGTH;
@@ -1722,7 +1726,8 @@ mb_decompose(int c, int *c1, int *c2, int *c3)
     else
     {
 	*c1 = c;
-	*c2 = *c3 = 0;
+	*c2 = 0;
+	*c3 = 0;
     }
 }
 

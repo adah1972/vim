@@ -342,7 +342,7 @@ nextwild(
     {
 	size_t	plen = STRLEN(p);
 	int	difflen;
-	int	v;
+	int	v = OK;
 
 	difflen = (int)plen - xp->xp_pattern_len;
 	if (ccline->cmdlen + difflen + 4 > ccline->cmdbufflen)
@@ -350,8 +350,7 @@ nextwild(
 	    v = realloc_cmdbuff(ccline->cmdlen + difflen + 4);
 	    xp->xp_pattern = ccline->cmdbuff + i;
 	}
-	else
-	    v = OK;
+
 	if (v == OK)
 	{
 	    mch_memmove(&ccline->cmdbuff[ccline->cmdpos + difflen],
@@ -395,7 +394,7 @@ cmdline_pum_create(
 	int		showtail)
 {
     int		i;
-    int		columns;
+    int		prefix_len;
 
     // Add all the completion matches
     compl_match_array = ALLOC_MULT(pumitem_T, numMatches);
@@ -415,13 +414,11 @@ cmdline_pum_create(
 
     // Compute the popup menu starting column
     compl_startcol = ccline == NULL ? 0 : vim_strsize(ccline->cmdbuff) + 1;
-    columns = vim_strsize(xp->xp_pattern);
+    prefix_len = vim_strsize(xp->xp_pattern);
     if (showtail)
-    {
-	columns += vim_strsize(showmatches_gettail(matches[0]));
-	columns -= vim_strsize(matches[0]);
-    }
-    compl_startcol = MAX(0, compl_startcol - columns);
+	prefix_len += vim_strsize(showmatches_gettail(matches[0]))
+	    - vim_strsize(matches[0]);
+    compl_startcol = MAX(0, compl_startcol - prefix_len);
 
     // no default selection
     compl_selected = -1;
@@ -455,9 +452,8 @@ cmdline_pum_active(void)
  * items and refresh the screen.
  */
     void
-cmdline_pum_remove(cmdline_info_T *cclp UNUSED)
+cmdline_pum_remove(cmdline_info_T *cclp UNUSED, int defer_redraw)
 {
-    int save_p_lz = p_lz;
     int	save_KeyTyped = KeyTyped;
 #ifdef FEAT_EVAL
     int	save_RedrawingDisabled = RedrawingDisabled;
@@ -468,9 +464,15 @@ cmdline_pum_remove(cmdline_info_T *cclp UNUSED)
     pum_undisplay();
     VIM_CLEAR(compl_match_array);
     compl_match_arraysize = 0;
-    p_lz = FALSE;  // avoid the popup menu hanging around
-    update_screen(0);
-    p_lz = save_p_lz;
+    if (!defer_redraw)
+    {
+	int save_p_lz = p_lz;
+	p_lz = FALSE;  // avoid the popup menu hanging around
+	update_screen(0);
+	p_lz = save_p_lz;
+    }
+    else
+	pum_call_update_screen();
     redrawcmd();
 
     // When a function is called (e.g. for 'foldtext') KeyTyped might be reset
@@ -485,7 +487,7 @@ cmdline_pum_remove(cmdline_info_T *cclp UNUSED)
     void
 cmdline_pum_cleanup(cmdline_info_T *cclp)
 {
-    cmdline_pum_remove(cclp);
+    cmdline_pum_remove(cclp, FALSE);
     wildmenu_cleanup(cclp);
 }
 
@@ -1068,7 +1070,7 @@ ExpandOne(
 
 	// The entries from xp_files may be used in the PUM, remove it.
 	if (compl_match_array != NULL)
-	    cmdline_pum_remove(get_cmdline_info());
+	    cmdline_pum_remove(get_cmdline_info(), FALSE);
     }
     xp->xp_selected = 0;
 
@@ -1274,12 +1276,12 @@ showmatches_oneline(
  * be inserted like a normal character.
  */
     int
-showmatches(expand_T *xp, int wildmenu UNUSED)
+showmatches(expand_T *xp, int wildmenu, int noselect)
 {
     cmdline_info_T	*ccline = get_cmdline_info();
     int		numMatches;
     char_u	**matches;
-    int		i, j;
+    int		i;
     int		maxlen;
     int		lines;
     int		columns;
@@ -1295,12 +1297,13 @@ showmatches(expand_T *xp, int wildmenu UNUSED)
 
     if (xp->xp_numfiles == -1)
     {
+	int retval;
 	set_expand_context(xp);
-	i = expand_cmdline(xp, ccline->cmdbuff, ccline->cmdpos,
-						    &numMatches, &matches);
+	retval = expand_cmdline(xp, ccline->cmdbuff, ccline->cmdpos,
+		&numMatches, &matches);
+	if (retval != EXPAND_OK)
+	    return retval;
 	showtail = expand_showtail(xp);
-	if (i != EXPAND_OK)
-	    return i;
     }
     else
     {
@@ -1311,7 +1314,8 @@ showmatches(expand_T *xp, int wildmenu UNUSED)
 
     if (wildmenu && vim_strchr(p_wop, WOP_PUM) != NULL)
 	// cmdline completion popup menu (with wildoptions=pum)
-	return cmdline_pum_create(ccline, xp, matches, numMatches, showtail);
+	return cmdline_pum_create(ccline, xp, matches, numMatches,
+		showtail && !noselect);
 
     if (!wildmenu)
     {
@@ -1334,17 +1338,18 @@ showmatches(expand_T *xp, int wildmenu UNUSED)
 	maxlen = 0;
 	for (i = 0; i < numMatches; ++i)
 	{
+	    int	len;
 	    if (!showtail && (xp->xp_context == EXPAND_FILES
 			  || xp->xp_context == EXPAND_SHELLCMD
 			  || xp->xp_context == EXPAND_BUFFERS))
 	    {
 		home_replace(NULL, matches[i], NameBuff, MAXPATHL, TRUE);
-		j = vim_strsize(NameBuff);
+		len = vim_strsize(NameBuff);
 	    }
 	    else
-		j = vim_strsize(SHOW_MATCH(i));
-	    if (j > maxlen)
-		maxlen = j;
+		len = vim_strsize(SHOW_MATCH(i));
+	    if (len > maxlen)
+		maxlen = len;
 	}
 
 	if (xp->xp_context == EXPAND_TAGS_LISTFILES)
@@ -2361,6 +2366,7 @@ set_context_by_cmdname(
 	case CMD_tab:
 	case CMD_tabdo:
 	case CMD_topleft:
+	case CMD_unsilent:
 	case CMD_verbose:
 	case CMD_vertical:
 	case CMD_windo:
@@ -3535,7 +3541,7 @@ ExpandGeneric(
     regmatch_T	*regmatch,
     char_u	***matches,
     int		*numMatches,
-    char_u	*((*func)(expand_T *, int)),
+    char_u	*(*func)(expand_T *, int),
 					  // returns a string from the list
     int		escaped)
 {
@@ -3566,7 +3572,7 @@ ExpandGenericExt(
     regmatch_T	*regmatch,
     char_u	***matches,
     int		*numMatches,
-    char_u	*((*func)(expand_T *, int)),
+    char_u	*(*func)(expand_T *, int),
 					  // returns a string from the list
     int		escaped,
     int		sortStartIdx)
@@ -3606,7 +3612,7 @@ ExpandGenericExt(
 	    else
 	    {
 		score = fuzzy_match_str(str, pat);
-		match = (score != 0);
+		match = (score != FUZZY_SCORE_NONE);
 	    }
 	}
 	else
@@ -4016,7 +4022,7 @@ ExpandUserDefined(
 	    else
 	    {
 		score = fuzzy_match_str(s, pat);
-		match = (score != 0);
+		match = (score != FUZZY_SCORE_NONE);
 	    }
 	}
 	else
@@ -4789,17 +4795,29 @@ copy_substring_from_pos(pos_T *start, pos_T *end, char_u **match,
     static int
 is_regex_match(char_u *pat, char_u *str)
 {
+    if (STRCMP(pat, str) == 0)
+	return TRUE;
+
     regmatch_T	regmatch;
     int		result;
 
+    ++emsg_off;
+    ++msg_silent;
     regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
+    --emsg_off;
+    --msg_silent;
+
     if (regmatch.regprog == NULL)
 	return FALSE;
     regmatch.rm_ic = p_ic;
     if (p_ic && p_scs)
 	regmatch.rm_ic = !pat_has_uppercase(pat);
 
+    ++emsg_off;
+    ++msg_silent;
     result = vim_regexec_nl(&regmatch, str, (colnr_T)0);
+    --emsg_off;
+    --msg_silent;
 
     vim_regfree(regmatch.regprog);
     return result;
