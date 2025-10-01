@@ -1,5 +1,10 @@
 " Test :setfiletype
 
+" Make VIMRUNTIME and &rtp absolute.
+" Otherwise, a :lcd inside a test would break the relative ../../runtime path.
+let $VIMRUNTIME = fnamemodify($VIMRUNTIME, ':p')
+let &rtp = join(map(split(&rtp, ','), 'fnamemodify(v:val, ":p")'), ',')
+
 func Test_backup_strip()
   filetype on
   let fname = 'Xdetect.js~~~~~~~~~~~'
@@ -147,7 +152,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     brightscript: ['file.brs'],
     bsdl: ['file.bsd', 'file.bsdl'],
     bst: ['file.bst'],
-    bzl: ['file.bazel', 'file.bzl', 'WORKSPACE', 'WORKSPACE.bzlmod'],
+    bzl: ['file.bazel', 'file.bzl', 'file.bxl', 'WORKSPACE', 'WORKSPACE.bzlmod'],
     bzr: ['bzr_log.any', 'bzr_log.file'],
     c: ['enlightenment/file.cfg', 'file.qc', 'file.c', 'some-enlightenment/file.cfg', 'file.mdh', 'file.epro'],
     c3: ['file.c3', 'file.c3i', 'file.c3t'],
@@ -184,10 +189,11 @@ def s:GetFilenameChecks(): dict<list<string>>
     cmusrc: ['any/.cmus/autosave', 'any/.cmus/rc', 'any/.cmus/command-history', 'any/.cmus/file.theme', 'any/cmus/rc', 'any/cmus/file.theme', '/.cmus/autosave', '/.cmus/command-history', '/.cmus/file.theme', '/.cmus/rc', '/cmus/file.theme', '/cmus/rc'],
     cobol: ['file.cbl', 'file.cob'],
     coco: ['file.atg'],
+    codeowners: ['CODEOWNERS'],
     conaryrecipe: ['file.recipe'],
     conf: ['auto.master', 'file.conf', 'texdoc.cnf', '.x11vncrc', '.chktexrc', '.ripgreprc', 'ripgreprc', 'file.ctags'],
-    config: ['configure.in', 'configure.ac', '/etc/hostname.file', 'any/etc/hostname.file'],
-    confini: ['pacman.conf', 'paru.conf', 'mpv.conf', 'any/.aws/config', 'any/.aws/credentials', 'file.nmconnection',
+    config: ['/etc/hostname.file', 'any/etc/hostname.file', 'configure.in', 'configure.ac', 'file.at', 'aclocal.m4'],
+    confini: ['pacman.conf', 'paru.conf', 'mpv.conf', 'any/.aws/config', 'any/.aws/credentials', 'any/.aws/cli/alias', 'file.nmconnection',
               'any/.gnuradio/grc.conf', 'any/gnuradio/config.conf', 'any/gnuradio/conf.d/modtool.conf'],
     context: ['tex/context/any/file.tex', 'file.mkii', 'file.mkiv', 'file.mkvi', 'file.mkxl', 'file.mklx'],
     cook: ['file.cook'],
@@ -303,7 +309,8 @@ def s:GetFilenameChecks(): dict<list<string>>
     fstab: ['fstab', 'mtab'],
     func: ['file.fc'],
     fusion: ['file.fusion'],
-    fvwm: ['/.fvwm/file', 'any/.fvwm/file'],
+    fvwm: ['/.fvwm/file', 'any/.fvwm/file', '.fvwmrc', 'foo.fvwmrc', 'fvwmrc.foo', '.fvwm2rc', 'foo.fvwm2rc', 'fvwm2rc.foo', 'foo.fvwm95.hook', 'fvwm95.foo.hook'],
+    fvwm2m4: ['.fvwm2rc.m4', 'foo.fvwm2rc.m4', 'fvwm2rc.foo.m4'],
     gdb: ['.gdbinit', 'gdbinit', '.cuda-gdbinit', 'cuda-gdbinit', 'file.gdb', '.config/gdbearlyinit', '.gdbearlyinit'],
     gdmo: ['file.mo', 'file.gdmo'],
     gdresource: ['file.tscn', 'file.tres'],
@@ -416,6 +423,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     karel: ['file.kl', 'file.KL'],
     kconfig: ['Kconfig', 'Kconfig.debug', 'Kconfig.file', 'Config.in', 'Config.in.host'],
     kdl: ['file.kdl'],
+    kitty: ['kitty.conf', '~/.config/kitty/colorscheme.conf'],
     kivy: ['file.kv'],
     kix: ['file.kix'],
     kotlin: ['file.kt', 'file.ktm', 'file.kts'],
@@ -448,6 +456,7 @@ def s:GetFilenameChecks(): dict<list<string>>
     lite: ['file.lite', 'file.lt'],
     litestep: ['/LiteStep/any/file.rc', 'any/LiteStep/any/file.rc'],
     livebook: ['file.livemd'],
+#    log: ['file.log', 'file_log', 'file.LOG', 'file_LOG'],
     logcheck: ['/etc/logcheck/file.d-some/file', '/etc/logcheck/file.d/file', 'any/etc/logcheck/file.d-some/file', 'any/etc/logcheck/file.d/file'],
     loginaccess: ['/etc/login.access', 'any/etc/login.access'],
     logindefs: ['/etc/login.defs', 'any/etc/login.defs'],
@@ -466,7 +475,7 @@ def s:GetFilenameChecks(): dict<list<string>>
              'any/m17n-db/file.ali', 'any/m17n-db/file.cs', 'any/m17n-db/file.dir', 'any/m17n-db/FLT/file.flt', 'any/m17n-db/file.fst', 'any/m17n-db/LANGDATA/file.lnm', 'any/m17n-db/file.mic', 'any/m17n-db/MIM/file.mim', 'any/m17n-db/file.tbl'],
     m3build: ['m3makefile', 'm3overrides'],
     m3quake: ['file.quake', 'cm3.cfg'],
-    m4: ['file.at', '.m4_history'],
+    m4: ['.m4_history'],
     mail: ['snd.123', '.letter', '.letter.123', '.followup', '.article', '.article.123', 'pico.123', 'mutt-xx-xxx', 'muttng-xx-xxx', 'ae123.txt', 'file.eml', 'reportbug-file'],
     mailaliases: ['/etc/mail/aliases', '/etc/aliases', 'any/etc/aliases', 'any/etc/mail/aliases'],
     mailcap: ['.mailcap', 'mailcap'],
@@ -766,7 +775,8 @@ def s:GetFilenameChecks(): dict<list<string>>
     svg: ['file.svg'],
     svn: ['svn-commitfile.tmp', 'svn-commit-file.tmp', 'svn-commit.tmp'],
     sway: ['file.sw'],
-    swayconfig: ['/home/user/.sway/config', '/home/user/.config/sway/config', '/etc/sway/config', '/etc/xdg/sway/config'],
+    swayconfig: ['/home/user/.sway/config', '/home/user/.config/sway/config', '/etc/sway/config', '/etc/xdg/sway/config',
+                 '/home/user/sway/config.d/50-user.conf' ],
     swift: ['file.swift', 'file.swiftinterface'],
     swiftgyb: ['file.swift.gyb'],
     swig: ['file.swg', 'file.swig'],
@@ -817,7 +827,8 @@ def s:GetFilenameChecks(): dict<list<string>>
     tal: ['file.tal'],
     taskdata: ['pending.data', 'completed.data', 'undo.data'],
     taskedit: ['file.task'],
-    tcl: ['file.tcl', 'file.tm', 'file.tk', 'file.itcl', 'file.itk', 'file.jacl', '.tclshrc', 'tclsh.rc', '.wishrc', '.tclsh-history', '.xsctcmdhistory', '.xsdbcmdhistory'],
+    tcl: ['file.tcl', 'file.tm', 'file.tk', 'file.itcl', 'file.itk', 'file.jacl', '.tclshrc', 'tclsh.rc', '.wishrc', '.tclsh-history',
+          '.xsctcmdhistory', '.xsdbcmdhistory', 'vivado.jou', 'vivado.log'],
     teal: ['file.tl'],
     templ: ['file.templ'],
     template: ['file.tmpl'],
@@ -924,8 +935,8 @@ def s:GetFilenameChecks(): dict<list<string>>
     xsd: ['file.xsd'],
     xslt: ['file.xsl', 'file.xslt'],
     yacc: ['file.yy', 'file.yxx', 'file.y++'],
-    yaml: ['file.yaml', 'file.yml', 'file.eyaml', 'any/.bundle/config', '.clangd', '.clang-format', '.clang-tidy', 'file.mplstyle', 'matplotlibrc', 'yarn.lock',
-           '/home/user/.kube/config', '.condarc', 'condarc', 'pixi.lock'],
+    yaml: ['file.yaml', 'file.yml', 'file.eyaml', 'file.kyaml', 'file.kyml', 'any/.bundle/config', '.clangd', '.clang-format', '.clang-tidy', 'file.mplstyle', 'matplotlibrc', 'yarn.lock',
+           '/home/user/.kube/config', '/home/user/.kube/kuberc', '.condarc', 'condarc', '.mambarc', 'mambarc', 'pixi.lock'],
     yang: ['file.yang'],
     yuck: ['file.yuck'],
     z8a: ['file.z8a'],
@@ -1179,6 +1190,43 @@ endfunc
 " Tests for specific extensions and filetypes.
 " Keep sorted.
 """""""""""""""""""""""""""""""""""""""""""""""""
+
+" Since dist#ft#FTm4() looks around for configure.ac
+" the test needs to isolate itself in a fresh temporary project tree,
+" so that no configure.ac from another test (or from the repo root)
+" accidentally influences detection.
+func Test_autoconf_file()
+  filetype on
+  " Make a fresh sandbox far away from any configure.ac
+  let save_cwd = getcwd()
+  call mkdir('Xproj_autoconf/a/b', 'p')
+  execute 'lcd Xproj_autoconf/a/b'
+
+  try
+    call writefile(['AC_CHECK_HEADERS([stdio.h])'], 'foo.m4', 'D')
+    split foo.m4
+    call assert_equal('config', &filetype)
+    bwipe!
+
+    call writefile(['AS_IF([true], [:])'], 'bar.m4', 'D')
+    split bar.m4
+    call assert_equal('config', &filetype)
+    bwipe!
+
+    call writefile(['AC_INIT([foo],[1.0])'], 'configure.ac')
+    call mkdir('m4', 'p')
+    call writefile([], 'm4/empty.m4', 'D')
+    split m4/empty.m4
+    call assert_equal('config', &filetype)
+    bwipe!
+  finally
+    call delete('m4', 'rf')
+    call delete('configure.ac')
+    execute 'lcd' fnameescape(save_cwd)
+    call delete('Xproj_autoconf', 'rf')
+    filetype off
+  endtry
+endfunc
 
 func Test_bas_file()
   filetype on
@@ -1664,6 +1712,7 @@ endfunc
 
 func Test_haredoc_file()
   filetype on
+
   call assert_true(mkdir('foo/bar', 'pR'))
 
   call writefile([], 'README', 'D')
@@ -1671,28 +1720,37 @@ func Test_haredoc_file()
   call assert_notequal('haredoc', &filetype)
   bwipe!
 
+  let g:filetype_haredoc = 3
+  call writefile([], 'foo/bar/bar.ha', 'D')
+  split README
+  call assert_equal('haredoc', &filetype)
+  bwipe!
+
+  let g:filetype_haredoc = 2
+  split README
+  call assert_notequal('haredoc', &filetype)
+  bwipe!
+
+  call writefile([], 'foo/foo.ha', 'D')
+  split README
+  call assert_equal('haredoc', &filetype)
+  bwipe!
+
   let g:filetype_haredoc = 1
   split README
   call assert_notequal('haredoc', &filetype)
   bwipe!
 
-  call writefile([], 'foo/quux.ha')
+  call writefile([], 'main.ha', 'D')
   split README
   call assert_equal('haredoc', &filetype)
   bwipe!
-  call delete('foo/quux.ha')
 
-  call writefile([], 'foo/bar/baz.ha', 'D')
+  let g:filetype_haredoc = 0
   split README
   call assert_notequal('haredoc', &filetype)
   bwipe!
-
-  let g:haredoc_search_depth = 2
-  split README
-  call assert_equal('haredoc', &filetype)
-  bwipe!
   unlet g:filetype_haredoc
-  unlet g:haredoc_search_depth
 
   filetype off
 endfunc
@@ -1923,6 +1981,30 @@ func Test_m_file()
   bwipe!
 
   filetype off
+endfunc
+
+" Since dist#ft#FTm4() looks around for configure.ac
+" the test needs to isolate itself in a fresh temporary project tree,
+" so that no configure.ac from another test (or from the repo root)
+" accidentally influences detection.
+func Test_m4_file()
+  filetype on
+  let save_cwd = getcwd()
+
+  " Make a fresh sandbox far away from any configure.ac
+  call mkdir('Xsandbox/level1/level2', 'p')
+  execute 'lcd Xsandbox/level1/level2'
+
+  try
+    call writefile(["define(`FOO', `bar')", "FOO"], 'plain.m4', 'D')
+    split plain.m4
+    call assert_equal('m4', &filetype)
+    bwipe!
+  finally
+    execute 'lcd' fnameescape(save_cwd)
+    call delete('Xsandbox', 'rf')
+    filetype off
+  endtry
 endfunc
 
 func Test_mod_file()
@@ -2626,6 +2708,21 @@ func Test_inc_file()
   call assert_equal('bitbake', &filetype)
   bwipe!
 
+  call writefile(['PREFERRED_PROVIDER_virtual/kernel = "linux-yocto"'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('bitbake', &filetype)
+  bwipe!
+
+  call writefile(['MACHINEOVERRIDES =. "qemuall:"'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('bitbake', &filetype)
+  bwipe!
+
+  call writefile(['BBPATH .= ":${LAYERDIR}"'], 'Xfile.inc')
+  split Xfile.inc
+  call assert_equal('bitbake', &filetype)
+  bwipe!
+
   " asm
   call writefile(['asmsyntax=foo'], 'Xfile.inc')
   split Xfile.inc
@@ -3078,6 +3175,25 @@ func Test_diff_format()
   call assert_true(empty(&filetype))
   bwipe!
 
+  filetype off
+endfunc
+
+func Test_m4_format()
+  filetype on
+
+  call mkdir('Xm4', 'D')
+  cd Xm4
+  call writefile([''], 'alocal.m4', 'D')
+  split alocal.m4
+  call assert_equal('m4', &filetype)
+  bwipe!
+  " an accompanying configure.ac in the current directory changes the filetype
+  call writefile([''], 'configure.ac')
+  split alocal.m4
+  call assert_equal('config', &filetype)
+  bwipe!
+
+  cd -
   filetype off
 endfunc
 

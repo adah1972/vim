@@ -2339,6 +2339,97 @@ def Test_var_declaration_fails()
   endfor
 enddef
 
+" Test for using "void" as the type in a variable declaration
+def Test_var_declaration_void_type()
+  # Using void as the type of a local variable
+  var lines =<< trim END
+    var x: void
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1330: Invalid type used in variable declaration: void')
+
+  # Using void as the type of a function argument
+  lines =<< trim END
+    vim9script
+    def Foo(x: void)
+    enddef
+    defcompile
+  END
+  v9.CheckSourceFailure(lines, 'E1330: Invalid type used in variable declaration: void', 2)
+
+  # Using void as the type of a variable with a initializer
+  lines =<< trim END
+    var a: void = 10
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1330: Invalid type used in variable declaration: void')
+
+  # Using void as the list item type
+  lines =<< trim END
+    var l: list<void> = []
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1330: Invalid type used in variable declaration: void')
+
+  # Using void as the tuple item type
+  lines =<< trim END
+    var t: tuple<void> = ()
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1330: Invalid type used in variable declaration: void')
+
+  # Using void as the dict item type
+  lines =<< trim END
+    var l: dict<void> = {}
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1330: Invalid type used in variable declaration: void')
+
+  # Using void as the argument type in a lambda
+  lines =<< trim END
+    var Fn = (x: void) => x
+  END
+  v9.CheckDefAndScriptFailure(lines, 'E1330: Invalid type used in variable declaration: void')
+
+  # Using void as the type of an object member variable
+  lines =<< trim END
+    vim9script
+    class A
+      var x: void = 1
+    endclass
+    var a = A.new()
+  END
+  v9.CheckScriptFailure(lines, 'E1330: Invalid type used in variable declaration: void')
+
+  # Using void as the type of a loop index
+  lines =<< trim END
+    for [i: number, j: void] in ((1, 2), (3, 4))
+    endfor
+  END
+  v9.CheckDefFailure(lines, 'E1330: Invalid type used in variable declaration: void')
+
+  # Using void as the type of a generic parameter
+  lines =<< trim END
+    vim9script
+    def Fn<T, U>()
+    enddef
+    Fn<void, void>()
+  END
+  v9.CheckSourceFailure(lines, 'E1330: Invalid type used in variable declaration: void', 4)
+
+  # Using void as the type of a parameter in a function type
+  lines =<< trim END
+    vim9script
+    def Foo()
+    enddef
+    var Fn: func(void): void = Foo
+  END
+  v9.CheckSourceFailure(lines, 'E1330: Invalid type used in variable declaration: void', 4)
+
+  # Using void in a type alias
+  lines =<< trim END
+    vim9script
+    type MyType = void
+    var x: MyType
+  END
+  v9.CheckSourceFailure(lines, 'E1330: Invalid type used in variable declaration: void', 3)
+enddef
+
 def Test_var_declaration_inferred()
   # check that type is set on the list so that extend() fails
   var lines =<< trim END
@@ -3229,7 +3320,7 @@ def Test_type_check()
     assert_fails('N = d', 'E1012: Type mismatch; expected number but got dict<number>')
     assert_fails('N = l', 'E1012: Type mismatch; expected number but got list<number>')
     assert_fails('N = b', 'E1012: Type mismatch; expected number but got blob')
-    assert_fails('N = Fn', 'E1012: Type mismatch; expected number but got func([unknown]): number')
+    assert_fails('N = Fn', 'E1012: Type mismatch; expected number but got func([unknown]): any')
     assert_fails('N = A', 'E1405: Class "A" cannot be used as a value')
     assert_fails('N = o', 'E1012: Type mismatch; expected number but got object<A>')
     assert_fails('N = T', 'E1403: Type alias "T" cannot be used as a value')
@@ -3247,7 +3338,7 @@ def Test_type_check()
     assert_fails('var [X1: number, Y: number] = [1, d]', 'E1012: Type mismatch; expected number but got dict<number>')
     assert_fails('var [X2: number, Y: number] = [1, l]', 'E1012: Type mismatch; expected number but got list<number>')
     assert_fails('var [X3: number, Y: number] = [1, b]', 'E1012: Type mismatch; expected number but got blob')
-    assert_fails('var [X4: number, Y: number] = [1, Fn]', 'E1012: Type mismatch; expected number but got func([unknown]): number')
+    assert_fails('var [X4: number, Y: number] = [1, Fn]', 'E1012: Type mismatch; expected number but got func([unknown]): any')
     assert_fails('var [X7: number, Y: number] = [1, A]', 'E1405: Class "A" cannot be used as a value')
     assert_fails('var [X8: number, Y: number] = [1, o]', 'E1012: Type mismatch; expected number but got object<A>')
     assert_fails('var [X8: number, Y: number] = [1, T]', 'E1403: Type alias "T" cannot be used as a value')
@@ -3323,6 +3414,19 @@ def Test_type_check()
   v9.CheckScriptFailure(lines, 'E1411: Missing dot after object "o"')
 enddef
 
+" Test for using a compound operator with a dict
+def Test_dict_compoundop_check()
+  for op in ['+=', '-=', '*=', '/=', '%=']
+    v9.CheckSourceDefAndScriptFailure(['var d: dict<number> = {a: 1}', $'d {op} 1'], $'E734: Wrong variable type for {op}')
+  endfor
+  var lines =<< trim END
+    var d: dict<number> = {a: 1}
+    d['a'] += 2
+    assert_equal({a: 3}, d)
+  END
+  v9.CheckSourceDefAndScriptSuccess(lines)
+enddef
+
 " Test for checking the argument type of a def function
 def Test_func_argtype_check()
   var lines =<< trim END
@@ -3345,7 +3449,7 @@ def Test_func_argtype_check()
     assert_fails('IntArg(d)', 'E1013: Argument 1: type mismatch, expected number but got dict<number>')
     assert_fails('IntArg(l)', 'E1013: Argument 1: type mismatch, expected number but got list<number>')
     assert_fails('IntArg(b)', 'E1013: Argument 1: type mismatch, expected number but got blob')
-    assert_fails('IntArg(Fn)', 'E1013: Argument 1: type mismatch, expected number but got func([unknown]): number')
+    assert_fails('IntArg(Fn)', 'E1013: Argument 1: type mismatch, expected number but got func([unknown]): any')
     if has('channel')
       var j: job = test_null_job()
       var ch: channel = test_null_channel()

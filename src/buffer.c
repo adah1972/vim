@@ -2534,6 +2534,7 @@ free_buf_options(
 #endif
     clear_string_option(&buf->b_p_tsr);
     clear_string_option(&buf->b_p_qe);
+    buf->b_p_ac = -1;
     buf->b_p_ar = -1;
     buf->b_p_ul = NO_LOCAL_UNDOLEVEL;
     clear_string_option(&buf->b_p_lw);
@@ -4422,7 +4423,7 @@ build_stl_str_hl(
 
 #ifdef FEAT_EVAL
     // if "fmt" was set insecurely it needs to be evaluated in the sandbox
-    use_sandbox = was_set_insecurely(opt_name, opt_scope);
+    use_sandbox = was_set_insecurely(wp, opt_name, opt_scope);
 
     // When the format starts with "%!" then evaluate it as an expression and
     // use the result as the actual format string.

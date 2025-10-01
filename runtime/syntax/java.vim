@@ -3,7 +3,7 @@
 " Maintainer:		Aliaksei Budavei <0x000c70 AT gmail DOT com>
 " Former Maintainer:	Claudio Fleiner <claudio@fleiner.com>
 " Repository:		https://github.com/zzzyxwvut/java-vim.git
-" Last Change:		2025 Aug 07
+" Last Change:		2025 Sep 28
 
 " Please check ":help java.vim" for comments on some of the options
 " available.
@@ -110,12 +110,9 @@ syn keyword javaTypedef		this super
 syn keyword javaOperator	new instanceof
 syn match   javaOperator	"\<var\>\%(\s*(\)\@!"
 
-if s:ff.IsAnyRequestedPreviewFeatureOf([476, 494])
-  " Module imports can be used in any source file.
-  syn match   javaExternal	"\<import\s\+module\>" contains=javaModuleImport
-  syn keyword javaModuleImport	contained module
-  hi def link javaModuleImport	Statement
-endif
+" Module imports can be used in any source file.
+syn match   javaExternal	"\<import\s\+module\>" contains=javaModuleImport
+syn keyword javaModuleImport	contained module
 
 " Since the yield statement, which could take a parenthesised operand,
 " and _qualified_ yield methods get along within the switch block
@@ -447,6 +444,11 @@ if !exists("g:java_ignore_javadoc") && (s:with_html || s:with_markdown) && g:mai
 	unlet g:html_syntax_folding
       endif
 
+      if !empty(get(g:, 'markdown_fenced_languages', []))
+	let s:markdown_fenced_languages_copy = g:markdown_fenced_languages
+	unlet g:markdown_fenced_languages
+      endif
+
       syntax include @javaMarkdown syntax/markdown.vim
 
       try
@@ -463,6 +465,11 @@ if !exists("g:java_ignore_javadoc") && (s:with_html || s:with_markdown) && g:mai
       let s:no_support = 1
     finally
       unlet! b:current_syntax
+
+      if exists("s:markdown_fenced_languages_copy")
+	let g:markdown_fenced_languages = s:markdown_fenced_languages_copy
+	unlet s:markdown_fenced_languages_copy
+      endif
 
       if exists("s:html_syntax_folding_copy")
 	let g:html_syntax_folding = s:html_syntax_folding_copy
@@ -911,6 +918,7 @@ hi def link javaAnnotation		PreProc
 hi def link javaAnnotationStart		javaAnnotation
 hi def link javaType			Type
 hi def link javaExternal		Include
+hi def link javaModuleImport		Statement
 
 hi def link javaUserLabel		Label
 hi def link javaUserLabelRef		javaUserLabel

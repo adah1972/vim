@@ -1,4 +1,4 @@
-*version9.txt*  For Vim version 9.1.  Last change: 2025 Aug 17
+*version9.txt*  For Vim version 9.1.  Last change: 2025 Sep 29
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -41619,6 +41619,9 @@ Platform specific~
 - Python3 support in OpenVMS is now available.
 
 - The Win32 GUI comes with better toolbar icons.
+
+- Better fullscreen support for Haiku |os_haiku.txt|.
+
 							*new-other-9.2*
 Other new features ~
 ------------------
@@ -41648,6 +41651,8 @@ Other new features ~
 - Add the new default highlighting groups "Bold", "Italic" and "BoldItalic"
   for use in syntax scripts.
 
+- |items()| function now supports Blob.
+
 							*changed-9.2*
 Changed~
 -------
@@ -41665,6 +41670,10 @@ Default values: ~
 - the default value for 'showcmd' is always enabled when using non-compatible
   mode (previously, it was off on UNIX systems) and consequently removed from
   |defaults.vim|
+- Improve the diff mode experience by updating the 'diffopt' default value to
+  "internal,filler,closeoff,indent-heuristic,inline:char".
+- the 'ruler' option value is always enabled when using non-compatible mode
+  and removed from |defaults.vim|
 
 Completion: ~
 - allow to complete directories from 'cdpath' for |:cd| and similar commands,
@@ -41701,6 +41710,9 @@ Options: ~
 - 'rulerformat' now supports the |stl-%!| item
 - use 'smoothscroll' logic for CTRL-F / CTRL-B for pagewise scrolling
   and CTRL-D / CTRL-U for half-pagewise scrolling
+- Setting 'nowrap' in a modeline could cause long lines to be hidden
+  off-screen.  To make this visible, the listchars "extend" suboption is set
+  to ">" by default, indicating text that extends beyond the window width.
 
 Ex commands: ~
 - allow to specify a priority when defining a new sign |:sign-define|
@@ -41726,6 +41738,19 @@ Functions: ~
 - |chdir()| allows to optionally specify a scope argument
 - |matchfuzzy()| and |matchfuzzypos()| use an improved fuzzy matching
   algorithm (same as fzy).
+- |sha256()| also accepts a |Blob| as argument.
+- |listener_add()| allows to register un-buffered listeners, so that changes
+  are handled as soon as they happen.
+
+Plugins~
+- |zip| plugin works with PowerShell Core.
+
+Platform specific ~
+- MS-Winodws: Paths like "\Windows" and "/Windows" are now considered to be
+  absolute paths (to the current drive) and no longer relative.
+- MS-Windows: The title bar background follows the |hl-Normal| highlighting
+  group background color.
+- macOS: increase default scheduler priority to TASK_DEFAULT_APPLICATION.
 
 Others: ~
 - the regex engines match correctly case-insensitive multi-byte characters
@@ -41748,10 +41773,10 @@ Others: ~
   ANGLE BRACKET "]>".
 - Support for Unix domain sockets have been added for the clientserver
   feature, see |socketserver-clientserver|.
-
-Platform specific ~
-- MS-Winodws: Paths like "\Windows" and "/Windows" are now considered to be
-  absolute paths (to the current drive) and no longer relative.
+- |CmdlineLeave| sets |v:char| to the character that caused exiting the
+  Command-line.
+- |min()|/|max()| can handle all comparable data types.
+- Vim triggers the |TermResponseAll| autocommand for any terminal OSC value.
 
 							*added-9.2*
 Added ~
@@ -41783,9 +41808,13 @@ Functions: ~
 |matchstrlist()|	all the matches of a pattern in a List of strings
 |ngettext()|		lookup single/plural message translation
 |popup_setbuf()|	switch to a different buffer in a popup
+|preinserted()|		whether preinserted text has been inserted during
+			completion (see 'completeopt')
 |str2blob()|		convert a List of strings into a blob
 |test_null_tuple()|	return a null tuple
 |tuple2list()|		turn a Tuple of items into a List
+|uri_decode()|		URI-decode a string
+|uri_encode()|		URI-encode a string
 |wildtrigger()|		trigger wildcard expansion
 
 
@@ -41809,6 +41838,7 @@ Highlighting: ~
 |hl-PmenuMatch|		Popup menu: highlighting of matched text
 |hl-PmenuMatchSel|	Popup menu: highlighting of matched text in selected
 			line
+|hl-PreInsert|		highlighting for completion preinserted text
 |hl-TabPanel|		|tabpanel|: not active tab page label
 |hl-TabPanelFill|	|tabpanel|: filler space
 |hl-TabPanelSel|	|tabpanel|: active tab page label
@@ -41827,14 +41857,16 @@ Ex-Commands: ~
 
 Options: ~
 
-'autocompletion'	Enable auto completion |ins-autocompletion|
+'autocomplete'		Enable auto completion |ins-autocompletion|
 'autocompletedelay'	Delay in msec before menu appears after typing
-'chistory'		Size of the quickfix stack |quickfix-stack|.
-'clipmethod'		How to access the clipboard.
+'autocompletetimeout'	initial decay timeout for autocompletion algorithm
+'chistory'		Size of the quickfix stack |quickfix-stack|
+'clipmethod'		How to access the clipboard
 'completefuzzycollect'	Enable fuzzy collection of candidates for (some)
 			|ins-completion| modes
 'completeitemalign'	Order of |complete-items| in Insert mode completion
 			popup
+'completetimeout'	initial decay timeout for CTRL-N and CTRL-P
 'diffanchors'		list of {address} to force syncing of diffs
 'eventignorewin'	autocommand events that are ignored in a window
 'findfunc'		Vim function to obtain the results for a |:find|
@@ -41856,6 +41888,10 @@ Options: ~
 'wlsteal'		Steal focus to access the |wayland| clipboard
 'wltimeout'		Specify the connection timeout for the |wayland|
 			compositor
+
+Vim Variables: ~
+|v:termda1|		The escape sequence returned for the primary device
+			attribute query (DA1).
 
 Vim Arguments: ~
 |-Y|			Do not connect to the |wayland| compositor.

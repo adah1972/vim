@@ -1646,7 +1646,9 @@ MESSAGE_TEST_TARGET = message_test$(EXEEXT)
 
 UNITTEST_SRC = $(JSON_TEST_SRC) $(KWORD_TEST_SRC) $(MEMFILE_TEST_SRC) $(MESSAGE_TEST_SRC)
 UNITTEST_TARGETS = $(JSON_TEST_TARGET) $(KWORD_TEST_TARGET) $(MEMFILE_TEST_TARGET) $(MESSAGE_TEST_TARGET)
-RUN_UNITTESTS = run_json_test run_kword_test run_memfile_test run_message_test
+# We need to put WAYLAND_SRC because the protocol files need to be generated
+# else wayland.h will error
+RUN_UNITTESTS = $(WAYLAND_SRC) run_json_test run_kword_test run_memfile_test run_message_test
 
 # All sources, also the ones that are not configured
 ALL_LOCAL_SRC = $(BASIC_SRC) $(ALL_GUI_SRC) $(UNITTEST_SRC) $(EXTRA_SRC) \
@@ -1852,6 +1854,7 @@ PRO_AUTO = \
 	arglist.pro \
 	autocmd.pro \
 	beval.pro \
+	blob.pro \
 	blowfish.pro \
 	buffer.pro \
 	bufwrite.pro \
@@ -1977,6 +1980,7 @@ PRO_AUTO = \
 	vim9script.pro \
 	vim9type.pro \
 	viminfo.pro \
+	wayland.pro \
 	window.pro \
 	$(ALL_GUI_PRO) \
 	$(TCL_PRO)
@@ -2474,7 +2478,8 @@ installrtbase: $(HELPSOURCE)/vim.1 $(DEST_VIM) $(VIMTARGET) $(DEST_RT) \
 # install the standard import files
 	cd $(IMPORTSOURCE)/dist; $(INSTALL_DATA) *.vim $(DEST_IMPORT)/dist
 	cd $(DEST_IMPORT)/dist; chmod $(HELPMOD) *.vim
-# install the standard plugin files
+# install the standard plugin files, but first remove existing ones
+	-rm -f $(DEST_PLUG)/*.vim
 	cd $(PLUGSOURCE); $(INSTALL_DATA) *.vim README.txt $(DEST_PLUG)
 	cd $(DEST_PLUG); chmod $(HELPMOD) *.vim README.txt
 # install the ftplugin files
@@ -3231,7 +3236,7 @@ objects/cindent.o: cindent.c
 objects/clientserver.o: clientserver.c
 	$(CCC) -o $@ clientserver.c
 
-objects/clipboard.o: clipboard.c
+objects/clipboard.o: clipboard.c $(WAYLAND_SRC)
 	$(CCC) -o $@ clipboard.c
 
 objects/cmdexpand.o: cmdexpand.c
@@ -3861,9 +3866,9 @@ objects/clientserver.o: clientserver.c vim.h protodef.h auto/config.h feature.h 
  ex_cmds.h spell.h proto.h globals.h errors.h
 objects/clipboard.o: clipboard.c vim.h protodef.h auto/config.h feature.h \
  os_unix.h auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h \
- beval.h proto/gui_beval.pro structs.h regexp.h gui.h \
- libvterm/include/vterm.h libvterm/include/vterm_keycodes.h alloc.h \
- ex_cmds.h spell.h proto.h globals.h errors.h
+ beval.h structs.h regexp.h gui.h libvterm/include/vterm.h \
+ libvterm/include/vterm_keycodes.h xdiff/xdiff.h xdiff/../vim.h alloc.h \
+ ex_cmds.h spell.h proto.h globals.h errors.h wayland.h
 objects/cmdexpand.o: cmdexpand.c vim.h protodef.h auto/config.h feature.h \
  os_unix.h auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h \
  beval.h proto/gui_beval.pro structs.h regexp.h gui.h \
@@ -4564,7 +4569,7 @@ objects/wayland.o: wayland.c vim.h protodef.h auto/config.h feature.h os_unix.h 
  auto/osdef.h ascii.h keymap.h termdefs.h macros.h option.h beval.h \
  structs.h regexp.h gui.h libvterm/include/vterm.h \
  libvterm/include/vterm_keycodes.h xdiff/xdiff.h xdiff/../vim.h alloc.h \
- ex_cmds.h spell.h proto.h globals.h errors.h \
+ ex_cmds.h spell.h proto.h globals.h errors.h wayland.h \
  auto/wayland/wlr-data-control-unstable-v1.h \
  auto/wayland/ext-data-control-v1.h auto/wayland/xdg-shell.h \
  auto/wayland/primary-selection-unstable-v1.h

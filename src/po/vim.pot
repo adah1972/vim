@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Vim\n"
 "Report-Msgid-Bugs-To: vim-dev@vim.org\n"
-"POT-Creation-Date: 2025-08-18 21:30+0200\n"
+"POT-Creation-Date: 2025-09-24 17:48+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2220,10 +2220,16 @@ msgstr ""
 msgid " SPACE/d/j: screen/page/line down, b/u/k: up, q: quit "
 msgstr ""
 
+msgid "W24: Clipboard register not available. See :h W24"
+msgstr ""
+
 msgid "W23: Clipboard register not available, using register 0"
 msgstr ""
 
-msgid "W24: Clipboard register not available. See :h W24"
+msgid "W23: Clipboard register + not available, using register 0"
+msgstr ""
+
+msgid "W23: Clipboard register * not available, using register 0"
 msgstr ""
 
 msgid "Question"
@@ -8222,7 +8228,7 @@ msgid "E1329: Invalid class variable declaration: %s"
 msgstr ""
 
 #, c-format
-msgid "E1330: Invalid type for object variable: %s"
+msgid "E1330: Invalid type used in variable declaration: %s"
 msgstr ""
 
 msgid ""
@@ -8830,6 +8836,13 @@ msgid "E1566: Failed connecting to socket %s: %s"
 msgstr ""
 
 msgid "E1567: Cannot start socket server, socket path is unavailable"
+msgstr ""
+
+#, c-format
+msgid "E1568: OSC command response timed out: %.*s"
+msgstr ""
+
+msgid "E1569: Cannot use listener_add in a listener callback"
 msgstr ""
 
 #. type of cmdline window or 0
@@ -9691,6 +9704,9 @@ msgstr ""
 msgid "restore the screen contents when exiting Vim"
 msgstr ""
 
+msgid "timeout used for terminal OSC responses"
+msgstr ""
+
 msgid "using the mouse"
 msgstr ""
 
@@ -9950,6 +9966,12 @@ msgid "specifies how Insert mode completion works for CTRL-N and CTRL-P"
 msgstr ""
 
 msgid "automatic completion in insert mode"
+msgstr ""
+
+msgid "initial decay timeout for 'autocomplete' algorithm"
+msgstr ""
+
+msgid "initial decay timeout for CTRL-N and CTRL-P completion"
 msgstr ""
 
 msgid "delay in msec before menu appears after typing"

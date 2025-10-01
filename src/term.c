@@ -104,6 +104,21 @@ typedef struct {
     time_t		    tr_start;	// when request was sent, -1 for never
 } termrequest_T;
 
+// Holds state for current OSC response.
+typedef struct
+{
+    int		    processing;	// If we are in the middle of an OSC response
+    char_u	    start_char;	// First char in the OSC response
+    garray_T	    buf;	// Buffer holding the OSC response, to be
+				// placed in the "v:termosc" vim var.
+
+#ifdef ELAPSED_FUNC
+    elapsed_T	    start_tv;	// Set at the beginning of an OSC response.
+				// Used to timeout after a set amount of
+				// time.
+#endif
+} oscstate_T;
+
 #define TERMREQUEST_INIT {STATUS_GET, -1}
 
 // Request Terminal Version status:
@@ -5028,6 +5043,8 @@ handle_u7_response(int *arg, char_u *tp UNUSED, int csi_len UNUSED)
     }
 }
 
+
+
 /*
  * Handle a response to T_CRV: {lead}{first}{x};{vers};{y}c
  * Xterm and alike use '>' for {first}.
@@ -5339,6 +5356,37 @@ put_key_modifiers_in_typebuf(
 }
 
 /*
+ * Parse the number from a CSI numbered sequence for an F1-F12 key:
+ *	ESC [ {number} ~
+ * Returns the key
+ */
+    static int
+parse_csi_f_keys(int arg)
+{
+    char_u key_name[2] = "";
+
+    switch (arg)
+    {
+	case 11: key_name[0] = 'k'; key_name[1] = '1'; break;  // K_F1
+	case 12: key_name[0] = 'k'; key_name[1] = '2'; break;  // K_F2
+	case 13: key_name[0] = 'k'; key_name[1] = '3'; break;  // K_F3
+	case 14: key_name[0] = 'k'; key_name[1] = '4'; break;  // K_F4
+	case 15: key_name[0] = 'k'; key_name[1] = '5'; break;  // K_F5
+	case 17: key_name[0] = 'k'; key_name[1] = '6'; break;  // K_F6
+	case 18: key_name[0] = 'k'; key_name[1] = '7'; break;  // K_F7
+	case 19: key_name[0] = 'k'; key_name[1] = '8'; break;  // K_F8
+	case 20: key_name[0] = 'k'; key_name[1] = '9'; break;  // K_F9
+	case 21: key_name[0] = 'F'; key_name[1] = ';'; break;  // K_F10
+	case 23: key_name[0] = 'F'; key_name[1] = '1'; break;  // K_F11
+	case 24: key_name[0] = 'F'; key_name[1] = '2'; break;  // K_F12
+    }
+    if (key_name[0])
+	return TERMCAP2KEY(key_name[0], key_name[1]);
+    // shouldn't happen
+    return arg;
+}
+
+/*
  * Handle a sequence with key and modifier, one of:
  *	{lead}27;{modifier};{key}~
  *	{lead}{key};{modifier}u
@@ -5347,12 +5395,13 @@ put_key_modifiers_in_typebuf(
     static int
 handle_key_with_modifier(
 	int	*arg,
-	int	trail,
 	int	csi_len,
 	int	offset,
 	char_u	*buf,
 	int	bufsize,
-	int	*buflen)
+	int	*buflen,
+	int	iskitty,
+	int	trail)
 {
     // Only set seenModifyOtherKeys for the "{lead}27;" code to avoid setting
     // it for terminals using the kitty keyboard protocol.  Xterm sends
@@ -5365,7 +5414,7 @@ handle_key_with_modifier(
     //
     // Do not set seenModifyOtherKeys for kitty, it does send some sequences
     // like this but does not have the modifyOtherKeys feature.
-    if (trail != 'u'
+    if (!iskitty
 	    && (kitty_protocol_state == KKPS_INITIAL
 		|| kitty_protocol_state == KKPS_OFF
 		|| kitty_protocol_state == KKPS_AFTER_T_TE)
@@ -5377,7 +5426,7 @@ handle_key_with_modifier(
 	seenModifyOtherKeys = TRUE;
     }
 
-    int key = trail == 'u' ? arg[0] : arg[2];
+    int key = iskitty ? arg[0] : arg[2];
     int modifiers = decode_modifiers(arg[1]);
 
     // Some terminals do not apply the Shift modifier to the key.  To make
@@ -5390,13 +5439,17 @@ handle_key_with_modifier(
     if (key == ESC)
 	key = K_ESC;
 
-    return put_key_modifiers_in_typebuf(key, modifiers,
-					csi_len, offset, buf, bufsize, buflen);
+    else if (arg[0] >= 11 && arg[0] <= 24 && trail == '~')
+	key = parse_csi_f_keys(arg[0]);
+
+    return put_key_modifiers_in_typebuf(key, modifiers, csi_len, offset, buf,
+	    bufsize, buflen);
 }
 
 /*
  * Handle a sequence with key without a modifier:
  *	{lead}{key}u
+ *	{lead}{key}~
  * Returns the difference in length.
  */
     static int
@@ -5406,7 +5459,8 @@ handle_key_without_modifier(
 	int	offset,
 	char_u	*buf,
 	int	bufsize,
-	int	*buflen)
+	int	*buflen,
+	int	trail)
 {
     char_u  string[MAX_KEY_CODE_LEN + 1];
     int	    new_slen;
@@ -5418,6 +5472,14 @@ handle_key_without_modifier(
 	string[0] = K_SPECIAL;
 	string[1] = KS_EXTRA;
 	string[2] = KE_ESC;
+	new_slen = 3;
+    }
+    else if (arg[0] >= 11 && arg[0] <= 24 && trail == '~')
+    {
+	int key = parse_csi_f_keys(arg[0]);
+	string[0] = K_SPECIAL;
+	string[1] = KEY2TERMCAP0(key);
+	string[2] = KEY2TERMCAP1(key);
 	new_slen = 3;
     }
     else
@@ -5494,6 +5556,8 @@ handle_csi_function_key(
  * - function key with or without modifiers:
  *	{lead}[ABCDEFHPQRS]
  *	{lead}1;{modifier}[ABCDEFHPQRS]
+ *
+ * - DA1 query response: {lead}?...;c
  *
  * Return 0 for no match, -1 for partial match, > 0 for full match.
  */
@@ -5607,6 +5671,22 @@ handle_csi(
 	*slen = csi_len;
     }
 
+    // Primary device attributes (DA1) response
+    else if (first == '?' && trail == 'c')
+    {
+	LOG_TRN("Received DA1 response: %s", tp);
+
+	*slen = csi_len;
+#ifdef FEAT_EVAL
+	set_vim_var_string(VV_TERMDA1, tp, *slen);
+#endif
+	apply_autocmds(EVENT_TERMRESPONSEALL,
+					(char_u *)"da1", NULL, FALSE, curbuf);
+
+	key_name[0] = (int)KS_EXTRA;
+	key_name[1] = (int)KE_IGNORE;
+    }
+
     // Version string: Eat it when there is at least one digit and
     // it ends in 'c'
     else if (*T_CRV != NUL && ap > argp + 1 && trail == 'c')
@@ -5699,22 +5779,25 @@ handle_csi(
     // Key with modifier:
     //	{lead}27;{modifier};{key}~
     //	{lead}{key};{modifier}u
+    //	{lead}{key};{modifier}~
     // Even though we only handle four modifiers and the {modifier} value
     // should be 16 or lower, we accept all modifier values to avoid the raw
     // sequence to be passed through.
     else if ((arg[0] == 27 && argc == 3 && trail == '~')
-		|| (argc == 2 && trail == 'u'))
+		|| (argc == 2 && (trail == 'u' || trail == '~')))
     {
-	return len + handle_key_with_modifier(arg, trail,
-					csi_len, offset, buf, bufsize, buflen);
+	int iskitty = argc == 2 && (trail == 'u' || trail == '~');
+	return len + handle_key_with_modifier(arg, csi_len, offset, buf,
+		bufsize, buflen, iskitty, trail);
     }
 
-    // Key without modifier (Kitty sends this for Esc):
+    // Key without modifier (Kitty sends this for Esc or F3):
     //	{lead}{key}u
-    else if (argc == 1 && trail == 'u')
+    //	{lead}{key}~
+    else if (argc == 1 && (trail == 'u' || trail == '~'))
     {
-	return len + handle_key_without_modifier(arg,
-			    csi_len, offset, buf, bufsize, buflen);
+	return len + handle_key_without_modifier(arg, csi_len, offset, buf,
+		bufsize, buflen, trail);
     }
 
     // else: Unknown CSI sequence.  We could drop it, but then the
@@ -5722,45 +5805,36 @@ handle_csi(
     return 0;
 }
 
-/*
- * Handle an OSC sequence, fore/background color response from the terminal:
- *
- *       {lead}{code};rgb:{rrrr}/{gggg}/{bbbb}{tail}
- * or    {lead}{code};rgb:{rr}/{gg}/{bb}{tail}
- *
- * {code} is 10 for foreground, 11 for background
- * {lead} can be <Esc>] or OSC
- * {tail} can be '\007', <Esc>\ or STERM.
- *
- * Consume any code that starts with "{lead}11;", it's also
- * possible that "rgba" is following.
- */
-    static int
-handle_osc(char_u *tp, char_u *argp, int len, char_u *key_name, int *slen)
+static void
+check_for_color_response(char_u *resp, int len)
 {
     int		i, j;
+    char_u	*argp;
 
-    j = 1 + (tp[0] == ESC);
+    j = 1 + (resp[0] == ESC);
+    argp = resp + j;
+
     if (len >= j + 3 && (argp[0] != '1'
 			     || (argp[1] != '1' && argp[1] != '0')
 			     || argp[2] != ';'))
 	i = 0; // no match
     else
+    {
 	for (i = j; i < len; ++i)
-	    if (tp[i] == '\007' || (tp[0] == OSC ? tp[i] == STERM
-			: (tp[i] == ESC && i + 1 < len && tp[i + 1] == '\\')))
+	    if (resp[i] == '\007' || (resp[0] == OSC ? resp[i] == STERM
+			: (resp[i] == ESC && i + 1 < len && resp[i + 1] == '\\')))
 	    {
 		int is_bg = argp[1] == '1';
-		int is_4digit = i - j >= 21 && tp[j + 11] == '/'
-						  && tp[j + 16] == '/';
+		int is_4digit = i - j >= 21 && resp[j + 11] == '/'
+						  && resp[j + 16] == '/';
 
-		if (i - j >= 15 && STRNCMP(tp + j + 3, "rgb:", 4) == 0
+		if (i - j >= 15 && STRNCMP(resp + j + 3, "rgb:", 4) == 0
 			    && (is_4digit
-				   || (tp[j + 9] == '/' && tp[j + 12] == '/')))
+				   || (resp[j + 9] == '/' && resp[j + 12] == '/')))
 		{
-		    char_u *tp_r = tp + j + 7;
-		    char_u *tp_g = tp + j + (is_4digit ? 12 : 10);
-		    char_u *tp_b = tp + j + (is_4digit ? 17 : 13);
+		    char_u *tp_r = resp + j + 7;
+		    char_u *tp_g = resp + j + (is_4digit ? 12 : 10);
+		    char_u *tp_b = resp + j + (is_4digit ? 17 : 13);
 #if defined(FEAT_TERMRESPONSE) && defined(FEAT_TERMINAL)
 		    int rval, gval, bval;
 
@@ -5804,23 +5878,106 @@ handle_osc(char_u *tp, char_u *argp, int len, char_u *key_name, int *slen)
 #endif
 		}
 
-		// got finished code: consume it
-		key_name[0] = (int)KS_EXTRA;
-		key_name[1] = (int)KE_IGNORE;
-		*slen = i + 1 + (tp[i] == ESC);
 #ifdef FEAT_EVAL
 		set_vim_var_string(is_bg ? VV_TERMRBGRESP
-						  : VV_TERMRFGRESP, tp, *slen);
+						  : VV_TERMRFGRESP, resp, len);
 #endif
 		apply_autocmds(EVENT_TERMRESPONSEALL,
-			    is_bg ? (char_u *)"background" : (char_u *)"foreground", NULL, FALSE, curbuf);
+			is_bg ? (char_u *)"background" : (char_u *)"foreground",
+			NULL, FALSE, curbuf);
 		break;
 	    }
+    }
     if (i == len)
-    {
 	LOG_TR1("not enough characters for RB");
+}
+
+static oscstate_T osc_state;
+
+/*
+ * Handles any OSC sequence and places the result in "v:termosc". Note that the
+ * OSC identifier and terminator character(s) will not be placed in the final
+ * result. Returns OK on success and FAIL on failure.
+ */
+    static int
+handle_osc(char_u *tp, int len, char_u *key_name, int *slen)
+{
+    char_u last_char;
+
+    if (!osc_state.processing)
+    {
+	int cur;
+
+	LOG_TRN("Received OSC response: %s", (char*)tp);
+	// Check if it is a valid OSC sequence, and consume it. OSC format
+	// consists of:
+	// <identifier><data><terminator>
+	// <identifier> is either <Esc>] or an OSC character
+	// <terminator> can be '\007', <Esc>\ or STERM.
+	cur = 1 + (tp[0] == ESC);
+
+	if (len < cur + 1 + (tp[0] != OSC)) // Include terminator as well
+	    return FAIL;
+
+	// The whole OSC response may be larger than the typeahead buffer.
+	// To handle this, keep reading data in and out of the typeahead
+	// buffer until we read an OSC terminator or timeout.
+	ga_init2(&osc_state.buf, 1, 1024);
+#ifdef ELAPSED_FUNC
+	ELAPSED_INIT(osc_state.start_tv);
+#endif
+	osc_state.processing = TRUE;
+	osc_state.start_char = tp[0];
+	last_char = 0;
+    }
+    else
+	last_char = ((char_u *)osc_state.buf.ga_data)[osc_state.buf.ga_len - 1];
+
+    key_name[0] = (int)KS_EXTRA;
+    key_name[1] = (int)KE_IGNORE;
+
+    // Read data and append to buffer. If we reach a terminator, then
+    // finally set the vim var.
+    for (int i = 0; i < len; i++)
+	if (tp[i] == '\007' || (osc_state.start_char == OSC ? tp[i] == STERM
+		    : ((tp[i] == ESC && i + 1 < len && tp[i + 1] == '\\')
+			|| (i == 0 && tp[i] == '\\' && last_char == ESC)
+			)))
+	{
+	    osc_state.processing = FALSE;
+
+	    ga_concat_len(&osc_state.buf, tp, i + 1 + (tp[i] == ESC));
+	    ga_append(&osc_state.buf, NUL);
+	    *slen = i + 1 + (tp[i] == ESC);
+#ifdef FEAT_EVAL
+	    set_vim_var_string_direct(VV_TERMOSC, osc_state.buf.ga_data);
+#endif
+	    // Check for background/foreground colour response
+	    check_for_color_response(osc_state.buf.ga_data, osc_state.buf.ga_len - 1);
+
+	    char_u savebg = *p_bg;
+	    apply_autocmds(EVENT_TERMRESPONSEALL, (char_u *)"osc",
+		    NULL, FALSE, curbuf);
+	    if (*p_bg != savebg)
+		redraw_asap(UPD_CLEAR);
+	    return OK;
+	}
+
+#ifdef ELAPSED_FUNC
+    if (ELAPSED_FUNC(osc_state.start_tv) >= p_ost)
+    {
+	semsg(_(e_osc_response_timed_out), osc_state.buf.ga_len,
+		osc_state.buf.ga_data);
+
+	ga_clear(&osc_state.buf);
+	osc_state.processing = FALSE;
 	return FAIL;
     }
+#endif
+
+    ga_concat(&osc_state.buf, tp);
+    *slen = len; // Consume everything
+
     return OK;
 }
 
@@ -6009,6 +6166,11 @@ check_termcode(
 	    offset += 2;	// there are always 2 extra characters
 	    continue;
 	}
+
+	if (osc_state.processing)
+	    // Still processing OSC response data, go straight to handler
+	    // function.
+	    goto handle_osc;
 
 	/*
 	 * Skip this position if the character does not appear as the first
@@ -6282,13 +6444,11 @@ check_termcode(
 		}
 	    }
 
-	    // Check for fore/background color response from the terminal,
-	    // starting} with <Esc>] or OSC
-	    else if ((*T_RBG != NUL || *T_RFG != NUL)
-			&& ((tp[0] == ESC && len >= 2 && tp[1] == ']')
-			    || tp[0] == OSC))
+	    // Check for OSC responses from terminal
+	    else if ((tp[0] == ESC && len >= 2 && tp[1] == ']') || tp[0] == OSC)
 	    {
-		if (handle_osc(tp, argp, len, key_name, &slen) == FAIL)
+handle_osc:
+		if (handle_osc(tp, len, key_name, &slen) == FAIL)
 		    return -1;
 	    }
 
@@ -6531,10 +6691,12 @@ check_termcode(
 	 */
 	key = handle_x_keys(TERMCAP2KEY(key_name[0], key_name[1]));
 
-	/*
-	 * Add any modifier codes to our string.
-	 */
-	new_slen = modifiers2keycode(modifiers, &key, string);
+	if (osc_state.processing)
+	    // We don't want to add anything to the typeahead buffer.
+	    new_slen = 0;
+	else
+	    // Add any modifier codes to our string.
+	    new_slen = modifiers2keycode(modifiers, &key, string);
 
 	// Finally, add the special key code to our string
 	key_name[0] = KEY2TERMCAP0(key);

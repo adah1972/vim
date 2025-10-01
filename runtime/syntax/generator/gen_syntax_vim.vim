@@ -1,7 +1,7 @@
 " Vim syntax file generator
 " Language:		 Vim script
 " Maintainer:  Hirohito Higashi (h_east)
-" Last Change: 2025 Jul 18
+" Last Change: 2025 Sep 23
 
 let s:keepcpo= &cpo
 set cpo&vim
@@ -310,6 +310,7 @@ function s:get_vim_command_type(cmd_name)
 		copy
 		debuggreedy
 		def
+		defer
 		delcommand
 		delete
 		delfunction
@@ -400,6 +401,7 @@ function s:get_vim_command_type(cmd_name)
 		tcl
 		tcldo
 		tclfile
+		terminal
 		this
 		throw
 		type
@@ -411,6 +413,7 @@ function s:get_vim_command_type(cmd_name)
 		vimgrep
 		vimgrepadd
 		while
+		wincmd
 	EOL
 	" Required for original behavior
 	" \	'global', 'vglobal'
@@ -508,7 +511,7 @@ function s:parse_vim_function(li)
 		new
 		exec 'read ' . file_name
 		norm! gg
-		exec '/^static\s\+funcentry_T\s\+global_functions\[\]\s*=\s*$/+1;/^};/-1yank'
+		exec '/^static\s\+const\s\+funcentry_T\s\+global_functions\[\]\s*=\s*$/+1;/^};/-1yank'
 		%delete _
 
 		put

@@ -22,6 +22,7 @@
 
 #define NAMESPACE_CHAR	(char_u *)"abglstvw"
 
+static int eval0_simple_funccal(char_u *arg, typval_T *rettv, exarg_T *eap, evalarg_T *evalarg);
 static int eval2(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval3(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
 static int eval4(char_u **arg, typval_T *rettv, evalarg_T *evalarg);
@@ -1019,7 +1020,7 @@ eval_foldexpr(win_T *wp, int *cp)
     varnumber_T	retval;
     char_u	*s;
     sctx_T	saved_sctx = current_sctx;
-    int		use_sandbox = was_set_insecurely((char_u *)"foldexpr",
+    int		use_sandbox = was_set_insecurely(wp, (char_u *)"foldexpr",
 								    OPT_LOCAL);
 
     arg = skipwhite(wp->w_p_fde);
@@ -2222,7 +2223,8 @@ get_lval(
 		lp->ll_type = parse_type(&tp,
 			       &SCRIPT_ITEM(current_sctx.sc_sid)->sn_type_list,
 			       NULL, NULL, !quiet);
-		if (lp->ll_type == NULL && !quiet)
+		if (!quiet && (lp->ll_type == NULL
+			    || !valid_declaration_type(lp->ll_type)))
 		    return NULL;
 		lp->ll_name_end = tp;
 	    }
@@ -3398,7 +3400,6 @@ skipwhite_and_linebreak(char_u *arg, evalarg_T *evalarg)
  * Handle zero level expression.
  * This calls eval1() and handles error message and nextcmd.
  * Put the result in "rettv" when returning OK and "evaluate" is TRUE.
- * Note: "rettv.v_lock" is not set.
  * "evalarg" can be NULL, EVALARG_EVALUATE or a pointer.
  * Return OK or FAIL.
  */
@@ -3439,7 +3440,7 @@ may_call_simple_func(
  * Handle zero level expression with optimization for a simple function call.
  * Same arguments and return value as eval0().
  */
-    int
+    static int
 eval0_simple_funccal(
     char_u	*arg,
     typval_T	*rettv,
@@ -3549,8 +3550,6 @@ eval0_retarg(
  *
  * "arg" must point to the first non-white of the expression.
  * "arg" is advanced to just after the recognized expression.
- *
- * Note: "rettv.v_lock" is not set.
  *
  * Return OK or FAIL.
  */

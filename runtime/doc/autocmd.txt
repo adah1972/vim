@@ -1,4 +1,4 @@
-*autocmd.txt*   For Vim version 9.1.  Last change: 2025 Jun 19
+*autocmd.txt*   For Vim version 9.1.  Last change: 2025 Sep 14
 
 
 		  VIM REFERENCE MANUAL    by Bram Moolenaar
@@ -546,6 +546,7 @@ BufUnload			Before unloading a buffer.  This is when the
 				NOTE: When this autocommand is executed, the
 				current buffer "%" may be different from the
 				buffer being unloaded "<afile>".
+								*E1546*
 				Don't change to another buffer or window, it
 				will cause problems!
 				When exiting and v:dying is 2 or more this
@@ -644,6 +645,8 @@ CmdlineLeave			Before leaving the command line; including
 				<afile> is set to a single character,
 				indicating the type of command-line.
 				|cmdwin-char|
+				Sets the |v:char| to the key that exited the
+				command-line (e.g. <CR>, <CTRL-C>, <Esc>).
 							*CmdlineLeavePre*
 CmdlineLeavePre			Just before leaving the command line, and
 				before |CmdlineLeave|.  Useful for capturing
@@ -656,6 +659,7 @@ CmdlineLeavePre			Just before leaving the command line, and
 				or <Esc>.  <afile> is set to a single
 				character indicating the command-line type.
 				See |cmdwin-char| for details.
+				Sets |v:char| as with |CmdlineLeave|.
 							*CmdwinEnter*
 CmdwinEnter			After entering the command-line window.
 				Useful for setting options specifically for
@@ -1302,18 +1306,20 @@ TermResponse			After the response to |t_RV| is received from
 				takes time is involved.
 							*TermResponseAll*
 TermResponseAll			After the response to |t_RV|, |t_RC|, |t_RS|,
-				|t_RB|, |t_RF|, or |t_u7| are received from
+				|t_u7| or any OSC command are received from
 				the terminal.  The value of |v:termresponse|,
 				|v:termblinkresp|, |v:termstyleresp|,
-				|v:termrbgresp|, |v:termrfgresp|, and
-				|v:termu7resp|, correspondingly, can be used.
-				<amatch> will be set to any of:
-				    "version",
-				    "cursorblink",
-				    "cursorshape",
-				    "background",
-				    "foreground",
-				    "ambiguouswidth"
+				|v:termu7resp|, and |v:termosc|
+				correspondingly, can be used.  <amatch> will
+				be set to any of:
+				    "ambiguouswidth" (|t_u7|),
+				    "background" (|t_RB|),
+				    "cursorblink" (|t_RC|),
+				    "cursorshape" (|t_RS|),
+				    "foreground" (|t_RF|),
+				    "da1",
+				    "osc",
+				    "version" (|t_RV|)
 				Note that this event may be triggered halfway
 				executing another event, especially if file I/O,
 				a shell command or anything else that takes time
@@ -1616,7 +1622,8 @@ The pattern is interpreted like mostly used in file names:
 
 Note that for all systems the '/' character is used for path separator (even
 for MS-Windows).  This was done because the backslash is difficult to use in a
-pattern and to make the autocommands portable across different systems.
+pattern and to make the autocommands portable across different systems.  To
+only match a '/' on all platforms (e.g. in a non-file pattern), use "\/".
 
 It is possible to use |pattern| items, but they may not work as expected,
 because of the translation done for the above.

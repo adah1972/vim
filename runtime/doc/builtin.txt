@@ -1,4 +1,4 @@
-*builtin.txt*	For Vim version 9.1.  Last change: 2025 Aug 20
+*builtin.txt*	For Vim version 9.1.  Last change: 2025 Sep 29
 
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
@@ -344,7 +344,7 @@ isinf({expr})			Number	determine if {expr} is infinity value
 					(positive or negative)
 islocked({expr})		Number	|TRUE| if {expr} is locked
 isnan({expr})			Number	|TRUE| if {expr} is NaN
-items({expr})			List	key-value pairs in {expr}
+items({expr})			List	key/index-value pairs in {expr}
 job_getchannel({job})		Channel	get the channel handle for {job}
 job_info([{job}])		Dict	get information about {job}
 job_setoptions({job}, {options}) none	set options for {job}
@@ -369,7 +369,7 @@ lispindent({lnum})		Number	Lisp indent for line {lnum}
 list2blob({list})		Blob	turn {list} of numbers into a Blob
 list2str({list} [, {utf8}])	String	turn {list} of numbers into a String
 list2tuple({list})		Tuple	turn {list} of items into a tuple
-listener_add({callback} [, {buf}])
+listener_add({callback} [, {buf} [, {unbuffered}]])
 				Number	add a callback to listen to changes
 listener_flush([{buf}])		none	invoke listener callbacks
 listener_remove({id})		none	remove a listener callback
@@ -451,8 +451,9 @@ popup_setbuf({id}, {buf})	Bool	set the buffer for the popup window {id}
 popup_setoptions({id}, {options})
 				none	set options for popup window {id}
 popup_settext({id}, {text})	none	set the text of popup window {id}
-popup_show({id})		none	unhide popup window {id}
+popup_show({id})		Number	unhide popup window {id}
 pow({x}, {y})			Float	{x} to the power of {y}
+preinserted()			Number	whether text is inserted after cursor
 prevnonblank({lnum})		Number	line nr of non-blank line <= {lnum}
 printf({fmt}, {expr1}...)	String	format text
 prompt_getprompt({buf})		String	get prompt text
@@ -575,7 +576,7 @@ settabwinvar({tabnr}, {winnr}, {varname}, {val})
 settagstack({nr}, {dict} [, {action}])
 				Number	modify tag stack using {dict}
 setwinvar({nr}, {varname}, {val}) none	set {varname} in window {nr} to {val}
-sha256({string})		String	SHA256 checksum of {string}
+sha256({expr})			String	SHA256 checksum of String or Blob
 shellescape({string} [, {special}])
 				String	escape {string} for use as shell
 					command argument
@@ -747,6 +748,8 @@ undofile({name})		String	undo file name for {name}
 undotree([{buf}])		List	undo file tree for buffer {buf}
 uniq({list} [, {func} [, {dict}]])
 				List	remove adjacent duplicates from a list
+uri_decode({string})		String	URI-decode a string
+uri_encode({string})		String	URI-encode a string
 utf16idx({string}, {idx} [, {countcc} [, {charidx}]])
 				Number	UTF-16 index of byte {idx} in {string}
 values({dict})			List	values in {dict}
@@ -1911,10 +1914,11 @@ col({expr} [, {winid}])					*col()*
 
 
 complete({startcol}, {matches})			*complete()* *E785*
-		Set the matches for Insert mode completion.
-		Can only be used in Insert mode.  You need to use a mapping
-		with CTRL-R = (see |i_CTRL-R|).  It does not work after CTRL-O
-		or with an expression mapping.
+		Set the matches for Insert mode completion. Can only be
+		used in Insert mode.  Typically invoked from a mapping with
+		CTRL-R = (see |i_CTRL-R|), but may also be called from a
+		|<Cmd>| or |<ScriptCmd>| mapping.  It does not work after
+		CTRL-O or with an expression mapping.
 		{startcol} is the byte offset in the line where the completed
 		text start.  The text up to the cursor is the original text
 		that will be replaced by the matches.  Use col('.') for an
@@ -1928,15 +1932,31 @@ complete({startcol}, {matches})			*complete()* *E785*
 		The match can be selected with CTRL-N and CTRL-P as usual with
 		Insert mode completion.  The popup menu will appear if
 		specified, see |ins-completion-menu|.
-		Example: >
-	inoremap <F5> <C-R>=ListMonths()<CR>
 
-	func ListMonths()
-	  call complete(col('.'), ['January', 'February', 'March',
-		\ 'April', 'May', 'June', 'July', 'August', 'September',
-		\ 'October', 'November', 'December'])
-	  return ''
-	endfunc
+		Example (using legacy Vim script): >
+
+		inoremap <F5> <C-R>=ListMonths()<CR>
+
+		func ListMonths()
+		  call complete(col('.'), ['January', 'February', 'March',
+			\ 'April', 'May', 'June', 'July', 'August',
+			\ 'September', 'October', 'November', 'December'])
+		  return ''
+		endfunc
+<
+		Example (using Vim9 script): >
+
+		vim9script
+		def ListMonths(): string
+		  const months = [ 'January', 'February', 'March', 'April',
+			'May', 'June', 'July', 'September', 'October',
+			'November', 'December']
+		  complete(col('.'), months)
+		  return ''
+		enddef
+
+		inoremap <F5> <ScriptCmd>ListMonths()<CR>
+
 <		This isn't very useful, but it shows how it works.  Note that
 		an empty string is returned to avoid a zero being inserted.
 
@@ -2988,6 +3008,9 @@ expand({string} [, {nosuf} [, {list}]])				*expand()*
 			:t		tail (last path component only)
 			:r		root (one extension removed)
 			:e		extension only
+
+		More modifiers are supported, for the full list see
+		|filename-modifiers|.
 
 		Example: >
 			:let &tags = expand("%:p:h") .. "/tags"
@@ -5319,14 +5342,17 @@ gettext({text} [, {package}])				*gettext()*
 
 
 getwininfo([{winid}])					*getwininfo()*
-		Returns information about windows as a |List| with Dictionaries.
+		Returns information about windows as a |List| with
+		Dictionaries.
 
-		If {winid} is given Information about the window with that ID
-		is returned, as a |List| with one item.  If the window does not
-		exist the result is an empty list.
+		If {winid} is given, information about the window with that ID
+		is returned, as a |List| with one item.  When that window is a
+		|popup| window, information about that popup window is
+		returned.  If the window does not exist the result is an empty
+		list.
 
 		Without {winid} information about all the windows in all the
-		tab pages is returned.
+		tab pages (excluding |popup|s) is returned.
 
 		Each List item is a |Dictionary| with the following entries:
 			botline		last complete displayed buffer line
@@ -6314,7 +6340,8 @@ items({expr})						*items()*
 		Return a |List| with all key/index and value pairs of {expr}.
 		Each |List| item is a list with two items:
 		- for a |Dict|: the key and the value
-		- for a |List|, |Tuple| or |String|: the index and the value
+		- for a |List|, |Tuple|, |Blob| or |String|: the index and the
+		  value
 		The returned |List| is in arbitrary order for a |Dict|,
 		otherwise it's in ascending order of the index.
 
@@ -6328,6 +6355,7 @@ items({expr})						*items()*
 			echo items([1, 2, 3])
 			echo items(('a', 'b', 'c'))
 			echo items("foobar")
+			echo items(0z0102)
 <
 		Can also be used as a |method|: >
 			mydict->items()
@@ -6694,13 +6722,18 @@ list2tuple({list})					*list2tuple()*
 		Return type: tuple<{type}> (depending on the given |List|)
 
 
-listener_add({callback} [, {buf}])			*listener_add()*
+listener_add({callback} [, {buf} [, {unbuffered}]])	*listener_add()*
 		Add a callback function that will be invoked when changes have
 		been made to buffer {buf}.
 		{buf} refers to a buffer name or number. For the accepted
 		values, see |bufname()|.  When {buf} is omitted the current
 		buffer is used.
 		Returns a unique ID that can be passed to |listener_remove()|.
+
+		If the {buf} already has registered callbacks then the
+		equivalent of >
+		    listener_flush({buf})
+<		is performed before the new callback is added.
 
 		The {callback} is invoked with five arguments:
 		    bufnr	the buffer that was changed
@@ -6744,19 +6777,36 @@ listener_add({callback} [, {buf}])			*listener_add()*
 		    added	0
 		    col		first column with a change or 1
 
-		The entries are in the order the changes were made, thus the
-		most recent change is at the end.  The line numbers are valid
-		when the callback is invoked, but later changes may make them
-		invalid, thus keeping a copy for later might not work.
+		When {unbuffered} is |FALSE| or not provided the {callback} is
+		invoked:
 
-		The {callback} is invoked just before the screen is updated,
-		when |listener_flush()| is called or when a change is being
-		made that changes the line count in a way it causes a line
-		number in the list of changes to become invalid.
+		1. Just before the screen is updated.
+		2. When |listener_flush()| is called.
+		3. When a change is being made that changes the line count in
+		   a way that causes a line number in the list of changes to
+		   become invalid.
+
+		The entries are in the order the changes were made, thus the
+		most recent change is at the end.
+
+		Because of the third trigger reason for triggering a callback
+		listed above, the line numbers passed to the callback are not
+		guaranteed to be valid. If this is a problem then make
+		{unbuffered} |TRUE|.
+
+		When {unbuffered} is |TRUE| the {callback} is invoked for every
+		single change. The changes list only holds a single dictionary
+		and the "start", "end" and "added" values in the dictionary are
+		the same as the corresponding callback arguments. The line
+		numbers are valid when the callback is invoked, but later
+		changes may make them invalid, thus keeping a copy for later
+		might not work.
 
 		The {callback} is invoked with the text locked, see
 		|textlock|.  If you do need to make changes to the buffer, use
 		a timer to do this later |timer_start()|.
+
+		You may not call listener_add() during the {callback}. *E1569*
 
 		The {callback} is not invoked when the buffer is first loaded.
 		Use the |BufReadPost| autocmd event to handle the initial text
@@ -7622,7 +7672,7 @@ max({expr})							*max()*
 		Can also be used as a |method|: >
 			mylist->max()
 <
-		Return type: |Number|
+		Return type: any, depending on {expr}
 
 
 menu_info({name} [, {mode}])				*menu_info()*
@@ -7714,7 +7764,7 @@ min({expr})							*min()*
 		Can also be used as a |method|: >
 			mylist->min()
 <
-		Return type: |Number|
+		Return type: any, depending on {expr}
 
 
 mkdir({name} [, {flags} [, {prot}]])			*mkdir()* *E739*
@@ -7984,6 +8034,15 @@ pow({x}, {y})						*pow()*
 		Can also be used as a |method|: >
 			Compute()->pow(3)
 <
+		Return type: |Number|
+
+
+preinserted()						*preinserted()*
+		Returns non-zero if text has been inserted after the cursor
+		because "preinsert" is present in 'completeopt', or because
+		"longest" is present in 'completeopt' while 'autocomplete'
+		is active.  Otherwise returns zero.
+
 		Return type: |Number|
 
 
@@ -10315,12 +10374,14 @@ setwinvar({winnr}, {varname}, {val})			*setwinvar()*
 		Return type: |Number|
 
 
-sha256({string})						*sha256()*
+sha256({expr})						*sha256()*
 		Returns a String with 64 hex characters, which is the SHA256
-		checksum of {string}.
+		checksum of {expr}.
+		{expr} is a String or a Blob.
 
 		Can also be used as a |method|: >
 			GetText()->sha256()
+			GetBlob()->sha256()
 <
 		Return type: |String|
 
@@ -12185,6 +12246,59 @@ uniq({list} [, {func} [, {dict}]])			*uniq()* *E882*
 		Return type: list<{type}>
 
 
+uri_decode({string})					*uri_decode()*
+		Returns the URI-decoded form of {string}, reversing
+		percent-encoding (converting sequences like "%3D" back to
+		the corresponding character).
+
+		The decoding follows standard percent-decoding rules:
+		    - "%HH" is replaced with the character for the hex value
+		      HH.
+		    - If the decoded bytes form valid UTF-8, they are combined
+		      into the corresponding character(s).  Otherwise, the
+		      bytes are kept as-is.
+		    - Invalid or incomplete encodings (e.g. "%GZ", "%3", or a
+		      trailing "%") are left unchanged.
+
+		Returns an empty String if {string} is empty.
+
+		Example: >
+			:echo uri_decode('c%3A%5Cmy%5Cdir%5Cfoo%20bar')
+			c:\my\dir\foo bar
+			:echo uri_decode('%CE%B1%CE%B2%CE%B3')
+			αβγ
+<
+		Can also be used as a |method|: >
+			mystr->uri_decode()
+<
+		Return type: |String|
+
+uri_encode({string})					*uri_encode()*
+		Returns the URI-encoded form of {string}.  URI encoding
+		replaces unsafe or reserved characters with percent-encoded
+		sequences.
+
+		The encoding follows standard percent-encoding rules:
+                    - Alphanumeric characters [0-9A-Za-z] remain unchanged.
+                    - The characters "-", "_", ".", and "~" also remain
+                      unchanged.
+                    - All other characters are replaced with "%HH", where HH
+                      is the two-digit uppercase hexadecimal value.
+                    - Existing percent-encoded sequences are not modified.
+
+		Returns an empty String if {string} is empty.
+
+		Example: >
+			:echo uri_encode('c:\my\dir\foo bar')
+			c%3A%5Cmy%5Cdir%5Cfoo%20bar
+			:echo uri_encode('key=value&name=αβγ')
+			key%3Dvalue%26name%3D%CE%B1%CE%B2%CE%B3
+<
+		Can also be used as a |method|: >
+			mystr->uri_encode()
+<
+		Return type: |String|
+
 							*utf16idx()*
 utf16idx({string}, {idx} [, {countcc} [, {charidx}]])
 		Same as |charidx()| but returns the UTF-16 code unit index of
@@ -12350,7 +12464,6 @@ wildmenumode()					*wildmenumode()*
 wildtrigger()						*wildtrigger()*
 		Start wildcard expansion in the command-line, using the
 		behavior defined by the 'wildmode' and 'wildoptions' settings.
-		See |cmdline-completion|.
 
 		This function also enables completion in search patterns such
 		as |/|, |?|, |:s|, |:g|, |:v| and |:vimgrep|.
@@ -12358,22 +12471,15 @@ wildtrigger()						*wildtrigger()*
 		Unlike pressing 'wildchar' manually, this function does not
 		produce a beep when no matches are found and generally
 		operates more quietly.  This makes it suitable for triggering
-		completion automatically, such as from an |:autocmd|.
-						*cmdline-autocompletion*
-		Example: To make the completion menu pop up automatically as
-		you type on the command line, use: >
-			autocmd CmdlineChanged [:/\?] call wildtrigger()
-			set wildmode=noselect:lastused,full wildoptions=pum
-<
-		To retain normal history navigation (up/down keys): >
-			cnoremap <Up>   <C-U><Up>
-			cnoremap <Down> <C-U><Down>
-<
-		To set an option specifically when performing a search, e.g.
-		to set 'pumheight': >
-			autocmd CmdlineEnter [/\?] set pumheight=8
-			autocmd CmdlineLeave [/\?] set pumheight&
-<
+		completion automatically.
+
+		Note: After navigating command-line history, the first call to
+		wildtrigger() is a no-op; a second call is needed to start
+		expansion.  This is to support history navigation in
+		command-line autocompletion.
+
+		See |cmdline-autocompletion|.
+
 		Return value is always 0.
 
 		Return type: |Number|
@@ -12571,7 +12677,7 @@ winbufnr({nr})	The result is a Number, which is the number of the buffer
 		window is returned.
 		When window {nr} doesn't exist, -1 is returned.
 		Example: >
-  :echo "The file in the current window is " . bufname(winbufnr(0))
+  :echo "The file in the current window is " .. bufname(winbufnr(0))
 <
 		Can also be used as a |method|: >
 			FindWindow()->winbufnr()->bufname()
@@ -13104,7 +13210,9 @@ vreplace		Compiled with |gR| and |gr| commands. (always true)
 vtp			Compiled for vcon support |+vtp| (check vcon to find
 			out if it works in the current console).
 wayland			Compiled with Wayland protocol support.
-wayland_clipboard	Compiled with support for Wayland selections/clipboard
+wayland_clipboard	Compiled with support for Wayland clipboard.
+wayland_focus_steal	Compiled with support for Wayland clipboard focus
+			stealing.
 wildignore		Compiled with 'wildignore' option.
 wildmenu		Compiled with 'wildmenu' option.
 win16			old version for MS-Windows 3.1 (always false)

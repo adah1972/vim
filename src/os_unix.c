@@ -3676,6 +3676,15 @@ mch_early_init(void)
     signal_stack = alloc(get_signal_stack_size());
     init_signal_stack();
 #endif
+
+    /*
+     * Inform the macOS scheduler that Vim renders UI, and so shouldn’t have its
+     * threads’ quality of service classes clamped.
+     */
+#ifdef MACOS_X
+    integer_t policy = TASK_DEFAULT_APPLICATION;
+    task_policy_set(mach_task_self(), TASK_CATEGORY_POLICY, &policy, 1);
+#endif
 }
 
 #if defined(EXITFREE) || defined(PROTO)
@@ -5731,7 +5740,7 @@ mch_call_shell_fork(
 #ifdef FEAT_WAYLAND
 		    // Handle Wayland events such as sending data as the source
 		    // client.
-		    wayland_client_update();
+		    wayland_update();
 #endif
 		}
 finished:
@@ -5805,7 +5814,7 @@ finished:
 #ifdef FEAT_WAYLAND
 		    // Handle Wayland events such as sending data as the source
 		    // client.
-		    wayland_client_update();
+		    wayland_update();
 #endif
 
 		    // Wait for 1 to 10 msec. 1 is faster but gives the child
@@ -6657,6 +6666,9 @@ RealWaitForChar(int fd, long msec, int *check_for_gpm UNUSED, int *interrupted)
 	int		mzquantum_used = FALSE;
 # endif
 #endif
+#ifdef FEAT_WAYLAND
+	int		wayland_fd = -1;
+#endif
 #ifndef HAVE_SELECT
 			// each channel may use in, out and err
 	struct pollfd   fds[7 + 3 * MAX_OPEN_CHANNELS];
@@ -6700,11 +6712,11 @@ RealWaitForChar(int fd, long msec, int *check_for_gpm UNUSED, int *interrupted)
 	}
 # endif
 
-# ifdef FEAT_WAYLAND_CLIPBOARD
-	if (wayland_may_restore_connection())
+# ifdef FEAT_WAYLAND
+	if ((wayland_fd = wayland_prepare_read()) >= 0)
 	{
 	    wayland_idx = nfd;
-	    fds[nfd].fd = wayland_display_fd;
+	    fds[nfd].fd = wayland_fd;
 	    fds[nfd].events = POLLIN;
 	    nfd++;
 	}
@@ -6756,23 +6768,21 @@ RealWaitForChar(int fd, long msec, int *check_for_gpm UNUSED, int *interrupted)
 # endif
 
 # ifdef FEAT_SOCKETSERVER
-	if (socket_server_fd != -1)
+	if (socket_server_idx >= 0)
 	{
 	    if (fds[socket_server_idx].revents & POLLIN)
-		socket_server_accept_client();
+	    {
+		if (socket_server_accept_client() == FAIL)
+		    socket_server_uninit();
+	    }
 	    else if (fds[socket_server_idx].revents & (POLLHUP | POLLERR))
 		socket_server_uninit();
 	}
-
 # endif
 
-# ifdef FEAT_WAYLAND_CLIPBOARD
-	// Technically we should first call wl_display_prepare_read() before
-	// polling the fd, then read and dispatch after we poll. However that is
-	// only needed for multi threaded environments to prevent deadlocks so
-	// we are fine.
-	if (fds[wayland_idx].revents & POLLIN)
-	    wayland_client_update();
+# ifdef FEAT_WAYLAND
+	if (wayland_idx >= 0)
+	    wayland_poll_check(fds[wayland_idx].revents);
 # endif
 
 # ifdef FEAT_XCLIPBOARD
@@ -6865,14 +6875,13 @@ select_eintr:
 	}
 # endif
 
-# ifdef FEAT_WAYLAND_CLIPBOARD
-
-	if (wayland_may_restore_connection())
+# ifdef FEAT_WAYLAND
+	if ((wayland_fd = wayland_prepare_read()) >= 0)
 	{
-	    FD_SET(wayland_display_fd, &rfds);
+	    FD_SET(wayland_fd, &rfds);
 
-	    if (maxfd < wayland_display_fd)
-		maxfd = wayland_display_fd;
+	    if (maxfd < wayland_fd)
+		maxfd = wayland_fd;
 	}
 # endif
 
@@ -6966,22 +6975,15 @@ select_eintr:
 # endif
 
 # ifdef FEAT_SOCKETSERVER
-	if (socket_server_fd != -1 && ret > 0)
-	{
-	    if (FD_ISSET(socket_server_fd, &rfds))
-		socket_server_accept_client();
-	    else if (FD_ISSET(socket_server_fd, &efds))
-		socket_server_uninit();
-	}
+	if (ret > 0 && socket_server_fd != -1
+		&& FD_ISSET(socket_server_fd, &rfds)
+		&& socket_server_accept_client() == FAIL)
+	    socket_server_uninit();
 # endif
 
-# ifdef FEAT_WAYLAND_CLIPBOARD
-	// Technically we should first call wl_display_prepare_read() before
-	// polling the fd, then read and dispatch after we poll. However that is
-	// only needed for multi threaded environments to prevent deadlocks so
-	// we are fine.
-	if (ret > 0 && FD_ISSET(wayland_display_fd, &rfds))
-	    wayland_client_update();
+# ifdef FEAT_WAYLAND
+	if (wayland_fd != -1)
+	    wayland_select_check(ret > 0 && FD_ISSET(wayland_fd, &rfds));
 # endif
 
 # ifdef FEAT_XCLIPBOARD
@@ -9437,16 +9439,17 @@ socket_server_list_sockets(void)
 
 /*
  * Called when the server has received a new command. If so, parse it and do the
- * stuff it says, and possibly send back a reply.
+ * stuff it says, and possibly send back a reply. Returns OK if client was
+ * accepted, else FAIL.
  */
-    void
+    int
 socket_server_accept_client(void)
 {
     int	fd = accept(socket_server_fd, NULL, NULL);
     ss_cmd_T cmd;
 
     if (fd == -1)
-	return;
+	return FAIL;
 
     if (socket_server_decode_cmd(&cmd, fd, 1000) == FAIL)
 	goto exit;
@@ -9460,6 +9463,7 @@ socket_server_accept_client(void)
 
 exit:
     close(fd);
+    return OK;
 }
 
 /*
@@ -9536,7 +9540,7 @@ socket_server_send(
 	char_u *str,	    // What to send
 	char_u **result,    // Set to result of expr
 	char_u **receiver,  // Full path of "name"
-	int is_expr,	    // Is it an expresison or keystrokes?
+	int is_expr,	    // Is it an expression or keystrokes?
 	int timeout,	    // In milliseconds
 	int silent)	    // Don't complain if socket doesn't exist
 {
@@ -9545,8 +9549,9 @@ socket_server_send(
     size_t	    sz;
     char_u	    *final;
     char_u	    *path;
-    struct timeval  start, now;
-
+#ifdef ELAPSED_FUNC
+    elapsed_T	    start_tv;
+#endif
 
     if (!socket_server_valid())
     {
@@ -9617,7 +9622,7 @@ socket_server_send(
 	else
 	    vim_free(path);
 
-	// Exit, we aren't waiting for a reponse
+	// Exit, we aren't waiting for a response
 	return 0;
     }
 
@@ -9625,7 +9630,9 @@ socket_server_send(
 
     socket_server_init_pending_cmd(&pending);
 
-    gettimeofday(&start, NULL);
+#ifdef ELAPSED_FUNC
+    ELAPSED_INIT(start_tv);
+#endif
 
     // Wait for server to send back result
     while (socket_server_dispatch(500) >= 0)
@@ -9633,12 +9640,10 @@ socket_server_send(
 	if (pending.result != NULL)
 	    break;
 
-	gettimeofday(&now, NULL);
-
-	if ((now.tv_sec * 1000000 + now.tv_usec) -
-		(start.tv_sec * 1000000 + start.tv_usec) >=
-		(timeout > 0 ? timeout * 1000 : 1000 * 1000))
+#ifdef ELAPSED_FUNC
+	if (ELAPSED_FUNC(start_tv) >= (timeout > 0 ? timeout : 1000))
 	    break;
+#endif
     }
 
     if (pending.result == NULL)
@@ -9668,10 +9673,12 @@ socket_server_send(
  * success and FAIL on failure. Timeout is in milliseconds
  */
     int
-socket_server_read_reply(char_u *client, char_u **str, int timeout)
+socket_server_read_reply(char_u *client, char_u **str, int timeout UNUSED)
 {
-    ss_reply_T *reply = NULL;
-    struct timeval start, now;
+    ss_reply_T	*reply = NULL;
+#ifdef ELAPSED_FUNC
+    elapsed_T	start_tv;
+#endif
 
     if (!socket_server_name_is_valid(client))
 	return -1;
@@ -9679,8 +9686,10 @@ socket_server_read_reply(char_u *client, char_u **str, int timeout)
     if (!socket_server_valid())
 	return -1;
 
+#ifdef ELAPSED_FUNC
     if (timeout > 0)
-	gettimeofday(&start, NULL);
+	ELAPSED_INIT(start_tv);
+#endif
 
     // Try seeing if there already is a reply in the queue
     goto get_reply;
@@ -9689,13 +9698,10 @@ socket_server_read_reply(char_u *client, char_u **str, int timeout)
     {
 	int fd;
 
-	if (timeout > 0)
-	    gettimeofday(&now, NULL);
-
-	if (timeout > 0)
-	    if ((now.tv_sec * 1000000 + now.tv_usec) -
-		    (start.tv_sec * 1000000 + start.tv_usec) >= timeout * 1000)
-		break;
+#ifdef ELAPSED_FUNC
+	if (timeout > 0 && ELAPSED_FUNC(start_tv) >= timeout)
+	    break;
+#endif
 
 get_reply:
 	reply = socket_server_get_reply(client, NULL);
@@ -9923,7 +9929,7 @@ socket_server_init_cmd(ss_cmd_T *cmd, ss_cmd_type_T type)
 
 /*
  * Append a message to a command. Note that "len" is the length of contents.
- * Returns OK on sucess and FAIL on failure
+ * Returns OK on success and FAIL on failure
  */
     static int
 socket_server_append_msg(ss_cmd_T *cmd, char_u type, char_u *contents, int len)
@@ -10023,7 +10029,9 @@ socket_server_decode_cmd(ss_cmd_T *cmd, int socket_fd, int timeout)
     size_t	total_r		= 0;
     char_u	*buf;
     char_u	*cur;
-    struct timeval start, now;
+#ifdef ELAPSED_FUNC
+    elapsed_T	start_tv;
+#endif
 
     // We also poll the socket server listening file descriptor to handle
     // recursive remote calls between Vim instances, such as when one Vim
@@ -10051,7 +10059,9 @@ socket_server_decode_cmd(ss_cmd_T *cmd, int socket_fd, int timeout)
     // want to free an uninitialized pointer.
     memset(cmd, 0, sizeof(*cmd));
 
-    gettimeofday(&start, NULL);
+#ifdef ELAPSED_FUNC
+    ELAPSED_INIT(start_tv);
+#endif
 
     while (TRUE)
     {
@@ -10125,11 +10135,10 @@ socket_server_decode_cmd(ss_cmd_T *cmd, int socket_fd, int timeout)
 	total_r += r;
 
 continue_loop:
-	gettimeofday(&now, NULL);
-
-	if ((now.tv_sec * 1000000 + now.tv_usec) -
-		(start.tv_sec * 1000000 + start.tv_usec) >= timeout * 1000)
+#ifdef ELAPSED_FUNC
+	if (ELAPSED_FUNC(start_tv) >= timeout)
 	    goto fail;
+#endif
     }
 
     // Parse message data
@@ -10172,7 +10181,9 @@ socket_server_write(int socket_fd, char_u *data, size_t sz, int timeout)
 {
     char_u *cur = data;
     size_t total_w = 0;
-    struct timeval start, now;
+#ifdef ELAPSED_FUNC
+    elapsed_T start_tv;
+#endif
 #ifndef HAVE_SELECT
     struct pollfd pfd;
 
@@ -10186,7 +10197,9 @@ socket_server_write(int socket_fd, char_u *data, size_t sz, int timeout)
     FD_SET(socket_fd, &wfds);
 #endif
 
-    gettimeofday(&start, NULL);
+#ifdef ELAPSED_FUNC
+    ELAPSED_INIT(start_tv);
+#endif
 
     while (total_w < sz)
     {
@@ -10213,13 +10226,11 @@ socket_server_write(int socket_fd, char_u *data, size_t sz, int timeout)
 
 	total_w += written;
 
-
 continue_loop:
-	gettimeofday(&now, NULL);
-
-	if ((now.tv_sec * 1000000 + now.tv_usec) -
-		(start.tv_sec * 1000000 + start.tv_usec) >= timeout * 1000)
+#ifdef ELAPSED_FUNC
+	if (ELAPSED_FUNC(start_tv) >= timeout)
 	    return FAIL;
+#endif
     }
 
     return OK;
@@ -10369,7 +10380,7 @@ socket_server_exec_cmd(ss_cmd_T *cmd, int fd)
 			    STRLEN(result) + 1); // We add +1 in case "result"
 						 // is an empty string.
 		else
-		    // An error occured, return an error msg instead
+		    // An error occurred, return an error msg instead
 		    socket_server_append_msg(&rcmd, SS_MSG_TYPE_STRING,
 			    (char_u *)_(e_invalid_expression_received),
 			    STRLEN(e_invalid_expression_received));
@@ -10546,7 +10557,7 @@ socket_server_dispatch(int timeout)
 }
 
 /*
- * Check if socket "name" is reponsive by sending an ALIVE command. This does
+ * Check if socket "name" is responsive by sending an ALIVE command. This does
  * not require the socket server to be active.
  */
     static int

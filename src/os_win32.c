@@ -222,8 +222,10 @@ static int suppress_winsize = 1;	// don't fiddle with console
 
 static WCHAR *exe_pathw = NULL;
 
-static BOOL win8_or_later = FALSE;
-static BOOL win10_22H2_or_later = FALSE;
+BOOL win8_or_later = FALSE;
+BOOL win10_22H2_or_later = FALSE;
+BOOL win11_or_later = FALSE;
+
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
 static BOOL use_alternate_screen_buffer = FALSE;
 #endif
@@ -1009,6 +1011,10 @@ PlatformId(void)
     if ((ovi.dwMajorVersion == 10 && ovi.dwBuildNumber >= 19045)
 	    || ovi.dwMajorVersion > 10)
 	win10_22H2_or_later = TRUE;
+
+    if ((ovi.dwMajorVersion == 10 && ovi.dwBuildNumber >= 22000)
+	    || ovi.dwMajorVersion > 10)
+	win11_or_later = TRUE;
 
 #ifdef HAVE_ACL
     // Enable privilege for getting or setting SACLs.
@@ -7704,6 +7710,21 @@ mch_total_mem(int special UNUSED)
     }
     // Use physical RAM less reserve for OS + data.
     return (long_u)((ms.ullTotalPhys - WINNT_RESERVE_BYTES) / 1024);
+}
+
+/*
+ * Expand a path into all matching files and/or directories.  Handles "*",
+ * "?", "[a-z]", "**", etc.
+ * "path" has backslashes before chars that are not to be expanded.
+ * Returns the number of matches found.
+ */
+    int
+mch_expandpath(
+    garray_T	*gap,
+    char_u	*path,
+    int		flags)		// EW_* flags
+{
+    return dos_expandpath(gap, path, 0, flags, FALSE);
 }
 
 /*

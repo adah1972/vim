@@ -350,6 +350,20 @@ typedef struct
 # define w_p_tws w_onebuf_opt.wo_tws	// 'termwinsize'
 #endif
 
+    // A few options have local flags for P_INSECURE.
+    long_u	wo_wrap_flags;		// flags for 'wrap'
+#define w_p_wrap_flags w_onebuf_opt.wo_wrap_flags
+#ifdef FEAT_STL_OPT
+    long_u	wo_stl_flags;		// flags for 'statusline'
+# define w_p_stl_flags w_onebuf_opt.wo_stl_flags
+#endif
+#ifdef FEAT_EVAL
+    long_u	wo_fde_flags;		// flags for 'foldexpr'
+# define w_p_fde_flags w_onebuf_opt.wo_fde_flags
+    long_u	wo_fdt_flags;		// flags for 'foldtext'
+# define w_p_fdt_flags w_onebuf_opt.wo_fdt_flags
+#endif
+
 #ifdef FEAT_EVAL
     sctx_T	wo_script_ctx[WV_COUNT];	// SCTXs for window-local options
 # define w_p_script_ctx w_onebuf_opt.wo_script_ctx
@@ -3285,6 +3299,7 @@ struct file_buffer
     sctx_T	b_p_script_ctx[BV_COUNT]; // SCTXs for buffer-local options
 #endif
 
+    int		b_p_ac;		// 'autocomplete'
     int		b_p_ai;		// 'autoindent'
     int		b_p_ai_nopaste;	// b_p_ai saved for paste mode
     char_u	*b_p_bkc;	// 'backupcopy'
@@ -3496,7 +3511,8 @@ struct file_buffer
     dictitem_T	b_bufvar;	// variable for "b:" Dictionary
     dict_T	*b_vars;	// internal variables, local to buffer
 
-    listener_T	*b_listener;
+    listener_T	*b_listener;       // Listeners accepting buffered reports.
+    listener_T	*b_sync_listener;  // Listeners requiring unbuffered reports.
     list_T	*b_recorded_changes;
 #endif
 #ifdef FEAT_PROP_POPUP
@@ -4211,14 +4227,6 @@ struct window_S
     // transform a pointer to a "onebuf" option into a "allbuf" option
 #define GLOBAL_WO(p)	((char *)(p) + sizeof(winopt_T))
 
-    // A few options have local flags for P_INSECURE.
-#ifdef FEAT_STL_OPT
-    long_u	w_p_stl_flags;	    // flags for 'statusline'
-#endif
-#ifdef FEAT_EVAL
-    long_u	w_p_fde_flags;	    // flags for 'foldexpr'
-    long_u	w_p_fdt_flags;	    // flags for 'foldtext'
-#endif
 #if defined(FEAT_SIGNS) || defined(FEAT_FOLDING) || defined(FEAT_DIFF)
     int		*w_p_cc_cols;	    // array of columns to highlight or NULL
     char_u	w_p_culopt_flags;   // flags for cursorline highlighting
@@ -5227,7 +5235,7 @@ typedef struct
 #define KEYVALUE_ENTRY(k, v) \
     {(k), {((char_u *)v), STRLEN_LITERAL(v)}}
 
-#if defined(UNIX) || defined(MSWIN) || defined(VMS)
+#if defined(UNIX) || defined(MSWIN) || defined(VMS) || defined(AMIGA)
 // Defined as signed, to return -1 on error
 struct cellsize {
     int cs_xpixel;
@@ -5237,20 +5245,26 @@ struct cellsize {
 
 #ifdef FEAT_WAYLAND
 
+typedef struct vwl_connection_S vwl_connection_T;
+typedef struct vwl_seat_S vwl_seat_T;
+
+# ifdef FEAT_WAYLAND_CLIPBOARD
+
+typedef struct vwl_data_offer_S vwl_data_offer_T;
+typedef struct vwl_data_source_S vwl_data_source_T;
+typedef struct vwl_data_device_S vwl_data_device_T;
+typedef struct vwl_data_device_manager_S vwl_data_device_manager_T;
+
+typedef struct vwl_data_device_listener_S vwl_data_device_listener_T;
+typedef struct vwl_data_source_listener_S vwl_data_source_listener_T;
+typedef struct vwl_data_offer_listener_S vwl_data_offer_listener_T;
+
 // Wayland selections
 typedef enum {
-    WAYLAND_SELECTION_NONE	    = 0x0,
-    WAYLAND_SELECTION_REGULAR	    = 0x1,
-    WAYLAND_SELECTION_PRIMARY	    = 0x2,
+    WAYLAND_SELECTION_NONE	= 0,
+    WAYLAND_SELECTION_REGULAR	= 1 << 0,
+    WAYLAND_SELECTION_PRIMARY	= 1 << 1,
 } wayland_selection_T;
 
-// Callback when another client wants us to send data to them
-typedef void (*wayland_cb_send_data_func_T)(
-	const char *mime_type,
-	int fd,
-	wayland_selection_T type);
-
-// Callback when the selection is lost (data source object overwritten)
-typedef void (*wayland_cb_selection_cancelled_func_T)(wayland_selection_T type);
-
-#endif // FEAT_WAYLAND
+# endif
+#endif

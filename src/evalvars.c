@@ -164,7 +164,9 @@ static struct vimvar
     {VV_NAME("stacktrace",	 VAR_LIST), &t_list_dict_any, VV_RO},
     {VV_NAME("t_tuple",		 VAR_NUMBER), NULL, VV_RO},
     {VV_NAME("wayland_display",  VAR_STRING), NULL, VV_RO},
-    {VV_NAME("clipmethod",  VAR_STRING), NULL, VV_RO},
+    {VV_NAME("clipmethod",	 VAR_STRING), NULL, VV_RO},
+    {VV_NAME("termda1",		 VAR_STRING), NULL, VV_RO},
+    {VV_NAME("termosc",	 VAR_STRING), NULL, VV_RO},
 };
 
 // shorthand
@@ -2909,6 +2911,17 @@ set_vim_var_string(
 	vimvars[idx].vv_str = vim_strnsave(val, len);
 }
 
+    void
+set_vim_var_string_direct(
+    int		idx,
+    char_u	*val)
+{
+    clear_tv(&vimvars[idx].vv_di.di_tv);
+    vimvars[idx].vv_tv_type = VAR_STRING;
+
+    vimvars[idx].vv_str = val;
+}
+
 /*
  * Set List v: variable to "val".
  */
@@ -3346,7 +3359,7 @@ eval_variable(
 		    }
 		}
 	    }
-	    copy_tv(tv, rettv);
+	    ret = copy_tv(tv, rettv);
 	}
     }
 

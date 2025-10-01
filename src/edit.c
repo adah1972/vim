@@ -664,9 +664,6 @@ edit(
 		    continue;
 		}
 
-		if (p_ac)
-		    ins_compl_set_autocomplete(TRUE);
-
 		// A non-white character that fits in with the current
 		// completion: Add to "compl_leader".
 		if (ins_compl_accept_char(c))
@@ -688,9 +685,6 @@ edit(
 		    continue;
 		}
 
-		if (p_ac)
-		    ins_compl_set_autocomplete(FALSE);
-
 		// Pressing CTRL-Y selects the current match.  When
 		// ins_compl_enter_selects() is set the Enter key does the
 		// same.
@@ -699,7 +693,12 @@ edit(
 			&& stop_arrow() == OK)
 		{
 		    ins_compl_delete();
-		    ins_compl_insert(FALSE);
+		    ins_compl_insert(FALSE, !ins_compl_has_preinsert());
+		    if (ins_compl_preinsert_longest())
+		    {
+			ins_compl_init_get_longest();
+			continue;
+		    }
 		}
 		// Delete preinserted text when typing special chars
 		else if (IS_WHITE_NL_OR_NUL(c) && ins_compl_preinsert_effect())
@@ -989,7 +988,7 @@ doESCkey:
 	case Ctrl_H:
 	    did_backspace = ins_bs(c, BACKSPACE_CHAR, &inserted_space);
 	    auto_format(FALSE, TRUE);
-	    if (did_backspace && p_ac && !char_avail()
+	    if (did_backspace && ins_compl_has_autocomplete() && !char_avail()
 		    && curwin->w_cursor.col > 0)
 	    {
 		c = char_before_cursor();
@@ -997,7 +996,7 @@ doESCkey:
 		{
 		    update_screen(UPD_VALID); // Show char deletion immediately
 		    out_flush();
-		    ins_compl_set_autocomplete(TRUE);
+		    ins_compl_enable_autocomplete();
 		    goto docomplete; // Trigger autocompletion
 		}
 	    }
@@ -1420,11 +1419,12 @@ normalchar:
 	    foldOpenCursor();
 #endif
 	    // Trigger autocompletion
-	    if (p_ac && !char_avail() && vim_isprintc(c))
+	    if (ins_compl_has_autocomplete() && !char_avail()
+		    && vim_isprintc(c))
 	    {
 		update_screen(UPD_VALID); // Show character immediately
 		out_flush();
-		ins_compl_set_autocomplete(TRUE);
+		ins_compl_enable_autocomplete();
 		goto docomplete;
 	    }
 

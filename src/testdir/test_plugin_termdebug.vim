@@ -367,6 +367,7 @@ endfunc
 func Test_termdebug_mapping()
   %bw!
   call assert_true(maparg('K', 'n', 0, 1)->empty())
+  call assert_true(maparg('K', 'x', 0, 1)->empty())
   call assert_true(maparg('-', 'n', 0, 1)->empty())
   call assert_true(maparg('+', 'n', 0, 1)->empty())
   Termdebug
@@ -374,6 +375,7 @@ func Test_termdebug_mapping()
   call WaitForAssert({-> assert_equal(3, winnr('$'))})
   wincmd b
   call assert_false(maparg('K', 'n', 0, 1)->empty())
+  call assert_false(maparg('K', 'x', 0, 1)->empty())
   call assert_false(maparg('-', 'n', 0, 1)->empty())
   call assert_false(maparg('+', 'n', 0, 1)->empty())
   call assert_false(maparg('K', 'n', 0, 1).buffer)
@@ -385,11 +387,13 @@ func Test_termdebug_mapping()
   redraw!
   call WaitForAssert({-> assert_equal(1, winnr('$'))})
   call assert_true(maparg('K', 'n', 0, 1)->empty())
+  call assert_true(maparg('K', 'x', 0, 1)->empty())
   call assert_true(maparg('-', 'n', 0, 1)->empty())
   call assert_true(maparg('+', 'n', 0, 1)->empty())
 
   %bw!
   nnoremap K :echom "K"<cr>
+  xnoremap K :<C-U>echom "VK"<cr>
   nnoremap - :echom "-"<cr>
   nnoremap + :echom "+"<cr>
   Termdebug
@@ -397,9 +401,11 @@ func Test_termdebug_mapping()
   call WaitForAssert({-> assert_equal(3, winnr('$'))})
   wincmd b
   call assert_false(maparg('K', 'n', 0, 1)->empty())
+  call assert_false(maparg('K', 'x', 0, 1)->empty())
   call assert_false(maparg('-', 'n', 0, 1)->empty())
   call assert_false(maparg('+', 'n', 0, 1)->empty())
   call assert_false(maparg('K', 'n', 0, 1).buffer)
+  call assert_false(maparg('K', 'x', 0, 1).buffer)
   call assert_false(maparg('-', 'n', 0, 1).buffer)
   call assert_false(maparg('+', 'n', 0, 1).buffer)
   call assert_equal(':Evaluate<CR>', maparg('K', 'n', 0, 1).rhs)
@@ -408,12 +414,15 @@ func Test_termdebug_mapping()
   redraw!
   call WaitForAssert({-> assert_equal(1, winnr('$'))})
   call assert_false(maparg('K', 'n', 0, 1)->empty())
+  call assert_false(maparg('K', 'x', 0, 1)->empty())
   call assert_false(maparg('-', 'n', 0, 1)->empty())
   call assert_false(maparg('+', 'n', 0, 1)->empty())
   call assert_false(maparg('K', 'n', 0, 1).buffer)
+  call assert_false(maparg('K', 'x', 0, 1).buffer)
   call assert_false(maparg('-', 'n', 0, 1).buffer)
   call assert_false(maparg('+', 'n', 0, 1).buffer)
   call assert_equal(':echom "K"<cr>', maparg('K', 'n', 0, 1).rhs)
+  call assert_equal(':<C-U>echom "VK"<cr>', maparg('K', 'x', 0, 1).rhs)
 
   %bw!
 
@@ -597,22 +606,87 @@ function Test_termdebug_config_types()
   unlet g:termdebug_config
 endfunction
 
-function Test_termdebug_config_debug()
-  let s:error_message = '\[termdebug\] Termdebug already loaded'
+func Test_termdebug_toggle_break()
+  let g:test_is_flaky = 1
+  let bin_name = 'XTD_tbreak'
+  let src_name = bin_name .. '.c'
 
-  " USER mode: No error message shall be displayed
-  packadd termdebug
-  call assert_true(execute('messages') !~ s:error_message)
+  eval s:generate_files(bin_name)
 
-  " DEBUG mode: Error message shall now be displayed
-  let g:termdebug_config = {}
-  let g:termdebug_config['debug'] = 1
-  packadd termdebug
-  call assert_true(execute('messages') =~ s:error_message)
+  execute 'edit ' .. src_name
+  execute 'Termdebug ./' .. bin_name
 
-  unlet g:termdebug_config
-  unlet g:termdebug_loaded
-  " Revert DEBUG mode, by reloading the plugin
-  source $VIMRUNTIME/pack/dist/opt/termdebug/plugin/termdebug.vim
-endfunction
+  call WaitForAssert({-> assert_true(get(g:, "termdebug_is_running", v:false))})
+  call WaitForAssert({-> assert_equal(3, winnr('$'))})
+  let gdb_buf = winbufnr(1)
+  wincmd b
+
+  let bp_line = 22        " 'return' statement in main
+  execute "normal! " .. bp_line .. "G"
+  execute "ToggleBreak"
+
+  call term_wait(gdb_buf)
+  redraw!
+  call assert_equal([
+        \ {'lnum': bp_line, 'id': 1014, 'name': 'debugBreakpoint1.0',
+        \  'priority': 110, 'group': 'TermDebug'}],
+        \ sign_getplaced('', #{group: 'TermDebug'})[0].signs)
+
+  RunOrContinue
+  call term_wait(gdb_buf, 400)
+  redraw!
+  call WaitForAssert({-> assert_equal([
+        \ {'lnum': bp_line, 'id': 12, 'name': 'debugPC', 'priority': 110,
+        \  'group': 'TermDebug'},
+        \ {'lnum': bp_line, 'id': 1014, 'name': 'debugBreakpoint1.0',
+        \  'priority': 110, 'group': 'TermDebug'}],
+        \ sign_getplaced('', #{group: 'TermDebug'})[0].signs)})
+
+  " Add one break point
+  execute "normal! " .. bp_line .. "G"
+  execute "ToggleBreak"
+  call term_wait(gdb_buf)
+  redraw!
+  call WaitForAssert({-> assert_equal([
+        \ {'lnum': bp_line, 'id': 12, 'name': 'debugPC', 'priority': 110,
+        \  'group': 'TermDebug'}],
+        \ sign_getplaced('', #{group: 'TermDebug'})[0].signs)})
+
+  " Remove one break point
+  execute "normal! " .. bp_line .. "G"
+  execute "ToggleBreak"
+  call term_wait(gdb_buf)
+  redraw!
+  call WaitForAssert({-> assert_equal([
+        \ {'lnum': bp_line, 'id': 2014, 'name': 'debugBreakpoint2.0',
+        \  'priority': 110, 'group': 'TermDebug'},
+        \ {'lnum': bp_line, 'id': 12, 'name': 'debugPC', 'priority': 110,
+        \  'group': 'TermDebug'}],
+        \ sign_getplaced('', #{group: 'TermDebug'})[0].signs)})
+
+  " Remove multiple break points
+  execute "Break"
+  execute "Break"
+  execute "Break"
+  execute "Break"
+  call term_wait(gdb_buf, 400)
+  execute "ToggleBreak"
+  call term_wait(gdb_buf)
+  redraw!
+  call WaitForAssert({-> assert_equal([
+        \ {'lnum': bp_line, 'id': 12, 'name': 'debugPC', 'priority': 110,
+        \  'group': 'TermDebug'}],
+        \ sign_getplaced('', #{group: 'TermDebug'})[0].signs)})
+
+
+  wincmd t
+  quit!
+  redraw!
+  call WaitForAssert({-> assert_equal(1, winnr('$'))})
+  call assert_equal([], sign_getplaced('', #{group: 'TermDebug'})[0].signs)
+
+  eval s:cleanup_files(bin_name)
+  %bw!
+endfunc
+
 " vim: shiftwidth=2 sts=2 expandtab

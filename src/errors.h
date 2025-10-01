@@ -3136,10 +3136,8 @@ EXTERN char e_float_or_number_required_for_argument_nr[]
 	INIT(= N_("E1219: Float or Number required for argument %d"));
 EXTERN char e_string_or_number_required_for_argument_nr[]
 	INIT(= N_("E1220: String or Number required for argument %d"));
-# ifdef FEAT_JOB_CHANNEL
 EXTERN char e_string_or_blob_required_for_argument_nr[]
 	INIT(= N_("E1221: String or Blob required for argument %d"));
-# endif
 EXTERN char e_string_or_list_required_for_argument_nr[]
 	INIT(= N_("E1222: String or List required for argument %d"));
 EXTERN char e_string_or_dict_required_for_argument_nr[]
@@ -3224,7 +3222,6 @@ EXTERN char e_string_list_or_blob_required_for_argument_nr[]
 	INIT(= N_("E1252: String, List or Blob required for argument %d"));
 EXTERN char e_string_list_tuple_or_blob_required_for_argument_nr[]
 	INIT(= N_("E1253: String, List, Tuple or Blob required for argument %d"));
-// E1253 unused
 EXTERN char e_cannot_use_script_variable_in_for_loop[]
 	INIT(= N_("E1254: Cannot use script variable in for loop"));
 #endif
@@ -3416,8 +3413,8 @@ EXTERN char e_constructor_default_value_must_be_vnone_str[]
 	INIT(= N_("E1328: Constructor default value must be v:none: %s"));
 EXTERN char e_invalid_class_variable_declaration_str[]
 	INIT(= N_("E1329: Invalid class variable declaration: %s"));
-EXTERN char e_invalid_type_for_object_variable_str[]
-	INIT(= N_("E1330: Invalid type for object variable: %s"));
+EXTERN char e_invalid_type_in_variable_declaration_str[]
+	INIT(= N_("E1330: Invalid type used in variable declaration: %s"));
 EXTERN char e_public_must_be_followed_by_var_static_final_or_const[]
 	INIT(= N_("E1331: public must be followed by \"var\" or \"static\" or \"final\" or \"const\""));
 EXTERN char e_public_variable_name_cannot_start_with_underscore_str[]
@@ -3793,4 +3790,10 @@ EXTERN char e_socket_server_failed_connecting[]
 	INIT(= N_("E1566: Failed connecting to socket %s: %s"));
 EXTERN char e_socket_server_unavailable[]
 	INIT(= N_("E1567: Cannot start socket server, socket path is unavailable"));
+#endif
+EXTERN char e_osc_response_timed_out[]
+	INIT(= N_("E1568: OSC command response timed out: %.*s"));
+#ifdef FEAT_EVAL
+EXTERN char e_cannot_add_listener_in_listener_callback[]
+	INIT(= N_("E1569: Cannot use listener_add in a listener callback"));
 #endif

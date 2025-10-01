@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:		The Vim Project <https://github.com/vim/vim>
-" Last Change:		2025 Aug 10
+" Last Change:		2025 Sep 14
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " Listen very carefully, I will say this only once
@@ -219,8 +219,8 @@ au BufNewFile,BufRead *.au3			setf autoit
 " Autohotkey
 au BufNewFile,BufRead *.ahk			setf autohotkey
 
-" Autotest .at files are actually m4
-au BufNewFile,BufRead *.at			setf m4
+" Autotest .at files are actually Autoconf M4
+au BufNewFile,BufRead *.at			setf config
 
 " Avenue
 au BufNewFile,BufRead *.ave			setf ave
@@ -319,7 +319,7 @@ au BufNewFile,BufRead *.brs			setf brightscript
 au BufNewFile,BufRead *.bsd,*.bsdl			setf bsdl
 
 " Bazel (https://bazel.build) and Buck2 (https://buck2.build/)
-autocmd BufRead,BufNewFile *.bzl,*.bazel,WORKSPACE,WORKSPACE.bzlmod	setf bzl
+autocmd BufRead,BufNewFile *.bzl,*.bxl,*.bazel,WORKSPACE,WORKSPACE.bzlmod	setf bzl
 if has("fname_case")
   " There is another check for BUILD and BUCK further below.
   autocmd BufRead,BufNewFile *.BUILD,BUILD,BUCK		setf bzl
@@ -397,6 +397,9 @@ au BufNewFile,BufRead *.ck			setf chuck
 
 " Comshare Dimension Definition Language
 au BufNewFile,BufRead *.cdl			setf cdl
+
+" Codeowners
+au BufNewFile,BufRead CODEOWNERS		setf codeowners
 
 " Conary Recipe
 au BufNewFile,BufRead *.recipe			setf conaryrecipe
@@ -626,6 +629,9 @@ au BufNewFile,BufRead lynx.cfg			setf lynx
 
 " LyRiCs
 au BufNewFile,BufRead *.lrc			setf lyrics
+
+" Mamba configuration file
+au BufNewFile,BufRead .mambarc,mambarc		setf yaml
 
 " MLIR
 au BufNewFile,BufRead *.mlir			setf mlir
@@ -1157,9 +1163,6 @@ au BufNewFile,BufRead *.http			setf http
 " HTML with Ruby - eRuby
 au BufNewFile,BufRead *.erb,*.rhtml		setf eruby
 
-" HTML with M4
-au BufNewFile,BufRead *.html.m4			setf htmlm4
-
 " Some template.  Used to be HTML Cheetah.
 au BufNewFile,BufRead *.tmpl			setf template
 
@@ -1190,6 +1193,7 @@ au BufNewFile,BufRead */.i3/config		setf i3config
 
 " sway
 au BufNewFile,BufRead */sway/config		setf swayconfig
+au BufNewFile,BufRead */sway/config.d/*		setf swayconfig
 au BufNewFile,BufRead */.sway/config		setf swayconfig
 
 " Icon
@@ -1343,6 +1347,9 @@ au BufNewFile,BufRead *.jl			setf julia
 " Just
 au BufNewFile,BufRead \c{,*.}justfile,\c*.just setf just
 
+" Kitty
+au BufNewFile,BufRead kitty.conf,*/kitty/*.conf setf kitty
+
 " KAREL
 au BufNewFile,BufRead *.kl setf karel
 if has("fname_case")
@@ -1379,6 +1386,9 @@ au BufNewFile,BufRead *.ks			setf kscript
 
 " Kconfig
 au BufNewFile,BufRead Kconfig,Kconfig.debug,Config.in	setf kconfig
+
+" Kyaml
+au BufNewFile,BufRead *.kyaml,*.kyml		setf yaml
 
 " Lace (ISE)
 au BufNewFile,BufRead *.ace,*.ACE		setf lace
@@ -1519,8 +1529,8 @@ au BufNewFile,BufRead *.lsl			call dist#ft#FTlsl()
 au BufNewFile,BufRead *.lss			setf lss
 
 " M4
-au BufNewFile,BufRead *.m4
-	\ if expand("<afile>") !~? 'html.m4$\|fvwm2rc' | setf m4 | endif
+au BufNewFile,BufRead *.m4	call dist#ft#FTm4()
+
 au BufNewFile,BufRead .m4_history		setf m4
 
 " MaGic Point
@@ -1676,7 +1686,9 @@ au BufNewFile,BufRead *.msql			setf msql
 au BufNewFile,BufRead *.mysql,.mysql_history	setf mysql
 
 " Tcl Shell RC file
-au BufNewFile,BufRead tclsh.rc			setf tcl
+" Vivado journal file records REPL input in tcl syntax
+" Vivado log file records REPL input in tcl syntax and output
+au BufNewFile,BufRead tclsh.rc,vivado*.{jou,log}	setf tcl
 
 " M$ Resource files
 " /etc/Muttrc.d/file.rc is muttrc
@@ -1835,7 +1847,7 @@ au BufNewFile,BufRead pf.conf				setf pf
 
 " ini style config files, using # comments
 au BufNewFile,BufRead pacman.conf,mpv.conf		setf confini
-au BufNewFile,BufRead */.aws/config,*/.aws/credentials	setf confini
+au BufNewFile,BufRead */.aws/config,*/.aws/credentials,*/.aws/cli/alias	setf confini
 au BufNewFile,BufRead *.nmconnection			setf confini
 au BufNewFile,BufRead paru.conf				setf confini
 au BufNewFile,BufRead */{,.}gnuradio/*.conf		setf confini
@@ -3064,7 +3076,7 @@ au BufNewFile,BufRead *.y			call dist#ft#FTy()
 
 " Yaml
 au BufNewFile,BufRead *.yaml,*.yml,*.eyaml		setf yaml
-au BufNewFile,BufRead */.kube/config	setf yaml
+au BufNewFile,BufRead */.kube/config,*/.kube/kuberc	setf yaml
 
 " Raml
 au BufNewFile,BufRead *.raml			setf raml
@@ -3190,11 +3202,7 @@ au BufNewFile,BufRead */.fvwm/*			call s:StarSetf('fvwm')
 au BufNewFile,BufRead *fvwmrc*,*fvwm95*.hook
 	\ let b:fvwm_version = 1 | call s:StarSetf('fvwm')
 au BufNewFile,BufRead *fvwm2rc*
-	\ if expand("<afile>:e") == "m4"
-	\|  call s:StarSetf('fvwm2m4')
-	\|else
-	\|  let b:fvwm_version = 2 | call s:StarSetf('fvwm')
-	\|endif
+	\ let b:fvwm_version = 2 | call s:StarSetf('fvwm')
 
 " Gedcom
 au BufNewFile,BufRead */tmp/lltmp*		call s:StarSetf('gedcom')
@@ -3411,6 +3419,10 @@ au BufNewFile,BufRead *.blp			setf blueprint
 
 " Blueprint build system file
 au BufNewFile,BufRead *.bp			setf bp
+
+" Generic log file
+" Disabled cause it is too distracting
+" au BufNewFile,BufRead *.log,*_log,*.LOG,*_LOG	setf log
 
 " Use the filetype detect plugins.  They may overrule any of the previously
 " detected filetypes.

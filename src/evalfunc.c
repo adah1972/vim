@@ -97,6 +97,7 @@ static void f_inputsecret(typval_T *argvars, typval_T *rettv);
 static void f_interrupt(typval_T *argvars, typval_T *rettv);
 static void f_invert(typval_T *argvars, typval_T *rettv);
 static void f_islocked(typval_T *argvars, typval_T *rettv);
+static void f_items(typval_T *argvars, typval_T *rettv);
 static void f_keytrans(typval_T *argvars, typval_T *rettv);
 static void f_last_buffer_nr(typval_T *argvars, typval_T *rettv);
 static void f_libcall(typval_T *argvars, typval_T *rettv);
@@ -726,10 +727,11 @@ arg_list_tuple_dict_blob_or_string(
 	    || type->tt_type == VAR_STRING
 	    || type_any_or_unknown(type))
 	return OK;
-    arg_type_mismatch(&t_list_any, type, context->arg_idx + 1);
+
+    semsg(_(e_list_tuple_dict_blob_or_string_required_for_argument_nr),
+						 context->arg_idx + 1);
     return FAIL;
 }
-
 
 /*
  * Check second argument of map(), filter(), foreach().
@@ -1248,14 +1250,14 @@ static argcheck_T arg1_list_number[] = {arg_list_number};
 static argcheck_T arg1_reverse[] = {arg_reverse};
 static argcheck_T arg1_list_or_tuple_or_dict[] = {arg_list_or_tuple_or_dict};
 static argcheck_T arg1_list_string[] = {arg_list_string};
-static argcheck_T arg1_string_list_tuple_or_dict[] = {arg_string_list_tuple_or_dict};
+static argcheck_T arg1_list_tuple_dict_blob_or_string[] = {arg_list_tuple_dict_blob_or_string};
 static argcheck_T arg1_lnum[] = {arg_lnum};
 static argcheck_T arg1_number[] = {arg_number};
 static argcheck_T arg1_string[] = {arg_string};
 static argcheck_T arg1_string_or_list_any[] = {arg_string_or_list_any};
 static argcheck_T arg1_string_or_list_string[] = {arg_string_or_list_string};
 static argcheck_T arg1_string_or_nr[] = {arg_string_or_nr};
-static argcheck_T arg2_any_buffer[] = {arg_any, arg_buffer};
+static argcheck_T arg1_string_or_blob[] = {arg_string_or_blob};
 static argcheck_T arg2_buffer_any[] = {arg_buffer, arg_any};
 static argcheck_T arg2_buffer_bool[] = {arg_buffer, arg_bool};
 static argcheck_T arg2_buffer_list_any[] = {arg_buffer, arg_list_any};
@@ -1298,6 +1300,7 @@ static argcheck_T arg2_string_or_list_number[] = {arg_string_or_list_any, arg_nu
 static argcheck_T arg2_string_string_or_number[] = {arg_string, arg_string_or_nr};
 static argcheck_T arg2_blob_dict[] = {arg_blob, arg_dict_any};
 static argcheck_T arg2_list_or_tuple_string[] = {arg_list_or_tuple, arg_string};
+static argcheck_T arg3_any_buffer_bool[] = {arg_any, arg_buffer, arg_bool};
 static argcheck_T arg3_any_list_dict[] = {arg_any, arg_list_any, arg_dict_any};
 static argcheck_T arg3_buffer_lnum_lnum[] = {arg_buffer, arg_lnum, arg_lnum};
 static argcheck_T arg3_buffer_number_number[] = {arg_buffer, arg_number, arg_number};
@@ -1798,6 +1801,30 @@ ret_remove(int argcount,
 }
 
     static type_T *
+ret_max_min(int argcount,
+	type2_T *argtypes,
+	type_T	**decl_type)
+{
+    if (argcount > 0)
+    {
+	type_T *t = argtypes[0].type_decl;
+	if (t->tt_type == VAR_LIST || t->tt_type == VAR_DICT)
+	    t = t->tt_member;
+	else
+	    t = &t_any;
+	*decl_type = t;
+
+	t = argtypes[0].type_curr;
+	if (t->tt_type == VAR_LIST || t->tt_type == VAR_DICT)
+	    t = t->tt_member;
+	else
+	    t = &t_any;
+	return t;
+    }
+    return &t_any;
+}
+
+    static type_T *
 ret_getreg(int argcount,
 	type2_T *argtypes UNUSED,
 	type_T	**decl_type)
@@ -1908,7 +1935,7 @@ typedef struct
 # define TERM_FUNC(name) NULL
 #endif
 
-static funcentry_T global_functions[] =
+static const funcentry_T global_functions[] =
 {
     {"abs",		1, 1, FEARG_1,	    arg1_float_or_nr,
 			ret_any,	    f_abs},
@@ -2432,7 +2459,7 @@ static funcentry_T global_functions[] =
 			ret_number_bool,    f_islocked},
     {"isnan",		1, 1, FEARG_1,	    arg1_float_or_nr,
 			ret_number_bool,    MATH_FUNC(f_isnan)},
-    {"items",		1, 1, FEARG_1,	    arg1_string_list_tuple_or_dict,
+    {"items",		1, 1, FEARG_1,	    arg1_list_tuple_dict_blob_or_string,
 			ret_list_items,	    f_items},
     {"job_getchannel",	1, 1, FEARG_1,	    arg1_job,
 			ret_channel,	    JOB_FUNC(f_job_getchannel)},
@@ -2480,7 +2507,7 @@ static funcentry_T global_functions[] =
 			ret_string,	    f_list2str},
     {"list2tuple",	1, 1, FEARG_1,	    arg1_list_any,
 			ret_tuple_any,	    f_list2tuple},
-    {"listener_add",	1, 2, FEARG_2,	    arg2_any_buffer,
+    {"listener_add",	1, 3, FEARG_2,	    arg3_any_buffer_bool,
 			ret_number,	    f_listener_add},
     {"listener_flush",	0, 1, FEARG_1,	    arg1_buffer,
 			ret_void,	    f_listener_flush},
@@ -2539,7 +2566,7 @@ static funcentry_T global_functions[] =
     {"matchstrpos",	2, 4, FEARG_1,	    arg24_match_func,
 			ret_list_any,	    f_matchstrpos},
     {"max",		1, 1, FEARG_1,	    arg1_list_or_tuple_or_dict,
-			ret_number,	    f_max},
+			ret_max_min,	    f_max},
     {"menu_info",	1, 2, FEARG_1,	    arg2_string,
 			ret_dict_any,
 #ifdef FEAT_MENU
@@ -2549,7 +2576,7 @@ static funcentry_T global_functions[] =
 #endif
 			},
     {"min",		1, 1, FEARG_1,	    arg1_list_or_tuple_or_dict,
-			ret_number,	    f_min},
+			ret_max_min,	    f_min},
     {"mkdir",		1, 3, FEARG_1,	    arg3_string_string_number,
 			ret_number_bool,    f_mkdir},
     {"mode",		0, 1, FEARG_1,	    arg1_bool,
@@ -2625,9 +2652,11 @@ static funcentry_T global_functions[] =
     {"popup_settext",	2, 2, FEARG_1,	    arg2_number_string_or_list,
 			ret_void,	    PROP_FUNC(f_popup_settext)},
     {"popup_show",	1, 1, FEARG_1,	    arg1_number,
-			ret_void,	    PROP_FUNC(f_popup_show)},
+			ret_number,	    PROP_FUNC(f_popup_show)},
     {"pow",		2, 2, FEARG_1,	    arg2_float_or_nr,
 			ret_float,	    f_pow},
+    {"preinserted",	0, 0, 0,	    NULL,
+			ret_number_bool,    f_preinserted},
     {"prevnonblank",	1, 1, FEARG_1,	    arg1_lnum,
 			ret_number,	    f_prevnonblank},
     {"printf",		1, 19, FEARG_2,	    arg119_printf,
@@ -2816,7 +2845,7 @@ static funcentry_T global_functions[] =
 			ret_number_bool,    f_settagstack},
     {"setwinvar",	3, 3, FEARG_3,	    arg3_number_string_any,
 			ret_void,	    f_setwinvar},
-    {"sha256",		1, 1, FEARG_1,	    arg1_string,
+    {"sha256",		1, 1, FEARG_1,	    arg1_string_or_blob,
 			ret_string,
 #ifdef FEAT_CRYPT
 	    f_sha256
@@ -3114,6 +3143,10 @@ static funcentry_T global_functions[] =
 			ret_dict_any,	    f_undotree},
     {"uniq",		1, 3, FEARG_1,	    arg13_sortuniq,
 			ret_first_arg,	    f_uniq},
+    {"uri_decode",	1, 1, FEARG_1,	    arg1_string,
+			ret_string,	    f_uridecode},
+    {"uri_encode",	1, 1, FEARG_1,	    arg1_string,
+			ret_string,	    f_uriencode},
     {"utf16idx",	2, 4, FEARG_1,	    arg4_string_number_bool_bool,
 			ret_number,	    f_utf16idx},
     {"values",		1, 1, FEARG_1,	    arg1_dict_any,
@@ -3330,7 +3363,7 @@ internal_func_check_arg_types(
 		return FAIL;
     }
 
-    argcheck_T	*argchecks = global_functions[idx].f_argcheck;
+    const argcheck_T	*argchecks = global_functions[idx].f_argcheck;
 
     if (argchecks == NULL)
 	return OK;
@@ -7587,6 +7620,13 @@ f_has(typval_T *argvars, typval_T *rettv)
 		0
 #endif
 		},
+	{"wayland_focus_steal",
+#ifdef FEAT_WAYLAND_CLIPBOARD_FS
+		1
+#else
+		0
+#endif
+		},
 	{"wildignore", 1},
 	{"wildmenu", 1},
 	{"windows", 1},
@@ -8717,6 +8757,26 @@ f_islocked(typval_T *argvars, typval_T *rettv)
 }
 
 /*
+ * "items(dict)" function
+ */
+    static void
+f_items(typval_T *argvars, typval_T *rettv)
+{
+    if (argvars[0].v_type == VAR_STRING)
+	string2items(argvars, rettv);
+    else if (argvars[0].v_type == VAR_LIST)
+	list2items(argvars, rettv);
+    else if (argvars[0].v_type == VAR_TUPLE)
+	tuple2items(argvars, rettv);
+    else if (argvars[0].v_type == VAR_BLOB)
+	blob2items(argvars, rettv);
+    else if (argvars[0].v_type == VAR_DICT)
+	dict2items(argvars, rettv);
+    else
+	semsg(_(e_list_tuple_dict_blob_or_string_required_for_argument_nr), 1);
+}
+
+/*
  * "keytrans()" function
  */
     static void
@@ -9509,17 +9569,18 @@ f_matchstrpos(typval_T *argvars, typval_T *rettv)
 max_min(typval_T *argvars, typval_T *rettv, int domax)
 {
     varnumber_T	n = 0;
-    varnumber_T	i;
-    int		error = FALSE;
 
     if (in_vim9script() &&
 	    check_for_list_or_tuple_or_dict_arg(argvars, 0) == FAIL)
 	return;
 
+    rettv->vval.v_number = 0;
+
     if (argvars[0].v_type == VAR_LIST)
     {
 	list_T		*l;
 	listitem_T	*li;
+	typval_T	*tv = NULL;
 
 	l = argvars[0].vval.v_list;
 	if (l != NULL && l->lv_len > 0)
@@ -9531,42 +9592,44 @@ max_min(typval_T *argvars, typval_T *rettv, int domax)
 		else
 		    n = l->lv_u.nonmat.lv_start + ((varnumber_T)l->lv_len - 1)
 						    * l->lv_u.nonmat.lv_stride;
+		rettv->vval.v_number = n;
 	    }
 	    else
 	    {
-		li = l->lv_first;
-		if (li != NULL)
+		FOR_ALL_LIST_ITEMS(l, li)
 		{
-		    n = tv_get_number_chk(&li->li_tv, &error);
-		    if (error)
-			return; // type error; errmsg already given
-		    for (;;)
+		    if (tv == NULL)
+			tv = &li->li_tv;
+		    else
 		    {
-			li = li->li_next;
-			if (li == NULL)
-			    break;
-			i = tv_get_number_chk(&li->li_tv, &error);
-			if (error)
-			    return; // type error; errmsg already given
-			if (domax ? i > n : i < n)
-			    n = i;
+			int res;
+			if (typval_compare2(&li->li_tv, tv,
+				domax ? EXPR_GREATER : EXPR_SMALLER, FALSE, &res) == FAIL)
+			    return;
+			if (res == OK)
+			    tv = &li->li_tv;
 		    }
 		}
+
+		if (tv != NULL)
+		    copy_tv(tv, rettv);
 	    }
 	}
     }
     else if (argvars[0].v_type == VAR_TUPLE)
     {
-	n = tuple_max_min(argvars[0].vval.v_tuple, domax, &error);
-	if (error)
-	    return;
+	typval_T *tv;
+
+	tv = tuple_max_min(argvars[0].vval.v_tuple, domax);
+	if (tv != NULL)
+	    copy_tv(tv, rettv);
     }
     else if (argvars[0].v_type == VAR_DICT)
     {
 	dict_T		*d;
-	int		first = TRUE;
 	hashitem_T	*hi;
 	int		todo;
+	typval_T	*tv = NULL;
 
 	d = argvars[0].vval.v_dict;
 	if (d != NULL)
@@ -9577,24 +9640,26 @@ max_min(typval_T *argvars, typval_T *rettv, int domax)
 		if (!HASHITEM_EMPTY(hi))
 		{
 		    --todo;
-		    i = tv_get_number_chk(&HI2DI(hi)->di_tv, &error);
-		    if (error)
-			return; // type error; errmsg already given
-		    if (first)
+		    if (tv == NULL)
+			tv = &HI2DI(hi)->di_tv;
+		    else
 		    {
-			n = i;
-			first = FALSE;
+			int res;
+			if (typval_compare2(&HI2DI(hi)->di_tv, tv,
+				domax ? EXPR_GREATER : EXPR_SMALLER, FALSE, &res) == FAIL)
+			    return;
+			if (res == OK)
+			    tv = &HI2DI(hi)->di_tv;
 		    }
-		    else if (domax ? i > n : i < n)
-			n = i;
 		}
 	    }
 	}
+
+	if (tv != NULL)
+	    copy_tv(tv, rettv);
     }
     else
 	semsg(_(e_argument_of_str_must_be_list_or_dictionary), domax ? "max()" : "min()");
-
-    rettv->vval.v_number = n;
 }
 
 /*
@@ -11687,20 +11752,33 @@ f_settagstack(typval_T *argvars, typval_T *rettv)
 
 #ifdef FEAT_CRYPT
 /*
- * "sha256({string})" function
+ * "sha256({expr})" function
  */
     static void
 f_sha256(typval_T *argvars, typval_T *rettv)
 {
     char_u	*p;
+    int		len;
 
-    if (in_vim9script() && check_for_string_arg(argvars, 0) == FAIL)
+    if (in_vim9script() && check_for_string_or_blob_arg(argvars, 0) == FAIL)
 	return;
 
-    p = tv_get_string(&argvars[0]);
-    rettv->vval.v_string = vim_strsave(
-				    sha256_bytes(p, (int)STRLEN(p), NULL, 0));
     rettv->v_type = VAR_STRING;
+    rettv->vval.v_string = NULL;
+
+    if (argvars[0].v_type == VAR_BLOB)
+    {
+	blob_T *blob = argvars[0].vval.v_blob;
+	p = blob != NULL ? (char_u *)blob->bv_ga.ga_data : (char_u *)"";
+	len = blob != NULL ? blob->bv_ga.ga_len : 0;
+	rettv->vval.v_string = vim_strsave(sha256_bytes(p, len, NULL, 0));
+    }
+    else
+    {
+	p = tv_get_string(&argvars[0]);
+	rettv->vval.v_string = vim_strsave(
+				    sha256_bytes(p, (int)STRLEN(p), NULL, 0));
+    }
 }
 #endif // FEAT_CRYPT
 
@@ -12547,9 +12625,11 @@ f_type(typval_T *argvars, typval_T *rettv)
 		}
 		break;
 	    }
+	case VAR_VOID:
+	    emsg(_(e_cannot_use_void_value));
+	    break;
 	case VAR_UNKNOWN:
 	case VAR_ANY:
-	case VAR_VOID:
 	    internal_error_no_abort("f_type(UNKNOWN)");
 	    n = -1;
 	    break;

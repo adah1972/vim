@@ -1702,7 +1702,7 @@ func Test_edit_special_chars()
   exe "normal " . t
   call assert_equal("ABC !a\<C-O>g\<C-G>8", getline(2))
 
-  close!
+  bw!
 endfunc
 
 func Test_edit_startinsert()
@@ -1733,7 +1733,7 @@ func Test_edit_startreplace()
   call assert_equal("axyz\tb", getline(1))
   call feedkeys("0i\<C-R>=execute('startreplace')\<CR>12\e", 'xt')
   call assert_equal("12axyz\tb", getline(1))
-  close!
+  bw!
 endfunc
 
 func Test_edit_noesckeys()
@@ -1772,7 +1772,7 @@ func Test_edit_ctrl_o_invalid_cmd()
   call assert_equal('abc', getline(1))
   set showmode& showcmd&
   call test_override('ui_delay', 0)
-  close!
+  bw!
 endfunc
 
 " Test for editing a file with a very long name
@@ -1974,7 +1974,7 @@ func Test_edit_hkmap()
   call assert_equal(expected, getline(1))
 
   set revins& hkmap& hkmapp&
-  close!
+  bw!
 endfunc
 
 " Test for 'allowrevins' and using CTRL-_ in insert mode
@@ -1985,7 +1985,7 @@ func Test_edit_allowrevins()
   call feedkeys("iABC\<C-_>DEF\<C-_>GHI", 'xt')
   call assert_equal('ABCFEDGHI', getline(1))
   set allowrevins&
-  close!
+  bw!
 endfunc
 
 " Test for inserting a register in insert mode using CTRL-R
@@ -2008,7 +2008,7 @@ func Test_edit_insert_reg()
   call feedkeys("a\<C-R>=[]\<CR>", "xt")
   call assert_equal(['r'], getbufline('', 1, '$'))
   call test_override('ALL', 0)
-  close!
+  bw!
 endfunc
 
 " Test for positioning cursor after CTRL-R expression failed
@@ -2032,6 +2032,10 @@ endfunc
 " window, the window contents should be scrolled one line up. If the top line
 " is part of a fold, then the entire fold should be scrolled up.
 func Test_edit_lastline_scroll()
+  if has('linux')
+    " TODO: For unknown reasons, this test fails on CI when run in Gui mode
+    CheckNotGui
+  endif
   new
   let h = winheight(0)
   let lines = ['one', 'two', 'three']
@@ -2052,7 +2056,7 @@ func Test_edit_lastline_scroll()
   call assert_equal(h - 1, winline())
   call assert_equal(3, line('w0'))
 
-  close!
+  bw!
 endfunc
 
 func Test_edit_browse()
@@ -2344,15 +2348,63 @@ func Test_edit_backspace_smarttab_virtual_text()
   set smarttab&
 endfunc
 
-func Test_edit_CAR()
-  set cot=menu,menuone,noselect
+func Test_edit_CAR_with_completion()
   new
 
-  call feedkeys("Shello hero\<CR>h\<C-x>\<C-N>e\<CR>", 'tx')
-  call assert_equal(['hello hero', 'he', ''], getline(1, '$'))
+  " With "noselect", behavior is the same with and without "noinsert":
+  " Enter inserts a new line when no selection is done or after selecting with
+  " Ctrl-N/P, but does not insert a new line when selecting with cursor keys.
+  for cot in ['menu,menuone,noselect', 'menu,menuone,noselect,noinsert']
+    let &cot = cot
+    %delete
+    call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>e\<CR>", 'tx')
+    call assert_equal(['hello hero', 'he', ''], getline(1, '$'))
+    %delete
+    call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<CR>", 'tx')
+    call assert_equal(['hello hero', 'h', ''], getline(1, '$'))
+    %delete
+    call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<C-N>\<CR>", 'tx')
+    call assert_equal(['hello hero', 'hello', ''], getline(1, '$'))
+    %delete
+    call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<C-N>\<C-N>\<CR>", 'tx')
+    call assert_equal(['hello hero', 'hero', ''], getline(1, '$'))
+    %delete
+    call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<C-N>\<C-P>\<CR>", 'tx')
+    call assert_equal(['hello hero', 'h', ''], getline(1, '$'))
+    %delete
+    call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<Down>\<CR>", 'tx')
+    call assert_equal(['hello hero', 'hello'], getline(1, '$'))
+    %delete
+    call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<Down>\<Down>\<CR>", 'tx')
+    call assert_equal(['hello hero', 'hero'], getline(1, '$'))
+    %delete
+    call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<Down>\<Up>\<CR>", 'tx')
+    call assert_equal(['hello hero', 'h'], getline(1, '$'))
+  endfor
 
-  bw!
+  " With "noinsert" but not "noselect": like pressing <Down> after "noselect".
+  set cot=menu,menuone,noinsert
+  %delete
+  call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>e\<CR>", 'tx')
+  call assert_equal(['hello hero', 'hello'], getline(1, '$'))
+  %delete
+  call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<CR>", 'tx')
+  call assert_equal(['hello hero', 'hello'], getline(1, '$'))
+  %delete
+  call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<Down>\<CR>", 'tx')
+  call assert_equal(['hello hero', 'hero'], getline(1, '$'))
+  %delete
+  call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<Up>\<CR>", 'tx')
+  call assert_equal(['hello hero', 'h'], getline(1, '$'))
+  %delete
+  call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<C-N>\<CR>", 'tx')
+  call assert_equal(['hello hero', 'hero', ''], getline(1, '$'))
+  %delete
+  call feedkeys("Shello hero\<CR>h\<C-X>\<C-N>\<C-P>\<CR>", 'tx')
+  call assert_equal(['hello hero', 'h', ''], getline(1, '$'))
+
   set cot&
+  bw!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

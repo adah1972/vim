@@ -4,7 +4,7 @@ vim9script
 
 # Author: Bram Moolenaar
 # Copyright: Vim license applies, see ":help license"
-# Last Change: 2025 Jul 08
+# Last Change: 2025 Sep 15
 # Converted to Vim9: Ubaldo Tiberi <ubaldo.tiberi@gmail.com>
 
 # WORK IN PROGRESS - The basics works stable, more to come
@@ -52,14 +52,6 @@ def Echowarn(msg: string)
 enddef
 
 # Variables to keep their status among multiple instances of Termdebug
-# Avoid to source the script twice.
-if exists('g:termdebug_loaded')
-  if DEBUG
-    Echoerr('Termdebug already loaded.')
-  endif
-  finish
-endif
-g:termdebug_loaded = true
 g:termdebug_is_running = false
 
 
@@ -147,6 +139,7 @@ var winbar_winids: list<number>
 var saved_mousemodel: string
 
 var saved_K_map: dict<any>
+var saved_visual_K_map: dict<any>
 var saved_plus_map: dict<any>
 var saved_minus_map: dict<any>
 
@@ -226,6 +219,7 @@ def InitScriptVariables()
   saved_K_map = maparg('K', 'n', false, true)
   saved_plus_map = maparg('+', 'n', false, true)
   saved_minus_map = maparg('-', 'n', false, true)
+  saved_visual_K_map = maparg('K', 'x', false, true)
 
   if has('menu')
     saved_mousemodel = &mousemodel
@@ -1179,6 +1173,7 @@ def InstallCommands()
 
   command -nargs=? Break  SetBreakpoint(<q-args>)
   command -nargs=? Tbreak  SetBreakpoint(<q-args>, true)
+  command ToggleBreak ToggleBreak()
   command Clear  ClearBreakpoint()
   command Step  SendResumingCommand('-exec-step')
   command Over  SendResumingCommand('-exec-next')
@@ -1188,6 +1183,7 @@ def InstallCommands()
   command -nargs=* Arguments  SendResumingCommand('-exec-arguments ' .. <q-args>)
   command Stop StopCommand()
   command Continue ContinueCommand()
+  command RunOrContinue RunOrContinue()
 
   command -nargs=* Frame  Frame(<q-args>)
   command -count=1 Up  Up(<count>)
@@ -1211,6 +1207,9 @@ def InstallCommands()
   if map
     if !empty(saved_K_map) && !saved_K_map.buffer || empty(saved_K_map)
       nnoremap K :Evaluate<CR>
+    endif
+    if !empty(saved_visual_K_map) && !saved_visual_K_map.buffer || empty(saved_visual_K_map)
+      xnoremap K :Evaluate<CR>
     endif
   endif
 
@@ -1299,12 +1298,20 @@ def DeleteCommands()
   delcommand Asm
   delcommand Var
   delcommand Winbar
+  delcommand RunOrContinue
+  delcommand ToggleBreak
 
 
   if !empty(saved_K_map) && !saved_K_map.buffer
     mapset(saved_K_map)
   elseif empty(saved_K_map)
     silent! nunmap K
+  endif
+
+  if !empty(saved_visual_K_map) && !saved_visual_K_map.buffer
+    mapset(saved_visual_K_map)
+  elseif empty(saved_visual_K_map)
+    silent! xunmap K
   endif
 
   if !empty(saved_plus_map) && !saved_plus_map.buffer
@@ -1436,11 +1443,32 @@ def ClearBreakpoint()
   endif
 enddef
 
+def ToggleBreak()
+  var fname = fnameescape(expand('%:p'))
+  var lnum = line('.')
+  var bploc = printf('%s:%d', fname, lnum)
+  if has_key(breakpoint_locations, bploc)
+    while has_key(breakpoint_locations, bploc)
+        ClearBreakpoint()
+    endwhile
+  else
+    SetBreakpoint("")
+  endif
+enddef
+
 def Run(args: string)
   if args != ''
     SendResumingCommand($'-exec-arguments {args}')
   endif
   SendResumingCommand('-exec-run')
+enddef
+
+def RunOrContinue()
+    if running
+      ContinueCommand()
+    else
+      Run('')
+    endif
 enddef
 
 # :Frame - go to a specific frame in the stack
@@ -1517,7 +1545,6 @@ def GetEvaluationExpression(range: number, arg: string): string
   if arg != ''
     # user supplied evaluation
     expr = CleanupExpr(arg)
-    # DSW: replace "likely copy + paste" assignment
     expr = substitute(expr, '"\([^"]*\)": *', '\1=', 'g')
   elseif range == 2
     # no evaluation but provided but range set
@@ -2001,7 +2028,10 @@ def HandleNewBreakpoint(msg: string, modifiedFlag: bool)
     if !has_key(breakpoint_locations, bploc)
       breakpoint_locations[bploc] = []
     endif
-    breakpoint_locations[bploc] += [id]
+    if breakpoint_locations[bploc]->index(id) == -1
+      # Make sure all ids are unique
+      breakpoint_locations[bploc] += [id]
+    endif
 
     var posMsg = ''
     if bufloaded(fname)
