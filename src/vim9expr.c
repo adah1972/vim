@@ -14,12 +14,7 @@
 #define USING_FLOAT_STUFF
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
-
-// When not generating protos this is included in proto.h
-#ifdef PROTO
-# include "vim9.h"
-#endif
+#if defined(FEAT_EVAL)
 
 // flag passed from compile_subscript() to compile_load_scriptvar()
 static int paren_follows_after_expr = 0;
@@ -1752,7 +1747,7 @@ compile_tuple(
  * "*arg" points to the '('.
  * Returns OK/FAIL when a lambda is recognized, NOTDONE if it's not a lambda.
  */
-    static int
+    int
 compile_lambda(char_u **arg, cctx_T *cctx)
 {
     int		r;

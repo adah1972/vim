@@ -214,6 +214,7 @@ runtime/ftplugin/julia.vim				@carlobaldassi
 runtime/ftplugin/just.vim				@pbnj
 runtime/ftplugin/kconfig.vim				@chrisbra
 runtime/ftplugin/kdl.vim				@imsnif @jiangyinzuo
+runtime/ftplugin/kerml.vim			    @daumantas-kavolis-sensmetry
 runtime/ftplugin/kivy.vim				@ribru17
 runtime/ftplugin/kotlin.vim				@udalov
 runtime/ftplugin/lc.vim					@ribru17
@@ -288,6 +289,7 @@ runtime/ftplugin/slint.vim				@ribru17
 runtime/ftplugin/snakemake.vim				@ribru17
 runtime/ftplugin/solidity.vim				@coti-z
 runtime/ftplugin/solution.vim				@dkearns
+runtime/ftplugin/soy.vim				@ribru17
 runtime/ftplugin/spajson.vim				@dseomn
 runtime/ftplugin/spec.vim				@ignatenkobrain
 runtime/ftplugin/squirrel.vim				@ribru17
@@ -296,6 +298,7 @@ runtime/ftplugin/sshdconfig.vim				@jiangyinzuo
 runtime/ftplugin/svelte.vim				@igorlfs
 runtime/ftplugin/sway.vim				@ribru17
 runtime/ftplugin/swayconfig.vim				@jamespeapen
+runtime/ftplugin/sysml.vim			    @daumantas-kavolis-sensmetry
 runtime/ftplugin/systemverilog.vim			@Kocha
 runtime/ftplugin/swig.vim				@jmarrec
 runtime/ftplugin/tap.vim				@petdance
@@ -585,6 +588,7 @@ runtime/syntax/pbtxt.vim				@lakshayg
 runtime/syntax/pdf.vim					@tpope
 runtime/syntax/perl.vim					@petdance
 runtime/syntax/php.vim					@TysonAndre
+runtime/syntax/pkl.vim					@jclsn
 runtime/syntax/plsql.vim				@lee-lindley
 runtime/syntax/pod.vim					@petdance
 runtime/syntax/poefilter.vim				@ObserverOfTime
@@ -686,6 +690,7 @@ src/po/ru.po						@RestorerZ
 src/po/sr.po						@eevan78
 src/po/tr.po						@bitigchi
 src/po/uk.po						@sakhnik
+src/proto/gen_prototypes.py				@h-east
 src/xxd/						@jnweiger
 
 # vim:ft=codeowners

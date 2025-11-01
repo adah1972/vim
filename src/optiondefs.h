@@ -310,7 +310,7 @@ struct vimoption
 # define ISP_LATIN1 (char_u *)"@,161-255"
 #endif
 
-# define HIGHLIGHT_INIT "8:SpecialKey,~:EndOfBuffer,@:NonText,d:Directory,e:ErrorMsg,i:IncSearch,l:Search,y:CurSearch,m:MoreMsg,M:ModeMsg,n:LineNr,a:LineNrAbove,b:LineNrBelow,N:CursorLineNr,G:CursorLineSign,O:CursorLineFold,r:Question,s:StatusLine,S:StatusLineNC,c:VertSplit,t:Title,v:Visual,V:VisualNOS,w:WarningMsg,W:WildMenu,f:Folded,F:FoldColumn,A:DiffAdd,C:DiffChange,D:DiffDelete,T:DiffText,E:DiffTextAdd,>:SignColumn,-:Conceal,B:SpellBad,P:SpellCap,R:SpellRare,L:SpellLocal,+:Pmenu,=:PmenuSel,k:PmenuMatch,<:PmenuMatchSel,[:PmenuKind,]:PmenuKindSel,{:PmenuExtra,}:PmenuExtraSel,x:PmenuSbar,X:PmenuThumb,*:TabLine,#:TabLineSel,_:TabLineFill,!:CursorColumn,.:CursorLine,o:ColorColumn,q:QuickFixLine,z:StatusLineTerm,Z:StatusLineTermNC,g:MsgArea,h:ComplMatchIns,%:TabPanel,^:TabPanelSel,&:TabPanelFill,I:PreInsert"
+# define HIGHLIGHT_INIT "8:SpecialKey,~:EndOfBuffer,@:NonText,d:Directory,e:ErrorMsg,i:IncSearch,l:Search,y:CurSearch,m:MoreMsg,M:ModeMsg,n:LineNr,a:LineNrAbove,b:LineNrBelow,N:CursorLineNr,G:CursorLineSign,O:CursorLineFold,r:Question,s:StatusLine,S:StatusLineNC,c:VertSplit,t:Title,v:Visual,V:VisualNOS,w:WarningMsg,W:WildMenu,f:Folded,F:FoldColumn,A:DiffAdd,C:DiffChange,D:DiffDelete,T:DiffText,E:DiffTextAdd,>:SignColumn,-:Conceal,B:SpellBad,P:SpellCap,R:SpellRare,L:SpellLocal,+:Pmenu,=:PmenuSel,k:PmenuMatch,<:PmenuMatchSel,[:PmenuKind,]:PmenuKindSel,{:PmenuExtra,}:PmenuExtraSel,x:PmenuSbar,X:PmenuThumb,j:PmenuBorder,H:PmenuShadow,*:TabLine,#:TabLineSel,_:TabLineFill,!:CursorColumn,.:CursorLine,o:ColorColumn,q:QuickFixLine,z:StatusLineTerm,Z:StatusLineTermNC,g:MsgArea,h:ComplMatchIns,%:TabPanel,^:TabPanelSel,&:TabPanelFill,I:PreInsert"
 
 // Default python version for pyx* commands
 #if defined(FEAT_PYTHON) && defined(FEAT_PYTHON3)
@@ -638,11 +638,11 @@ static struct vimoption options[] =
 #ifdef FEAT_CLIPBOARD
 			    (char_u *)&p_cpm, PV_NONE, did_set_clipmethod, expand_set_clipmethod,
 # ifdef UNIX
-			    {(char_u *)"wayland,x11,gui,other", (char_u *)0L}
+			    {(char_u *)"wayland,x11", (char_u *)0L}
 # elif defined(VMS)
-			    {(char_u *)"x11,gui,other", (char_u *)0L}
+			    {(char_u *)"x11", (char_u *)0L}
 # else
-			    {(char_u *)"gui,other", (char_u *)0L}
+			    {(char_u *)"", (char_u *)0L}
 # endif
 #else
 			    (char_u *)NULL, PV_NONE, NULL, NULL,
@@ -711,7 +711,7 @@ static struct vimoption options[] =
 			    SCTX_INIT},
     {"completepopup", "cpp", P_STRING|P_VI_DEF|P_COMMA|P_NODUP|P_COLON,
 #if defined(FEAT_PROP_POPUP) && defined(FEAT_QUICKFIX)
-			    (char_u *)&p_cpp, PV_NONE, did_set_completepopup, expand_set_popupoption,
+			    (char_u *)&p_cpp, PV_NONE, did_set_completepopup, expand_set_completepopup,
 			    {(char_u *)"", (char_u *)0L}
 #else
 			    (char_u *)NULL, PV_NONE, NULL, NULL,
@@ -1991,7 +1991,7 @@ static struct vimoption options[] =
 			    {(char_u *)12L, (char_u *)0L} SCTX_INIT},
     {"previewpopup", "pvp", P_STRING|P_VI_DEF|P_COMMA|P_NODUP|P_COLON,
 #ifdef FEAT_PROP_POPUP
-			    (char_u *)&p_pvp, PV_NONE, did_set_previewpopup, expand_set_popupoption,
+			    (char_u *)&p_pvp, PV_NONE, did_set_previewpopup, expand_set_previewpopup,
 			    {(char_u *)"", (char_u *)0L}
 #else
 			    (char_u *)NULL, PV_NONE, NULL, NULL,
@@ -2089,6 +2089,9 @@ static struct vimoption options[] =
     {"prompt",	    NULL,   P_BOOL|P_VI_DEF,
 			    (char_u *)&p_prompt, PV_NONE, NULL, NULL,
 			    {(char_u *)TRUE, (char_u *)0L} SCTX_INIT},
+    {"pumborder",   "pb",   P_STRING|P_VI_DEF|P_COMMA|P_NODUP|P_COLON|P_SECURE,
+			    (char_u *)&p_pb, PV_NONE, did_set_pumborder, expand_set_pumborder,
+			    {(char_u *)"", (char_u *)NULL} SCTX_INIT},
     {"pumheight",   "ph",   P_NUM|P_VI_DEF,
 			    (char_u *)&p_ph, PV_NONE, NULL, NULL,
 			    {(char_u *)0L, (char_u *)0L} SCTX_INIT},

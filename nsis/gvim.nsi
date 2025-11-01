@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # NSIS file to create a self-installing exe for Vim.
 # It requires NSIS version 3.0 or later.
-# Last Change:	2025-09-06
+# Last Change:	2025-09-30
 #
 
 Unicode true  ; !include defaults to UTF-8 after Unicode True since 3.0 Alpha 2
@@ -73,11 +73,18 @@ Unicode true  ; !include defaults to UTF-8 after Unicode True since 3.0 Alpha 2
   !define INCLUDE_LIBGCC 1
 !endif
 
-!include .\gvim_version.nsh	; for version numbers
+# Get version numbers
+!getdllversion "${VIMSRC}\gvim_ole.exe" VimVer_
+!echo "Vim version MAJOR=${VimVer_1} MINOR=${VimVer_2} PATCHLEVEL=${VimVer_3}"
 
-# Definition of Patch for Vim.
+!ifndef VER_MAJOR
+  !define VER_MAJOR  ${VimVer_1}
+!endif
+!ifndef VER_MINOR
+  !define VER_MINOR  ${VimVer_2}
+!endif
 !ifndef PATCHLEVEL
-  !define PATCHLEVEL 0
+  !define PATCHLEVEL ${VimVer_3}
 !endif
 
 # ----------- No configurable settings below this line -----------
@@ -170,8 +177,8 @@ VIAddVersionKey /LANG=0 "FileVersion" \
 !define MUI_ABORTWARNING
 !define MUI_UNABORTWARNING
 
-!define MUI_ICON   "icons\vim_16c.ico"
-!define MUI_UNICON "icons\vim_uninst_16c.ico"
+!define MUI_ICON   "icons\in_vim_32bpp.ico"
+!define MUI_UNICON "icons\un_vim_32bpp.ico"
 
 # Show all languages, despite user's codepage:
 !define MUI_LANGDLL_ALLLANGUAGES
@@ -181,10 +188,10 @@ VIAddVersionKey /LANG=0 "FileVersion" \
 !define MUI_LANGDLL_REGISTRY_KEY	"Software\Vim"
 !define MUI_LANGDLL_REGISTRY_VALUENAME  "Installer Language"
 
-!define MUI_WELCOMEFINISHPAGE_BITMAP	"icons\welcome.bmp"
-!define MUI_UNWELCOMEFINISHPAGE_BITMAP	"icons\uninstall.bmp"
+!define MUI_WELCOMEFINISHPAGE_BITMAP	"icons\in_welcome.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP	"icons\un_welcome.bmp"
 !define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP		"icons\header.bmp"
+!define MUI_HEADERIMAGE_BITMAP		"icons\in_header.bmp"
 !define MUI_HEADERIMAGE_UNBITMAP	"icons\un_header.bmp"
 
 !define MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH	"AspectFitHeight"

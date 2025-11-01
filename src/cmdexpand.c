@@ -2482,6 +2482,8 @@ set_context_by_cmdname(
 	case CMD_execute:
 	case CMD_echomsg:
 	case CMD_echoerr:
+	case CMD_echoconsole:
+	case CMD_echowindow:
 	case CMD_call:
 	case CMD_return:
 	case CMD_cexpr:
@@ -4484,7 +4486,7 @@ wildmenu_cleanup(cmdline_info_T *cclp UNUSED)
 	RedrawingDisabled = 0;
 #endif
 
-#if defined(FEAT_SEARCH_EXTRA) || defined(PROTO)
+#if defined(FEAT_SEARCH_EXTRA)
     // Clear highlighting applied during wildmenu activity
     set_no_hlsearch(TRUE);
 #endif
@@ -4521,7 +4523,7 @@ wildmenu_cleanup(cmdline_info_T *cclp UNUSED)
 #endif
 }
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 /*
  * "getcompletion()" function
  */
@@ -4863,7 +4865,7 @@ concat_pattern_with_buffer_match(
     mch_memmove(match, pat, pat_len);
     if (match_len > 0)
     {
-#if defined(FEAT_EVAL) || defined(FEAT_SPELL) || defined(PROTO)
+#if defined(FEAT_EVAL) || defined(FEAT_SPELL)
 	if (lowercase)
 	{
 	    char_u  *mword = vim_strnsave(line + end_match_pos->col,
@@ -4884,7 +4886,7 @@ concat_pattern_with_buffer_match(
     match[pat_len + match_len] = NUL;
     return match;
 
-#if defined(FEAT_EVAL) || defined(FEAT_SPELL) || defined(PROTO)
+#if defined(FEAT_EVAL) || defined(FEAT_SPELL)
 cleanup:
     vim_free(match);
     return NULL;

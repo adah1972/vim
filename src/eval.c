@@ -14,7 +14,7 @@
 
 #include "vim.h"
 
-#if defined(FEAT_EVAL) || defined(PROTO)
+#if defined(FEAT_EVAL)
 
 #ifdef VMS
 # include <float.h>
@@ -97,7 +97,7 @@ eval_init(void)
     func_init();
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
     void
 eval_clear(void)
 {
@@ -1005,7 +1005,7 @@ call_func_retlist(
     return rettv.vval.v_list;
 }
 
-#if defined(FEAT_FOLDING) || defined(PROTO)
+#if defined(FEAT_FOLDING)
 /*
  * Evaluate "arg", which is 'foldexpr'.
  * Note: caller must set "curwin" to match "arg".
@@ -2236,13 +2236,33 @@ get_lval(
 
     if (*p == '.')
     {
-	imported_T *import = find_imported(lp->ll_name, p - lp->ll_name, TRUE);
-	if (import != NULL)
+	// In legacy script, when a local variable and import exists with this name,
+	// prioritize local variable over imports to avoid conflicts.
+	int var_exists = FALSE;
+	if (!vim9script)
 	{
-	    p++;	// skip '.'
-	    p = get_lval_imported(lp, import->imp_sid, p, &v, fne_flags);
-	    if (p == NULL)
-		return NULL;
+	    cc = *p;
+	    *p = NUL;
+	    hashtab_T *local_ht = get_funccal_local_ht();
+	    if (local_ht != NULL)
+	    {
+		hashitem_T *hi = hash_find(local_ht, lp->ll_name);
+		if (!HASHITEM_EMPTY(hi))
+		    var_exists = TRUE;
+	    }
+	    *p = cc;
+	}
+
+	if (!var_exists)
+	{
+	    imported_T *import = find_imported(lp->ll_name, p - lp->ll_name, TRUE);
+	    if (import != NULL)
+	    {
+		p++;	// skip '.'
+		p = get_lval_imported(lp, import->imp_sid, p, &v, fne_flags);
+		if (p == NULL)
+		    return NULL;
+	    }
 	}
     }
 
@@ -3093,6 +3113,8 @@ set_context_for_expression(
 		|| cmdidx == CMD_echo
 		|| cmdidx == CMD_echon
 		|| cmdidx == CMD_echomsg
+		|| cmdidx == CMD_echoerr
+		|| cmdidx == CMD_echoconsole
 		|| cmdidx == CMD_echowindow)
 	    && xp->xp_context == EXPAND_EXPRESSION)
     {

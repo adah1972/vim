@@ -1046,7 +1046,7 @@ redraw_win_toolbar(win_T *wp)
 }
 #endif
 
-#if defined(FEAT_FOLDING) || defined(PROTO)
+#if defined(FEAT_FOLDING)
 /*
  * Copy "buf[len]" to ScreenLines["off"] and set attributes to "attr".
  */
@@ -1919,13 +1919,8 @@ win_update(win_T *wp)
 		    // Correct the first entry for filler lines at the top
 		    // when it won't get updated below.
 		    if (wp->w_p_diff && bot_start > 0)
-		    {
-			int n = plines_win_nofill(wp, wp->w_topline, FALSE)
-			      + wp->w_topfill - adjust_plines_for_skipcol(wp);
-			if (n > wp->w_height)
-			    n = wp->w_height;
-			wp->w_lines[0].wl_size = n;
-		    }
+			wp->w_lines[0].wl_size = plines_correct_topline(wp,
+							  wp->w_topline, TRUE);
 #endif
 		}
 	    }
@@ -2285,13 +2280,12 @@ win_update(win_T *wp)
 	    // When at start of changed lines: May scroll following lines
 	    // up or down to minimize redrawing.
 	    // Don't do this when the change continues until the end.
-	    // Don't scroll when dollar_vcol >= 0, keep the "$".
 	    // Don't scroll when redrawing the top, scrolled already above.
 	    if (lnum == mod_top
 		    && mod_bot != MAXLNUM
-		    && !(dollar_vcol >= 0 && mod_bot == mod_top + 1)
 		    && row >= top_end)
 	    {
+		int		old_cline_height = 0;
 		int		old_rows = 0;
 		int		new_rows = 0;
 		int		xtra_rows;
@@ -2307,6 +2301,8 @@ win_update(win_T *wp)
 		    if (wp->w_lines[i].wl_valid
 			    && wp->w_lines[i].wl_lnum == mod_bot)
 			break;
+		    if (wp->w_lines[i].wl_lnum == wp->w_cursor.lnum)
+			old_cline_height = wp->w_lines[i].wl_size;
 		    old_rows += wp->w_lines[i].wl_size;
 #ifdef FEAT_FOLDING
 		    if (wp->w_lines[i].wl_valid
@@ -2337,26 +2333,17 @@ win_update(win_T *wp)
 		    j = idx;
 		    for (l = lnum; l < mod_bot; ++l)
 		    {
+			if (dollar_vcol >= 0 && wp == curwin &&
+				old_cline_height > 0 && l == wp->w_cursor.lnum)
+			    // When dollar_vcol >= 0, cursor line isn't fully
+			    // redrawn, and its height remains unchanged.
+			    new_rows += old_cline_height;
 #ifdef FEAT_FOLDING
-			if (hasFoldingWin(wp, l, NULL, &l, TRUE, NULL))
+			else if (hasFoldingWin(wp, l, NULL, &l, TRUE, NULL))
 			    ++new_rows;
+#endif
 			else
-#endif
-			{
-#ifdef FEAT_DIFF
-			    if (l == wp->w_topline)
-			    {
-				int n = plines_win_nofill(wp, l, FALSE)
-								+ wp->w_topfill;
-				n -= adjust_plines_for_skipcol(wp);
-				if (n > wp->w_height)
-				    n = wp->w_height;
-				new_rows += n;
-			    }
-			    else
-#endif
-				new_rows += plines_win(wp, l, TRUE);
-			}
+			    new_rows += plines_correct_topline(wp, l, TRUE);
 			++j;
 			if (new_rows > wp->w_height - row - 2)
 			{
@@ -2523,18 +2510,20 @@ win_update(win_T *wp)
 	    wp->w_lines[idx].wl_lnum = lnum;
 	    wp->w_lines[idx].wl_valid = TRUE;
 
+	    int is_curline = wp == curwin && lnum == wp->w_cursor.lnum;
+
 	    // Past end of the window or end of the screen. Note that after
 	    // resizing wp->w_height may be end up too big. That's a problem
 	    // elsewhere, but prevent a crash here.
 	    if (row > wp->w_height || row + wp->w_winrow >= Rows)
 	    {
 		// we may need the size of that too long line later on
-		if (dollar_vcol == -1)
+		if (dollar_vcol == -1 || !is_curline)
 		    wp->w_lines[idx].wl_size = plines_win(wp, lnum, TRUE);
 		++idx;
 		break;
 	    }
-	    if (dollar_vcol == -1)
+	    if (dollar_vcol == -1 || !is_curline)
 		wp->w_lines[idx].wl_size = row - srow;
 	    ++idx;
 #ifdef FEAT_FOLDING
@@ -2725,7 +2714,7 @@ win_update(win_T *wp)
 	    }
 #endif
 	}
-	else if (dollar_vcol == -1)
+	else if (dollar_vcol == -1 || wp != curwin)
 	    wp->w_botline = lnum;
 
 	// Make sure the rest of the screen is blank.
@@ -2750,7 +2739,7 @@ win_update(win_T *wp)
     wp->w_old_botfill = wp->w_botfill;
 #endif
 
-    if (dollar_vcol == -1)
+    if (dollar_vcol == -1 || wp != curwin)
     {
 	// There is a trick with w_botline.  If we invalidate it on each
 	// change that might modify it, this will cause a lot of expensive
@@ -2875,7 +2864,7 @@ update_finish(void)
 }
 #endif
 
-#if defined(FEAT_NETBEANS_INTG) || defined(PROTO)
+#if defined(FEAT_NETBEANS_INTG)
     void
 update_debug_sign(buf_T *buf, linenr_T lnum)
 {
@@ -2925,7 +2914,7 @@ update_debug_sign(buf_T *buf, linenr_T lnum)
 }
 #endif
 
-#if defined(FEAT_GUI) || defined(PROTO)
+#if defined(FEAT_GUI)
 /*
  * Update a single window, its status line and maybe the command line msg.
  * Used for the GUI scrollbar.
@@ -3277,7 +3266,7 @@ redraw_buf_later(buf_T *buf, int type)
 #endif
 }
 
-#if defined(FEAT_SIGNS) || defined(PROTO)
+#if defined(FEAT_SIGNS)
     void
 redraw_buf_line_later(buf_T *buf, linenr_T lnum)
 {
@@ -3290,7 +3279,7 @@ redraw_buf_line_later(buf_T *buf, linenr_T lnum)
 }
 #endif
 
-#if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
+#if defined(FEAT_JOB_CHANNEL)
     void
 redraw_buf_and_status_later(buf_T *buf, int type)
 {

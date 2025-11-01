@@ -84,7 +84,7 @@ jobs:
             architecture: arm64
           - features: normal
             compiler: gcc
-            extra: [vimtags]
+            extra: [vimtags, proto]
           - features: huge
             compiler: gcc
             extra: [no_x11]
@@ -182,6 +182,9 @@ jobs:
               libattr1-dev
             )
           fi
+          if ${{ contains(matrix.extra, 'proto') }}; then
+            PKGS+=( python3-clang )
+          fi
           sudo apt-get update && sudo apt-get upgrade -y --allow-downgrades && sudo apt-get install -y --allow-downgrades "${PKGS[@]}"
 
       - name: Install gcc-${{ env.GCC_VER }}
@@ -270,6 +273,9 @@ jobs:
           if ${{ contains(matrix.extra, 'vimtags') }}; then
             echo "TEST=-C runtime/doc vimtags VIMEXE=../../${SRCDIR}/vim"
           fi
+          if ${{ contains(matrix.extra, 'proto') }}; then
+            echo "TEST=-C src protoclean proto"
+          fi
           echo "CFLAGS=${CFLAGS}"
           echo "CONFOPT=${CONFOPT}"
           # Disables GTK attempt to integrate with the accessibility service that does run in CI.
@@ -354,6 +360,15 @@ jobs:
             true
           )
 
+      - name: Generate Proto files
+        if: contains(matrix.extra, 'proto')
+        run: |
+          # This will exit with an error code if the generated proto files differ from source
+          (
+            git diff --exit-code -- src/proto/
+            true
+          )
+
       - name: Generate gcov files
         if: matrix.coverage
         run: |
@@ -391,7 +406,7 @@ jobs:
       fail-fast: false
       matrix:
         features: [tiny, normal, huge]
-        runner: [macos-13, macos-15]
+        runner: [macos-15-intel, macos-15]
 
     steps:
       - name: Checkout repository from github
@@ -402,12 +417,6 @@ jobs:
         run: |
           brew install lua libtool
           echo "LUA_PREFIX=$(brew --prefix)" >> $GITHUB_ENV
-
-      - name: Set up Xcode
-        if: matrix.runner == 'macos-15'
-        run: |
-          # Xcode 16 has compiler bugs which are fixed in 16.2+
-          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
 
       - name: Set up environment
         run: |

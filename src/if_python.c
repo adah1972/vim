@@ -51,9 +51,6 @@
 #ifdef HAVE_PUTENV
 # undef HAVE_PUTENV
 #endif
-#ifdef HAVE_STDARG_H
-# undef HAVE_STDARG_H	// Python's config.h defines it as well.
-#endif
 #ifdef _POSIX_C_SOURCE
 # undef _POSIX_C_SOURCE	// pyconfig.h defines it as well.
 #endif
@@ -81,15 +78,6 @@
 #define PyBytes_Check		PyString_Check
 #define PyBytes_AsStringAndSize PyString_AsStringAndSize
 #define PyBytes_FromStringAndSize   PyString_FromStringAndSize
-
-#if !defined(FEAT_PYTHON) && defined(PROTO)
-// Use this to be able to generate prototypes without python being used.
-# define PyObject Py_ssize_t
-# define PyThreadState Py_ssize_t
-# define PyTypeObject Py_ssize_t
-struct PyMethodDef { Py_ssize_t a; };
-# define PySequenceMethods Py_ssize_t
-#endif
 
 #if defined(PY_VERSION_HEX) && PY_VERSION_HEX >= 0x02070000
 # define PY_USE_CAPSULE
@@ -125,7 +113,7 @@ struct PyMethodDef { Py_ssize_t a; };
 # define PY_CAN_RECURSE
 #endif
 
-#if defined(DYNAMIC_PYTHON) || defined(PROTO)
+#if defined(DYNAMIC_PYTHON)
 # ifndef DYNAMIC_PYTHON
 #  define HINSTANCE long_u		// for generating prototypes
 # endif
@@ -900,7 +888,7 @@ python_end(void)
     --recurse;
 }
 
-#if (defined(DYNAMIC_PYTHON) && defined(FEAT_PYTHON3)) || defined(PROTO)
+#if defined(DYNAMIC_PYTHON) && defined(FEAT_PYTHON3)
     int
 python_loaded(void)
 {

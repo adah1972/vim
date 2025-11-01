@@ -3682,6 +3682,7 @@ func Test_popupmenu_info_border()
   " Test that the popupmenu's scrollbar and infopopup do not overlap
   call term_sendkeys(buf, "\<Esc>")
   call term_sendkeys(buf, ":set pumheight=3\<CR>")
+  call term_sendkeys(buf, ":set completepopup=border:off\<CR>")
   call term_sendkeys(buf, "cc\<C-X>\<C-U>")
   call VerifyScreenDump(buf, 'Test_popupwin_infopopup_6', {})
 
@@ -3695,14 +3696,15 @@ func Test_popupmenu_info_border()
   call VerifyScreenDump(buf, 'Test_popupwin_infopopup_7', {})
 
   " Test that when the option is changed the popup changes.
-  call term_sendkeys(buf, "\<Esc>")
-  call term_sendkeys(buf, ":set completepopup=border:off\<CR>")
-  call term_sendkeys(buf, "a\<C-X>\<C-U>")
-  call VerifyScreenDump(buf, 'Test_popupwin_infopopup_8', {})
-
   call term_sendkeys(buf, " \<Esc>")
   call term_sendkeys(buf, ":set completepopup+=width:10\<CR>")
   call term_sendkeys(buf, "a\<C-X>\<C-U>")
+  call VerifyScreenDump(buf, 'Test_popupwin_infopopup_8', {})
+
+  " Test shadow
+  call term_sendkeys(buf, "\<Esc>")
+  call term_sendkeys(buf, ":set completepopup=border:off,shadow:on\<CR>")
+  call term_sendkeys(buf, "Sa\<C-X>\<C-U>")
   call VerifyScreenDump(buf, 'Test_popupwin_infopopup_9', {})
 
   call term_sendkeys(buf, "\<Esc>")
@@ -3935,7 +3937,7 @@ func Test_popupwin_cancel_with_without_filter()
 
   call feedkeys("\<C-C>", 'xt')
   call assert_equal({}, popup_getpos(win1))
-  call assert_equal({}, popup_getpos(win2))
+  call assert_equal(10, popup_getpos(win2).line)
 
   call popup_clear()
 endfunc

@@ -49,7 +49,7 @@ static void ins_ctrl_o(void);
 static void ins_shift(int c, int lastc);
 static void ins_del(void);
 static int  ins_bs(int c, int mode, int *inserted_space_p);
-#if defined(FEAT_GUI_TABLINE) || defined(PROTO)
+#if defined(FEAT_GUI_TABLINE)
 static void ins_tabline(int c);
 #endif
 static void ins_left(void);
@@ -100,6 +100,25 @@ static int	ins_need_undo;		// call u_save() before inserting a
 static int	dont_sync_undo = FALSE;	// CTRL-G U prevents syncing undo for
 					// the next left/right cursor key
 
+#define TRIGGER_AUTOCOMPLETE()			\
+    do {					\
+	update_screen(UPD_VALID);  /* Show char (deletion) immediately */ \
+	out_flush();				\
+	ins_compl_enable_autocomplete();	\
+	goto docomplete;			\
+    } while (0)
+
+#define MAY_TRIGGER_AUTOCOMPLETE(c)				\
+    do {							\
+	if (ins_compl_has_autocomplete() && !char_avail()	\
+		&& curwin->w_cursor.col > 0)			\
+	{							\
+	    (c) = char_before_cursor();				\
+	    if (vim_isprintc(c))				\
+		TRIGGER_AUTOCOMPLETE();				\
+	}							\
+    } while (0)
+
 /*
  * edit(): Start inserting text.
  *
@@ -146,6 +165,7 @@ edit(
 #ifdef FEAT_CONCEAL
     int		cursor_line_was_concealed;
 #endif
+    int		ins_just_started = TRUE;
 
     // Remember whether editing was restarted after CTRL-O.
     did_restart_edit = restart_edit;
@@ -593,6 +613,30 @@ edit(
 	    // Got here from normal mode when bracketed paste started.
 	    c = K_PS;
 	else
+	{
+	    // Trigger autocomplete when entering Insert mode, either directly
+	    // or via change commands like 'ciw', 'cw', etc., before the first
+	    // character is typed.
+	    if (ins_just_started)
+	    {
+		ins_just_started = FALSE;
+		if (ins_compl_has_autocomplete() && !char_avail()
+			&& curwin->w_cursor.col > 0)
+		{
+		    c = char_before_cursor();
+		    if (vim_isprintc(c))
+		    {
+			ins_compl_enable_autocomplete();
+			ins_compl_init_get_longest();
+#ifdef FEAT_RIGHTLEFT
+			if (p_hkmap)
+			    c = hkmap(c);		// Hebrew mode mapping
+#endif
+			goto docomplete;
+		    }
+		}
+	    }
+
 	    do
 	    {
 		c = safe_vgetc();
@@ -622,6 +666,7 @@ edit(
 		    goto doESCkey;
 		}
 	    } while (c == K_IGNORE || c == K_NOP);
+	}
 
 	// Don't want K_CURSORHOLD for the second key, e.g., after CTRL-V.
 	did_cursorhold = TRUE;
@@ -693,12 +738,15 @@ edit(
 			&& stop_arrow() == OK)
 		{
 		    ins_compl_delete();
-		    ins_compl_insert(FALSE, !ins_compl_has_preinsert());
-		    if (ins_compl_preinsert_longest())
+		    if (ins_compl_preinsert_longest()
+			    && !ins_compl_is_match_selected())
 		    {
+			ins_compl_insert(FALSE, TRUE);
 			ins_compl_init_get_longest();
 			continue;
 		    }
+		    else
+			ins_compl_insert(FALSE, FALSE);
 		}
 		// Delete preinserted text when typing special chars
 		else if (IS_WHITE_NL_OR_NUL(c) && ins_compl_preinsert_effect())
@@ -988,18 +1036,8 @@ doESCkey:
 	case Ctrl_H:
 	    did_backspace = ins_bs(c, BACKSPACE_CHAR, &inserted_space);
 	    auto_format(FALSE, TRUE);
-	    if (did_backspace && ins_compl_has_autocomplete() && !char_avail()
-		    && curwin->w_cursor.col > 0)
-	    {
-		c = char_before_cursor();
-		if (vim_isprintc(c))
-		{
-		    update_screen(UPD_VALID); // Show char deletion immediately
-		    out_flush();
-		    ins_compl_enable_autocomplete();
-		    goto docomplete; // Trigger autocompletion
-		}
-	    }
+	    if (did_backspace)
+		MAY_TRIGGER_AUTOCOMPLETE(c);
 	    break;
 
 	case Ctrl_W:	// delete word before the cursor
@@ -1017,6 +1055,8 @@ doESCkey:
 #endif
 	    did_backspace = ins_bs(c, BACKSPACE_WORD, &inserted_space);
 	    auto_format(FALSE, TRUE);
+	    if (did_backspace)
+		MAY_TRIGGER_AUTOCOMPLETE(c);
 	    break;
 
 	case Ctrl_U:	// delete all inserted text in current line
@@ -1028,6 +1068,8 @@ doESCkey:
 	    did_backspace = ins_bs(c, BACKSPACE_LINE, &inserted_space);
 	    auto_format(FALSE, TRUE);
 	    inserted_space = FALSE;
+	    if (did_backspace)
+		MAY_TRIGGER_AUTOCOMPLETE(c);
 	    break;
 
 	case K_LEFTMOUSE:   // mouse keys
@@ -1421,12 +1463,7 @@ normalchar:
 	    // Trigger autocompletion
 	    if (ins_compl_has_autocomplete() && !char_avail()
 		    && vim_isprintc(c))
-	    {
-		update_screen(UPD_VALID); // Show character immediately
-		out_flush();
-		ins_compl_enable_autocomplete();
-		goto docomplete;
-	    }
+		TRIGGER_AUTOCOMPLETE();
 
 	    break;
 	}   // end of switch (c)
@@ -1766,7 +1803,7 @@ edit_putchar(int c, int highlight)
     screen_putchar(c, pc_row, pc_col, attr);
 }
 
-#if defined(FEAT_JOB_CHANNEL) || defined(PROTO)
+#if defined(FEAT_JOB_CHANNEL)
 /*
  * Set the insert start position for when using a prompt buffer.
  */
@@ -2633,7 +2670,7 @@ set_last_insert(int c)
     last_insert_skip = 0;
 }
 
-#if defined(EXITFREE) || defined(PROTO)
+#if defined(EXITFREE)
     void
 free_last_insert(void)
 {
@@ -3377,7 +3414,7 @@ replace_do_bs(int limit_col)
 	(void)del_char_after_col(limit_col);
 }
 
-#if defined(FEAT_RIGHTLEFT) || defined(PROTO)
+#if defined(FEAT_RIGHTLEFT)
 /*
  * Map Hebrew keyboard when in hkmap mode.
  */
@@ -4608,7 +4645,7 @@ bracketed_paste(paste_mode_T mode, int drop, garray_T *gap)
     return ret_char;
 }
 
-#if defined(FEAT_GUI_TABLINE) || defined(PROTO)
+#if defined(FEAT_GUI_TABLINE)
     static void
 ins_tabline(int c)
 {
@@ -4631,7 +4668,7 @@ ins_tabline(int c)
 }
 #endif
 
-#if defined(FEAT_GUI) || defined(PROTO)
+#if defined(FEAT_GUI)
     void
 ins_scroll(void)
 {

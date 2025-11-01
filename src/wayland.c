@@ -738,7 +738,7 @@ wayland_prepare_read(void)
 }
 
 /*
- * Catch up on any qeueued events
+ * Catch up on any queued events
  */
     int
 wayland_update(void)
@@ -748,7 +748,7 @@ wayland_update(void)
     return vwl_connection_roundtrip(wayland_ct);
 }
 
-#if !defined(HAVE_SELECT) || defined(PROTO)
+#if !defined(HAVE_SELECT)
 
     void
 wayland_poll_check(int revents)
@@ -777,7 +777,7 @@ wayland_poll_check(int revents)
 }
 
 #endif
-#if defined(HAVE_SELECT) || defined(PROTO)
+#if defined(HAVE_SELECT)
 
     void
 wayland_select_check(bool is_set)
@@ -862,11 +862,11 @@ ex_wlrestore(exarg_T *eap)
     choose_clipmethod();
 }
 
-#if defined(FEAT_WAYLAND_CLIPBOARD) || defined(PROTO)
+#if defined(FEAT_WAYLAND_CLIPBOARD)
 
 /*
  * Get a suitable data device manager from connection. "supported" should be
- * iniitialized to VWL_DATA_PROTOCOL_NONE beforehand. Returns NULL if there are
+ * initialized to VWL_DATA_PROTOCOL_NONE beforehand. Returns NULL if there are
  * no data device manager available with the required selection.
  */
     vwl_data_device_manager_T *
