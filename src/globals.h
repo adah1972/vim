@@ -146,6 +146,8 @@ EXTERN int	vgetc_char INIT(= 0);
  * update_screen().
  */
 EXTERN int	cmdline_row;
+EXTERN int	cmdline_col_off;
+EXTERN int	cmdline_width;
 
 EXTERN int	redraw_cmdline INIT(= FALSE);	// cmdline must be redrawn
 EXTERN int	redraw_mode INIT(= FALSE);	// mode must be redrawn
@@ -990,6 +992,11 @@ EXTERN int	clip_html INIT(= FALSE);
 EXTERN regprog_T *clip_exclude_prog INIT(= NULL);
 EXTERN int	clip_unnamed_saved INIT(= 0);
 #endif
+
+#ifdef FEAT_CLIPBOARD_PROVIDER
+EXTERN char_u	*clip_provider INIT(= NULL);
+#endif
+
 
 /*
  * All regular windows are linked in a list. "firstwin" points to the first
@@ -2065,7 +2072,10 @@ EXTERN char_u showcmd_buf[SHOWCMD_BUFLEN];
 EXTERN int	p_tgc_set INIT(= FALSE);
 #endif
 
-#ifdef FEAT_CLIPBOARD
+// If we've already warned about missing/unavailable clipboard
+EXTERN bool did_warn_clipboard INIT(= FALSE);
+
+#ifdef HAVE_CLIPMETHOD
 EXTERN clipmethod_T clipmethod INIT(= CLIPMETHOD_NONE);
 #endif
 
@@ -2077,6 +2087,9 @@ EXTERN char *wayland_display_name INIT(= NULL);
 // Special mime type used to identify selection events that came from us setting
 // the selection. Is in format of "application/x-vim-instance-<pid>" where <pid>
 // is the PID of the Vim process. Set in main.c
+//
+// This is more reliable than just checking if our data source is non-NULL, as
+// that may be subject to data races in the Wayland protocol.
 EXTERN char wayland_vim_special_mime[
     sizeof("application/x-vim-instance-") + NUMBUFLEN - 1]; // Includes NUL
 
@@ -2115,4 +2128,13 @@ INIT(= CLIENTSERVER_METHOD_NONE);
 #ifdef FEAT_SOCKETSERVER
 // Path to socket of last client that communicated with us
 EXTERN char_u *client_socket INIT(= NULL);
+#endif
+
+// If the <xOSC> key should be propogated from vgetc()
+EXTERN int allow_osc_key INIT(= 0);
+
+#ifdef FEAT_EVAL
+// Global singly linked list of redraw listeners
+EXTERN redraw_listener_T *redraw_listeners INIT(= NULL);
+EXTERN bool inside_redraw_on_start_cb INIT(= false);
 #endif

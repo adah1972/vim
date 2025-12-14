@@ -146,9 +146,11 @@ gui_start(char_u *arg UNUSED)
 	    emsg(msg);
 #endif
     }
+#ifdef HAVE_CLIPMETHOD
     else
 	// Reset clipmethod to CLIPMETHOD_NONE
 	choose_clipmethod();
+#endif
 
 #ifdef FEAT_SOCKETSERVER
     // Install socket server listening socket if we are running it
@@ -1081,7 +1083,7 @@ gui_get_wide_font(void)
 #if defined(FEAT_GUI_GTK) || defined(FEAT_GUI_MSWIN)
 /*
  * Set list of ascii characters that combined can create ligature.
- * Store them in char map for quick access from gui_gtk2_draw_string.
+ * Store them in char map for quick access from gui_gtk_draw_string.
  */
     void
 gui_set_ligatures(void)
@@ -2533,7 +2535,7 @@ gui_outstr_nowrap(
      */
 #ifdef FEAT_GUI_GTK
     // The value returned is the length in display cells
-    len = gui_gtk2_draw_string(gui.row, col, s, len, draw_flags);
+    len = gui_gtk_draw_string(gui.row, col, s, len, draw_flags);
 #else
     if (enc_utf8)
     {
@@ -3260,6 +3262,8 @@ button_set:
      */
     if ((State == MODE_NORMAL || State == MODE_NORMAL_BUSY
 						      || (State & MODE_INSERT))
+	    && X_2_COL(x) >= firstwin->w_wincol
+	    && X_2_COL(x) < firstwin->w_wincol + topframe->fr_width
 	    && Y_2_ROW(y) >= topframe->fr_height + firstwin->w_winrow
 	    && button != MOUSE_DRAG
 # ifdef FEAT_MOUSESHAPE
@@ -3478,7 +3482,7 @@ static int	prev_which_scrollbars[3];
 gui_init_which_components(char_u *oldval UNUSED)
 {
 #ifdef FEAT_GUI_DARKTHEME
-    static int	prev_dark_theme = -1;
+    static int	prev_dark_theme = FALSE;
     int		using_dark_theme = FALSE;
 #endif
 #ifdef FEAT_MENU
@@ -3492,7 +3496,7 @@ gui_init_which_components(char_u *oldval UNUSED)
     int		using_tabline;
 #endif
 #ifdef FEAT_GUI_MSWIN
-    static int	prev_titlebar = -1;
+    static int	prev_titlebar = FALSE;
     int		using_titlebar = FALSE;
 #endif
 #if defined(FEAT_MENU)
@@ -4941,7 +4945,12 @@ xy2win(int x, int y, mouse_find_T popup)
 	return NULL;
     wp = mouse_find_win(&row, &col, popup);
     if (wp == NULL)
+    {
+#ifdef FEAT_MOUSESHAPE
+	update_mouseshape(-2);
+#endif
 	return NULL;
+    }
 #ifdef FEAT_MOUSESHAPE
     if (State == MODE_HITRETURN || State == MODE_ASKMORE)
     {

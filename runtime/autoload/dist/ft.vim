@@ -3,7 +3,7 @@ vim9script
 # Vim functions for file type detection
 #
 # Maintainer:		The Vim Project <https://github.com/vim/vim>
-# Last Change:		2025 Oct 31
+# Last Change:		2025 Dec 07
 # Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 # These functions are moved here from runtime/filetype.vim to make startup
@@ -27,6 +27,28 @@ export def Check_inp()
       n += 1
     endwhile
   endif
+enddef
+
+# Erlang Application Resource Files (*.app.src is matched by extension)
+# See: https://erlang.org/doc/system/applications
+export def FTapp()
+  if exists("g:filetype_app")
+    exe "setf " .. g:filetype_app
+    return
+  endif
+  const pat = '^\s*{\s*application\s*,\s*\(''\=\)' .. expand("%:t:r:r") .. '\1\s*,'
+  var line: string
+  for lnum in range(1, min([line("$"), 100]))
+    line = getline(lnum)
+    # skip Erlang comments, might be something else
+    if line =~ '^\s*%' || line =~ '^\s*$'
+      continue
+    elseif line =~ '^\s*{' &&
+	getline(lnum, lnum + 9)->filter((_, v) => v !~ '^\s*%')->join(' ') =~# pat
+      setf erlang
+    endif
+    return
+  endfor
 enddef
 
 # This function checks for the kind of assembly that is wanted by the user, or
@@ -1736,6 +1758,8 @@ const ft_from_ext = {
   # BSDL
   "bsd": "bsdl",
   "bsdl": "bsdl",
+  # Bpftrace
+  "bt": "bpftrace",
   # C3
   "c3": "c3",
   "c3i": "c3",
@@ -2226,6 +2250,8 @@ const ft_from_ext = {
   "ldg": "ledger",
   "ledger": "ledger",
   "journal": "ledger",
+  # Leex
+  "xrl": "leex",
   # Leo
   "leo": "leo",
   # Less
@@ -2571,6 +2597,8 @@ const ft_from_ext = {
   "builder": "ruby",
   "rxml": "ruby",
   "rjs": "ruby",
+  # Sorbet (Ruby typechecker)
+  "rbi": "ruby",
   # Rust
   "rs": "rust",
   # S-lang
@@ -2703,6 +2731,7 @@ const ft_from_ext = {
   "nut": "squirrel",
   # Starlark
   "ipd": "starlark",
+  "sky": "starlark",
   "star": "starlark",
   "starlark": "starlark",
   # OpenVPN configuration
@@ -2999,6 +3028,8 @@ const ft_from_name = {
   "apt.conf": "aptconf",
   # BIND zone
   "named.root": "bindzone",
+  # Brewfile (uses Ruby syntax)
+  "Brewfile": "ruby",
   # Busted (Lua unit testing framework - configuration files)
   ".busted": "lua",
   # Bun history
@@ -3067,6 +3098,8 @@ const ft_from_name = {
   ".editorconfig": "editorconfig",
   # Elinks configuration
   "elinks.conf": "elinks",
+  # Erlang
+  "rebar.config": "erlang",
   # Exim
   "exim.conf": "exim",
   # Exports

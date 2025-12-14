@@ -4403,6 +4403,7 @@ close_others(
 {
     win_T	*wp;
     win_T	*nextwp;
+    win_T	*old_curwin = curwin;
     int		r;
 
     if (one_window())
@@ -4416,6 +4417,14 @@ close_others(
     for (wp = firstwin; win_valid(wp); wp = nextwp)
     {
 	nextwp = wp->w_next;
+
+	// autocommands messed this one up
+	if (old_curwin != curwin && win_valid(old_curwin))
+	{
+	    curwin = old_curwin;
+	    curbuf = curwin->w_buffer;
+	}
+
 	if (wp == curwin)		// don't close current window
 	    continue;
 
@@ -6228,8 +6237,9 @@ shell_new_columns(void)
 	return;
 
 #if defined(FEAT_TABPANEL)
-    int save_wincol = firstwin->w_wincol;
-    int save_fr_width = topframe->fr_width;
+    static int prev_tp_width;
+    static int prev_wincol;
+    static int prev_fr_width;
 #endif
     int w = COLUMNS_WITHOUT_TPL();
 
@@ -6242,12 +6252,26 @@ shell_new_columns(void)
     win_comp_pos();		// recompute w_winrow and w_wincol
 
 #if defined(FEAT_TABPANEL)
-    if (p_ea && firstwin->w_wincol + topframe->fr_width
-	    == save_wincol + save_fr_width &&
-	    (firstwin->w_wincol != save_wincol ||
-	     topframe->fr_width != save_fr_width))
+    int tp_width = tabpanel_width();
+    int tp_width_changed = tp_width != prev_tp_width;
+    // tabpanel width changed
+    if (tp_width_changed && p_ea)
 	win_equal(curwin, FALSE, 0);
+    // tabpanel layout changed
+    if (tp_width_changed
+	    || (tp_width > 0 && (firstwin->w_wincol != prev_wincol
+		    || topframe->fr_width != prev_fr_width)))
+    {
+	screen_fill(cmdline_row, (int)Rows, 0, (int)Columns, ' ', ' ', 0);
+    }
+    prev_tp_width = tabpanel_width();
+    prev_wincol = firstwin->w_wincol;
+    prev_fr_width = topframe->fr_width;
 #endif
+    // Adjust offset for command line start column
+    cmdline_col_off = firstwin->w_wincol;
+    cmdline_width = topframe->fr_width;
+    comp_col();
     if (!skip_win_fix_scroll)
 	win_fix_scroll(TRUE);
 

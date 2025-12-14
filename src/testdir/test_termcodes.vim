@@ -1641,6 +1641,62 @@ func Test_mouse_termcodes()
   %bw!
 endfunc
 
+" Test buttons 8 and 9 for xterm-like terminal mouse support
+func Test_term_mouse_side_buttons()
+  new
+  let save_mouse = &mouse
+  let save_term = &term
+  let save_ttymouse = &ttymouse
+  call test_override('no_query_mouse', 1)
+  set mouse=a term=xterm
+  call WaitForResponses()
+
+  for ttymouse_val in g:Ttymouse_values
+    let msg = 'ttymouse=' .. ttymouse_val
+    exe 'set ttymouse=' .. ttymouse_val
+
+    let mouse_codes = [
+          \ ["<X1Mouse>", TerminalEscapeCode(128, 1, 1, 'M')],
+          \ ["<X1Drag>", TerminalEscapeCode(128+32, 1, 1, 'M')],
+          \ ["<X2Mouse>", TerminalEscapeCode(129, 1, 1, 'M')],
+          \ ["<X2Drag>", TerminalEscapeCode(129+32, 1, 1, 'M')],
+          \ ["<S-X1Mouse>", TerminalEscapeCode(128+4, 1, 1, 'M')],
+          \ ["<S-X2Mouse>", TerminalEscapeCode(129+4, 1, 1, 'M')],
+          \ ["<M-X1Mouse>", TerminalEscapeCode(128+8, 1, 1, 'M')],
+          \ ["<M-X2Mouse>", TerminalEscapeCode(129+8, 1, 1, 'M')],
+          \ ["<C-X1Mouse>", TerminalEscapeCode(128+16, 1, 1, 'M')],
+          \ ["<C-X2Mouse>", TerminalEscapeCode(129+16, 1, 1, 'M')],
+          \ ]
+
+    for [outstr, code] in mouse_codes
+      exe "normal ggC\<C-K>" . code
+      call assert_equal(outstr, getline(1), msg)
+    endfor
+  endfor
+
+  " ttymouse_val 'sgr'
+  let msg = 'ttymouse=sgr'
+  exe 'set ttymouse=sgr'
+
+  let mouse_codes = [
+        \ ["<X1Mouse>", TerminalEscapeCode(128, 1, 1, 'M')],
+        \ ["<X1Release>", TerminalEscapeCode(128, 1, 1, 'm')],
+        \ ["<X2Mouse>", TerminalEscapeCode(129, 1, 1, 'M')],
+        \ ["<X2Release>", TerminalEscapeCode(129, 1, 1, 'm')],
+        \ ]
+
+  for [outstr, code] in mouse_codes
+    exe "normal ggC\<C-K>" . code
+    call assert_equal(outstr, getline(1), msg)
+  endfor
+
+  let &mouse = save_mouse
+  let &term = save_term
+  let &ttymouse = save_ttymouse
+  call test_override('no_query_mouse', 0)
+  bwipe!
+endfunc
+
 " This only checks if the sequence is recognized.
 " This must be after other tests, because it has side effects to xterm
 " properties.
@@ -2791,12 +2847,36 @@ func Test_term_response_osc()
   " Test if large OSC responses (that must be processed in chunks) are handled
   let data = repeat('a', 3000)
 
-  call feedkeys("\<Esc>]12;" .. data .. "\x07", 'Lx!')
-  call assert_equal("\<Esc>]12;" .. data .. "\x07", v:termosc)
+  call feedkeys("\<Esc>]12;" .. data .. "\<Esc>\\", 'Lx!')
+  call assert_equal("\<Esc>]12;" .. data .. "\<Esc>\\", v:termosc)
 
   " Test small OSC responses
-  call feedkeys("\<Esc>]15;hello world!\07", 'Lx!')
+  call feedkeys("\<Esc>]15;hello world!\x07", 'Lx!')
   call assert_equal("\<Esc>]15;hello world!\x07", v:termosc)
+endfunc
+
+" Test if xOSC key is emitted.
+func Test_term_response_xosc_key()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    func Test()
+      while getcharstr(-1) != "\<xOSC>"
+      endwhile
+      call writefile(["done"], 'XTestResult')
+    endfunc
+  END
+  call writefile(lines, 'XTest', 'D')
+  defer delete('XTestResult')
+
+  let buf = RunVimInTerminal("-S XTest", {'rows': 10})
+  call TermWait(buf)
+  call term_sendkeys(buf, "\<Esc>:call Test()\<CR>")
+  call TermWait(buf)
+  call term_sendkeys(buf, "\<Esc>]52;hello;\<Esc>\\")
+  call TermWait(buf)
+  call WaitForAssert({-> assert_equal(["done"], readfile('XTestResult'))})
+  call StopVimInTerminal(buf)
 endfunc
 
 " This only checks if the sequence is recognized.

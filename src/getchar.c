@@ -439,7 +439,7 @@ stuff_empty(void)
 #if defined(FEAT_EVAL)
 /*
  * Return TRUE if readbuf1 is empty.  There may still be redo characters in
- * redbuf2.
+ * readbuf2.
  */
     int
 readbuf1_empty(void)
@@ -1977,6 +1977,9 @@ vgetc(void)
 		}
 		c = TO_SPECIAL(c2, c);
 
+		if (allow_osc_key == 0 && c == K_OSC)
+		    continue;
+
 		// K_ESC is used to avoid ambiguity with the single Esc
 		// character that might be the start of an escape sequence.
 		// Convert it back to a single Esc here.
@@ -2448,10 +2451,11 @@ getchar_common(typval_T *argvars, typval_T *rettv, int allow_number)
     if (cursor_flag == 'h')
 	cursor_sleep();
     else if (cursor_flag == 'm')
-	windgoto(msg_row, msg_col);
+	windgoto(msg_row, cmdline_col_off + msg_col);
 
     ++no_mapping;
     ++allow_keys;
+    ++allow_osc_key;
     if (!simplify)
 	++no_reduce_keys;
     for (;;)
@@ -2479,6 +2483,7 @@ getchar_common(typval_T *argvars, typval_T *rettv, int allow_number)
     }
     --no_mapping;
     --allow_keys;
+    --allow_osc_key;
     if (!simplify)
 	--no_reduce_keys;
 

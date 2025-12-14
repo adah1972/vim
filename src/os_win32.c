@@ -161,7 +161,7 @@ static int suppress_winsize = 1;	// don't fiddle with console
 static WCHAR *exe_pathw = NULL;
 
 static BOOL win8_or_later = FALSE;
-static BOOL win10_22H2_or_later = FALSE;
+BOOL win10_22H2_or_later = FALSE;
 BOOL win11_or_later = FALSE; // used in gui_mch_set_titlebar_colors(void)
 
 #if !defined(FEAT_GUI_MSWIN) || defined(VIMDLL)
@@ -2867,7 +2867,8 @@ executable_exists(
 		goto theend;
 	    }
 
-	    if (mch_getenv("NoDefaultCurrentDirectoryInExePath") == NULL)
+	    if (mch_getenv("NoDefaultCurrentDirectoryInExePath") == NULL &&
+		    strstr((char *)gettail(p_sh), "cmd.exe") != NULL)
 	    {
 		STRCPY(pathbuf.string, ".;");
 		pathbuf.length = 2;
@@ -4436,7 +4437,7 @@ handler_routine(
     case CTRL_CLOSE_EVENT:
     case CTRL_LOGOFF_EVENT:
     case CTRL_SHUTDOWN_EVENT:
-	windgoto((int)Rows - 1, 0);
+	windgoto((int)Rows - 1, cmdline_col_off);
 	g_fForceExit = TRUE;
 
 	vim_snprintf((char *)IObuff, IOSIZE, _("Vim: Caught %s event\n"),
@@ -5066,7 +5067,7 @@ dump_pipe(int	    options,
 	    msg_puts((char *)buffer);
 	}
 
-	windgoto(msg_row, msg_col);
+	windgoto(msg_row, cmdline_col_off + msg_col);
 	cursor_on();
 	out_flush();
     }
@@ -5265,7 +5266,7 @@ mch_system_piped(char *cmd, int options)
 			else
 			    msg_outtrans_len(ta_buf + i, 1);
 		    }
-		    windgoto(msg_row, msg_col);
+		    windgoto(msg_row, cmdline_col_off + msg_col);
 		    out_flush();
 
 		    ta_len += len;
@@ -5491,6 +5492,21 @@ mch_call_shell_terminal(
     return retval;
 }
 #endif
+/* Restore a previous environment variable value, or unset it if NULL.
+ * 'must_free' indicates whether 'old_value' was allocated.
+ */
+    static void
+restore_env_var(char_u *name, char_u *old_value, int must_free)
+{
+    if (old_value != NULL)
+    {
+	vim_setenv(name, old_value);
+	if (must_free)
+	    vim_free(old_value);
+	return;
+    }
+    vim_unsetenv(name);
+}
 
 /*
  * Either execute a command by calling the shell or start a new shell
@@ -5503,6 +5519,8 @@ mch_call_shell(
     int		x = 0;
     int		tmode = cur_tmode;
     WCHAR	szShellTitle[512];
+    int		must_free;
+    char_u	*oldval;
 
 #ifdef FEAT_EVAL
     ch_log(NULL, "executing shell command: %s", cmd);
@@ -5527,6 +5545,11 @@ mch_call_shell(
 	    }
 	}
     }
+    // do not execute anything from the current directory by setting the
+    // environemnt variable $NoDefaultCurrentDirectoryInExePath
+    oldval = vim_getenv((char_u *)"NoDefaultCurrentDirectoryInExePath",
+	    &must_free);
+    vim_setenv((char_u *)"NoDefaultCurrentDirectoryInExePath", (char_u *)"1");
 
     out_flush();
 
@@ -5560,6 +5583,8 @@ mch_call_shell(
 	    // Use a terminal window to run the command in.
 	    x = mch_call_shell_terminal(cmd, options);
 	    resettitle();
+	    restore_env_var((char_u *)"NoDefaultCurrentDirectoryInExePath",
+		    oldval, must_free);
 	    return x;
 	}
     }
@@ -5783,6 +5808,10 @@ mch_call_shell(
 	    }
 	}
     }
+
+    // Restore original value of NoDefaultCurrentDirectoryInExePath
+    restore_env_var((char_u *)"NoDefaultCurrentDirectoryInExePath",
+	    oldval, must_free);
 
     if (tmode == TMODE_RAW)
     {

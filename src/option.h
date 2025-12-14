@@ -507,12 +507,12 @@ EXTERN char_u	*p_cedit;	// 'cedit'
 EXTERN long	p_cwh;		// 'cmdwinheight'
 #ifdef FEAT_CLIPBOARD
 EXTERN char_u	*p_cb;		// 'clipboard'
+#endif
+#ifdef HAVE_CLIPMETHOD
 EXTERN char_u	*p_cpm;		// 'clipmethod'
 #endif
 EXTERN long	p_ch;		// 'cmdheight'
-#ifdef FEAT_FOLDING
 EXTERN char_u	*p_cms;		// 'commentstring'
-#endif
 EXTERN char_u	*p_cpt;		// 'complete'
 EXTERN long	p_cto;		// 'completetimeout'
 #if defined(FEAT_GUI_DIALOG) || defined(FEAT_CON_DIALOG)
@@ -741,7 +741,6 @@ EXTERN char_u	*p_inde;	// 'indentexpr'
 EXTERN char_u	*p_indk;	// 'indentkeys'
 #endif
 EXTERN int	p_im;		// 'insertmode'
-EXTERN char_u	*p_ise;		// 'isexpand'
 EXTERN char_u	*p_isf;		// 'isfname'
 EXTERN char_u	*p_isi;		// 'isident'
 EXTERN char_u	*p_isk;		// 'iskeyword'
@@ -1191,9 +1190,7 @@ enum
     , BV_CINSD
     , BV_CINW
     , BV_CM
-#ifdef FEAT_FOLDING
     , BV_CMS
-#endif
     , BV_COM
     , BV_COT
     , BV_CPT

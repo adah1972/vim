@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:		The Vim Project <https://github.com/vim/vim>
-" Last Change:		2025 Oct 09
+" Last Change:		2025 Nov 11
 " Former Maintainer:	Bram Moolenaar <Bram@vim.org>
 
 " If the filetype can be detected from extension or file name(the final path component),
@@ -427,6 +427,10 @@ au BufNewFile,BufRead *.e,*.E			call dist#ft#FTe()
 " Elm Filter Rules file
 au BufNewFile,BufRead filter-rules		setf elmfilt
 
+" Erlang Application Resource Files
+au BufNewFile,BufRead *.app.src			setf erlang
+au BufNewFile,BufRead *.app			call dist#ft#FTapp()
+
 " ESMTP rc file
 au BufNewFile,BufRead *esmtprc			setf esmtprc
 
@@ -774,12 +778,13 @@ au BufNewFile,BufRead */neofetch/config.conf	setf sh
 " Nginx
 au BufNewFile,BufRead *.nginx,nginx*.conf,*nginx.conf,*/nginx/*.conf	setf nginx
 
-" Nroff/Troff (*.ms and *.t are checked below)
+" Nroff/Groff/Troff (*.ms and *.t are checked below)
 au BufNewFile,BufRead *.me
 	\ if expand("<afile>") != "read.me" && expand("<afile>") != "click.me" |
 	\   setf nroff |
 	\ endif
-au BufNewFile,BufRead *.tr,*.nr,*.roff,*.tmac,*.mom	setf nroff
+au BufNewFile,BufRead *.tr,*.nr,*.roff,*.tmac setf nroff
+au BufNewFile,BufRead *.groff,*.mom setf groff
 au BufNewFile,BufRead *.[0-9],*.[013]p,*.[1-8]x,*.3{am,perl,pm,posix,type},*.n	call dist#ft#FTnroff()
 
 " Nroff or Objective C++

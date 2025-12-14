@@ -156,6 +156,11 @@ static char *(features[]) =
 #else
 	"-clipboard",
 #endif
+#ifdef FEAT_CLIPBOARD_PROVIDER
+	"+clipboard_provider",
+#else
+	"-clipboard_provider",
+#endif
 	"+cmdline_compl",
 	"+cmdline_hist",
 	"+cmdline_info",
@@ -729,6 +734,178 @@ static char *(features[]) =
 
 static int included_patches[] =
 {   /* Add new patch number below this line */
+/**/
+    1977,
+/**/
+    1976,
+/**/
+    1975,
+/**/
+    1974,
+/**/
+    1973,
+/**/
+    1972,
+/**/
+    1971,
+/**/
+    1970,
+/**/
+    1969,
+/**/
+    1968,
+/**/
+    1967,
+/**/
+    1966,
+/**/
+    1965,
+/**/
+    1964,
+/**/
+    1963,
+/**/
+    1962,
+/**/
+    1961,
+/**/
+    1960,
+/**/
+    1959,
+/**/
+    1958,
+/**/
+    1957,
+/**/
+    1956,
+/**/
+    1955,
+/**/
+    1954,
+/**/
+    1953,
+/**/
+    1952,
+/**/
+    1951,
+/**/
+    1950,
+/**/
+    1949,
+/**/
+    1948,
+/**/
+    1947,
+/**/
+    1946,
+/**/
+    1945,
+/**/
+    1944,
+/**/
+    1943,
+/**/
+    1942,
+/**/
+    1941,
+/**/
+    1940,
+/**/
+    1939,
+/**/
+    1938,
+/**/
+    1937,
+/**/
+    1936,
+/**/
+    1935,
+/**/
+    1934,
+/**/
+    1933,
+/**/
+    1932,
+/**/
+    1931,
+/**/
+    1930,
+/**/
+    1929,
+/**/
+    1928,
+/**/
+    1927,
+/**/
+    1926,
+/**/
+    1925,
+/**/
+    1924,
+/**/
+    1923,
+/**/
+    1922,
+/**/
+    1921,
+/**/
+    1920,
+/**/
+    1919,
+/**/
+    1918,
+/**/
+    1917,
+/**/
+    1916,
+/**/
+    1915,
+/**/
+    1914,
+/**/
+    1913,
+/**/
+    1912,
+/**/
+    1911,
+/**/
+    1910,
+/**/
+    1909,
+/**/
+    1908,
+/**/
+    1907,
+/**/
+    1906,
+/**/
+    1905,
+/**/
+    1904,
+/**/
+    1903,
+/**/
+    1902,
+/**/
+    1901,
+/**/
+    1900,
+/**/
+    1899,
+/**/
+    1898,
+/**/
+    1897,
+/**/
+    1896,
+/**/
+    1895,
+/**/
+    1894,
+/**/
+    1893,
+/**/
+    1892,
 /**/
     1891,
 /**/
@@ -4586,7 +4763,7 @@ version_msg_wrap(char_u *s, int wrap)
 {
     int		len = vim_strsize(s) + (wrap ? 2 : 0);
 
-    if (!got_int && len < (int)Columns && msg_col + len >= (int)Columns
+    if (!got_int && len < cmdline_width && msg_col + len >= cmdline_width
 								&& *s != '\n')
 	msg_putchar('\n');
     if (!got_int)
@@ -4644,7 +4821,7 @@ list_in_columns(char_u **items, int size, int current)
     }
     width += 1;
 
-    if (Columns < width)
+    if (cmdline_width < width)
     {
 	// Not enough screen columns - show one per line
 	for (i = 0; i < item_count; ++i)
@@ -4658,7 +4835,7 @@ list_in_columns(char_u **items, int size, int current)
 
     // The rightmost column doesn't need a separator.
     // Sacrifice it to fit in one more column if possible.
-    ncol = (int) (Columns + 1) / width;
+    ncol = (cmdline_width + 1) / width;
     nrow = item_count / ncol + ((item_count % ncol) ? 1 : 0);
 
     // "i" counts columns then rows.  "idx" counts rows then columns.
@@ -5027,7 +5204,7 @@ intro_message(
 	N_("Vim is open source and freely distributable"),
 	"",
 	N_("Help poor children in Uganda!"),
-	N_("type  :help iccf<Enter>       for information "),
+	N_("type  :help Kuwasha<Enter>    for information "),
 	"",
 	N_("type  :q<Enter>               to exit         "),
 	N_("type  :help<Enter>  or  <F1>  for on-line help"),
@@ -5103,7 +5280,7 @@ intro_message(
 		    p = sponsor < 0
 			? N_("Sponsor Vim development!")
 			: N_("Become a registered Vim user!");
-		else if (strstr(p, "iccf") != NULL)
+		else if (strstr(p, "Kuwasha") != NULL)
 		    p = sponsor < 0
 			? N_("type  :help sponsor<Enter>    for information ")
 			: N_("type  :help register<Enter>   for information ");

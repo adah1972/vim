@@ -2864,6 +2864,19 @@ struct listener_S
     int		lr_id;
     callback_T	lr_callback;
 };
+
+// Structure used for listeners added with redraw_listener_add().
+typedef struct redraw_listener_S redraw_listener_T;
+struct redraw_listener_S
+{
+    redraw_listener_T	*rl_next;
+    int			rl_id;
+    struct
+    {
+	callback_T	on_start;
+	callback_T	on_end;
+    }			rl_callbacks;
+};
 #endif
 
 /*
@@ -3312,9 +3325,7 @@ struct file_buffer
     char_u	*b_p_cinsd;	// 'cinscopedecls'
     char_u	*b_p_cinw;	// 'cinwords'
     char_u	*b_p_com;	// 'comments'
-#ifdef FEAT_FOLDING
     char_u	*b_p_cms;	// 'commentstring'
-#endif
     char_u	*b_p_cot;	// 'completeopt' local value
     unsigned	b_cot_flags;	// flags for 'completeopt'
     char_u	*b_p_cpt;	// 'complete'
@@ -3347,7 +3358,6 @@ struct file_buffer
     char_u	*b_p_fo;	// 'formatoptions'
     char_u	*b_p_flp;	// 'formatlistpat'
     int		b_p_inf;	// 'infercase'
-    char_u	*b_p_ise;	// 'isexpand' local value
     char_u	*b_p_isk;	// 'iskeyword'
 #ifdef FEAT_FIND_ID
     char_u	*b_p_def;	// 'define' local value
@@ -4877,12 +4887,20 @@ typedef enum {
 
 // Symbolic names for some registers.
 #define DELETION_REGISTER	36
-#ifdef FEAT_CLIPBOARD
+#if defined(FEAT_CLIPBOARD) || defined(HAVE_CLIPMETHOD)
 # define STAR_REGISTER		37
 #  if defined(FEAT_X11) || defined(FEAT_WAYLAND)
 #   define PLUS_REGISTER	38
+#   define REAL_PLUS_REGISTER	PLUS_REGISTER
 #  else
 #   define PLUS_REGISTER	STAR_REGISTER	    // there is only one
+#   ifdef FEAT_EVAL
+// Make it so that if clipmethod is "none", the plus register is not available,
+// but if clipmethod is a provider, then expose the plus register for use.
+#    define REAL_PLUS_REGISTER	38
+#   else
+#    define REAL_PLUS_REGISTER	STAR_REGISTER
+#   endif
 #  endif
 #endif
 #ifdef FEAT_DND
@@ -4893,10 +4911,14 @@ typedef enum {
 # ifdef FEAT_DND
 #  define NUM_REGISTERS		(TILDE_REGISTER + 1)
 # else
-#  define NUM_REGISTERS		(PLUS_REGISTER + 1)
+#  define NUM_REGISTERS		(REAL_PLUS_REGISTER + 1)
 # endif
 #else
-# define NUM_REGISTERS		37
+# ifdef HAVE_CLIPMETHOD
+#  define NUM_REGISTERS		(REAL_PLUS_REGISTER + 1)
+# else
+#  define NUM_REGISTERS		37
+# endif
 #endif
 
 // structure used by block_prep, op_delete and op_yank for blockwise operators

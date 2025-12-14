@@ -167,6 +167,8 @@ static struct vimvar
     {VV_NAME("clipmethod",	 VAR_STRING), NULL, VV_RO},
     {VV_NAME("termda1",		 VAR_STRING), NULL, VV_RO},
     {VV_NAME("termosc",	 VAR_STRING), NULL, VV_RO},
+    {VV_NAME("vim_did_init",	 VAR_NUMBER), NULL, VV_RO},
+    {VV_NAME("clipproviders",	 VAR_DICT), NULL, VV_RO},
 };
 
 // shorthand
@@ -1087,8 +1089,6 @@ ex_let(exarg_T *eap)
     argend = skip_var_list(arg, TRUE, &var_count, &semicolon, FALSE);
     if (argend == NULL)
 	return;
-    if (argend > arg && argend[-1] == '.')  // for var.='str'
-	--argend;
     expr = skipwhite(argend);
     concat = expr[0] == '.'
 	&& ((expr[1] == '=' && in_old_script(2))
@@ -2021,7 +2021,7 @@ ex_let_one(
     void
 ex_unlet(exarg_T *eap)
 {
-    ex_unletlock(eap, eap->arg, 0, 0, do_unlet_var, NULL);
+    ex_unletlock(eap, eap->arg, 0, eap->forceit ? GLV_QUIET : 0, do_unlet_var, NULL);
 }
 
 /*

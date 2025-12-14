@@ -398,7 +398,10 @@ main
 #endif
 
     cmdline_row = Rows - p_ch;
+    cmdline_col_off = 0;
+    cmdline_width = (int)Columns;
     msg_row = cmdline_row;
+    msg_col = 0;
     screenalloc(FALSE);		// allocate screen buffers
     set_init_2();
     TIME_MSG("inits 2");
@@ -432,6 +435,10 @@ main
 
     // Source startup scripts.
     source_startup_scripts(&params);
+
+#ifdef FEAT_EVAL
+    set_vim_var_nr(VV_VIM_DID_INIT, 1L);
+#endif
 
 #ifdef FEAT_MZSCHEME
     /*
@@ -697,7 +704,7 @@ vim_main2(void)
     }
 #endif
 
-#ifdef FEAT_CLIPBOARD
+#ifdef HAVE_CLIPMETHOD
     choose_clipmethod();
 #endif
 
