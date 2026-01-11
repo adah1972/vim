@@ -248,6 +248,7 @@ SRC_ALL =	\
 		src/testdir/util/view_util.vim \
 		src/testdir/util/vim9.vim \
 		src/testdir/util/window_manager.vim \
+		src/testdir/util/socketserver.vim \
 		src/testdir/viewdumps.vim \
 		src/proto.h \
 		src/protodef.h \
@@ -856,7 +857,11 @@ RT_ALL =	\
 		runtime/pack/dist/opt/netrw/autoload/netrw_gitignore.vim \
 		runtime/pack/dist/opt/netrw/doc/netrw.txt \
 		runtime/pack/dist/opt/netrw/plugin/netrwPlugin.vim \
-		runtime/pack/dist/opt/netrw/syntax/netrw.vim
+		runtime/pack/dist/opt/netrw/syntax/netrw.vim \
+		runtime/pack/dist/opt/osc52/plugin/osc52.vim \
+		runtime/pack/dist/opt/osc52/autoload/osc52.vim \
+		runtime/pack/dist/opt/osc52/doc/osc52.txt \
+		runtime/pack/dist/opt/osc52/doc/tags
 
 # Runtime files for all distributions without CR/LF translation.
 RT_ALL_BIN =	\

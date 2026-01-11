@@ -2920,7 +2920,7 @@ executable_exists(
 		(char *)buf,
 		sizeof(buf),
 		"%.*s%s%s", (int)(e - p), p,
-		!after_pathsep(p, e - 1) ? PATHSEPSTR : "",
+		!after_pathsep(p, e) ? PATHSEPSTR : "",
 		name);
 	}
 
@@ -5546,7 +5546,7 @@ mch_call_shell(
 	}
     }
     // do not execute anything from the current directory by setting the
-    // environemnt variable $NoDefaultCurrentDirectoryInExePath
+    // environment variable $NoDefaultCurrentDirectoryInExePath
     oldval = vim_getenv((char_u *)"NoDefaultCurrentDirectoryInExePath",
 	    &must_free);
     vim_setenv((char_u *)"NoDefaultCurrentDirectoryInExePath", (char_u *)"1");
@@ -9082,22 +9082,38 @@ resize_console_buf(void)
     char *
 GetWin32Error(void)
 {
-    static char *oldmsg = NULL;
-    char *msg = NULL;
+    static char	*oldmsg = NULL;
+    char	*acp_msg = NULL;
+    DWORD	acp_len;
+    char	*enc_msg = NULL;
+    int		enc_len = 0;
 
-    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
-	    NULL, GetLastError(), 0, (LPSTR)&msg, 0, NULL);
+    // get formatted message from OS
+    acp_len = FormatMessage(
+	    FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
+	    NULL, GetLastError(), 0, (LPSTR)&acp_msg, 0, NULL);
+    if (acp_len == 0 || acp_msg == NULL)
+	return NULL;
+
+    // clean oldmsg if remained.
     if (oldmsg != NULL)
-	LocalFree(oldmsg);
-    if (msg == NULL)
+    {
+	vim_free(oldmsg);
+	oldmsg = NULL;
+    }
+
+    acp_to_enc((char_u *)acp_msg, (int)acp_len, (char_u **)&enc_msg, &enc_len);
+    LocalFree(acp_msg);
+    if (enc_msg == NULL)
 	return NULL;
 
     // remove trailing \r\n
-    char *pcrlf = strstr(msg, "\r\n");
+    char *pcrlf = strstr(enc_msg, "\r\n");
     if (pcrlf != NULL)
 	*pcrlf = NUL;
-    oldmsg = msg;
-    return msg;
+
+    oldmsg = enc_msg;
+    return enc_msg;
 }
 
 #if defined(FEAT_RELTIME)

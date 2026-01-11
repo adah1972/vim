@@ -377,6 +377,7 @@ $quote	eval.txt	/*$quote*
 'go-m'	options.txt	/*'go-m'*
 'go-p'	options.txt	/*'go-p'*
 'go-r'	options.txt	/*'go-r'*
+'go-s'	options.txt	/*'go-s'*
 'go-t'	options.txt	/*'go-t'*
 'go-v'	options.txt	/*'go-v'*
 'gp'	options.txt	/*'gp'*
@@ -4670,6 +4671,7 @@ E1433	vim9.txt	/*E1433*
 E1434	vim9.txt	/*E1434*
 E1435	vim9class.txt	/*E1435*
 E1436	vim9class.txt	/*E1436*
+E1437	eval.txt	/*E1437*
 E144	various.txt	/*E144*
 E145	starting.txt	/*E145*
 E146	change.txt	/*E146*
@@ -6697,6 +6699,7 @@ clipboard-exclude	options.txt	/*clipboard-exclude*
 clipboard-html	options.txt	/*clipboard-html*
 clipboard-providers	eval.txt	/*clipboard-providers*
 clipboard-providers-available	eval.txt	/*clipboard-providers-available*
+clipboard-providers-clipboard	eval.txt	/*clipboard-providers-clipboard*
 clipboard-providers-clipmethod	eval.txt	/*clipboard-providers-clipmethod*
 clipboard-providers-copy	eval.txt	/*clipboard-providers-copy*
 clipboard-providers-define	eval.txt	/*clipboard-providers-define*
@@ -6769,6 +6772,7 @@ compiler-mypy	quickfix.txt	/*compiler-mypy*
 compiler-pandoc	quickfix.txt	/*compiler-pandoc*
 compiler-perl	quickfix.txt	/*compiler-perl*
 compiler-pylint	quickfix.txt	/*compiler-pylint*
+compiler-pyright	quickfix.txt	/*compiler-pyright*
 compiler-pytest	quickfix.txt	/*compiler-pytest*
 compiler-pyunit	quickfix.txt	/*compiler-pyunit*
 compiler-ruff	quickfix.txt	/*compiler-ruff*
@@ -6777,6 +6781,7 @@ compiler-spotbugs	quickfix.txt	/*compiler-spotbugs*
 compiler-tex	quickfix.txt	/*compiler-tex*
 compiler-tombi	quickfix.txt	/*compiler-tombi*
 compiler-tsc	quickfix.txt	/*compiler-tsc*
+compiler-ty	quickfix.txt	/*compiler-ty*
 compiler-typst	quickfix.txt	/*compiler-typst*
 compiler-vaxada	ft_ada.txt	/*compiler-vaxada*
 compl-current	insert.txt	/*compl-current*
@@ -8246,6 +8251,7 @@ gui-vert-scroll	gui.txt	/*gui-vert-scroll*
 gui-w32	gui_w32.txt	/*gui-w32*
 gui-w32-cmdargs	gui_w32.txt	/*gui-w32-cmdargs*
 gui-w32-dialogs	gui_w32.txt	/*gui-w32-dialogs*
+gui-w32-fullscreen	gui_w32.txt	/*gui-w32-fullscreen*
 gui-w32-printing	gui_w32.txt	/*gui-w32-printing*
 gui-w32-start	gui_w32.txt	/*gui-w32-start*
 gui-w32-title-bar	gui_w32.txt	/*gui-w32-title-bar*
@@ -9616,6 +9622,7 @@ os_risc.txt	os_risc.txt	/*os_risc.txt*
 os_unix.txt	os_unix.txt	/*os_unix.txt*
 os_vms.txt	os_vms.txt	/*os_vms.txt*
 os_win32.txt	os_win32.txt	/*os_win32.txt*
+osc52-install	usr_05.txt	/*osc52-install*
 other-features	vi_diff.txt	/*other-features*
 out_buf	channel.txt	/*out_buf*
 out_cb	channel.txt	/*out_cb*
@@ -9640,6 +9647,7 @@ package-justify	usr_25.txt	/*package-justify*
 package-matchit	usr_05.txt	/*package-matchit*
 package-nohlsearch	usr_05.txt	/*package-nohlsearch*
 package-open	eval.txt	/*package-open*
+package-osc52	usr_05.txt	/*package-osc52*
 package-termdebug	terminal.txt	/*package-termdebug*
 package-translate_example	repeat.txt	/*package-translate_example*
 package-translation	repeat.txt	/*package-translation*
@@ -10968,6 +10976,7 @@ termcap-cursor-shape	term.txt	/*termcap-cursor-shape*
 termcap-options	term.txt	/*termcap-options*
 termcap-title	term.txt	/*termcap-title*
 termda1-variable	eval.txt	/*termda1-variable*
+termdebug	terminal.txt	/*termdebug*
 termdebug-commands	terminal.txt	/*termdebug-commands*
 termdebug-communication	terminal.txt	/*termdebug-communication*
 termdebug-customizing	terminal.txt	/*termdebug-customizing*

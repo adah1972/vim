@@ -2258,7 +2258,7 @@ report_lockvar_member(char *msg, lval_T *lp)
     int did_alloc = FALSE;
     char_u *vname = (char_u *)"";
     char_u *class_name = lp->ll_class != NULL
-				    ? lp->ll_class->class_name : (char_u *)"";
+				    ? lp->ll_class->class_name.string : (char_u *)"";
     if (lp->ll_name != NULL)
     {
 	if (lp->ll_name_end == NULL)
@@ -2986,7 +2986,7 @@ reset_reg_var(void)
 
     // Adjust the register according to 'clipboard', so that when
     // "unnamed" is present it becomes '*' or '+' instead of '"'.
-#ifdef FEAT_CLIPBOARD
+#ifdef HAVE_CLIPMETHOD
     adjust_clip_reg(&regname);
 #endif
     set_reg_var(regname);

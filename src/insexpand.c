@@ -3319,14 +3319,21 @@ copy_global_to_buflocal_cb(callback_T *globcb, callback_T *bufcb)
  * lambda expression.
  */
     char *
-did_set_completefunc(optset_T *args UNUSED)
+did_set_completefunc(optset_T *args)
 {
-    if (option_set_callback_func(curbuf->b_p_cfu, &cfu_cb) == FAIL)
-	return e_invalid_argument;
+    int	retval;
 
-    set_buflocal_cfu_callback(curbuf);
+    if (args->os_flags & OPT_LOCAL)
+	retval = option_set_callback_func(args->os_newval.string,
+							    &curbuf->b_cfu_cb);
+    else
+    {
+	retval = option_set_callback_func(args->os_newval.string, &cfu_cb);
+	if (retval == OK && !(args->os_flags & OPT_GLOBAL))
+	    set_buflocal_cfu_callback(curbuf);
+    }
 
-    return NULL;
+    return retval == FAIL ? e_invalid_argument : NULL;
 }
 
 /*
@@ -3348,13 +3355,21 @@ set_buflocal_cfu_callback(buf_T *buf UNUSED)
  * lambda expression.
  */
     char *
-did_set_omnifunc(optset_T *args UNUSED)
+did_set_omnifunc(optset_T *args)
 {
-    if (option_set_callback_func(curbuf->b_p_ofu, &ofu_cb) == FAIL)
-	return e_invalid_argument;
+    int	retval;
 
-    set_buflocal_ofu_callback(curbuf);
-    return NULL;
+    if (args->os_flags & OPT_LOCAL)
+	retval = option_set_callback_func(args->os_newval.string,
+							    &curbuf->b_ofu_cb);
+    else
+    {
+	retval = option_set_callback_func(args->os_newval.string, &ofu_cb);
+	if (retval == OK && !(args->os_flags & OPT_GLOBAL))
+	    set_buflocal_ofu_callback(curbuf);
+    }
+
+    return retval == FAIL ? e_invalid_argument : NULL;
 }
 
 /*
@@ -7195,11 +7210,16 @@ ins_complete(int c, int enable_pum)
     compl_curr_buf = curwin->w_buffer;
     compl_shown_match = compl_curr_match;
     compl_shows_dir = compl_direction;
+    compl_num_bests = 0;
 
     // Find next match (and following matches).
     save_w_wrow = curwin->w_wrow;
     save_w_leftcol = curwin->w_leftcol;
     n = ins_compl_next(TRUE, ins_compl_key2count(c), insert_match);
+
+    // Reset autocompletion timer expiry flag
+    if (compl_autocomplete)
+	compl_time_slice_expired = FALSE;
 
     // may undisplay the popup menu
     ins_compl_upd_pum();

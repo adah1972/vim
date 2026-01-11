@@ -33,7 +33,7 @@ static int	stuff_yank(int, char_u *);
 static void	put_reedit_in_typebuf(int silent);
 static int	put_in_typebuf(char_u *s, int esc, int colon, int silent);
 static int	yank_copy_line(struct block_def *bd, long y_idx, int exclude_trailing_space);
-#ifdef FEAT_CLIPBOARD
+#ifdef HAVE_CLIPMETHOD
 static void	copy_yank_reg(yankreg_T *reg);
 #endif
 static void	dis_msg(char_u *p, int skip_esc);
@@ -565,10 +565,9 @@ set_execreg_lastc(int lastc)
 execreg_line_continuation(string_T *lines, long *idx)
 {
     garray_T	ga;
-    long	i = *idx;
-    char_u	*p;
-    int		cmd_start;
-    int		cmd_end = i;
+    long	cmd_start = *idx;
+    long	cmd_end = *idx;
+    string_T	*tmp;
     int		j;
     char_u	*str;
 
@@ -577,19 +576,24 @@ execreg_line_continuation(string_T *lines, long *idx)
     // search backwards to find the first line of this command.
     // Any line not starting with \ or "\ is the start of the
     // command.
-    while (--i > 0)
+    while (--cmd_start > 0)
     {
-	p = skipwhite(lines[i].string);
+	char_u	*p;
+
+	p = skipwhite(lines[cmd_start].string);
 	if (*p != '\\' && (p[0] != '"' || p[1] != '\\' || p[2] != ' '))
 	    break;
     }
-    cmd_start = i;
 
     // join all the lines
-    ga_concat(&ga, lines[cmd_start].string);
+    tmp = &lines[cmd_start];
+    ga_concat_len(&ga, tmp->string, tmp->length);
     for (j = cmd_start + 1; j <= cmd_end; j++)
     {
-	p = skipwhite(lines[j].string);
+	char_u	*p;
+
+	tmp = &lines[j];
+	p = skipwhite(tmp->string);
 	if (*p == '\\')
 	{
 	    // Adjust the growsize to the current length to
@@ -601,14 +605,15 @@ execreg_line_continuation(string_T *lines, long *idx)
 		else
 		    ga.ga_growsize = ga.ga_len;
 	    }
-	    ga_concat(&ga, p + 1);
+	    p++;
+	    ga_concat_len(&ga, p, (tmp->string + tmp->length) - p);
 	}
     }
     ga_append(&ga, NUL);
     str = vim_strnsave(ga.ga_data, ga.ga_len);
     ga_clear(&ga);
 
-    *idx = i;
+    *idx = cmd_start;
     return str;
 }
 
@@ -1421,10 +1426,20 @@ op_yank(oparg_T *oap, int deleting, int mess)
 
 #ifdef FEAT_CLIPBOARD_PROVIDER
     inc_clip_provider();
-    if (curr == &y_regs[REAL_PLUS_REGISTER])
+    if (curr == &y_regs[REAL_PLUS_REGISTER] || (!deleting && oap->regname == 0
+		&& (clip_unnamed & CLIP_UNNAMED_PLUS)))
+    {
+	if (curr != &(y_regs[REAL_PLUS_REGISTER]))
+	    copy_yank_reg(&(y_regs[REAL_PLUS_REGISTER]));
 	call_clip_provider_set('+');
-    else if (curr == &y_regs[STAR_REGISTER])
+    }
+    if (curr == &y_regs[STAR_REGISTER] || (!deleting && oap->regname == 0
+		&& (clip_unnamed & CLIP_UNNAMED)))
+    {
+	if (curr != &(y_regs[STAR_REGISTER]))
+	    copy_yank_reg(&(y_regs[STAR_REGISTER]));
 	call_clip_provider_set('*');
+    }
 #endif
 
 #ifdef FEAT_CLIPBOARD
@@ -1518,7 +1533,7 @@ yank_copy_line(struct block_def *bd, long y_idx, int exclude_trailing_space)
     return OK;
 }
 
-#ifdef FEAT_CLIPBOARD
+#ifdef HAVE_CLIPMETHOD
 /*
  * Make a copy of the y_current register to register "reg".
  */
@@ -1589,16 +1604,16 @@ do_put(
     pos_T	orig_end = curbuf->b_op_end;
     unsigned int cur_ve_flags = get_ve_flags();
 
+#ifdef HAVE_CLIPMETHOD
+    adjust_clip_reg(&regname);
+#endif
 #ifdef FEAT_CLIPBOARD_PROVIDER
     call_clip_provider_request(regname);
 #endif
 #ifdef FEAT_CLIPBOARD
     if (clipmethod != CLIPMETHOD_PROVIDER)
-    {
 	// Adjust register name for "unnamed" in 'clipboard'.
-	adjust_clip_reg(&regname);
 	(void)may_get_selection(regname);
-    }
 #endif
 
 
@@ -2458,18 +2473,18 @@ ex_display(exarg_T *eap)
 		)
 	    continue;	    // did not ask for this register
 
+#ifdef HAVE_CLIPMETHOD
+	adjust_clip_reg(&name);
+#endif
 #ifdef FEAT_CLIPBOARD_PROVIDER
 	call_clip_provider_request(name);
 #endif
 #ifdef FEAT_CLIPBOARD
 	if (clipmethod != CLIPMETHOD_PROVIDER)
-	{
 	    // Adjust register name for "unnamed" in 'clipboard'.
 	    // When it's a clipboard register, fill it with the current contents
 	    // of the clipboard.
-	    adjust_clip_reg(&name);
 	    (void)may_get_selection(name);
-	}
 #endif
 
 	if (i == -1)
