@@ -3566,4 +3566,62 @@ func Test_diff_add_prop_in_autocmd()
   call StopVimInTerminal(buf)
 endfunc
 
+" this was causing a use-after-free by calling winframe_remove() recursively
+func Test_diffexpr_wipe_buffers()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    def DiffFuncExpr()
+      var in: list<string> = readfile(v:fname_in)
+      var new = readfile(v:fname_new)
+      var out: string = diff(in, new)
+      writefile(split(out, "n"), v:fname_out)
+    enddef
+
+    new
+    vnew
+    set diffexpr=DiffFuncExpr()
+    wincmd l
+    new
+    cal setline(1,range(20))
+    wind difft
+    wincm w
+    hid
+    %bw!
+  END
+  call writefile(lines, 'Xtest_diffexpr_wipe', 'D')
+
+  let buf = RunVimInTerminal('Xtest_diffexpr_wipe', {})
+  call term_sendkeys(buf, ":so\<CR>")
+  call WaitForAssert({-> assert_match('4 buffers wiped out', term_getline(buf, 20))})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_diffput_to_empty_buf()
+  CheckScreendump
+
+  let lines =<< trim END
+    call setline(1, ['foo', 'bar', 'baz'])
+    rightbelow vnew
+    windo diffthis
+    windo set cursorline nofoldenable
+    wincmd t
+  END
+  call writefile(lines, 'Xtest_diffput_to_empty_buf', 'D')
+
+  let buf = RunVimInTerminal('-S Xtest_diffput_to_empty_buf', {})
+  call VerifyScreenDump(buf, 'Test_diffput_to_empty_buf_01', {})
+  call term_sendkeys(buf, '0')  " Trigger an initial 'cursorbind' check.
+  call VerifyScreenDump(buf, 'Test_diffput_to_empty_buf_01', {})
+  call term_sendkeys(buf, ":diffput | echo\<CR>")
+  call VerifyScreenDump(buf, 'Test_diffput_to_empty_buf_02', {})
+  call term_sendkeys(buf, ":redraw!\<CR>")
+  call VerifyScreenDump(buf, 'Test_diffput_to_empty_buf_02', {})
+  call term_sendkeys(buf, 'j')
+  call VerifyScreenDump(buf, 'Test_diffput_to_empty_buf_03', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
 " vim: shiftwidth=2 sts=2 expandtab
